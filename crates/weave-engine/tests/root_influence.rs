@@ -79,12 +79,34 @@ fn support(input: GraphExpression) -> GraphExpression {
 fn private_empty_node_influence_survives_scalar_generation_reader_and_carrier_removal() {
     let mut e = Engine::memory().unwrap();
     let gate = secret(&mut e, "secret", "alice");
-    write(
+    let influenced = write(
         &mut e,
         "input",
         json!({"influence":{"assertions":[],"nodes":[gate]},"nodes":[],"edges":[]}),
     );
     write(&mut e, "empty", json!({"nodes":[],"edges":[]}));
+    let empty_capsule = e.export_capsule(&influenced, &host("alice")).unwrap();
+    assert!(empty_capsule
+        .revisions
+        .iter()
+        .any(|r| r.graph_id == "secret"));
+    let mut empty_peer = Engine::memory().unwrap();
+    empty_peer
+        .receive_capsule(&empty_capsule, &host("alice"))
+        .unwrap();
+    let pinned: QueryPlan =
+        serde_json::from_value(json!({"graph_id":"input","revision":influenced.revision})).unwrap();
+    let peer_value = empty_peer.query(&pinned, &host("alice")).unwrap();
+    assert!(serde_json::to_value(peer_value.graph)
+        .unwrap()
+        .get("influence")
+        .is_some());
+    let peer_denied = empty_peer.query(&pinned, &host("bob")).unwrap();
+    assert_eq!(peer_denied.coverage, Coverage::Partial);
+    assert!(serde_json::to_value(peer_denied.graph)
+        .unwrap()
+        .get("influence")
+        .is_none());
     let visible = query(&e, "input", "alice");
     assert!(serde_json::to_value(&visible.graph)
         .unwrap()
@@ -212,5 +234,26 @@ fn old_wire_rejection_precedes_marker_writes_for_all_new_influence_positions() {
         assert_eq!(e.execute(&p, &host("alice")).unwrap_err().code, "E_VERSION");
         assert!(e.head("marker", "main").unwrap().is_none());
         assert_eq!(e.event_count().unwrap(), count);
+    }
+}
+
+#[test]
+fn logical_cross_graph_influence_cycles_fail_closed_without_unbounded_recursion() {
+    let mut e = Engine::memory().unwrap();
+    let p: Program = serde_json::from_value(json!({"version":VERSION,"commands":[{
+        "op":"commit_batch","batch_id":"influence-cycle","commits":[
+            {"graph_id":"input","data":{"nodes":[node("a")],"influence":{"assertions":[],"nodes":[{"graph_id":"empty","revision":"logical:influence-cycle:empty","node_id":"b"}]}}},
+            {"graph_id":"empty","data":{"nodes":[node("b")],"influence":{"assertions":[],"nodes":[{"graph_id":"input","revision":"logical:influence-cycle:input","node_id":"a"}]}}}
+        ]
+    }]})).unwrap();
+    e.execute(&p, &host("alice")).unwrap();
+    for graph in ["input", "empty"] {
+        let result = query(&e, graph, "alice");
+        assert!(result.graph.nodes.is_empty());
+        assert_eq!(result.coverage, Coverage::Partial);
+        assert!(serde_json::to_value(result.graph)
+            .unwrap()
+            .get("influence")
+            .is_none());
     }
 }
