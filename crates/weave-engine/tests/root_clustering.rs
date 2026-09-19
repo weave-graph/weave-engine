@@ -311,3 +311,60 @@ fn navigation_values_compose_idempotently_for_connected_and_isolated_evidence() 
         assert!(difference.graph.attachments.is_empty());
     }
 }
+#[test]
+fn exact_query_domain_keeps_negative_rare_temporal_and_isolated_facts_at_every_zoom() {
+    let mut e = Engine::memory().unwrap();
+    let mut rare = edge("rare", "b", "c");
+    rare["predicate"] = json!("rare");
+    let mut negative = edge("negative", "c", "a");
+    negative["polarity"] = json!("negative");
+    let mut boundary = edge("boundary", "a", "c");
+    boundary["valid_time"] = json!({"start":5,"end":6});
+    let mut private = node("private");
+    private["readers"] = json!(["alice"]);
+    let data = json!({"nodes":[node("a"),node("b"),node("c"),node("isolated"),private],"edges":[edge("ab","a","b"),rare,negative,boundary,edge("private-edge","a","private")]});
+    let r = commit(&mut e, "source", data, None);
+    let query = |time| {
+        serde_json::from_value::<QueryPlan>(
+            json!({"graph_id":"source","revision":r,"valid_at":time}),
+        )
+        .unwrap()
+    };
+    for actor in ["alice", "bob"] {
+        let at5 = e.query(&query(5), &host(actor)).unwrap();
+        let at6 = e.query(&query(6), &host(actor)).unwrap();
+        assert!(at5
+            .graph
+            .edges
+            .iter()
+            .any(|x| x.id == "rare" && x.predicate == "rare"));
+        assert!(at5
+            .graph
+            .edges
+            .iter()
+            .any(|x| x.id == "negative" && x.polarity == weave_contract::Polarity::Negative));
+        let all_query: QueryPlan =
+            serde_json::from_value(json!({"graph_id":"source","revision":r})).unwrap();
+        let all = e.query(&all_query, &host(actor)).unwrap();
+        assert!(all.graph.nodes.iter().any(|x| x.id == "isolated"));
+        assert!(at5.graph.edges.iter().any(|x| x.id == "boundary"));
+        assert!(!at6.graph.edges.iter().any(|x| x.id == "boundary"));
+        assert_eq!(
+            at5.graph.nodes.iter().any(|x| x.id == "private"),
+            actor == "alice"
+        );
+        for level in [0, 1, 2, 100] {
+            let navigation = e
+                .cluster_navigation(&request(&r, level), &host(actor))
+                .unwrap();
+            assert!(navigation
+                .graph
+                .edges
+                .iter()
+                .all(|x| x.polarity == weave_contract::Polarity::Positive));
+            assert_eq!(e.query(&all_query, &host(actor)).unwrap(), all);
+            assert_eq!(e.query(&query(5), &host(actor)).unwrap(), at5);
+            assert_eq!(e.query(&query(6), &host(actor)).unwrap(), at6);
+        }
+    }
+}
