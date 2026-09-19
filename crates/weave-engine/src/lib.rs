@@ -1285,9 +1285,8 @@ impl Engine {
             }
         }
     }
-    fn authorized(&self, data: GraphData, host: &HostContext) -> Result<(GraphData, bool)> {
+    fn authorized_nodes(&self, data: GraphData, host: &HostContext) -> Result<(GraphData, bool)> {
         let mut data = visible(data, &host.principal);
-        let mut edges = Vec::new();
         let mut incomplete = false;
         let mut nodes = Vec::new();
         for node in std::mem::take(&mut data.nodes) {
@@ -1308,7 +1307,11 @@ impl Engine {
             }
         }
         data.nodes = nodes;
-        data = visible(data, &host.principal);
+        Ok((visible(data, &host.principal), incomplete))
+    }
+    fn authorized(&self, data: GraphData, host: &HostContext) -> Result<(GraphData, bool)> {
+        let (mut data, mut incomplete) = self.authorized_nodes(data, host)?;
+        let mut edges = Vec::new();
         for mut edge in data.edges {
             if self.authorize_edge_groups(&mut edge, host, &mut incomplete)? {
                 edges.push(edge);

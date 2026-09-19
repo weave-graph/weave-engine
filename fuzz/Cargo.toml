@@ -1,0 +1,41 @@
+[package]
+name = "weave-engine-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+weave-engine = { path = "../crates/weave-engine" }
+weave-policy = { path = "../crates/weave-policy" }
+
+[dependencies.weave-contract]
+path = "../crates/weave-contract"
+
+[[bin]]
+name = "program_atomic"
+path = "fuzz_targets/program_atomic.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "capsule_receive"
+path = "fuzz_targets/capsule_receive.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "policy_wire"
+path = "fuzz_targets/policy_wire.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]

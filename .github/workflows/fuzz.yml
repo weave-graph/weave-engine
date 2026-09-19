@@ -1,0 +1,30 @@
+name: Fuzz smoke
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [program_atomic, capsule_receive, policy_wire]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-09-19
+      - run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Verify valid semantic seeds
+        run: cargo run --locked --manifest-path fuzz/Cargo.toml --example check_seeds
+      - name: Bounded address-sanitized coverage fuzzing
+        run: |
+          mkdir -p fuzz/corpus/${{ matrix.target }}
+          cargo fuzz run ${{ matrix.target }} fuzz/corpus/${{ matrix.target }} fuzz/seeds/${{ matrix.target }} -- -max_total_time=30 -timeout=5 -rss_limit_mb=1536 -max_len=131072 -seed=190919
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: fuzz-${{ matrix.target }}-failure
+          path: fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore

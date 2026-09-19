@@ -1,4 +1,4 @@
-# Contract 0.11: exact node influence references
+# Contract 0.11.0: exact node influence references
 
 `Node.derived_nodes` is an optional, default-empty list of pinned `NodeRef { graph_id, revision, node_id }` influences. Together with the existing assertion `derived_from` list, it is a conservative AND gate. Every source node and its recursive node/assertion influences must be currently visible to the evaluating principal. A missing, private, cyclic or exhausted proof is unavailable. Node and assertion IDs use separate cycle-detection namespaces.
 
@@ -10,4 +10,4 @@ There is a combined maximum of 1000 node/assertion influences per stored or gene
 
 Immutable source revision pins were already present in query snapshot/origin envelopes. They now also accompany copied node payloads. A hidden-only change to a monolithic source revision changes that pin; visible fact comparisons normalize only this already-visible own-origin revision, while checking exact payloads and excluding hidden dependency names. This is not activity-hiding storage or a stronger privacy claim about revision hashes.
 
-Versions 0.1–0.10 remain accepted for their supported commands; committing node influence fields requires 0.11. New query results use the current protocol. Five independent native regressions cover isolated private node copies, scalar counts, capsule roundtrip, endpoint proxy rejection, cycles, disjoint reference namespaces, profile/count limits and atomic failure of overlarge derived outputs. A signed-admission regression checks source-node scope on initial read and narrowed retry. Alternative proof groups for node influences, authorized release, broader compression and full clustering integration remain open.
+Versions 0.1–0.10 remain accepted for their supported commands; committing node influence fields requires 0.11. New query results use the current protocol. Six independent native regressions cover isolated private node copies, scalar counts, capsule roundtrip, endpoint proxy rejection, direct structural lookup, cycles, disjoint reference namespaces, profile/count limits and atomic failure of overlarge derived outputs. A signed-admission regression checks source-node scope on initial read and narrowed retry. Alternative proof groups for node influences, authorized release, broader compression and full clustering integration remain open.

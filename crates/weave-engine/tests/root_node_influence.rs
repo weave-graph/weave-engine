@@ -107,6 +107,31 @@ fn edge_premises_cannot_proxy_a_restricted_node_dependency() {
 }
 
 #[test]
+fn direct_structural_lookup_enforces_source_node_influences() {
+    let mut e = Engine::memory().unwrap();
+    let mut secret = node("n");
+    secret["readers"] = json!(["alice"]);
+    let r = commit(&mut e, "source", graph(secret));
+    let mut target = node("target");
+    target["derived_nodes"] = json!([{"graph_id":"source","revision":r,"node_id":"n"}]);
+    let structural:GraphData=serde_json::from_value(json!({"profile":"explicit","nodes":[target],"structural_edges":[{"id":"relation","predicate":"p","from":"target","to":"target"}],"assertions":[]})).unwrap();
+    let revision = commit(&mut e, "structural", structural);
+    let reference = weave_contract::StructuralRef {
+        graph_id: "structural".into(),
+        revision,
+        edge_id: "relation".into(),
+    };
+    assert!(e
+        .resolve_structural(&reference, &HostContext::new("alice", []))
+        .unwrap()
+        .is_some());
+    assert!(e
+        .resolve_structural(&reference, &HostContext::new("bob", []))
+        .unwrap()
+        .is_none());
+}
+
+#[test]
 fn node_cycles_are_unavailable_but_node_and_assertion_namespaces_do_not_collide() {
     let mut e = Engine::memory().unwrap();
     let mut cyclic = node("loop");
