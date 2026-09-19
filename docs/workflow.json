@@ -331,7 +331,11 @@
           "unresolved_findings": "Unsigned local APIs; no peer authenticity, mounts, governance or mobile support"
         },
         "docs/CAPSULES.md",
-        "crates/weave-engine/tests/root_capsule.rs"
+        "crates/weave-engine/tests/root_capsule.rs",
+        "docs/MOUNTS_AND_INTEGRATION.md",
+        "crates/weave-engine/tests/mounts.rs",
+        "crates/weave-engine/tests/integration.rs",
+        "scripts/check_integration_recovery.py"
       ]
     },
     {
@@ -363,7 +367,11 @@
           "kind": "native_identity_acceptance",
           "path": "crates/weave-engine/tests/identity_acceptance.rs",
           "result": "Pinned replacement partitions, installed policy authority, atomic CAS/receipt/events, current policy and NodeRef source gates, hidden membership payload/coverage parity and historical splits. Remote acceptance and broader governance remain open."
-        }
+        },
+        "docs/MOUNTS_AND_INTEGRATION.md",
+        "crates/weave-engine/tests/mounts.rs",
+        "crates/weave-engine/tests/integration.rs",
+        "scripts/check_integration_recovery.py"
       ]
     },
     {

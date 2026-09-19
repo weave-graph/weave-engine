@@ -10,7 +10,7 @@ Acceptance requires an explicit graph write grant and compare-and-swap against t
 
 Capsule hashes provide content integrity, **not signer identity, provenance truth or peer authenticity**. Capsules are currently unsigned. Source system timestamps are not imported as trusted local recording time: receipt records local host time, while source-clock reconstruction is not yet implemented. Logical batch snapshots separate revision names from content digests, so cyclic metadata can be transported with a complete manifest; see [ADR 0001](architecture/ADR-0001-revision-identity-and-content.md).
 
-Limits: 1000 included revisions, ancestry/dependency traversal depth 32, 16 MiB serialized capsule. Tests cover persisted offline edits, acceptance separation, repeated receipt, altered content, omitted dependency manifests and denied acceptance. Transport, encrypted replicas, signed capabilities, actual mobile storage, attachment mounts and governed synchronization remain open.
+Limits: 1000 included revisions, ancestry/dependency traversal depth 32, 16 MiB serialized capsule. Tests cover persisted offline edits, acceptance separation, repeated receipt, altered content, omitted dependency manifests and denied acceptance. Native principal-owned attachment mounts and explicit signed-proposal integration are implemented in [the mount/integration profile](MOUNTS_AND_INTEGRATION.md). Standalone signed capsule manifests, encrypted replicas, transport, selective proofs and broader governed synchronization remain open.
 
 ## Logical snapshots: capsule 0.2
 

@@ -6,6 +6,10 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use weave_contract::*;
 mod admission;
+mod integration;
+mod mounts;
+pub use integration::{IntegrationReceipt, IntegrationRequest};
+pub use mounts::{MountEvent, MountReceipt, MountSpec};
 mod identity_acceptance;
 pub use identity_acceptance::{
     IdentityCandidate, IdentityDecisionReceipt, IdentityDecisionRequest, IdentityPolicy,
@@ -95,7 +99,7 @@ impl Engine {
     }
     fn from_connection_boundary(conn: Connection, before_commit: impl FnOnce()) -> Result<Self> {
         let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
-        if !(0..=7).contains(&version) {
+        if !(0..=8).contains(&version) {
             return Err(err(
                 "E_STORAGE_VERSION",
                 "database schema version is unsupported",
@@ -149,7 +153,9 @@ impl Engine {
         engine.initialize_views()?;
         engine.initialize_admission()?;
         engine.initialize_identity()?;
-        engine.conn.pragma_update(None, "user_version", 7)?;
+        engine.initialize_mounts()?;
+        engine.initialize_integration()?;
+        engine.conn.pragma_update(None, "user_version", 8)?;
         before_commit();
         initialization.commit()?;
         Ok(engine)

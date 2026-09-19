@@ -21,3 +21,7 @@ tempfile = "3"
 
 [features]
 recovery-testing = []
+
+[[example]]
+name = "integration_probe"
+required-features = ["recovery-testing"]

@@ -1,6 +1,6 @@
 # Storage integrity and recovery
 
-Database schema version 6 is the current native storage format. `Engine::open`
+Database schema version 8 is the current native storage format. Identity policies/receipts, guarded view transitions, mount routes/lifecycle and signed integration receipts are initialized in the same schema transaction. `Engine::open`
 rejects future versions before creating tables or attempting migration. Schema
 creation, legacy structural-identity backfill, version-marker advancement, and
 dispatcher/view/admission table initialization share one SQLite immediate

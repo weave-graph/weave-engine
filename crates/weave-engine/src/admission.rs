@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
             consumed_nonces: stored.consumed_nonces,
         })
     }
-    fn verify_admission(
+    pub(crate) fn verify_admission(
         &self,
         proof: &AdmissionProof,
         body: &[u8],
@@ -642,7 +642,12 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         Ok(dependencies)
     }
 }
-fn require_scope(scopes: &[Scope], graph: &str, branch: &str, actions: &[Action]) -> Result<()> {
+pub(crate) fn require_scope(
+    scopes: &[Scope],
+    graph: &str,
+    branch: &str,
+    actions: &[Action],
+) -> Result<()> {
     if !scopes.iter().any(|s| {
         s.graph_id == graph
             && s.branch_id == branch

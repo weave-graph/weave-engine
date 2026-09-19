@@ -70,24 +70,20 @@ impl CapsuleRevision {
 }
 impl Engine {
     fn revision_record(&self, reference: &GraphRef) -> Result<Option<CapsuleRevision>> {
-        let row: Option<(String, Option<String>, String)> = self
-            .conn
-            .query_row(
-                "SELECT branch_id,parent,data FROM revisions WHERE graph_id=?1 AND revision=?2",
-                params![reference.graph_id, reference.revision],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )
-            .optional()?;
-        row.map(|(branch_id, parent, data)| {
-            Ok(CapsuleRevision {
-                graph_id: reference.graph_id.clone(),
-                revision: reference.revision.clone(),
-                branch_id,
-                parent,
-                data: serde_json::from_str(&data)?,
-            })
-        })
-        .transpose()
+        let Some(data) = self.load(&reference.graph_id, &reference.revision)? else {
+            return Ok(None);
+        };
+        let (branch_id,parent):(String,Option<String>)=self.conn.query_row("SELECT substr(branch_id,1,513),substr(parent,1,513) FROM revisions WHERE graph_id=?1 AND revision=?2",params![reference.graph_id,reference.revision],|r|Ok((r.get(0)?,r.get(1)?)))?;
+        if !valid_id(&branch_id) || parent.as_ref().is_some_and(|p| !valid_id(p)) {
+            return Err(err("E_INTEGRITY", "stored revision identifiers invalid"));
+        }
+        Ok(Some(CapsuleRevision {
+            graph_id: reference.graph_id.clone(),
+            revision: reference.revision.clone(),
+            branch_id,
+            parent,
+            data,
+        }))
     }
     /// Export exact authorized snapshots. Logical snapshots include their whole manifest.
     /// Hidden manifest members cannot be disclosed through hashes or membership lists.
@@ -264,6 +260,21 @@ impl Engine {
     /// Verify and quarantine snapshots. Receipt never advances accepted heads or emits events.
     /// Hashes authenticate byte consistency only, not a peer or an assertion's truth.
     pub fn receive_capsule(&mut self, capsule: &Capsule, host: &HostContext) -> Result<usize> {
+        self.conn.execute_batch("SAVEPOINT capsule_receive")?;
+        let result = self.receive_capsule_inner(capsule, host);
+        match result {
+            Ok(value) => {
+                self.conn.execute_batch("RELEASE capsule_receive")?;
+                Ok(value)
+            }
+            Err(error) => {
+                self.conn
+                    .execute_batch("ROLLBACK TO capsule_receive; RELEASE capsule_receive")?;
+                Err(error)
+            }
+        }
+    }
+    fn receive_capsule_inner(&self, capsule: &Capsule, host: &HostContext) -> Result<usize> {
         let _read_scope = self.read_budget.enter();
         if !["weave-capsule-0.1", "weave-capsule-0.2"].contains(&capsule.format.as_str()) {
             return Err(err("E_VERSION", "unsupported capsule format"));
@@ -420,7 +431,7 @@ impl Engine {
                 };
             }
         }
-        let tx = self.conn.unchecked_transaction()?;
+        let tx = &self.conn;
         for manifest in &capsule.manifests {
             let id = &manifest_ids[&manifest.batch_id];
             let existing: Option<String> = tx
@@ -479,13 +490,33 @@ impl Engine {
                 )?;
             }
         }
-        tx.commit()?;
         Ok(inserted)
     }
     /// Explicitly accept a received/local revision into a branch using strict CAS.
     /// This is owner publication, not collective governance or conflict resolution.
     pub fn accept_revision(
         &mut self,
+        reference: &GraphRef,
+        branch: &str,
+        expected: Option<&str>,
+        host: &HostContext,
+    ) -> Result<()> {
+        self.conn.execute_batch("SAVEPOINT capsule_accept")?;
+        let result = self.accept_revision_inner(reference, branch, expected, host);
+        match result {
+            Ok(()) => {
+                self.conn.execute_batch("RELEASE capsule_accept")?;
+                Ok(())
+            }
+            Err(error) => {
+                self.conn
+                    .execute_batch("ROLLBACK TO capsule_accept; RELEASE capsule_accept")?;
+                Err(error)
+            }
+        }
+    }
+    fn accept_revision_inner(
+        &self,
         reference: &GraphRef,
         branch: &str,
         expected: Option<&str>,
@@ -502,7 +533,7 @@ impl Engine {
                 "host has not granted acceptance authority",
             ));
         }
-        let tx = self.conn.unchecked_transaction()?;
+        let tx = &self.conn;
         let head = self.head(&reference.graph_id, branch)?;
         if head.as_deref() != expected {
             return Err(err(
@@ -519,7 +550,6 @@ impl Engine {
         }
         self.validate_required_metadata(&record.data, host)?;
         if head.as_ref() == Some(&reference.revision) {
-            tx.commit()?;
             return Ok(());
         }
         let event_id = format!(
@@ -534,7 +564,6 @@ impl Engine {
         );
         tx.execute("INSERT INTO heads VALUES (?1,?2,?3) ON CONFLICT(graph_id,branch_id) DO UPDATE SET revision=excluded.revision",params![reference.graph_id,branch,reference.revision])?;
         tx.execute("INSERT INTO events(event_id,graph_id,branch_id,revision,actor) VALUES (?1,?2,?3,?4,?5)",params![event_id,reference.graph_id,branch,reference.revision,host.principal])?;
-        tx.commit()?;
         Ok(())
     }
     /// Create an independent branch at an immutable revision. Existing branches reject.

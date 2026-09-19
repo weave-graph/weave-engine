@@ -23,6 +23,8 @@ Public MIT implementation in progress; recovered original papers are reconciled.
 
 - Version 0.12 adds canonical exact Decimal and nominal Quantity property schemas, checked portable arithmetic and explicit rational conversions; old wire versions reject these schemas before writes. Graph-backed conversion authority and full dimensional algebra remain open. See [numeric profile](contract/v0.12/README.md).
 
+- Native durable mounts keep route lifecycle separate from graph acceptance and retention. Current signed proposal proofs plus separate host approval atomically integrate into explicit offline branches; restart/replay and real pre/post-commit process death are verified. Transport, selective proofs and semantic merges remain open. See [mounts and integration](MOUNTS_AND_INTEGRATION.md).
+
 ## Evidence
 
 `cargo test --workspace --locked`, formatting, clippy and the contract WASM target are checked locally. Independent executable acceptance is committed under `scripts/root_*`: language compilation into runtime, revision/CAS/time checks, joins, graph values, ten metadata checks, eight original-paper example checks, and seven process-death dispatch/effect checks. Public CI executes native tests and contract WASM checks. Runtime SQLite remains native, not a browser/mobile persistence implementation.
