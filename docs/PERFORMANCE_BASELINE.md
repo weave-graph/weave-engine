@@ -1,14 +1,14 @@
 # Native baseline measurements
 
-These are small reproducible local workloads, not a service SLO or a capacity claim. Source commit `193cc7e608b592213680b556619e92547f491c92`, Rust1.94.0 release build, Apple M4 Max, macOS/aarch64. The process uses a temporary local SQLite WAL database, one principal, no networking and warm operating-system caches. The [raw measurement JSON](measurements/2026-09-19-native-baseline.json) records exact counts, source hash and limitations; [time output](measurements/2026-09-19-native-time.txt) records whole-process resource observations.
+These are small reproducible local workloads, not a service SLO or a capacity claim. Source commit `193cc7e608b592213680b556619e92547f491c92`, Rust 1.94.0 release build, Apple M4 Max, macOS/aarch64. The process uses a temporary local SQLite WAL database, one principal, no networking and warm operating-system caches. The [raw measurement JSON](measurements/2026-09-19-native-baseline.json) records exact counts, source hash and limitations; [time output](measurements/2026-09-19-native-time.txt) records whole-process resource observations.
 
-| Workload | Samples after3warmups | Median | Observed p95 |
+| Workload | Samples after 3 warmups | Median | Observed p95 |
 |---|---:|---:|---:|
-| Commit256nodes/1024positiveedges, changed property generation |30|7.072ms|10.890ms|
-| Authorized exact predicate/time query,256nodes/1024edges |30|2.833ms|2.953ms|
-| Available navigation hierarchy,64nodes/63chain links |10|13.037ms|23.850ms|
+| Commit 256 nodes/1024 positive edges, changed property generation | 30 |7.072ms|10.890ms|
+| Authorized exact predicate/time query,256 nodes/1024 edges | 30 |2.833ms|2.953ms|
+| Available navigation hierarchy,64 nodes/63 chain links | 10 |13.037ms|23.850ms|
 
-The query value serializes to554,127bytes. The navigation graph has128nodes/127edges and serializes to5,371,300bytes, reflecting conservative repeated whole-input influence proofs. Whole executable maximum resident set was99,516,416bytes, with95,846,832bytes reported peak memory footprint; these include fixture construction, revisions, cache state and final serialization and are not per-operation allocations. One reopen took1.906ms and preserved34events and exact query results. Small-sample percentiles do not characterize tail latency under production contention.
+The query value serializes to 554,127 bytes. The navigation graph has 128 nodes/127 edges and serializes to 5,371,300 bytes, reflecting conservative repeated whole-input influence proofs. Whole executable maximum resident set was 99,516,416 bytes, with 95,846,832 bytes reported peak memory footprint; these include fixture construction, revisions, cache state and final serialization and are not per-operation allocations. One reopen took 1.906 ms and preserved 34 events and exact query results. Small-sample percentiles do not characterize tail latency under production contention.
 
 Reproduce from the corresponding source commit:
 

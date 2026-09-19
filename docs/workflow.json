@@ -418,7 +418,9 @@
         "docs/contract/v0.9/README.md",
         "crates/weave-engine/tests/geometry.rs",
         "docs/contract/v0.10/README.md",
-        "crates/weave-engine/tests/counterparts.rs"
+        "crates/weave-engine/tests/counterparts.rs",
+        "docs/IDENTITY_ACCEPTANCE_DESIGN.md",
+        "crates/weave-engine/tests/identity_acceptance.rs"
       ]
     },
     {
@@ -440,7 +442,10 @@
       ],
       "evidence": [
         "docs/CLUSTERING.md",
-        "crates/weave-cluster/tests/hierarchy.rs"
+        "crates/weave-cluster/tests/hierarchy.rs",
+        "docs/CLUSTER_SERVICE.md",
+        "crates/weave-engine/tests/root_clustering.rs",
+        "docs/SYNTHETIC_RELATIONS.md"
       ]
     },
     {
@@ -465,7 +470,10 @@
         "scripts/root_dispatch.py",
         "docs/STORAGE_RECOVERY.md",
         "crates/weave-engine/tests/root_storage.rs",
-        "scripts/root_admission.py"
+        "scripts/root_admission.py",
+        "scripts/root_identity.py",
+        "docs/PERFORMANCE_BASELINE.md",
+        "docs/measurements/2026-09-19-native-baseline.json"
       ]
     },
     {
