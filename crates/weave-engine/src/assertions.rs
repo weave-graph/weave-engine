@@ -265,7 +265,7 @@ impl Engine {
         let Some(data) = self.load(&reference.graph_id, &reference.revision)? else {
             return Ok(None);
         };
-        let visible = visible(data, &host.principal);
+        let (visible, _) = self.authorized(data, host)?;
         Ok(visible
             .structural_edges
             .into_iter()
