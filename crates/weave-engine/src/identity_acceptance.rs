@@ -403,6 +403,24 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
         request: &IdentityDecisionRequest,
         host: &HostContext,
     ) -> Result<IdentityDecisionReceipt> {
+        self.accept_identity_boundary(request, host, || {})
+    }
+    /// Test-only crash observer after all acceptance SQL and before the outer savepoint commits.
+    #[cfg(feature = "recovery-testing")]
+    pub fn accept_identity_test_before_commit(
+        &mut self,
+        request: &IdentityDecisionRequest,
+        host: &HostContext,
+        before_commit: impl FnOnce(),
+    ) -> Result<IdentityDecisionReceipt> {
+        self.accept_identity_boundary(request, host, before_commit)
+    }
+    fn accept_identity_boundary(
+        &mut self,
+        request: &IdentityDecisionRequest,
+        host: &HostContext,
+        before_commit: impl FnOnce(),
+    ) -> Result<IdentityDecisionReceipt> {
         let _scope = self.read_budget.enter();
         if !valid_id(&request.candidate_id)
             || !valid_id(&request.nonce)
@@ -536,6 +554,7 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
         })();
         match result {
             Ok(value) => {
+                before_commit();
                 self.conn.execute_batch("RELEASE identity_acceptance")?;
                 Ok(value)
             }
@@ -757,7 +776,7 @@ fn membership_graph(
     let mut edges = Vec::new();
     for (_, reference, source) in sources {
         let id = format!("member:{}", key(reference)?);
-        nodes.push(json!({"id":id,"entity_id":source.entity_id,"space_id":source.space_id,"type_id":"Member","context_scope":candidate.context.as_ref().map(|reference|ContextSelection::Pinned{reference:reference.clone()}).unwrap_or_default(),"properties":{"source_graph":reference.graph_id,"source_revision":reference.revision,"source_node":reference.node_id},"derived_nodes":[reference],"readers":source.readers}));
+        nodes.push(json!({"id":id,"entity_id":source.entity_id,"space_id":source.space_id,"type_id":"Member","context_scope":candidate.context.as_ref().map(|reference|ContextSelection::Pinned{reference:reference.clone()}).unwrap_or_default(),"properties":{"source_graph":reference.graph_id,"source_revision":reference.revision,"source_node":reference.node_id},"derived_nodes":[reference],"derived_from":candidate.evidence,"readers":source.readers}));
         edges.push(json!({"id":format!("membership:{}",key(reference)?),"type_id":"Membership","predicate":"weave:identity-member","from":id,"to":id,"valid_time":candidate.valid_time,"assertion_context":candidate.context,"assertion_source":actor,"assertion_properties":{"candidate":candidate.id,"policy":candidate.policy},"derived_from":candidate.evidence,"readers":source.readers}));
     }
     Ok(serde_json::from_value(

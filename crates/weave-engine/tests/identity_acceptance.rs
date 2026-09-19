@@ -540,3 +540,150 @@ fn repeated_resolution_and_union_preserve_distinct_same_space_manifestations() {
     assert_eq!(merged.graph.nodes.len(), 3);
     assert_eq!(merged.graph.edges.len(), 2);
 }
+
+#[test]
+fn private_approval_evidence_protects_members_and_node_only_copies() {
+    let (mut e, mut c) = setup();
+    let old = e.head("private", "main").unwrap();
+    let proof: GraphData = serde_json::from_value(json!({"nodes":[{"id":"proof","entity_id":"proof","space_id":"private"}],"edges":[{"id":"approval","predicate":"reviewed","from":"proof","to":"proof","valid_time":{"start":0,"end":10},"readers":["alice","reviewer"]}]})).unwrap();
+    e.execute(
+        &Program {
+            version: VERSION.into(),
+            source_revisions: vec![],
+            commands: vec![Command::Commit {
+                graph_id: "private".into(),
+                branch_id: "main".into(),
+                expected_head: old,
+                data: proof,
+            }],
+        },
+        &host("alice"),
+    )
+    .unwrap();
+    c.groups[0].pop();
+    c.evidence = vec![AssertionRef {
+        graph_id: "private".into(),
+        revision: e.head("private", "main").unwrap().unwrap(),
+        assertion_id: "approval".into(),
+    }];
+    e.submit_identity_candidate(&c, &host("alice")).unwrap();
+    let accepted = e
+        .accept_identity_candidate(&request(&c, None, "evidence"), &host("reviewer"))
+        .unwrap();
+    let query: QueryPlan = serde_json::from_value(
+        json!({"graph_id":accepted.reference.graph_id,"revision":accepted.reference.revision}),
+    )
+    .unwrap();
+    assert!(e
+        .query(&query, &host("bob"))
+        .unwrap()
+        .graph
+        .nodes
+        .is_empty());
+    assert!(e
+        .resolve_identity(
+            &selection(&c, &accepted.reference.revision, "operations"),
+            &host("bob")
+        )
+        .unwrap()
+        .graph
+        .nodes
+        .is_empty());
+    let authorized = e.query(&query, &host("alice")).unwrap();
+    assert_eq!(authorized.graph.nodes.len(), 2);
+    assert_eq!(
+        e.resolve_identity(
+            &selection(&c, &accepted.reference.revision, "operations"),
+            &host("alice")
+        )
+        .unwrap()
+        .graph
+        .edges
+        .len(),
+        1
+    );
+    let mut copied = authorized.graph;
+    copied.edges.clear();
+    for n in &mut copied.nodes {
+        n.readers.clear();
+    }
+    e.execute(
+        &Program {
+            version: VERSION.into(),
+            source_revisions: vec![],
+            commands: vec![Command::Commit {
+                graph_id: "copy".into(),
+                branch_id: "main".into(),
+                expected_head: None,
+                data: copied,
+            }],
+        },
+        &host("alice"),
+    )
+    .unwrap();
+    let copy: QueryPlan = serde_json::from_value(json!({"graph_id":"copy"})).unwrap();
+    assert!(e.query(&copy, &host("bob")).unwrap().graph.nodes.is_empty());
+    assert_eq!(e.query(&copy, &host("alice")).unwrap().graph.nodes.len(), 2);
+}
+
+#[test]
+fn metadata_navigation_keeps_the_same_scoped_coverage_with_hidden_members() {
+    let mut results = Vec::new();
+    for include_private in [false, true] {
+        let (mut e, mut c) = setup();
+        if !include_private {
+            c.groups[0].pop();
+        }
+        e.submit_identity_candidate(&c, &host("alice")).unwrap();
+        let accepted = e
+            .accept_identity_candidate(&request(&c, None, "accept"), &host("reviewer"))
+            .unwrap();
+        let carrier: GraphData = serde_json::from_value(json!({"nodes":[{"id":"carrier","entity_id":"carrier","space_id":"physical","metadata":[accepted.reference]}]})).unwrap();
+        e.execute(
+            &Program {
+                version: VERSION.into(),
+                source_revisions: vec![],
+                commands: vec![Command::Commit {
+                    graph_id: "copy".into(),
+                    branch_id: "main".into(),
+                    expected_head: None,
+                    data: carrier,
+                }],
+            },
+            &host("alice"),
+        )
+        .unwrap();
+        let carrier_revision = e.head("copy", "main").unwrap().unwrap();
+        let value = e
+            .query(
+                &serde_json::from_value(json!({"graph_id":"copy","include_metadata":true}))
+                    .unwrap(),
+                &host("bob"),
+            )
+            .unwrap();
+        assert_eq!(value.coverage, Coverage::Partial);
+        assert!(value
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "E_IDENTITY_SCOPE"));
+        assert_eq!(value.metadata_graphs.len(), 3);
+        assert_eq!(
+            value
+                .metadata_graphs
+                .iter()
+                .find(|g| g.reference == accepted.reference)
+                .unwrap()
+                .graph
+                .nodes
+                .len(),
+            2
+        );
+        let normalized = serde_json::to_string(&value)
+            .unwrap()
+            .replace(&accepted.reference.revision, "mapping-pin")
+            .replace(&carrier_revision, "carrier-pin");
+        assert!(!normalized.contains("pairwise-C"));
+        results.push(normalized);
+    }
+    assert_eq!(results[0], results[1]);
+}

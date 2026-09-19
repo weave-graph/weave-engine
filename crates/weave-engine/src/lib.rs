@@ -769,7 +769,13 @@ impl Engine {
                         let (data, incomplete_derivation) = self.authorized(data, host)?;
                         let (mut data, attachment_origins) =
                             materialize(data, &reference.graph_id, &reference.revision)?;
-                        if incomplete_derivation {
+                        if identity_acceptance::reserved(&reference.graph_id) {
+                            partial(
+                                &mut result,
+                                "E_IDENTITY_SCOPE",
+                                "identity results cover only authorized and available membership records",
+                            );
+                        } else if incomplete_derivation {
                             partial(
                                 &mut result,
                                 "E_DERIVATION_UNAVAILABLE",
