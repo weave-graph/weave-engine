@@ -408,7 +408,7 @@
       "id": "E13",
       "title": "Clustering and semantic zoom",
       "owner": "engine",
-      "state": "proposed",
+      "state": "in_progress",
       "depends_on": [
         "E07",
         "E12"
@@ -421,7 +421,10 @@
         "R30",
         "R33"
       ],
-      "evidence": []
+      "evidence": [
+        "docs/CLUSTERING.md",
+        "crates/weave-cluster/tests/hierarchy.rs"
+      ]
     },
     {
       "id": "E14",
