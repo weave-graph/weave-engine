@@ -4,7 +4,7 @@ Public MIT implementation in progress; recovered original papers are reconciled.
 
 ## Implemented
 
-- Versions 0.1–0.13: immutable SQLite snapshots/CAS, half-open time, principal-filtered pinned queries, interval-aware identity-space joins and reusable pure graph values.
+- Versions 0.1–0.14: immutable SQLite snapshots/CAS, half-open time, principal-filtered pinned queries, interval-aware identity-space joins and reusable pure graph values.
 - Version 0.4 adds immutable embedded schemas, typed joins, named host/time-qualified metadata, atomic logical snapshot manifests with constructible metadata cycles, required dependency checks, live handle pinning, and no-op suppression. See [contract](contract/v0.4/README.md).
 - Signed per-operation native Query/Publish/Propose admission with durable nonce receipts, accepted-branch scope checks, isolated proposal quarantine and subject-scoped egress; [security boundary](ADMISSION.md). No remote arbitrary-program authority or transport server is implied.
 - Trusted host read/write boundaries, transitive derivation restrictions, generic partial coverage, bounded materialization and whole-program rollback.
@@ -42,3 +42,5 @@ Protocol 0.11 preserves exact node-source influences through materialization, su
 Protocol 0.13 exposes explicitly pinned accepted identity resolution and authorized clustering as reusable source graph values. Native service selection never installs policy or grants acceptance. The trusted native C ABI and Swift host add bounded cross-language persistence/privacy/rollback acceptance; see [native host](NATIVE_HOST.md).
 
 The fixed portable conformance harness executes seven semantic case groups both natively and as WebAssembly and compares complete output bytes. [Portable parity](PORTABLE_PARITY.md) records the supported fixture boundary; this does not provide browser storage. [Clustering diagnostics](CLUSTERING.md) record split/merge lineage, adversarial bridge quality/churn and exact-query preservation without claiming sound approximate pruning.
+
+Protocol 0.14 adds exact typed context axis definitions and a persistable whole-value influence carrier. Empty typed values retain descriptor authority through mixed union, missing metadata, support and saved results; generated support/explanation/geometry nodes retain independent proof gates even after carrier/reader removal. Nine native typed-context tests and signed scope/retry acceptance pass; the combined workspace passed 243 tests with strict lint before the additional native-service composition regression, which also passes. Full context compatibility/broadcast and accepted-view governance remain open. See [typed context contract](contract/v0.14/README.md) and [governance next stage](ACCEPTED_VIEW_GOVERNANCE_DESIGN.md).

@@ -421,3 +421,119 @@ fn missing_metadata_navigation_preserves_empty_private_context_influence() {
         .nodes
         .is_empty());
 }
+#[test]
+fn native_cluster_and_accepted_identity_outputs_retain_typed_source_influence() {
+    let (mut e, c) = setup();
+    for (id, space) in [("source", "physical"), ("g", "operations")] {
+        write(
+            &mut e,
+            id,
+            serde_json::from_value(json!({"nodes":[{"id":"n","entity_id":id,"space_id":space}]}))
+                .unwrap(),
+        );
+        let typed_value = evaluate(&mut e, typed(query(id), &c), "alice").unwrap();
+        write(&mut e, id, typed_value.graph);
+    }
+    let source = NodeRef {
+        graph_id: "source".into(),
+        revision: e.head("source", "main").unwrap().unwrap(),
+        node_id: "n".into(),
+    };
+    let target = NodeRef {
+        graph_id: "g".into(),
+        revision: e.head("g", "main").unwrap().unwrap(),
+        node_id: "n".into(),
+    };
+    let selected = ContextSelection::Pinned {
+        reference: c.clone(),
+    };
+    let navigation = e
+        .cluster_navigation(
+            &ClusterRequest {
+                source: GraphRef {
+                    graph_id: source.graph_id.clone(),
+                    revision: source.revision.clone(),
+                },
+                context: selected.clone(),
+                valid_at: 5,
+                predicate: "connected".into(),
+                levels: 0,
+            },
+            &host("alice"),
+        )
+        .unwrap();
+    assert!(navigation.graph.context_typing.is_some());
+    let policy = IdentityPolicy {
+        reference: IdentityPolicyRef {
+            id: "review".into(),
+            revision: "typed".into(),
+        },
+        proposers: vec!["alice".into()],
+        approvers: vec!["alice".into()],
+        readers: vec![],
+        allowed_spaces: vec!["physical".into(), "operations".into()],
+        max_members: 4,
+    };
+    e.install_identity_policy(&policy).unwrap();
+    e.submit_identity_candidate(
+        &IdentityCandidate {
+            id: "typed-candidate".into(),
+            mapping_id: "equipment".into(),
+            policy: policy.reference.clone(),
+            groups: vec![vec![source.clone(), target]],
+            evidence: vec![],
+            valid_time: Interval {
+                start: 0,
+                end: None,
+            },
+            context: Some(c),
+        },
+        &host("alice"),
+    )
+    .unwrap();
+    let accepted = e
+        .accept_identity_candidate(
+            &IdentityDecisionRequest {
+                candidate_id: "typed-candidate".into(),
+                expected_head: None,
+                nonce: "typed-accept".into(),
+            },
+            &host("alice"),
+        )
+        .unwrap();
+    let resolved = e
+        .resolve_identity(
+            &IdentityResolve {
+                mapping_id: "equipment".into(),
+                revision: accepted.reference.revision,
+                policy: policy.reference,
+                source,
+                target_space: "operations".into(),
+                valid_at: 5,
+                context: selected,
+            },
+            &host("alice"),
+        )
+        .unwrap();
+    assert!(resolved.graph.context_typing.is_some());
+    for mut value in [navigation, resolved] {
+        assert!(!value.graph.nodes.is_empty());
+        value.graph.context_typing = None;
+        value.graph.edges.clear();
+        value.graph.attachments.clear();
+        for node in &mut value.graph.nodes {
+            node.readers.clear();
+        }
+        write(&mut e, "copy", value.graph);
+        assert!(evaluate(&mut e, query("copy"), "bob")
+            .unwrap()
+            .graph
+            .nodes
+            .is_empty());
+        assert!(!evaluate(&mut e, query("copy"), "alice")
+            .unwrap()
+            .graph
+            .nodes
+            .is_empty());
+    }
+}
