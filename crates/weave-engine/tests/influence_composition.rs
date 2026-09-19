@@ -123,3 +123,79 @@ fn node_only_cluster_membership_cannot_drop_gates_by_replacing_endpoints() {
     assert!(denied.graph.edges.is_empty());
     assert_eq!(denied.coverage, Coverage::Partial);
 }
+
+#[test]
+fn metadata_path_wrappers_do_not_claim_original_node_identity_and_union_stably() {
+    let mut e = Engine::memory().unwrap();
+    run(
+        &mut e,
+        vec![Command::Commit {
+            graph_id: "saved".into(),
+            branch_id: "main".into(),
+            expected_head: None,
+            data: serde_json::from_value(
+                json!({"nodes":[{"id":"original","entity_id":"entity","space_id":"s"}]}),
+            )
+            .unwrap(),
+        }],
+    );
+    let pin = e.head("saved", "main").unwrap().unwrap();
+    run(&mut e,vec![Command::Commit {graph_id:"input".into(),branch_id:"main".into(),expected_head:None,data:serde_json::from_value(json!({"attachments":[{"id":"path","host":{"kind":"graph"},"key":"proof","value":{"kind":"graph","reference":{"graph_id":"saved","revision":pin}},"valid_time":{"start":0,"end":null},"readers":["alice"]}]})).unwrap()}]);
+    let q = |graph: &str| GraphExpression::Query {
+        query: serde_json::from_value(json!({"graph_id":graph,"include_metadata":true})).unwrap(),
+    };
+    let path = GraphExpression::Metadata {
+        input: Box::new(q("input")),
+        host: MetadataHost::Graph,
+        key: "proof".into(),
+    };
+    let read = run(
+        &mut e,
+        vec![Command::Evaluate {
+            value: path.clone(),
+        }],
+    );
+    let CommandResult::Queried { result } = &read[0] else {
+        panic!()
+    };
+    assert!(result.graph.nodes[0].id.starts_with("metadata-node:"));
+    assert!(result.node_origins.values().all(Vec::is_empty));
+    assert!(result.graph.nodes[0]
+        .derived_nodes
+        .iter()
+        .any(|r| r.graph_id == "saved" && r.revision == pin && r.node_id == "original"));
+    let union = GraphExpression::Union {
+        left: Box::new(path),
+        right: Box::new(q("saved")),
+    };
+    let values = run(
+        &mut e,
+        vec![
+            Command::Evaluate {
+                value: union.clone(),
+            },
+            Command::Evaluate {
+                value: GraphExpression::Union {
+                    left: Box::new(union.clone()),
+                    right: Box::new(union),
+                },
+            },
+        ],
+    );
+    let CommandResult::Queried { result: first } = &values[0] else {
+        panic!()
+    };
+    let CommandResult::Queried { result: repeated } = &values[1] else {
+        panic!()
+    };
+    assert_eq!(first.graph.nodes.len(), 2);
+    assert_eq!(first.graph, repeated.graph);
+    let plain = e
+        .query(
+            &serde_json::from_value(json!({"graph_id":"saved"})).unwrap(),
+            &host("bob"),
+        )
+        .unwrap();
+    assert_eq!(plain.graph.nodes[0].id, "original");
+    assert!(plain.graph.influence.is_none());
+}

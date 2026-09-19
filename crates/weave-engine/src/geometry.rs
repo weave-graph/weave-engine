@@ -320,13 +320,22 @@ fn geometry_result(
     let mut origins = Vec::new();
     for p in derivations.iter().flat_map(|d| &d.premises) {
         if !origins.contains(p) {
+            if origins.len() == weave_contract::influence::MAX_REFERENCES {
+                return Err(err("E_BUDGET", "geometry scalar influence limit exceeded"));
+            }
             origins.push(p.clone());
         }
     }
-    let node_gates = derivations
-        .iter()
-        .flat_map(|d| d.node_premises.iter().cloned())
-        .collect::<Vec<_>>();
+    let mut node_gates = BTreeMap::new();
+    for node in derivations.iter().flat_map(|d| &d.node_premises) {
+        node_gates.insert((&node.graph_id, &node.revision, &node.node_id), node);
+        if node_gates.len().saturating_add(origins.len())
+            > weave_contract::influence::MAX_REFERENCES
+        {
+            return Err(err("E_BUDGET", "geometry scalar influence limit exceeded"));
+        }
+    }
+    let node_gates = node_gates.into_values().cloned().collect();
     let mut node_gates = GraphInfluence {
         assertions: origins.clone(),
         nodes: node_gates,
