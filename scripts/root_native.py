@@ -7,6 +7,7 @@ from pathlib import Path
 import plistlib
 import subprocess
 import tempfile
+import time
 
 ROOT=Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser()
@@ -41,7 +42,14 @@ with tempfile.TemporaryDirectory(prefix='weave-native-') as directory:
         try:
             run(simctl+['boot',simulator],timeout=30)
             run(simctl+['bootstatus',simulator,'-b'],timeout=600)
-            run(simctl+['install',simulator,str(app)],timeout=60)
+            for attempt in range(3):
+                try:
+                    run(simctl+['install',simulator,str(app)],timeout=60)
+                    break
+                except RuntimeError as error:
+                    if 'IXErrorDomain' not in str(error) or attempt == 2:
+                        raise
+                    time.sleep(2)
             report['runtime']=a.runtime;report['device_type']=a.device_type
             for stage in ['seed','read','rollback','read']:
                 output=run(simctl+['launch','--console',simulator,'org.weave-graph.acceptance',stage],timeout=60)
