@@ -1,5 +1,5 @@
 use serde_json::json;
-use weave_contract::{AlgebraContext, CommandResult, GraphData, Program, VERSION, algebra};
+use weave_contract::{algebra, AlgebraContext, CommandResult, GraphData, Program, VERSION};
 use weave_engine::{Engine, HostContext};
 
 fn commit(engine: &mut Engine, name: &str, data: GraphData) {
@@ -42,11 +42,10 @@ fn node_grounded_navigation_relations_gain_real_assertion_origins_after_persiste
             &host,
         )
         .unwrap();
-    assert!(
-        read.edge_origins
-            .values()
-            .all(|origins| origins.len() == 1 && origins[0].graph_id == "saved")
-    );
+    assert!(read
+        .edge_origins
+        .values()
+        .all(|origins| origins.len() == 1 && origins[0].graph_id == "saved"));
     let support = algebra::support(
         read,
         "weave:cluster:frontier",
@@ -63,11 +62,9 @@ fn node_grounded_navigation_relations_gain_real_assertion_origins_after_persiste
     )
     .unwrap();
     assert_eq!(support.graph.nodes[0].properties["state"], "supported");
-    assert!(
-        support
-            .graph
-            .edges
-            .iter()
-            .all(|e| !e.derived_from.is_empty())
-    );
+    assert!(support
+        .graph
+        .edges
+        .iter()
+        .all(|e| !e.derived_from.is_empty()));
 }

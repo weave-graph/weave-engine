@@ -1,7 +1,7 @@
 //! Bounded, pure operators over runtime-authorized graph values.
 use crate::*;
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Write};
@@ -804,23 +804,19 @@ pub fn support(
             ("state".into(), json!(state)),
             (
                 "context_graph_id".into(),
-                json!(
-                    input
-                        .selected_context
-                        .as_ref()
-                        .and_then(ContextSelection::reference)
-                        .map(|r| &r.graph_id)
-                ),
+                json!(input
+                    .selected_context
+                    .as_ref()
+                    .and_then(ContextSelection::reference)
+                    .map(|r| &r.graph_id)),
             ),
             (
                 "context_revision".into(),
-                json!(
-                    input
-                        .selected_context
-                        .as_ref()
-                        .and_then(ContextSelection::reference)
-                        .map(|r| &r.revision)
-                ),
+                json!(input
+                    .selected_context
+                    .as_ref()
+                    .and_then(ContextSelection::reference)
+                    .map(|r| &r.revision)),
             ),
             ("valid_at".into(), json!(valid_at)),
             (
@@ -1081,13 +1077,11 @@ mod tests {
         let empty = project(a.clone(), &[], &[], &ctx()).unwrap();
         let delta = diff(a, empty, &ctx()).unwrap();
         assert_eq!(delta.graph.edges[0].polarity, Polarity::Positive);
-        assert!(
-            delta
-                .graph
-                .attachments
-                .iter()
-                .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed"))
-        );
+        assert!(delta
+            .graph
+            .attachments
+            .iter()
+            .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed")));
     }
     #[test]
     fn support_four_states_are_time_specific_and_open_world() {
@@ -1133,12 +1127,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.graph.edges[0].derivations.len(), 2);
-        assert!(
-            r.graph.edges[0]
-                .derivations
-                .iter()
-                .all(|d| d.premises.len() == 2)
-        );
+        assert!(r.graph.edges[0]
+            .derivations
+            .iter()
+            .all(|d| d.premises.len() == 2));
     }
     #[test]
     fn byte_object_and_missing_origin_limits_fail_closed() {
@@ -1227,11 +1219,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(d[0].input_snapshots.len(), 2);
-        assert!(
-            !serde_json::to_string(&d)
-                .unwrap()
-                .contains("private-other-path")
-        );
+        assert!(!serde_json::to_string(&d)
+            .unwrap()
+            .contains("private-other-path"));
     }
     #[test]
     fn contextual_support_is_not_silently_treated_as_universal() {
@@ -1288,13 +1278,11 @@ mod tests {
         assert!(unknown.graph.edges.is_empty());
         assert_eq!(unknown.graph.nodes[0].derived_from, input.edge_origins["e"]);
         let explanation = crate::identity::explain(&input, &ctx()).unwrap();
-        assert!(
-            explanation
-                .graph
-                .nodes
-                .iter()
-                .all(|n| !n.derived_from.is_empty())
-        );
+        assert!(explanation
+            .graph
+            .nodes
+            .iter()
+            .all(|n| !n.derived_from.is_empty()));
         let mut altered = input.clone();
         altered.graph.nodes[0].derived_from = input.edge_origins["e"].clone();
         assert_eq!(
@@ -1311,13 +1299,11 @@ mod tests {
         }
         let first = union(input.clone(), input.clone(), &ctx()).unwrap();
         assert_eq!(first.graph.nodes.len(), 2);
-        assert!(
-            first
-                .graph
-                .nodes
-                .iter()
-                .all(|n| n.id.starts_with("derived-node:"))
-        );
+        assert!(first
+            .graph
+            .nodes
+            .iter()
+            .all(|n| n.id.starts_with("derived-node:")));
         assert!(first.node_origins.values().all(Vec::is_empty));
         let nested = union(first.clone(), input.clone(), &ctx()).unwrap();
         assert_eq!(nested.graph, first.graph);
@@ -1370,13 +1356,11 @@ mod tests {
         let empty = project(value.clone(), &["a".into(), "b".into()], &[], &ctx()).unwrap();
         let removed = diff(value.clone(), empty, &ctx()).unwrap();
         assert_eq!(removed.graph.edges.len(), 1);
-        assert!(
-            removed
-                .graph
-                .attachments
-                .iter()
-                .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed"))
-        );
+        assert!(removed
+            .graph
+            .attachments
+            .iter()
+            .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed")));
         let mut relation = value.clone();
         relation.graph.edges[0].predicate = "weave:cluster:member".into();
         assert_eq!(
