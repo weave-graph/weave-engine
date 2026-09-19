@@ -32,3 +32,4 @@ jobs:
           python3 weave-engine/scripts/root_assertions.py
           python3 weave-engine/scripts/root_dispatch.py
           python3 weave-engine/scripts/root_admission.py
+          python3 weave-engine/scripts/root_migration.py
