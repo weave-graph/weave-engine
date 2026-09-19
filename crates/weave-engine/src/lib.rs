@@ -17,7 +17,9 @@ pub use dispatch::{
     AdapterManifest, DispatchEnvelope, EffectIntent, HandlerReceipt, SubscriptionScope,
 };
 pub use views::{ViewChange, ViewClock, ViewDefinition, ViewFreshness, ViewSnapshot};
+mod clustering;
 mod geometry;
+pub use clustering::ClusterRequest;
 mod metadata;
 mod snapshot;
 mod typed;
