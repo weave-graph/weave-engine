@@ -21,7 +21,8 @@
       "target": "capsule_receive",
       "run": "capsule_receive",
       "seconds": 31,
-      "exit_code": 0
+      "exit_code": 0,
+      "limitation": "Initial host had no storage grant; this run covered rejection paths. Authorized follow-up exercises receive/replay."
     },
     {
       "inputs": 3318373,
@@ -52,6 +53,19 @@
       "run": "program_atomic",
       "seconds": 31,
       "exit_code": 0
+    },
+    {
+      "inputs": 529194,
+      "libfuzzer_cov": 2769,
+      "libfuzzer_features": 5473,
+      "reported_rss_mib": 508,
+      "target": "capsule_receive",
+      "run": "capsule_receive-authorized",
+      "seconds": 31,
+      "exit_code": 0,
+      "host_storage_scope": [
+        "fuzz"
+      ]
     }
   ],
   "seed_sha256": {
