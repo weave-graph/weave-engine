@@ -6,6 +6,7 @@ fn host() -> HostContext {
 }
 fn node(id: &str, entity: &str, space: &str) -> Node {
     Node {
+        derived_nodes: vec![],
         derived_from: vec![],
         context_scope: None,
         type_id: None,

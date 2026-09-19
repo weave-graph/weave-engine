@@ -1,7 +1,7 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.10.0";
+pub const VERSION: &str = "0.11.0";
 pub mod counterpart;
 mod geometry_types;
 pub use geometry_types::*;
@@ -64,6 +64,9 @@ pub enum Polarity {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Node {
+    /// Conservative AND influence from exact source nodes, including isolated nodes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derived_nodes: Vec<NodeRef>,
     /// Conservative AND gate for derived node values, independent of readers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub derived_from: Vec<AssertionRef>,

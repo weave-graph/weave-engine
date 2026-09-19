@@ -149,7 +149,7 @@ impl Engine {
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
         let _read_scope = self.read_budget.enter();
         if ![
-            VERSION, "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0",
+            VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0",
         ]
         .contains(&program.version.as_str())
             && program.version != "0.2.0"
@@ -167,7 +167,7 @@ impl Engine {
             return Err(err("E_VERSION", "join requires contract 0.2.0"));
         }
         if ![
-            VERSION, "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0",
+            VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0",
         ]
         .contains(&program.version.as_str())
             && program
@@ -177,9 +177,11 @@ impl Engine {
         {
             return Err(err("E_VERSION", "graph expressions require contract 0.3.0"));
         }
-        if ![VERSION, "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
-        if ![VERSION, "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0"]
-            .contains(&program.version.as_str())
+        if ![VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
+        if ![
+            VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0",
+        ]
+        .contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => {
                     data.edges.iter().any(|e| !e.derivations.is_empty())
@@ -195,7 +197,8 @@ impl Engine {
                 "derivation alternatives require contract 0.5.0",
             ));
         }
-        if ![VERSION, "0.9.0", "0.8.0", "0.7.0", "0.6.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0"]
+            .contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => requires_explicit_profile(data),
                 Command::CommitBatch { commits, .. } => {
@@ -209,7 +212,7 @@ impl Engine {
                 "explicit assertions require contract 0.6.0",
             ));
         }
-        if ![VERSION, "0.9.0", "0.8.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.10.0", "0.9.0", "0.8.0"].contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => {
                     data.attachments.iter().any(|a| a.context.is_some())
@@ -227,7 +230,7 @@ impl Engine {
                 "attachment/node context requires contract 0.8.0",
             ));
         }
-        if ![VERSION, "0.9.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.10.0", "0.9.0"].contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => {
                     has_float_schema(data) || data.nodes.iter().any(|n| !n.derived_from.is_empty())
@@ -244,13 +247,30 @@ impl Engine {
                 "Float schemas and node dependencies require contract 0.9.0",
             ));
         }
+        if program.version != VERSION
+            && program.commands.iter().any(|c| match c {
+                Command::Commit { data, .. } => {
+                    data.nodes.iter().any(|n| !n.derived_nodes.is_empty())
+                }
+                Command::CommitBatch { commits, .. } => commits
+                    .iter()
+                    .any(|c| c.data.nodes.iter().any(|n| !n.derived_nodes.is_empty())),
+                _ => false,
+            })
+        {
+            return Err(err(
+                "E_VERSION",
+                "node source influences require contract 0.11.0",
+            ));
+        }
         for command in &program.commands {
             if let Command::Bind { value, .. } | Command::Evaluate { value } = command {
                 validate_expression_profile(value, &program.version)?;
             }
         }
         if !program.source_revisions.is_empty()
-            && ![VERSION, "0.9.0", "0.8.0", "0.7.0", "0.6.0"].contains(&program.version.as_str())
+            && ![VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0"]
+                .contains(&program.version.as_str())
         {
             return Err(err(
                 "E_VERSION",
@@ -293,7 +313,7 @@ impl Engine {
                 let mut command_result = match command {
                     Command::CommitBatch { batch_id, commits } => {
                         if ![
-                            VERSION, "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0",
+                            VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0",
                         ]
                         .contains(&program.version.as_str())
                         {
@@ -616,7 +636,7 @@ impl Engine {
             );
         }
         let mut query_bytes = json_size(&result, MATERIALIZED_LIMIT)?;
-        for node in &result.graph.nodes {
+        for node in &mut result.graph.nodes {
             let origins = vec![NodeRef {
                 graph_id: query.graph_id.clone(),
                 revision: revision.clone(),
@@ -626,6 +646,11 @@ impl Engine {
                 &(&node.id, &origins),
                 MATERIALIZED_LIMIT.saturating_sub(query_bytes),
             )?;
+            if !node.derived_nodes.contains(&origins[0]) {
+                query_bytes +=
+                    json_size(&origins[0], MATERIALIZED_LIMIT.saturating_sub(query_bytes))?;
+                node.derived_nodes.push(origins[0].clone());
+            }
             result.node_origins.insert(node.id.clone(), origins);
         }
         for attachment in &result.graph.attachments {
@@ -1266,7 +1291,17 @@ impl Engine {
         let mut incomplete = false;
         let mut nodes = Vec::new();
         for node in std::mem::take(&mut data.nodes) {
-            if self.premises_visible(&node.derived_from, host, &mut HashSet::new(), &mut 1000, 0)? {
+            let mut visiting = HashSet::new();
+            let mut budget = 1000;
+            if self.premises_visible(&node.derived_from, host, &mut visiting, &mut budget, 0)?
+                && self.node_refs_visible(
+                    &node.derived_nodes,
+                    host,
+                    &mut visiting,
+                    &mut budget,
+                    0,
+                )?
+            {
                 nodes.push(node);
             } else {
                 incomplete = true;
@@ -1358,11 +1393,11 @@ impl Engine {
         edge.derivations = groups;
         Ok(!edge.derivations.is_empty())
     }
-    fn premises_visible(
+    fn node_refs_visible(
         &self,
-        references: &[AssertionRef],
+        references: &[NodeRef],
         host: &HostContext,
-        visiting: &mut HashSet<(String, String, String)>,
+        visiting: &mut HashSet<(u8, String, String, String)>,
         budget: &mut usize,
         depth: u32,
     ) -> Result<bool> {
@@ -1375,6 +1410,55 @@ impl Engine {
             }
             *budget -= 1;
             let key = (
+                1,
+                reference.graph_id.clone(),
+                reference.revision.clone(),
+                reference.node_id.clone(),
+            );
+            if !visiting.insert(key.clone()) {
+                return Ok(false);
+            }
+            let Some(source) = self.load(&reference.graph_id, &reference.revision)? else {
+                return Ok(false);
+            };
+            let source = visible(source, &host.principal);
+            let Some(node) = source.nodes.iter().find(|n| n.id == reference.node_id) else {
+                return Ok(false);
+            };
+            let permitted =
+                self.premises_visible(&node.derived_from, host, visiting, budget, depth + 1)?
+                    && self.node_refs_visible(
+                        &node.derived_nodes,
+                        host,
+                        visiting,
+                        budget,
+                        depth + 1,
+                    )?;
+            visiting.remove(&key);
+            if !permitted {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+    fn premises_visible(
+        &self,
+        references: &[AssertionRef],
+        host: &HostContext,
+        visiting: &mut HashSet<(u8, String, String, String)>,
+        budget: &mut usize,
+        depth: u32,
+    ) -> Result<bool> {
+        if depth > 32 {
+            return Ok(false);
+        }
+        for reference in references {
+            if *budget == 0 {
+                return Ok(false);
+            }
+            *budget -= 1;
+            let key = (
+                0,
                 reference.graph_id.clone(),
                 reference.revision.clone(),
                 reference.assertion_id.clone(),
@@ -1436,7 +1520,15 @@ impl Engine {
                 .iter()
                 .filter(|n| endpoint_ids.contains(&n.id.as_str()))
             {
-                if !self.premises_visible(&node.derived_from, host, visiting, budget, depth + 1)? {
+                if !self.premises_visible(&node.derived_from, host, visiting, budget, depth + 1)?
+                    || !self.node_refs_visible(
+                        &node.derived_nodes,
+                        host,
+                        visiting,
+                        budget,
+                        depth + 1,
+                    )?
+                {
                     return Ok(false);
                 }
             }
@@ -1515,7 +1607,7 @@ impl Engine {
         &self,
         edge: &Edge,
         host: &HostContext,
-        visiting: &mut HashSet<(String, String, String)>,
+        visiting: &mut HashSet<(u8, String, String, String)>,
         budget: &mut usize,
         depth: u32,
     ) -> Result<bool> {
@@ -1678,6 +1770,12 @@ fn refs(data: &GraphData) -> Vec<GraphRef> {
         .iter()
         .flat_map(|n| n.metadata.clone())
         .chain(data.nodes.iter().flat_map(|n| {
+            n.derived_nodes.iter().map(|p| GraphRef {
+                graph_id: p.graph_id.clone(),
+                revision: p.revision.clone(),
+            })
+        }))
+        .chain(data.nodes.iter().flat_map(|n| {
             n.derived_from.iter().map(|p| GraphRef {
                 graph_id: p.graph_id.clone(),
                 revision: p.revision.clone(),
@@ -1742,7 +1840,15 @@ fn partial(result: &mut QueryResult, code: &str, message: &str) {
 }
 fn validate_graph(data: &GraphData) -> Result<()> {
     for node in &data.nodes {
-        if node.derived_from.len() > 1000
+        if node
+            .derived_from
+            .len()
+            .saturating_add(node.derived_nodes.len())
+            > 1000
+            || node
+                .derived_nodes
+                .iter()
+                .any(|p| !valid_id(&p.graph_id) || !valid_id(&p.revision) || !valid_id(&p.node_id))
             || node.derived_from.iter().any(|p| {
                 !valid_id(&p.graph_id) || !valid_id(&p.revision) || !valid_id(&p.assertion_id)
             })
@@ -1947,7 +2053,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
         }
         match expression {
             GraphExpression::Counterparts { input, .. } => {
-                if version != VERSION {
+                if ![VERSION, "0.10.0"].contains(&version) {
                     return Err(err(
                         "E_VERSION",
                         "counterpart selection requires contract 0.10.0",
@@ -1956,7 +2062,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 pending.push((input, depth + 1));
             }
             GraphExpression::Geometry { operation, .. } => {
-                if ![VERSION, "0.9.0"].contains(&version) {
+                if ![VERSION, "0.10.0", "0.9.0"].contains(&version) {
                     return Err(err("E_VERSION", "geometry requires contract 0.9.0"));
                 }
                 pending.extend(
@@ -1967,7 +2073,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 );
             }
             GraphExpression::Explain { input } => {
-                if ![VERSION, "0.9.0"].contains(&version) {
+                if ![VERSION, "0.10.0", "0.9.0"].contains(&version) {
                     return Err(err(
                         "E_VERSION",
                         "explain expression requires contract 0.9.0",
@@ -1976,7 +2082,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 pending.push((input, depth + 1));
             }
             GraphExpression::Context { input, .. } => {
-                if ![VERSION, "0.9.0", "0.8.0"].contains(&version) {
+                if ![VERSION, "0.10.0", "0.9.0", "0.8.0"].contains(&version) {
                     return Err(err(
                         "E_VERSION",
                         "context selection requires contract 0.8.0",
@@ -1985,7 +2091,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 pending.push((input, depth + 1));
             }
             GraphExpression::Reason { input, .. } => {
-                if ![VERSION, "0.9.0", "0.8.0", "0.7.0"].contains(&version) {
+                if ![VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0"].contains(&version) {
                     return Err(err("E_VERSION", "finite rules require contract 0.7.0"));
                 }
                 pending.push((input, depth + 1));
@@ -1995,21 +2101,29 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 before: left,
                 after: right,
             } => {
-                if ![VERSION, "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0"].contains(&version) {
+                if ![
+                    VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0",
+                ]
+                .contains(&version)
+                {
                     return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
                 }
                 pending.push((left, depth + 1));
                 pending.push((right, depth + 1));
             }
             GraphExpression::Project { input, .. } | GraphExpression::Support { input, .. } => {
-                if ![VERSION, "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0"].contains(&version) {
+                if ![
+                    VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0",
+                ]
+                .contains(&version)
+                {
                     return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
                 }
                 pending.push((input, depth + 1));
             }
             GraphExpression::Metadata { input, host, .. } => {
                 if matches!(host, MetadataHost::Assertion { .. })
-                    && ![VERSION, "0.9.0", "0.8.0", "0.7.0", "0.6.0"].contains(&version)
+                    && ![VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0"].contains(&version)
                 {
                     return Err(err(
                         "E_VERSION",
@@ -2017,7 +2131,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                     ));
                 }
                 if ![
-                    VERSION, "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0",
+                    VERSION, "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0",
                 ]
                 .contains(&version)
                 {

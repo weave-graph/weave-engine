@@ -353,6 +353,7 @@ fn geometry_result(
         }
     };
     let node = Node {
+        derived_nodes: vec![],
         derived_from: origins.clone(),
         context_scope: Some(context.clone().unwrap_or_default()),
         id: "result".into(),

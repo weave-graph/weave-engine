@@ -42,10 +42,33 @@ pub(crate) fn assertion_edge(
     }
 }
 pub(crate) fn materialize(
-    data: GraphData,
+    mut data: GraphData,
     graph: &str,
     revision: &str,
 ) -> Result<(GraphData, BTreeMap<String, Vec<AssertionRef>>)> {
+    let mut node_bytes = json_size(&data, MATERIALIZED_LIMIT)?;
+    for node in &mut data.nodes {
+        let origin = NodeRef {
+            graph_id: graph.into(),
+            revision: revision.into(),
+            node_id: node.id.clone(),
+        };
+        if !node.derived_nodes.contains(&origin) {
+            if node
+                .derived_from
+                .len()
+                .saturating_add(node.derived_nodes.len())
+                >= 1000
+            {
+                return Err(err(
+                    "E_BUDGET",
+                    "Node influence expansion exceeds output limit",
+                ));
+            }
+            node_bytes += json_size(&origin, MATERIALIZED_LIMIT.saturating_sub(node_bytes))?;
+            node.derived_nodes.push(origin);
+        }
+    }
     if data.profile == GraphProfile::Legacy {
         return Ok((data, BTreeMap::new()));
     }

@@ -193,6 +193,17 @@ impl Engine {
         for node in &mut input.graph.nodes {
             for dependency in &origin {
                 if !node.derived_from.contains(dependency) {
+                    if node
+                        .derived_from
+                        .len()
+                        .saturating_add(node.derived_nodes.len())
+                        >= 1000
+                    {
+                        return Err(err(
+                            "E_BUDGET",
+                            "Node influence expansion exceeds output limit",
+                        ));
+                    }
                     bytes += json_size(dependency, MATERIALIZED_LIMIT.saturating_sub(bytes))?;
                     node.derived_from.push(dependency.clone());
                 }
@@ -206,6 +217,10 @@ impl Engine {
                 &(&node.id, &origins),
                 MATERIALIZED_LIMIT.saturating_sub(bytes),
             )?;
+            if !node.derived_nodes.contains(&origins[0]) {
+                bytes += json_size(&origins[0], MATERIALIZED_LIMIT.saturating_sub(bytes))?;
+                node.derived_nodes.push(origins[0].clone());
+            }
             input.node_origins.insert(node.id.clone(), origins);
         }
         for dependency in &origin {

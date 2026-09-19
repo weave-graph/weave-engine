@@ -441,7 +441,22 @@ fn hidden_objects_do_not_influence_scope_checks_or_visible_payload() {
     f.install(&with_hidden);
     write(&mut with_hidden, "g", "main", d);
     let result = with_hidden.admit_query(&p, &q, 200).unwrap().result;
-    assert_eq!(result.graph, plain.graph);
+    // Exact source pins were already observable in the snapshot/origin envelope.
+    // Node influence now retains that same pin in copied payloads. Compare facts
+    // after validating and normalizing only this own-origin revision.
+    let normalize = |value: &weave_contract::QueryResult| {
+        let mut graph = value.graph.clone();
+        for node in &mut graph.nodes {
+            assert_eq!(node.derived_nodes.len(), 1);
+            let pin = &mut node.derived_nodes[0];
+            assert_eq!(pin.graph_id, "g");
+            assert_eq!(pin.node_id, node.id);
+            assert_eq!(&pin.revision, &value.snapshots["g"]);
+            pin.revision = "verified-own-origin".into();
+        }
+        graph
+    };
+    assert_eq!(normalize(&result), normalize(&plain));
     assert_eq!(result.coverage, plain.coverage);
     assert_eq!(result.metadata_graphs, plain.metadata_graphs);
     assert_eq!(result.input_snapshots.len(), plain.input_snapshots.len());
@@ -483,6 +498,31 @@ fn signed_node_only_scalar_requires_its_private_proof_scope_on_read_and_retry() 
     f.install(&e);
     let revision = write(&mut e, "evidence", "main", private(data(), &f));
     let graph:GraphData=serde_json::from_value(json!({"nodes":[{"id":"scalar","entity_id":"result","space_id":"analysis","properties":{"value":42},"derived_from":[{"graph_id":"evidence","revision":revision,"assertion_id":"e"}]}]})).unwrap();
+    write(&mut e, "g", "main", graph);
+    let q = query();
+    let narrow = f.proof(&q, Action::Read, "g", scopes(&["g"]), 22);
+    assert_eq!(e.admit_query(&narrow, &q, 200).unwrap_err().code, "E_SCOPE");
+    let broad = f.proof(&q, Action::Read, "g", scopes(&["g", "evidence"]), 22);
+    let result = e.admit_query(&broad, &q, 200).unwrap();
+    assert_eq!(result.result.graph.nodes[0].properties["value"], 42);
+    assert!(result
+        .result
+        .input_snapshots
+        .iter()
+        .any(|r| r.graph_id == "evidence"));
+    assert_eq!(e.admit_query(&narrow, &q, 201).unwrap_err().code, "E_SCOPE");
+    assert!(e.admit_query(&broad, &q, 201).unwrap().duplicate);
+}
+
+#[test]
+fn signed_node_only_scalar_requires_isolated_node_scope_on_read_and_retry() {
+    let f = Fixture::new();
+    let mut e = Engine::memory().unwrap();
+    f.install(&e);
+    let mut isolated = private(data(), &f);
+    isolated.edges.clear();
+    let revision = write(&mut e, "evidence", "main", isolated);
+    let graph:GraphData=serde_json::from_value(json!({"nodes":[{"id":"scalar","entity_id":"result","space_id":"analysis","properties":{"value":42},"derived_nodes":[{"graph_id":"evidence","revision":revision,"node_id":"a"}]}]})).unwrap();
     write(&mut e, "g", "main", graph);
     let q = query();
     let narrow = f.proof(&q, Action::Read, "g", scopes(&["g"]), 22);

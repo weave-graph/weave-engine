@@ -61,6 +61,17 @@ fn checked(mut result: QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
         ));
     }
     for node in &mut result.graph.nodes {
+        if node
+            .derived_from
+            .len()
+            .saturating_add(node.derived_nodes.len())
+            > 1000
+        {
+            return Err(err(
+                "E_ALGEBRA_LIMIT",
+                "Node influence count exceeds output limit",
+            ));
+        }
         node.readers = vec![ctx.principal.clone()];
     }
     for edge in &mut result.graph.edges {
@@ -685,6 +696,14 @@ pub fn support(
     }
     let id = format!("support:{}", key(&(&parameters, &input.input_snapshots)));
     let node = Node {
+        derived_nodes: identity::node_dependencies(
+            input
+                .graph
+                .nodes
+                .iter()
+                .flat_map(|n| n.derived_nodes.iter())
+                .chain(input.node_origins.values().flatten()),
+        )?,
         derived_from: unique(
             input
                 .provenance

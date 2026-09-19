@@ -7,6 +7,22 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::io::{self, Write};
 
+pub(crate) fn node_dependencies<'a>(
+    values: impl Iterator<Item = &'a NodeRef>,
+) -> Result<Vec<NodeRef>, Diagnostic> {
+    let mut refs = BTreeMap::new();
+    for r in values {
+        refs.insert((&r.graph_id, &r.revision, &r.node_id), r);
+        if refs.len() > 1000 {
+            return Err(failure(
+                "E_PROVENANCE",
+                "Node influence count exceeds output limit",
+            ));
+        }
+    }
+    Ok(refs.into_values().cloned().collect())
+}
+
 const MAX_IDENTITY_BYTES: usize = 16 * 1024 * 1024;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -179,14 +195,29 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     let mut nodes: BTreeMap<String, Node> = BTreeMap::new();
     let mut edges = Vec::new();
     let mut edge_origins = BTreeMap::new();
+    let node_influences = node_dependencies(
+        input
+            .graph
+            .nodes
+            .iter()
+            .flat_map(|n| n.derived_nodes.iter())
+            .chain(input.node_origins.values().flatten()),
+    )?;
     let mut add_node = |id: String,
                         kind: &str,
                         scope: &crate::ContextSelection,
                         dependencies: &[AssertionRef]|
      -> Result<(), Diagnostic> {
         if let std::collections::btree_map::Entry::Vacant(entry) = nodes.entry(id.clone()) {
-            size(&(kind, scope, dependencies), remaining)?;
+            if dependencies.len().saturating_add(node_influences.len()) > 1000 {
+                return Err(failure(
+                    "E_EXPLAIN_LIMIT",
+                    "Node influence count exceeds output limit",
+                ));
+            }
+            size(&(kind, scope, dependencies, &node_influences), remaining)?;
             let n = Node {
+                derived_nodes: node_influences.clone(),
                 derived_from: ordered(dependencies)?,
                 context_scope: Some(scope.clone()),
                 id: id.clone(),

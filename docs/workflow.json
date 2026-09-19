@@ -210,7 +210,9 @@
         "crates/weave-contract/src/context.rs",
         "crates/weave-engine/tests/context.rs",
         "docs/contract/v0.10/README.md",
-        "crates/weave-engine/tests/counterparts.rs"
+        "crates/weave-engine/tests/counterparts.rs",
+        "docs/contract/v0.11/README.md",
+        "crates/weave-engine/tests/root_node_influence.rs"
       ]
     },
     {
