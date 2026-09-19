@@ -1,0 +1,59 @@
+{
+  "host": "ios-simulator",
+  "stages": [
+    {
+      "contract": "0.13.0",
+      "seeded": true,
+      "stage": "seed"
+    },
+    {
+      "alice_nodes": 2,
+      "bob_nodes": 1,
+      "contract": "0.13.0",
+      "exact_decimal": "9007199254740993",
+      "pinned_history": true,
+      "restarted_persistence": true,
+      "rollback": false,
+      "stage": "read"
+    },
+    {
+      "alice_nodes": 2,
+      "bob_nodes": 1,
+      "contract": "0.13.0",
+      "exact_decimal": "9007199254740993",
+      "pinned_history": true,
+      "restarted_persistence": true,
+      "rollback": true,
+      "stage": "rollback"
+    },
+    {
+      "alice_nodes": 2,
+      "bob_nodes": 1,
+      "contract": "0.13.0",
+      "exact_decimal": "9007199254740993",
+      "pinned_history": true,
+      "restarted_persistence": true,
+      "rollback": false,
+      "stage": "read"
+    }
+  ],
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+  "device_type": "com.apple.CoreSimulator.SimDeviceType.iPhone-17e",
+  "result": "passed",
+  "limits": [
+    "no network used; networking not disabled",
+    "simulator is not a physical device",
+    "local persistence/privacy/rollback profile, not full sync/governance/mobile app acceptance"
+  ],
+  "source_commit": "26190cbf0436bec441889190127e99e8a84adfd2",
+  "environment": {
+    "host": "Apple M4 Max macOS arm64",
+    "rust": "1.94.0",
+    "swift": "6.4",
+    "target": "aarch64-apple-ios-sim",
+    "sdk": "iPhoneSimulator27.0",
+    "runtime": "iOS26.5",
+    "device": "iPhone17e simulator",
+    "deployment_target": "17.0"
+  }
+}
