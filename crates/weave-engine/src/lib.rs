@@ -7,7 +7,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use weave_contract::*;
 mod admission;
 mod governance;
+mod governance_delivery;
 pub use governance::*;
+pub use governance_delivery::*;
 mod integration;
 mod mounts;
 pub use integration::{IntegrationReceipt, IntegrationRequest};
@@ -102,7 +104,7 @@ impl Engine {
     }
     fn from_connection_boundary(conn: Connection, before_commit: impl FnOnce()) -> Result<Self> {
         let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
-        if !(0..=9).contains(&version) {
+        if !(0..=10).contains(&version) {
             return Err(err(
                 "E_STORAGE_VERSION",
                 "database schema version is unsupported",
@@ -159,7 +161,8 @@ impl Engine {
         engine.initialize_mounts()?;
         engine.initialize_integration()?;
         engine.initialize_governance()?;
-        engine.conn.pragma_update(None, "user_version", 9)?;
+        engine.initialize_governance_delivery()?;
+        engine.conn.pragma_update(None, "user_version", 10)?;
         before_commit();
         initialization.commit()?;
         Ok(engine)

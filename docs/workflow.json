@@ -278,7 +278,10 @@
         },
         "docs/DISPATCH.md",
         "crates/weave-engine/tests/dispatch.rs",
-        "scripts/root_dispatch.py"
+        "scripts/root_dispatch.py",
+        "docs/GOVERNANCE_DELIVERY.md",
+        "crates/weave-engine/tests/governance_delivery.rs",
+        "scripts/check_governance_delivery_recovery.py"
       ]
     },
     {
@@ -457,7 +460,10 @@
       "evidence": [
         "docs/GOVERNANCE.md",
         "crates/weave-engine/tests/governance.rs",
-        "scripts/check_governance_recovery.py"
+        "scripts/check_governance_recovery.py",
+        "docs/GOVERNANCE_DELIVERY.md",
+        "crates/weave-engine/tests/governance_delivery.rs",
+        "scripts/check_governance_delivery_recovery.py"
       ]
     },
     {

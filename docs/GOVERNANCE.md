@@ -20,7 +20,7 @@ Acceptance revalidates a current quorum and compares the expected head inside th
 
 Exact lost-response retry returns the original decision only while current policy, source authority, proposal lifetime, and enough approvals remain valid. A changed body under the same collector nonce fails. A policy-transition request is deliberately rejected on retry after it installs the new policy epoch; its old approval epoch no longer authorizes the operation. Hosts can inspect the current head separately under current authority. Historical admission evidence does not confer current read authority.
 
-The durable outbox has typed `view.accepted` and `policy.changed` events. These are separate from graph-commit events: accepting a pointer does not fabricate a graph mutation. The unscoped event count is a trusted administrative diagnostic only. Authorized delivery, acknowledgments, replay, and dissemination through the engine bus remain required next work.
+The durable outbox has typed `view.accepted` and `policy.changed` events. These are separate from graph-commit events: accepting a pointer does not fabricate a graph mutation. The unscoped event count is a trusted administrative diagnostic only. [Authorized typed delivery](GOVERNANCE_DELIVERY.md) now attaches this outbox to existing adapter identities/lifecycle, with current-authority checks and atomic acknowledgments. Graph-producing handlers, remote dissemination and broader bus integration remain open.
 
 ## Bounds and exposure
 

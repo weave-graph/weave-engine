@@ -141,13 +141,18 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
     }
     /// Trusted lifecycle management; removed identities cannot silently restart.
     pub fn set_adapter_state(&self, id: &str, state: &str) -> Result<()> {
+        let transaction = if self.conn.is_autocommit() {
+            Some(self.conn.unchecked_transaction()?)
+        } else {
+            None
+        };
         let (_, current, _) = self.dispatch_manifest(id)?;
         if !["running", "paused", "draining", "removed"].contains(&state) || current == "removed" {
             return Err(err("E_LIFECYCLE", "invalid lifecycle transition"));
         }
         if state == "removed" {
             let pending: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM dispatch_pending WHERE adapter=?1",
+                "SELECT (SELECT COUNT(*) FROM dispatch_pending WHERE adapter=?1)+(SELECT COUNT(*) FROM governance_delivery_pending WHERE adapter=?1)",
                 [id],
                 |r| r.get(0),
             )?;
@@ -158,10 +163,16 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                 ));
             }
         }
+        if state == "paused" || state == "removed" {
+            self.invalidate_governance_leases(id)?;
+        }
         self.conn.execute(
             "UPDATE dispatch_adapters SET state=?2 WHERE id=?1",
             params![id, state],
         )?;
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
         Ok(())
     }
     fn scoped_event(

@@ -791,4 +791,75 @@ impl Engine {
                 .query_row("SELECT count(*) FROM governance_events", [], |r| r.get(0))?;
         u64::try_from(count).map_err(|_| failure("E_INTEGRITY"))
     }
+    pub(crate) fn governance_delivery_event(
+        &self,
+        view: &str,
+        event: &str,
+        now: i64,
+        host: &HostContext,
+    ) -> Result<Option<GovernanceEvent>> {
+        let head = self.inspect_governance_head(view, now, host)?;
+        let policy = self.gov_policy(view, &head.policy, now)?;
+        let row: Option<(String,String,String,i64)> = self.conn.query_row(
+            "SELECT substr(e.decision_id,1,513),substr(e.event_type,1,65),substr(d.proposal_id,1,513),e.recorded_at_ms FROM governance_events e JOIN governance_decisions d ON d.id=e.decision_id AND d.view_id=e.view_id WHERE e.id=?1 AND e.view_id=?2",
+            params![event,view], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)),
+        ).optional()?;
+        let Some((decision_id, event_type, proposal_id, recorded_at_ms)) = row else {
+            return Ok(None);
+        };
+        if !valid_id(&decision_id)
+            || !valid_id(&proposal_id)
+            || !["view.accepted", "policy.changed"].contains(&event_type.as_str())
+        {
+            return Err(failure("E_INTEGRITY"));
+        }
+        let (mut record, _) = self.gov_proposal(&proposal_id)?;
+        if record.proposal.view_id != view {
+            return Err(failure("E_INTEGRITY"));
+        }
+        // A policy-change event inherits the source selected at that historical decision,
+        // not whichever graph happens to be the current accepted head.
+        for depth in 0..=1000 {
+            if depth == 1000 {
+                return Err(failure("E_BUDGET"));
+            }
+            match &record.proposal.action {
+                GovernanceAction::Publish { source, branch_id } => {
+                    match self.gov_source(source, branch_id, &policy, host) {
+                        Ok(()) => {}
+                        Err(error)
+                            if ["E_GOV_SOURCE", "E_GOV_UNAVAILABLE", "E_UNAVAILABLE"]
+                                .contains(&error.code.as_str()) =>
+                        {
+                            return Ok(None)
+                        }
+                        Err(error) => return Err(error),
+                    }
+                    break;
+                }
+                GovernanceAction::ReplacePolicy { .. } => {
+                    let Some(parent) = &record.proposal.expected_head else {
+                        break;
+                    };
+                    self.read_budget.request()?;
+                    let prior:Option<String>=self.conn.query_row(
+                        "SELECT substr(proposal_id,1,513) FROM governance_decisions WHERE id=?1 AND view_id=?2",
+                        params![parent,view],|r|r.get(0),
+                    ).optional()?;
+                    let prior = prior.ok_or_else(|| failure("E_INTEGRITY"))?;
+                    record = self.gov_proposal(&prior)?.0;
+                    if record.proposal.view_id != view {
+                        return Err(failure("E_INTEGRITY"));
+                    }
+                }
+            }
+        }
+        Ok(Some(GovernanceEvent {
+            id: event.into(),
+            view_id: view.into(),
+            decision_id,
+            event_type,
+            recorded_at_ms,
+        }))
+    }
 }

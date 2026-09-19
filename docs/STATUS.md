@@ -47,3 +47,5 @@ Protocol 0.14 adds exact typed context axis definitions and a persistable whole-
 
 Native governance now implements owner/threshold policies, isolated signed approvals, prior-policy transitions, atomic head CAS/receipts and a separate typed governance outbox. Seven native tests include a real two-connection race; six process-death checks verify rollback and response-loss replay. E11 remains in progress: authorized outbox delivery, reusable accepted graph influence and broader governance remain required. See [native governance](GOVERNANCE.md).
 
+
+The native governance outbox now has [typed authorized delivery](GOVERNANCE_DELIVERY.md) attached to existing adapter lifecycle: current-policy/source checks on pending and cached occurrences, local ordinals, leases, dead-letter replay and atomic acknowledgments. Four native tests and six process-death checks pass. E05/E11 remain open for graph-producing governance handlers, accepted-value proof carriers, remote subscribers and broader governance.
