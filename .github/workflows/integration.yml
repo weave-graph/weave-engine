@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: weave-graph/weave-language
-          ref: b06d234a4bc9a8aa1e77be70c1a7c95982bd9d7b
+          ref: 1682332b3159ce28de10d9f0fc4561be4912c057
           path: weave-language
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify actual compiler and persistent runtime
@@ -26,4 +26,5 @@ jobs:
           python3 weave-engine/scripts/root_metadata.py
           python3 weave-engine/scripts/root_paper_example.py
           python3 weave-language/scripts/check_algebra.py --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
+          python3 weave-language/scripts/check_functions.py --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
           python3 weave-engine/scripts/root_dispatch.py
