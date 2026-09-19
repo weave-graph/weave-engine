@@ -84,12 +84,68 @@ pub fn golden_profile() -> Vec<u8> {
     assert_eq!(huge.to_string(), "9007199254740993");
     let cluster = cluster_profile();
     let geometry = geometry_profile();
-    serde_json::to_vec(&json!({"profile":"weave-portable-golden-1","contract":VERSION,"cases":{
+    serde_json::to_vec(&json!({"profile":"weave-portable-golden-2","contract":VERSION,"cases":{
         "exact_decimal":{"sum":sum,"beyond_binary64":huge,"nonterminating_error":nonterminating.to_string()},
         "nominal_quantity":{"converted":converted,"mismatch_error":mismatch_unit.to_string()},
         "graph_union":union,"four_valued_temporal_support":states,"exact_context":{"selected":default,"reselection_error":mismatch},
-        "authorized_geometry_fixture":geometry,"lazy_clustering":cluster
+        "authorized_geometry_fixture":geometry,"lazy_clustering":cluster,"typed_context_carrier":typed_context_profile()
     },"limits":["fixed host-authorized test inputs; no authentication or persistent runtime","binary64 fixture agreement is not general bitwise geometry portability","no browser storage, network, mobile energy or adapter sandbox claim"]})).unwrap()
+}
+fn typed_context_profile() -> Value {
+    use weave_contract::context_axes::ContextDefinition;
+    use weave_contract::{ContextTyping, TypedContextWitness};
+    let source = br#"{"schema":{"reference":{"id":"scenario","revision":"1"},"axes":{"mode":{"kind":"enum","members":["live","test"]},"load":{"kind":"decimal"}}},"values":{"mode":"live","load":"0.3"}}"#;
+    let definition = ContextDefinition::from_json(source).unwrap();
+    let mut reordered = definition.clone();
+    if let weave_contract::context_axes::ContextAxisType::Enum { members } =
+        reordered.schema.axes.get_mut("mode").unwrap()
+    {
+        members.reverse();
+    }
+    assert_eq!(
+        definition.fingerprint().unwrap(),
+        reordered.fingerprint().unwrap()
+    );
+    assert!(ContextDefinition::from_json(br#"{"schema":{},"schema":{},"values":{}}"#).is_err());
+    let reference = GraphRef {
+        graph_id: "world".into(),
+        revision: "1".into(),
+    };
+    let proof = AssertionRef {
+        graph_id: "world".into(),
+        revision: "1".into(),
+        assertion_id: "definition".into(),
+    };
+    let typing = ContextTyping {
+        selected: Some(reference.clone()),
+        witnesses: vec![TypedContextWitness {
+            context: reference.clone(),
+            schema: definition.schema.clone(),
+            definition: proof.clone(),
+            anchor_nodes: vec![NodeRef {
+                graph_id: "world".into(),
+                revision: "1".into(),
+                node_id: "anchor".into(),
+            }],
+        }],
+    };
+    let mut input:QueryResult=serde_json::from_value(json!({"version":VERSION,"graph":{},"snapshots":{},"input_snapshots":[],"coverage":"partial","diagnostics":[],"provenance":[],"metadata_graphs":[]})).unwrap();
+    input.selected_context = Some(ContextSelection::Pinned { reference });
+    input.graph.context_typing = Some(typing);
+    let ctx = AlgebraContext {
+        principal: "reader".into(),
+        max_objects: 100,
+        max_output_bytes: 1_000_000,
+    };
+    let t = EntitySpace {
+        entity_id: "absent".into(),
+        space_id: "s".into(),
+    };
+    let supported = algebra::support(input, "p", &t, &t, 5, &ctx).unwrap();
+    assert_eq!(supported.graph.nodes[0].properties["state"], "unknown");
+    assert!(supported.graph.nodes[0].derived_from.contains(&proof));
+    assert!(supported.graph.context_typing.is_some());
+    json!({"schema_fingerprint":definition.schema.fingerprint().unwrap(),"definition_fingerprint":definition.fingerprint().unwrap(),"unknown_with_retained_context":supported})
 }
 fn cluster_profile() -> Value {
     let source = weave_cluster::Snapshot {
