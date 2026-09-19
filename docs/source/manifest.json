@@ -12,6 +12,16 @@
       "path": "Weave_Language_White_Paper_v0.1.md",
       "sha256": "e9965099f0cedefd7b1e7f02051550e761a9411421c6fab283c9c05cba15247c",
       "bytes": 36085
+    },
+    {
+      "path": "Weave_Engine_White_Paper_v0.1.pdf",
+      "sha256": "ae7012a78dd8e1bd363d8f3e4c1ab8d3706c5963757abe31958dfa335179d97c",
+      "bytes": 231999
+    },
+    {
+      "path": "Weave_Engine_White_Paper_v0.1.docx",
+      "sha256": "20f8534332b5e658f2dca71b5182e2caf4dd634f138df3a9933bff9d44d11dca",
+      "bytes": 60228
     }
   ]
 }
