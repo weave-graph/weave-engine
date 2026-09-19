@@ -470,7 +470,14 @@
         "crates/weave-cluster/tests/hierarchy.rs",
         "docs/CLUSTER_SERVICE.md",
         "crates/weave-engine/tests/root_clustering.rs",
-        "docs/SYNTHETIC_RELATIONS.md"
+        "docs/SYNTHETIC_RELATIONS.md",
+        {
+          "artifact": "docs/measurements/2026-09-19-cluster-quality.json",
+          "command": "cargo run --locked -p weave-cluster --example measure_quality",
+          "host": "local macOS arm64",
+          "result": "Five pure lineage regressions plus native exact-query preservation across four depths pass. Synthetic bridge exposes coarse over-merging; no incremental/hysteresis/service-lineage completion claim.",
+          "commit": "26f27343c12ba406cc91765ea657623c076fcd41"
+        }
       ]
     },
     {

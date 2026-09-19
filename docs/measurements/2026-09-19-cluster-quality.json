@@ -1,0 +1,851 @@
+{
+  "algorithm": "weave:topology-matching:1",
+  "bridge_churn": [
+    {
+      "after_level": 0,
+      "all_common_pairs": 66,
+      "before_level": 0,
+      "changed_common_pairs": 0,
+      "merge_records": 0,
+      "requested_level": 0,
+      "split_records": 0
+    },
+    {
+      "after_level": 1,
+      "all_common_pairs": 66,
+      "before_level": 1,
+      "changed_common_pairs": 0,
+      "merge_records": 0,
+      "requested_level": 1,
+      "split_records": 0
+    },
+    {
+      "after_level": 2,
+      "all_common_pairs": 66,
+      "before_level": 2,
+      "changed_common_pairs": 12,
+      "merge_records": 2,
+      "requested_level": 2,
+      "split_records": 1
+    },
+    {
+      "after_level": 3,
+      "all_common_pairs": 66,
+      "before_level": 3,
+      "changed_common_pairs": 20,
+      "merge_records": 1,
+      "requested_level": 3,
+      "split_records": 1
+    },
+    {
+      "after_level": 4,
+      "all_common_pairs": 66,
+      "before_level": 3,
+      "changed_common_pairs": 36,
+      "merge_records": 1,
+      "requested_level": 4,
+      "split_records": 0
+    }
+  ],
+  "fixture_nodes": 12,
+  "limits": [
+    "synthetic labels are fixture data, not discovered truth",
+    "pair enumeration is bounded to twelve nodes, not a production algorithm",
+    "full-source fallback scans every fixture relation; no speedup or pruning claim",
+    "fixture perspective is not the whole engine query domain",
+    "lineage comparison is not incremental maintenance or hysteresis"
+  ],
+  "rows": [
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 30,
+        "recovered_relations": 30,
+        "source_records_scanned": 30
+      },
+      "frontier_count": 12,
+      "internal_link_fraction": {
+        "denominator": 30,
+        "not_applicable": false,
+        "numerator": 0
+      },
+      "level": 0,
+      "partial_input": true,
+      "shape": "planted",
+      "synthetic_pair_f1": {
+        "denominator": 30,
+        "false_negative": 30,
+        "false_positive": 0,
+        "numerator": 0,
+        "true_positive": 0
+      }
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 30,
+        "recovered_relations": 30,
+        "source_records_scanned": 30
+      },
+      "frontier_count": 6,
+      "internal_link_fraction": {
+        "denominator": 30,
+        "not_applicable": false,
+        "numerator": 6
+      },
+      "level": 1,
+      "partial_input": true,
+      "shape": "planted",
+      "synthetic_pair_f1": {
+        "denominator": 36,
+        "false_negative": 24,
+        "false_positive": 0,
+        "numerator": 12,
+        "true_positive": 6
+      }
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 30,
+        "recovered_relations": 30,
+        "source_records_scanned": 30
+      },
+      "frontier_count": 4,
+      "internal_link_fraction": {
+        "denominator": 30,
+        "not_applicable": false,
+        "numerator": 14
+      },
+      "level": 2,
+      "partial_input": true,
+      "shape": "planted",
+      "synthetic_pair_f1": {
+        "denominator": 44,
+        "false_negative": 16,
+        "false_positive": 0,
+        "numerator": 28,
+        "true_positive": 14
+      }
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 30,
+        "recovered_relations": 30,
+        "source_records_scanned": 30
+      },
+      "frontier_count": 2,
+      "internal_link_fraction": {
+        "denominator": 30,
+        "not_applicable": false,
+        "numerator": 30
+      },
+      "level": 3,
+      "partial_input": true,
+      "shape": "planted",
+      "synthetic_pair_f1": {
+        "denominator": 60,
+        "false_negative": 0,
+        "false_positive": 0,
+        "numerator": 60,
+        "true_positive": 30
+      }
+    },
+    {
+      "evidence_boundary": true,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 30,
+        "recovered_relations": 30,
+        "source_records_scanned": 30
+      },
+      "frontier_count": 2,
+      "internal_link_fraction": {
+        "denominator": 30,
+        "not_applicable": false,
+        "numerator": 30
+      },
+      "level": 3,
+      "partial_input": true,
+      "shape": "planted",
+      "synthetic_pair_f1": {
+        "denominator": 60,
+        "false_negative": 0,
+        "false_positive": 0,
+        "numerator": 60,
+        "true_positive": 30
+      }
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 31,
+        "recovered_relations": 31,
+        "source_records_scanned": 31
+      },
+      "frontier_count": 12,
+      "internal_link_fraction": {
+        "denominator": 31,
+        "not_applicable": false,
+        "numerator": 0
+      },
+      "level": 0,
+      "partial_input": true,
+      "shape": "bridge",
+      "synthetic_pair_f1": {
+        "denominator": 30,
+        "false_negative": 30,
+        "false_positive": 0,
+        "numerator": 0,
+        "true_positive": 0
+      }
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 31,
+        "recovered_relations": 31,
+        "source_records_scanned": 31
+      },
+      "frontier_count": 6,
+      "internal_link_fraction": {
+        "denominator": 31,
+        "not_applicable": false,
+        "numerator": 6
+      },
+      "level": 1,
+      "partial_input": true,
+      "shape": "bridge",
+      "synthetic_pair_f1": {
+        "denominator": 36,
+        "false_negative": 24,
+        "false_positive": 0,
+        "numerator": 12,
+        "true_positive": 6
+      }
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 31,
+        "recovered_relations": 31,
+        "source_records_scanned": 31
+      },
+      "frontier_count": 3,
+      "internal_link_fraction": {
+        "denominator": 31,
+        "not_applicable": false,
+        "numerator": 15
+      },
+      "level": 2,
+      "partial_input": true,
+      "shape": "bridge",
+      "synthetic_pair_f1": {
+        "denominator": 48,
+        "false_negative": 16,
+        "false_positive": 4,
+        "numerator": 28,
+        "true_positive": 14
+      }
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 31,
+        "recovered_relations": 31,
+        "source_records_scanned": 31
+      },
+      "frontier_count": 2,
+      "internal_link_fraction": {
+        "denominator": 31,
+        "not_applicable": false,
+        "numerator": 23
+      },
+      "level": 3,
+      "partial_input": true,
+      "shape": "bridge",
+      "synthetic_pair_f1": {
+        "denominator": 64,
+        "false_negative": 8,
+        "false_positive": 12,
+        "numerator": 44,
+        "true_positive": 22
+      }
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 31,
+        "recovered_relations": 31,
+        "source_records_scanned": 31
+      },
+      "frontier_count": 1,
+      "internal_link_fraction": {
+        "denominator": 31,
+        "not_applicable": false,
+        "numerator": 31
+      },
+      "level": 4,
+      "partial_input": true,
+      "shape": "bridge",
+      "synthetic_pair_f1": {
+        "denominator": 96,
+        "false_negative": 0,
+        "false_positive": 36,
+        "numerator": 60,
+        "true_positive": 30
+      }
+    },
+    {
+      "evidence_boundary": true,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 31,
+        "recovered_relations": 31,
+        "source_records_scanned": 31
+      },
+      "frontier_count": 1,
+      "internal_link_fraction": {
+        "denominator": 31,
+        "not_applicable": false,
+        "numerator": 31
+      },
+      "level": 4,
+      "partial_input": true,
+      "shape": "bridge",
+      "synthetic_pair_f1": {
+        "denominator": 96,
+        "false_negative": 0,
+        "false_positive": 36,
+        "numerator": 60,
+        "true_positive": 30
+      }
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 12,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 0
+      },
+      "level": 0,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 11,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 1
+      },
+      "level": 1,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 10,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 2
+      },
+      "level": 2,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 9,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 3
+      },
+      "level": 3,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 8,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 4
+      },
+      "level": 4,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 7,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 5
+      },
+      "level": 5,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 6,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 6
+      },
+      "level": 6,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 5,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 7
+      },
+      "level": 7,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 4,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 8
+      },
+      "level": 8,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 3,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 9
+      },
+      "level": 9,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 2,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 10
+      },
+      "level": 10,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 1,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 11
+      },
+      "level": 11,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": true,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 1,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 11
+      },
+      "level": 11,
+      "partial_input": true,
+      "shape": "star",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 12,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 0
+      },
+      "level": 0,
+      "partial_input": true,
+      "shape": "chain",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 6,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 6
+      },
+      "level": 1,
+      "partial_input": true,
+      "shape": "chain",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 3,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 9
+      },
+      "level": 2,
+      "partial_input": true,
+      "shape": "chain",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 2,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 10
+      },
+      "level": 3,
+      "partial_input": true,
+      "shape": "chain",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 1,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 11
+      },
+      "level": 4,
+      "partial_input": true,
+      "shape": "chain",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": true,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 11,
+        "recovered_relations": 11,
+        "source_records_scanned": 11
+      },
+      "frontier_count": 1,
+      "internal_link_fraction": {
+        "denominator": 11,
+        "not_applicable": false,
+        "numerator": 11
+      },
+      "level": 4,
+      "partial_input": true,
+      "shape": "chain",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 12,
+        "recovered_relations": 12,
+        "source_records_scanned": 12
+      },
+      "frontier_count": 12,
+      "internal_link_fraction": {
+        "denominator": 12,
+        "not_applicable": false,
+        "numerator": 0
+      },
+      "level": 0,
+      "partial_input": true,
+      "shape": "ring",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 12,
+        "recovered_relations": 12,
+        "source_records_scanned": 12
+      },
+      "frontier_count": 6,
+      "internal_link_fraction": {
+        "denominator": 12,
+        "not_applicable": false,
+        "numerator": 6
+      },
+      "level": 1,
+      "partial_input": true,
+      "shape": "ring",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 12,
+        "recovered_relations": 12,
+        "source_records_scanned": 12
+      },
+      "frontier_count": 3,
+      "internal_link_fraction": {
+        "denominator": 12,
+        "not_applicable": false,
+        "numerator": 9
+      },
+      "level": 2,
+      "partial_input": true,
+      "shape": "ring",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 12,
+        "recovered_relations": 12,
+        "source_records_scanned": 12
+      },
+      "frontier_count": 2,
+      "internal_link_fraction": {
+        "denominator": 12,
+        "not_applicable": false,
+        "numerator": 10
+      },
+      "level": 3,
+      "partial_input": true,
+      "shape": "ring",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 12,
+        "recovered_relations": 12,
+        "source_records_scanned": 12
+      },
+      "frontier_count": 1,
+      "internal_link_fraction": {
+        "denominator": 12,
+        "not_applicable": false,
+        "numerator": 12
+      },
+      "level": 4,
+      "partial_input": true,
+      "shape": "ring",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": true,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 12,
+        "recovered_relations": 12,
+        "source_records_scanned": 12
+      },
+      "frontier_count": 1,
+      "internal_link_fraction": {
+        "denominator": 12,
+        "not_applicable": false,
+        "numerator": 12
+      },
+      "level": 4,
+      "partial_input": true,
+      "shape": "ring",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": false,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 0,
+        "recovered_relations": 0,
+        "source_records_scanned": 0
+      },
+      "frontier_count": 12,
+      "internal_link_fraction": {
+        "denominator": 0,
+        "not_applicable": true,
+        "numerator": 0
+      },
+      "level": 0,
+      "partial_input": true,
+      "shape": "isolated",
+      "synthetic_pair_f1": null
+    },
+    {
+      "evidence_boundary": true,
+      "exact_fixture_fallback": {
+        "exact_set_equal": true,
+        "expected_relations": 0,
+        "recovered_relations": 0,
+        "source_records_scanned": 0
+      },
+      "frontier_count": 12,
+      "internal_link_fraction": {
+        "denominator": 0,
+        "not_applicable": true,
+        "numerator": 0
+      },
+      "level": 0,
+      "partial_input": true,
+      "shape": "isolated",
+      "synthetic_pair_f1": null
+    }
+  ],
+  "source_commit": "26f27343c12ba406cc91765ea657623c076fcd41",
+  "command": "cargo run --locked -p weave-cluster --example measure_quality",
+  "environment": "Apple M4 Max macOS arm64; Rust1.94.0; deterministic counts, no timing benchmark"
+}

@@ -12,4 +12,25 @@ The current host limits are 10,000 nodes, 100,000 links, 16 MiB serialized input
 
 Seven independent tests cover recursive expansion with a disconnected evidence boundary, exact leaf/evidence preservation, canonical-order reproducibility, unchanged visible layout across private-only source revisions, directed aggregate relation witnesses, overlapping perspectives, malformed provenance and explicit budget/partial behavior. The privacy test assumes the host supplied identical authorized facts; it is not a full runtime noninterference proof.
 
-The native authorized graph-service now materializes navigation values; see [CLUSTER_SERVICE.md](CLUSTER_SERVICE.md). Still required for E13: language query operators and persistent graph-valued metadata, version-to-version split/merge lineage, event-driven incremental updates and hysteresis, task-quality/churn measurements, and end-to-end exact-search recall tests. This crate is an experimental foundation, not completion of automatic clustering or semantic zoom delivery.
+The native authorized graph-service now materializes navigation values; see [CLUSTER_SERVICE.md](CLUSTER_SERVICE.md). Source query operators and graph-valued navigation are implemented. Pure frontier lineage and bounded synthetic quality/recall checks are documented below. Still required for E13: authorization-checked persistent lineage integration, event-driven incremental updates, hysteresis and broader task-quality/recall acceptance. This crate is an experimental foundation, not completion of automatic clustering or semantic zoom delivery.
+
+
+## Frontier lineage and measured synthetic behavior
+
+`Hierarchy::lineage_to` compares two complete materialized frontiers from the same perspective, exact context and **single source graph-ID domain**. Revisions and evaluation instants may differ and are recorded explicitly. Plain leaf IDs cannot establish identity across several source graph domains, so that case rejects. A trusted host must reauthorize both historical and current inputs before releasing any old label, count or membership. This pure API has no storage/policy access and is not yet exposed as an authorization-checking native service.
+
+Sparse overlap follows common leaves to their old/new owners, with at most one overlap entry per common leaf; there is no old-cluster × new-cluster scan. Each record reference contains membership identity plus exact record revision. Splits and merges are separate lists: `{ab,cd} -> {ac,bd}` correctly produces both. Added/removed leaves are independent of whole-record creation/retirement. These describe changes in supplied navigation inputs, not real-world object deletion, entity equivalence or accepted truth. Input partial status remains explicit. Output items are charged before retention against32MiB, including source pins and labels, with a fixed envelope reserve. One bounded item may be constructed before its charge; this is not a whole-process RSS bound. A failure leaves both input hierarchies unchanged.
+
+Five lineage regressions cover crossing partitions, new evidence with stable memberships, isolated/add/remove cases, exact-domain rejection and two disjoint10,000-node maximum-label snapshots exhausting the output budget. A native engine regression compares ordinary exact queries before/after navigation at levels0,1,2,100 for two principals: unrelated predicates, negative claims, half-open time boundaries, isolated nodes and private data retain their original answers. Unfiltered node reads preserve isolated nodes; edge/time-filtered queries retain their documented endpoint selection semantics.
+
+Reproduce synthetic diagnostics:
+
+```sh
+cargo run --locked -p weave-cluster --example measure_quality
+```
+
+The [recorded output](measurements/2026-09-19-cluster-quality.json) uses12named nodes in planted communities, an adversarial bridge, star, chain, ring and isolated fixtures. Pair-F1 compares co-membership with explicitly supplied synthetic labels: `2*TP/(2*TP+FP+FN)`. Internal-link fraction counts each non-self directed link record once; zero denominators are not applicable. Churn counts changed co-membership pairs among common leaves, with added/removed leaves separate. Pair enumeration here is bounded to12nodes, not a production quadratic diagnostic API.
+
+At the evidence boundary, two disconnected planted communities score F1=60/60. Adding one bridge eventually joins all12nodes and lowers the synthetic score to60/96;36of66common leaf-pair memberships change relative to the disconnected input. At shallower levels the report shows distinct scores and churn. These measurements expose limitations of the baseline; they do not establish community-quality guarantees or tune a pass threshold after seeing results.
+
+Fixture exact fallback retains all source relations and explicitly scans the entire source fixture. Navigation has no exclusion certificate and no speedup is claimed. A real exact engine query may span predicates, negative evidence or time selections absent from a positive clustering perspective, so fallback must use its full authorized query domain, not merely `Hierarchy.snapshot()`. Comparing snapshots and reporting lineage does not implement affected-region updates, hysteresis or a durable cluster adapter. Those requirements remain open.
