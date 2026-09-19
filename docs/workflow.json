@@ -87,6 +87,15 @@
           "host": "local macOS",
           "commit": "1100193",
           "unresolved_findings": "General plans, recursive functions and broader policy remain open"
+        },
+        {
+          "artifact": "docs/contract/v0.14/README.md",
+          "command": "cargo test --workspace --all-features --offline; cargo clippy --workspace --all-targets --all-features --offline -- -D warnings",
+          "result": "243 combined workspace tests pass, including 8 native typed-context tests, 9 axis tests, 5 carrier tests and signed carrier scope/retry acceptance; full gate remains incomplete",
+          "contract_revision": "0.14.0",
+          "host": "local macOS",
+          "commit": "02253ee44277e49dbc8d1bf5c707d028caf1b410",
+          "unresolved_findings": "Explicit compatibility/broadcast mappings and accepted-view governance remain open; whole-value witness AND gating can conservatively deny mixed results."
         }
       ]
     },
@@ -180,7 +189,16 @@
         "docs/contract/v0.9/README.md",
         "crates/weave-engine/tests/geometry.rs",
         "docs/contract/v0.10/README.md",
-        "crates/weave-engine/tests/counterparts.rs"
+        "crates/weave-engine/tests/counterparts.rs",
+        {
+          "artifact": "docs/contract/v0.14/README.md",
+          "command": "cargo test --workspace --all-features --offline; cargo clippy --workspace --all-targets --all-features --offline -- -D warnings",
+          "result": "243 combined workspace tests pass, including 8 native typed-context tests, 9 axis tests, 5 carrier tests and signed carrier scope/retry acceptance; full gate remains incomplete",
+          "contract_revision": "0.14.0",
+          "host": "local macOS",
+          "commit": "02253ee44277e49dbc8d1bf5c707d028caf1b410",
+          "unresolved_findings": "Explicit compatibility/broadcast mappings and accepted-view governance remain open; whole-value witness AND gating can conservatively deny mixed results."
+        }
       ]
     },
     {
@@ -222,6 +240,15 @@
           "kind": "native_identity_acceptance",
           "path": "crates/weave-engine/tests/identity_acceptance.rs",
           "result": "Pinned replacement partitions, installed policy authority, atomic CAS/receipt/events, current policy and NodeRef source gates, hidden membership payload/coverage parity and historical splits. Remote acceptance and broader governance remain open."
+        },
+        {
+          "artifact": "docs/contract/v0.14/README.md",
+          "command": "cargo test --workspace --all-features --offline; cargo clippy --workspace --all-targets --all-features --offline -- -D warnings",
+          "result": "243 combined workspace tests pass, including 8 native typed-context tests, 9 axis tests, 5 carrier tests and signed carrier scope/retry acceptance; full gate remains incomplete",
+          "contract_revision": "0.14.0",
+          "host": "local macOS",
+          "commit": "02253ee44277e49dbc8d1bf5c707d028caf1b410",
+          "unresolved_findings": "Explicit compatibility/broadcast mappings and accepted-view governance remain open; whole-value witness AND gating can conservatively deny mixed results."
         }
       ]
     },
