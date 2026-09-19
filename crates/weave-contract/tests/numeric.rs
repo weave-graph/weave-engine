@@ -280,18 +280,14 @@ fn numeric_schema_requires_canonical_amounts_and_exact_unit_descriptors() {
         let mut invalid = value.clone();
         invalid["nodes"][0]["properties"]["exact"] = amount;
         let graph = serde_json::from_value(invalid).unwrap();
-        assert!(
-            weave_contract::validate_schema_graph(&graph)
-                .iter()
-                .any(|d| d.code == "E_SCHEMA_PROPERTY_TYPE")
-        );
+        assert!(weave_contract::validate_schema_graph(&graph)
+            .iter()
+            .any(|d| d.code == "E_SCHEMA_PROPERTY_TYPE"));
     }
     let mut invalid = value;
     invalid["nodes"][0]["properties"]["length"]["unit"]["revision"] = json!("2");
     let graph = serde_json::from_value(invalid).unwrap();
-    assert!(
-        weave_contract::validate_schema_graph(&graph)
-            .iter()
-            .any(|d| d.code == "E_SCHEMA_PROPERTY_TYPE")
-    );
+    assert!(weave_contract::validate_schema_graph(&graph)
+        .iter()
+        .any(|d| d.code == "E_SCHEMA_PROPERTY_TYPE"));
 }

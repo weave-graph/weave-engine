@@ -4,7 +4,7 @@ Public MIT implementation in progress; recovered original papers are reconciled.
 
 ## Implemented
 
-- Versions 0.1–0.11: immutable SQLite snapshots/CAS, half-open time, principal-filtered pinned queries, interval-aware identity-space joins and reusable pure graph values.
+- Versions 0.1–0.12: immutable SQLite snapshots/CAS, half-open time, principal-filtered pinned queries, interval-aware identity-space joins and reusable pure graph values.
 - Version 0.4 adds immutable embedded schemas, typed joins, named host/time-qualified metadata, atomic logical snapshot manifests with constructible metadata cycles, required dependency checks, live handle pinning, and no-op suppression. See [contract](contract/v0.4/README.md).
 - Signed per-operation native Query/Publish/Propose admission with durable nonce receipts, accepted-branch scope checks, isolated proposal quarantine and subject-scoped egress; [security boundary](ADMISSION.md). No remote arbitrary-program authority or transport server is implied.
 - Trusted host read/write boundaries, transitive derivation restrictions, generic partial coverage, bounded materialization and whole-program rollback.
@@ -20,6 +20,8 @@ Public MIT implementation in progress; recovered original papers are reconciled.
 
 - Portable typed physical/embedding geometry, explicit frame/unit transforms, restriction-preserving lineage and display-only projection; [geometry boundary](SPACES.md). Version 0.9 exposes authorized assertion-backed graph distance, transforms and display projections with reusable results; [contract](contract/v0.9/README.md).
 - Stored revision/manifest integrity checks, transactional schema initialization and backup/legacy-upgrade acceptance; [recovery evidence](STORAGE_RECOVERY.md).
+
+- Version 0.12 adds canonical exact Decimal and nominal Quantity property schemas, checked portable arithmetic and explicit rational conversions; old wire versions reject these schemas before writes. Graph-backed conversion authority and full dimensional algebra remain open. See [numeric profile](contract/v0.12/README.md).
 
 ## Evidence
 

@@ -1,4 +1,4 @@
-//! Exact bounded decimal arithmetic. This library profile is not yet a wire scalar.
+//! Exact bounded decimal arithmetic and canonical protocol 0.12 scalar.
 //! Values have <=18 significant coefficient digits and <=18 fractional places.
 //! No operation rounds or converts through binary floating point.
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
