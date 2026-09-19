@@ -74,7 +74,20 @@ impl Engine {
         Self::from_connection(Connection::open_in_memory()?)
     }
     fn from_connection(conn: Connection) -> Result<Self> {
-        conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;
+        let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
+        if !(0..=6).contains(&version) {
+            return Err(err(
+                "E_STORAGE_VERSION",
+                "database schema version is unsupported",
+            ));
+        }
+        conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;")?;
+        let engine = Self { conn };
+        let initialization = rusqlite::Transaction::new_unchecked(
+            &engine.conn,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        engine.conn.execute_batch("
  CREATE TABLE IF NOT EXISTS revisions(revision TEXT PRIMARY KEY,graph_id TEXT NOT NULL,branch_id TEXT NOT NULL,parent TEXT,recorded_at INTEGER NOT NULL,data TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS heads(graph_id TEXT NOT NULL,branch_id TEXT NOT NULL,revision TEXT NOT NULL REFERENCES revisions(revision),PRIMARY KEY(graph_id,branch_id));
  CREATE TABLE IF NOT EXISTS events(sequence INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT UNIQUE NOT NULL,graph_id TEXT NOT NULL,branch_id TEXT NOT NULL,revision TEXT NOT NULL REFERENCES revisions(revision),actor TEXT NOT NULL);
@@ -86,14 +99,12 @@ impl Engine {
  CREATE TABLE IF NOT EXISTS assertion_structures(graph_id TEXT NOT NULL,assertion_id TEXT NOT NULL,edge_id TEXT NOT NULL,source TEXT NOT NULL,PRIMARY KEY(graph_id,assertion_id));
  CREATE TABLE IF NOT EXISTS edge_structures(graph_id TEXT NOT NULL,edge_id TEXT NOT NULL,from_id TEXT NOT NULL,to_id TEXT NOT NULL,predicate TEXT NOT NULL,PRIMARY KEY(graph_id,edge_id));
  CREATE TABLE IF NOT EXISTS effects(adapter TEXT NOT NULL,event_id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(adapter,event_id));")?;
-        let engine = Self { conn };
         // Backfill structural identity from legacy immutable snapshots on first upgrade.
         if engine
             .conn
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?
             < 6
         {
-            let transaction = engine.conn.unchecked_transaction()?;
             {
                 let mut statement = engine
                     .conn
@@ -107,12 +118,12 @@ impl Engine {
                     engine.record_structures(&graph, &data)?;
                 }
             }
-            transaction.pragma_update(None, "user_version", 6)?;
-            transaction.commit()?;
+            engine.conn.pragma_update(None, "user_version", 6)?;
         }
         engine.initialize_dispatch()?;
         engine.initialize_views()?;
         engine.initialize_admission()?;
+        initialization.commit()?;
         Ok(engine)
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
@@ -387,16 +398,64 @@ impl Engine {
         )?)
     }
     fn load(&self, graph: &str, revision: &str) -> Result<Option<GraphData>> {
-        let data: Option<String> = self
+        let row: Option<(String, Option<String>, String)> = self
             .conn
             .query_row(
-                "SELECT data FROM revisions WHERE graph_id=?1 AND revision=?2",
+                "SELECT branch_id,parent,data FROM revisions WHERE graph_id=?1 AND revision=?2",
                 params![graph, revision],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .optional()?;
-        data.map(|s| serde_json::from_str(&s).map_err(Into::into))
-            .transpose()
+        let Some((branch, parent, encoded)) = row else {
+            return Ok(None);
+        };
+        if encoded.len() > 16 * 1024 * 1024 {
+            return Err(err("E_INTEGRITY", "stored revision exceeds format bounds"));
+        }
+        let data: GraphData = serde_json::from_str(&encoded)
+            .map_err(|_| err("E_INTEGRITY", "stored revision is malformed"))?;
+        let digest = snapshot::content_digest(graph, &branch, &parent, &data)?;
+        if revision.starts_with("logical:") {
+            let integrity: Option<(String, String, String)> = self.conn.query_row(
+                "SELECT i.content_digest,i.manifest_id,m.manifest FROM revision_integrity i JOIN snapshot_manifests m ON m.id=i.manifest_id WHERE i.revision=?1",
+                [revision], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
+            let (stored_digest, id, manifest) = integrity
+                .ok_or_else(|| err("E_INTEGRITY", "stored logical revision lacks its manifest"))?;
+            if manifest.len() > 16 * 1024 * 1024 {
+                return Err(err("E_INTEGRITY", "stored manifest exceeds format bounds"));
+            }
+            let manifest: SnapshotManifest = serde_json::from_str(&manifest)
+                .map_err(|_| err("E_INTEGRITY", "stored manifest is malformed"))?;
+            let hash = format!(
+                "manifest:{:x}",
+                Sha256::digest(serde_json::to_vec(&("weave-manifest-v0.4", &manifest))?)
+            );
+            let member = manifest
+                .members
+                .iter()
+                .find(|m| m.graph_id == graph && m.revision == revision);
+            if digest != stored_digest
+                || hash != id
+                || !member.is_some_and(|m| {
+                    m.branch_id == branch && m.parent == parent && m.content_digest == digest
+                })
+                || revision != format!("logical:{}:{graph}", manifest.batch_id)
+                || manifest.members.is_empty()
+                || manifest.members.len() > 1000
+                || manifest
+                    .members
+                    .windows(2)
+                    .any(|m| m[0].graph_id >= m[1].graph_id)
+            {
+                return Err(err(
+                    "E_INTEGRITY",
+                    "stored logical revision does not match its manifest",
+                ));
+            }
+        } else if digest != revision {
+            return Err(err("E_INTEGRITY", "stored revision digest mismatch"));
+        }
+        Ok(Some(data))
     }
     pub fn query(&self, query: &QueryPlan, host: &HostContext) -> Result<QueryResult> {
         if !valid_id(&query.graph_id)
