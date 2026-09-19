@@ -403,6 +403,13 @@
           "result": "Four separate app processes pass exact Decimal persistence, pinned history, principal visibility and rollback. Physical device, full peer-sync and browser/Android remain open.",
           "contract_revision": "0.13.0",
           "commit": "26190cbf0436bec441889190127e99e8a84adfd2"
+        },
+        {
+          "artifact": "docs/measurements/2026-09-19-portable-parity.json",
+          "command": "python3 scripts/root_portable.py",
+          "host": "Apple M4 Max macOS arm64; native Rust executable and Node WebAssembly",
+          "result": "Seven fixed semantic case groups executed natively and in WebAssembly with identical19639-byte results; module imports zero host functions. Persistent browser/runtime and full portability gate remain open.",
+          "commit": "06759aa53fd919da3eddc9cc39c0478bd9010df5"
         }
       ]
     },
