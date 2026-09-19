@@ -31,6 +31,8 @@ impl Engine {
         let mut existing = 0;
         json_size(&commits, 16 * 1024 * 1024)?;
         for commit in commits {
+            identity_acceptance::require_external_graph(&commit.graph_id)?;
+            identity_acceptance::require_external_schema(&commit.data)?;
             if !host.writable_graphs.contains(&commit.graph_id) {
                 return Err(err(
                     "E_FORBIDDEN",
@@ -381,6 +383,12 @@ impl Engine {
                     "required metadata unavailable",
                 ));
             };
+            if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
+                return Err(err(
+                    "E_DEPENDENCY_UNAVAILABLE",
+                    "required dependency unavailable",
+                ));
+            }
             let Some(target) = self.load(&reference.graph_id, &reference.revision)? else {
                 return Err(err(
                     "E_DEPENDENCY_UNAVAILABLE",

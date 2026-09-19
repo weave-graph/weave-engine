@@ -241,6 +241,27 @@ fn node_key(input: &QueryResult, node: &Node) -> Result<String, Diagnostic> {
             "Graph node lacks runtime-provided pinned provenance",
         )
     })?;
+    if origins.is_empty() {
+        // Materialized synthetic values have no stored node origin. Preserve their
+        // own identity across repeated normalization without fabricating a NodeRef.
+        if node.id.strip_prefix("derived-node:").is_some_and(|suffix| {
+            suffix.len() == 64
+                && suffix
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        }) {
+            return Ok(node.id.clone());
+        }
+        return Ok(format!(
+            "derived-node:{}",
+            key(&(
+                &node.id,
+                &node.entity_id,
+                &node.space_id,
+                &node.context_scope
+            ))
+        ));
+    }
     Ok(format!(
         "node:{}",
         key(&(
@@ -1211,6 +1232,38 @@ mod tests {
         altered.graph.nodes[0].derived_from = input.edge_origins["e"].clone();
         assert_eq!(
             union(input, altered, &ctx()).unwrap_err().code,
+            "E_ORIGIN_CONFLICT"
+        );
+    }
+    #[test]
+    fn synthetic_node_union_keeps_distinct_manifestations_and_normalizes_idempotently() {
+        let mut input = fixture("source", "positive", 0, 10);
+        input.graph.nodes[1].entity_id = input.graph.nodes[0].entity_id.clone();
+        for origins in input.node_origins.values_mut() {
+            origins.clear();
+        }
+        let first = union(input.clone(), input.clone(), &ctx()).unwrap();
+        assert_eq!(first.graph.nodes.len(), 2);
+        assert!(first
+            .graph
+            .nodes
+            .iter()
+            .all(|n| n.id.starts_with("derived-node:")));
+        assert!(first.node_origins.values().all(Vec::is_empty));
+        let nested = union(first.clone(), input.clone(), &ctx()).unwrap();
+        assert_eq!(nested.graph, first.graph);
+        let repeated = union(first.clone(), first.clone(), &ctx()).unwrap();
+        assert_eq!(repeated.graph, first.graph);
+        assert_eq!(
+            union(input.clone(), input, &ctx()).unwrap().graph,
+            first.graph
+        );
+        let mut altered = first.clone();
+        altered.graph.nodes[0]
+            .properties
+            .insert("changed".into(), json!(true));
+        assert_eq!(
+            union(first, altered, &ctx()).unwrap_err().code,
             "E_ORIGIN_CONFLICT"
         );
     }

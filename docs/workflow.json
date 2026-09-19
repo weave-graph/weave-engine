@@ -115,7 +115,12 @@
           "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
         },
         "docs/contract/v0.6/README.md",
-        "crates/weave-engine/tests/assertions.rs"
+        "crates/weave-engine/tests/assertions.rs",
+        {
+          "kind": "native_identity_acceptance",
+          "path": "crates/weave-engine/tests/identity_acceptance.rs",
+          "result": "Pinned replacement partitions, installed policy authority, atomic CAS/receipt/events, current policy and NodeRef source gates, hidden membership payload/coverage parity and historical splits. Remote acceptance and broader governance remain open."
+        }
       ]
     },
     {
@@ -212,7 +217,12 @@
         "docs/contract/v0.10/README.md",
         "crates/weave-engine/tests/counterparts.rs",
         "docs/contract/v0.11/README.md",
-        "crates/weave-engine/tests/root_node_influence.rs"
+        "crates/weave-engine/tests/root_node_influence.rs",
+        {
+          "kind": "native_identity_acceptance",
+          "path": "crates/weave-engine/tests/identity_acceptance.rs",
+          "result": "Pinned replacement partitions, installed policy authority, atomic CAS/receipt/events, current policy and NodeRef source gates, hidden membership payload/coverage parity and historical splits. Remote acceptance and broader governance remain open."
+        }
       ]
     },
     {
@@ -348,6 +358,11 @@
           "contract_revision": "capsule0.1 / program0.3",
           "commit": "7cdf6b4",
           "unresolved_findings": "Unsigned local APIs; no peer authenticity, mounts, governance or mobile support"
+        },
+        {
+          "kind": "native_identity_acceptance",
+          "path": "crates/weave-engine/tests/identity_acceptance.rs",
+          "result": "Pinned replacement partitions, installed policy authority, atomic CAS/receipt/events, current policy and NodeRef source gates, hidden membership payload/coverage parity and historical splits. Remote acceptance and broader governance remain open."
         }
       ]
     },

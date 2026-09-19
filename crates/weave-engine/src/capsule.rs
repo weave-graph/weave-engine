@@ -144,7 +144,10 @@ impl Engine {
                         .revision_record(&member_ref)?
                         .ok_or_else(|| err("E_INTEGRITY", "logical snapshot member unavailable"))?;
                     let (visible, incomplete) = self.authorized(row.data.clone(), host)?;
-                    if visible != row.data || incomplete {
+                    if visible != row.data
+                        || incomplete
+                        || !self.identity_reference_allowed(&row.graph_id, &row.revision, host)?
+                    {
                         if &reference == root {
                             return Err(err("E_UNAVAILABLE", "capsule root unavailable"));
                         }
@@ -186,7 +189,9 @@ impl Engine {
                     .iter()
                     .any(|a| matches!(a.value, MetadataValue::LiveGraph { .. }));
                 let (visible, incomplete) = self.authorized(row.data.clone(), host)?;
-                available &= visible == row.data && !incomplete;
+                available &= visible == row.data
+                    && !incomplete
+                    && self.identity_reference_allowed(&row.graph_id, &row.revision, host)?;
             }
             if !available || live {
                 if &reference == root {
@@ -271,6 +276,10 @@ impl Engine {
             || json_size(capsule, 16 * 1024 * 1024).is_err()
         {
             return Err(err("E_BUDGET", "capsule budget exceeded"));
+        }
+        for record in &capsule.revisions {
+            identity_acceptance::require_external_graph(&record.graph_id)?;
+            identity_acceptance::require_external_schema(&record.data)?;
         }
         let mut manifest_ids = BTreeMap::new();
         let mut logical = BTreeMap::new();
@@ -483,6 +492,7 @@ impl Engine {
         host: &HostContext,
     ) -> Result<()> {
         let _read_scope = self.read_budget.enter();
+        identity_acceptance::require_external_graph(&reference.graph_id)?;
         if !valid_id(branch) || !valid_id(&host.principal) {
             return Err(err("E_ID", "branch and principal required"));
         }
