@@ -280,3 +280,34 @@ fn bounded_inputs_fail_without_mutation_and_private_only_updates_preserve_layout
     );
     assert!(e.head("saved", "main").unwrap().is_none());
 }
+
+#[test]
+fn navigation_values_compose_idempotently_for_connected_and_isolated_evidence() {
+    for connected in [false, true] {
+        let mut e = Engine::memory().unwrap();
+        let edges = if connected {
+            vec![edge("ab", "a", "b")]
+        } else {
+            vec![]
+        };
+        let r = commit(
+            &mut e,
+            "source",
+            json!({"nodes":[node("a"),node("b")],"edges":edges}),
+            None,
+        );
+        let value = e
+            .cluster_navigation(&request(&r, 2), &host("alice"))
+            .unwrap();
+        let ctx = weave_contract::AlgebraContext {
+            principal: "alice".into(),
+            max_objects: 1000,
+            max_output_bytes: 16 * 1024 * 1024,
+        };
+        let first = weave_contract::algebra::union(value.clone(), value.clone(), &ctx).unwrap();
+        let repeated = weave_contract::algebra::union(first.clone(), value, &ctx).unwrap();
+        assert_eq!(first.graph, repeated.graph);
+        let difference = weave_contract::algebra::diff(first.clone(), first, &ctx).unwrap();
+        assert!(difference.graph.attachments.is_empty());
+    }
+}
