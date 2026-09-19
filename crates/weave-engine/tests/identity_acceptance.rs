@@ -960,3 +960,82 @@ fn program_identity_selector_is_a_pinned_read_not_acceptance_authority() {
         "E_IDENTITY_UNAVAILABLE"
     );
 }
+
+#[test]
+fn root_handler_receipt_retry_rechecks_event_and_unrelated_query_authority() {
+    let (mut e, mut candidate) = setup();
+    candidate.groups[0].pop();
+    e.submit_identity_candidate(&candidate, &host("alice"))
+        .unwrap();
+    let accepted = e
+        .accept_identity_candidate(
+            &request(&candidate, None, "receipt-accept"),
+            &host("reviewer"),
+        )
+        .unwrap();
+    let mut deliveries = vec![];
+    for (id, graph, query) in [
+        ("revoked-event", accepted.reference.graph_id.as_str(), false),
+        ("revoked-query", "physical", true),
+    ] {
+        e.install_adapter(
+            &AdapterManifest {
+                id: id.into(),
+                version: "1".into(),
+                artifact_digest: format!("sha256:{}", "a".repeat(64)),
+                config_revision: "1".into(),
+                principal: "bob".into(),
+                subscriptions: vec![SubscriptionScope {
+                    graph_id: graph.into(),
+                    branch_id: "main".into(),
+                }],
+                output_graphs: vec![],
+                effect_destinations: vec![],
+                max_attempts: 3,
+                lease_ms: 100,
+                max_pending_events: 100,
+                projection_replay: false,
+            },
+            &host("bob"),
+        )
+        .unwrap();
+        e.set_adapter_state(id, "running").unwrap();
+        let delivery = e.poll_adapter(id, 0).unwrap().unwrap();
+        let program = Program {
+            version: VERSION.into(),
+            source_revisions: vec![],
+            commands: if query {
+                vec![Command::Query {query:serde_json::from_value(json!({"graph_id":accepted.reference.graph_id,"revision":accepted.reference.revision})).unwrap()}]
+            } else {
+                vec![]
+            },
+        };
+        let first = e
+            .complete_handler(id, &delivery.id, &delivery.lease, &program)
+            .unwrap();
+        assert!(!first.duplicate);
+        if query {
+            let CommandResult::Queried { result } = &first.results[0] else {
+                panic!()
+            };
+            assert!(!result.graph.nodes.is_empty());
+        }
+        assert!(
+            e.complete_handler(id, &delivery.id, &delivery.lease, &program)
+                .unwrap()
+                .duplicate
+        );
+        deliveries.push((id, delivery, program));
+    }
+    let count = e.event_count().unwrap();
+    e.revoke_identity_policy(&candidate.policy).unwrap();
+    for (id, delivery, program) in deliveries {
+        assert_eq!(
+            e.complete_handler(id, &delivery.id, &delivery.lease, &program)
+                .unwrap_err()
+                .code,
+            "E_UNAVAILABLE"
+        );
+    }
+    assert_eq!(e.event_count().unwrap(), count);
+}

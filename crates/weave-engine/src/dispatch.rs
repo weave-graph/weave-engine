@@ -340,6 +340,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         program: &Program,
         before_commit: impl FnOnce(),
     ) -> Result<HandlerReceipt> {
+        let _read_scope = self.read_budget.enter();
         json_size(program, 16 * 1024 * 1024)?;
         let hash = format!("{:x}", Sha256::digest(serde_json::to_vec(program)?));
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
@@ -348,7 +349,18 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             if state != "running" && state != "draining" {
                 return Err(err("E_PAUSED", "adapter is not running"));
             }
-            let prior:Option<(String,String)>=self.conn.query_row("SELECT request_hash,results FROM handler_receipts WHERE adapter=?1 AND event_id=?2",params![adapter,event],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
+            // Replays remain subject to current event authority, even after their lease
+            // has been acknowledged. The handler may also have read unrelated graphs.
+            let (_, _, _, sequence) = self
+                .scoped_event(&manifest, event)?
+                .ok_or_else(|| err("E_UNAVAILABLE", "delivery is unavailable"))?;
+            let host = HostContext::new(&manifest.principal, manifest.output_graphs.clone());
+            self.read_budget.request()?;
+            let limit = self.read_budget.remaining().min(MATERIALIZED_LIMIT + 4096);
+            let prior: Option<(String, Option<String>)> = self.conn.query_row(
+                "SELECT substr(request_hash,1,65),CASE WHEN length(CAST(results AS BLOB))<=?3 THEN results ELSE NULL END FROM handler_receipts WHERE adapter=?1 AND event_id=?2",
+                params![adapter,event,limit as i64], |r| Ok((r.get(0)?,r.get(1)?)),
+            ).optional()?;
             if let Some((prior, results)) = prior {
                 if prior != hash {
                     return Err(err(
@@ -356,15 +368,21 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                         "processed occurrence has different commands",
                     ));
                 }
+                let results = results
+                    .ok_or_else(|| err("E_BUDGET", "stored handler receipt exceeds read budget"))?;
+                self.read_budget.charge(results.len())?;
+                let results: Vec<CommandResult> = serde_json::from_str(&results)?;
+                for result in &results {
+                    if let CommandResult::Queried { result } = result {
+                        self.require_current_result_authority(result, &host)?;
+                    }
+                }
                 return Ok(HandlerReceipt {
                     duplicate: true,
-                    results: serde_json::from_str(&results)?,
+                    results,
                 });
             }
             self.check_lease(adapter, event, lease)?;
-            let (_, _, _, sequence) = self
-                .scoped_event(&manifest, event)?
-                .ok_or_else(|| err("E_UNAVAILABLE", "delivery is unavailable"))?;
             // Until declassification exists, derived handler output stays within the installed principal.
             for command in &program.commands {
                 let datas: Vec<&GraphData> = match command {
@@ -403,7 +421,6 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                     }
                 }
             }
-            let host = HostContext::new(&manifest.principal, manifest.output_graphs);
             let results = self.execute(program, &host)?;
             let json = serde_json::to_string(&results)?;
             self.conn.execute(

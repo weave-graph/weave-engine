@@ -244,3 +244,36 @@ fn explicit_handler_output_requires_structural_and_assertion_restrictions() {
             .duplicate
     );
 }
+
+#[test]
+fn root_cached_handler_receipt_is_bounded_before_loading() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("receipt.db");
+    let mut e = Engine::open(&path).unwrap();
+    setup(&mut e);
+    let delivery = e.poll_adapter("test-adapter-v1", 0).unwrap().unwrap();
+    e.complete_handler("test-adapter-v1", &delivery.id, &delivery.lease, &empty())
+        .unwrap();
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute(
+            "UPDATE handler_receipts SET results=CAST(zeroblob(?1) AS TEXT)",
+            [MATERIALIZED_LIMIT as i64 + 4097],
+        )
+        .unwrap();
+    assert_eq!(
+        e.complete_handler("test-adapter-v1", &delivery.id, &delivery.lease, &empty())
+            .unwrap_err()
+            .code,
+        "E_BUDGET"
+    );
+    connection
+        .execute("UPDATE handler_receipts SET results='[]'", [])
+        .unwrap();
+    assert!(
+        e.complete_handler("test-adapter-v1", &delivery.id, &delivery.lease, &empty())
+            .unwrap()
+            .duplicate
+    );
+    assert_eq!(e.event_count().unwrap(), 1);
+}
