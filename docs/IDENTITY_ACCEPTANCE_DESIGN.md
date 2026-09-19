@@ -30,3 +30,13 @@ An accepted bridge keeps both source-node and decision proofs, exact context and
 - Hidden source nodes, candidate membership and proof paths produce no global count or identifying error. Persisted bridge copies cannot shed source restrictions by clearing readers.
 - Source properties remain unchanged. Coordinate transforms and similarity claims cannot satisfy identity acceptance.
 - Initial trusted-host implementation remains explicitly separate from remote signed admission; broader operation scopes and governance adapters are subsequent integration work.
+
+## Proposed decision representation
+
+A candidate replaces the explicit membership partition for one mapping. Every member is an exact graph/revision/node reference and occurs in at most one group. Singleton groups are permitted after a split. The system does not infer transitive links between groups or merge the original entity IDs. A new candidate with revised time or evidence produces a distinct decision body even if its members match an earlier decision.
+
+Accepted storage uses one membership assertion per member, with an opaque partition tag on that member's record and source-node dependency protection. It has no separate public node containing a total group count or full member list. A trusted registry binds the mapping ID, decision revision and named policy revision to an accepted head. Selecting a graph with similar data cannot forge a registry entry. Internal mapping graph identifiers need protection against raw commit/import preemption; the private acceptance path must not expose a client-selectable bypass flag.
+
+A resolver finds the authorized source membership and emits adjacency only to authorized target-space memberships in that selected partition. Each returned bridge carries both membership assertion pins and both original NodeRefs. It retains original entity IDs, node identities, context and applicability. There is no eager pairwise clique, universal counterpart count or property synchronization. Mapping revocation and current authorization remain admission conditions even when historical decision content is pinned.
+
+This representation remains a proposal pending the source-node dependency gate and independent API review. It does not yet define remote signed acceptance operations or claim a fully private multi-user index.
