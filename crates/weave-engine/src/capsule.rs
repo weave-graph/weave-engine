@@ -93,6 +93,19 @@ impl Engine {
                 external_dependencies.push(reference);
                 continue;
             };
+            if record.revision.starts_with("logical:")
+                || record
+                    .data
+                    .attachments
+                    .iter()
+                    .any(|a| matches!(a.value, MetadataValue::LiveGraph { .. }))
+            {
+                if &reference == root {
+                    return Err(err("E_CAPSULE_VERSION","logical manifests and live handles require the next capsule transport format"));
+                }
+                external_dependencies.push(reference);
+                continue;
+            }
             let (visible, incomplete) = self.authorized(record.data.clone(), host)?;
             if visible != record.data || incomplete {
                 if &reference == root {
@@ -107,6 +120,20 @@ impl Engine {
                 (16usize * 1024 * 1024).saturating_sub(export_bytes),
             )?;
             revisions.push(record);
+        }
+        for record in &revisions {
+            for attachment in record.data.attachments.iter().filter(|a| a.required) {
+                if let MetadataValue::Graph { reference } = &attachment.value {
+                    if !revisions.iter().any(|r| {
+                        r.graph_id == reference.graph_id && r.revision == reference.revision
+                    }) {
+                        return Err(err(
+                            "E_DEPENDENCY_UNAVAILABLE",
+                            "required metadata cannot be included in this capsule",
+                        ));
+                    }
+                }
+            }
         }
         let capsule = Capsule {
             format: "weave-capsule-0.1".into(),
@@ -137,6 +164,7 @@ impl Engine {
                 ));
             }
             validate_graph(&record.data)?;
+            self.validate_structures(&record.graph_id, &record.data)?;
             if !valid_id(&record.graph_id)
                 || !valid_id(&record.branch_id)
                 || record.digest()? != record.revision
@@ -163,7 +191,7 @@ impl Engine {
                 }
             }
         }
-        let tx = self.conn.transaction()?;
+        let tx = self.conn.unchecked_transaction()?;
         let mut inserted = 0;
         let recorded_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -172,6 +200,8 @@ impl Engine {
         let recorded_at =
             i64::try_from(recorded_at).map_err(|_| err("E_CLOCK", "clock out of range"))?;
         for record in &capsule.revisions {
+            self.validate_structures(&record.graph_id, &record.data)?;
+            self.record_structures(&record.graph_id, &record.data)?;
             inserted += tx.execute(
                 "INSERT OR IGNORE INTO revisions VALUES (?1,?2,?3,?4,?5,?6)",
                 params![

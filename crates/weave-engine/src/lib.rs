@@ -6,6 +6,9 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use weave_contract::*;
 mod capsule;
+mod metadata;
+mod snapshot;
+mod typed;
 pub use capsule::{Capsule, CapsuleRevision};
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -67,12 +70,41 @@ impl Engine {
  CREATE TABLE IF NOT EXISTS events(sequence INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT UNIQUE NOT NULL,graph_id TEXT NOT NULL,branch_id TEXT NOT NULL,revision TEXT NOT NULL REFERENCES revisions(revision),actor TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS adapters(id TEXT PRIMARY KEY,graph_id TEXT NOT NULL,paused INTEGER NOT NULL DEFAULT 0);
  CREATE TABLE IF NOT EXISTS deliveries(adapter TEXT NOT NULL REFERENCES adapters(id),event_id TEXT NOT NULL REFERENCES events(event_id),attempts INTEGER NOT NULL,status TEXT NOT NULL,PRIMARY KEY(adapter,event_id));
+ CREATE TABLE IF NOT EXISTS schema_registry(id TEXT NOT NULL,revision TEXT NOT NULL,descriptor TEXT NOT NULL,PRIMARY KEY(id,revision));
+ CREATE TABLE IF NOT EXISTS snapshot_manifests(id TEXT PRIMARY KEY,batch_id TEXT UNIQUE NOT NULL,manifest TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS revision_integrity(revision TEXT PRIMARY KEY REFERENCES revisions(revision),content_digest TEXT NOT NULL,manifest_id TEXT NOT NULL REFERENCES snapshot_manifests(id));
+ CREATE TABLE IF NOT EXISTS edge_structures(graph_id TEXT NOT NULL,edge_id TEXT NOT NULL,from_id TEXT NOT NULL,to_id TEXT NOT NULL,predicate TEXT NOT NULL,PRIMARY KEY(graph_id,edge_id));
  CREATE TABLE IF NOT EXISTS effects(adapter TEXT NOT NULL,event_id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(adapter,event_id));")?;
-        Ok(Self { conn })
+        let engine = Self { conn };
+        // Backfill structural identity from legacy immutable snapshots on first upgrade.
+        if engine
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?
+            < 5
+        {
+            let transaction = engine.conn.unchecked_transaction()?;
+            {
+                let mut statement = engine
+                    .conn
+                    .prepare("SELECT graph_id,data FROM revisions ORDER BY rowid")?;
+                let rows = statement
+                    .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+                for row in rows {
+                    let (graph, json) = row?;
+                    let data: GraphData = serde_json::from_str(&json)?;
+                    engine.validate_structures(&graph, &data)?;
+                    engine.record_structures(&graph, &data)?;
+                }
+            }
+            transaction.pragma_update(None, "user_version", 5)?;
+            transaction.commit()?;
+        }
+        Ok(engine)
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
-        if program.version != VERSION
+        if ![VERSION, "0.3.0"].contains(&program.version.as_str())
             && program.version != "0.2.0"
+            && program.version != "0.3.0"
             && program.version != LEGACY_VERSION
         {
             return Err(err("E_VERSION", "unsupported contract version"));
@@ -85,13 +117,19 @@ impl Engine {
         {
             return Err(err("E_VERSION", "join requires contract 0.2.0"));
         }
-        if program.version != VERSION
+        if ![VERSION, "0.3.0"].contains(&program.version.as_str())
             && program
                 .commands
                 .iter()
                 .any(|c| matches!(c, Command::Bind { .. } | Command::Evaluate { .. }))
         {
             return Err(err("E_VERSION", "graph expressions require contract 0.3.0"));
+        }
+        if program.version != VERSION && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
+        for command in &program.commands {
+            if let Command::Bind { value, .. } | Command::Evaluate { value } = command {
+                validate_expression_profile(value, &program.version)?;
+            }
         }
         if program.commands.len() > 1000 {
             return Err(err("E_BUDGET", "at most 1000 commands"));
@@ -105,6 +143,22 @@ impl Engine {
             let mut materialized_bytes = 0usize;
             for command in &program.commands {
                 let command_result = match command {
+                    Command::CommitBatch { batch_id, commits } => {
+                        if program.version != VERSION {
+                            return Err(err(
+                                "E_VERSION",
+                                "snapshot batches require contract 0.4.0",
+                            ));
+                        }
+                        let (manifest_id, commits) = self.commit_batch(batch_id, commits, host)?;
+                        match manifest_id {
+                            Some(manifest_id) => CommandResult::BatchCommitted {
+                                manifest_id,
+                                commits,
+                            },
+                            None => CommandResult::BatchUnchanged { commits },
+                        }
+                    }
                     Command::Bind { name, value } => {
                         if !valid_id(name) || values.contains_key(name) {
                             return Err(err(
@@ -122,10 +176,12 @@ impl Engine {
                             MATERIALIZED_LIMIT.saturating_sub(materialized_bytes),
                         )?;
                         values.insert(name.clone(), result.clone());
-                        CommandResult::Queried { result }
+                        CommandResult::Queried {
+                            result: Box::new(result),
+                        }
                     }
                     Command::Evaluate { value } => CommandResult::Queried {
-                        result: self.expression(value, &values, host, 0, &mut 1000)?,
+                        result: Box::new(self.expression(value, &values, host, 0, &mut 1000)?),
                     },
 
                     Command::Join {
@@ -134,7 +190,7 @@ impl Engine {
                         output_predicate,
                         match_on: JoinMatch::EntitySpaceToFrom,
                     } => CommandResult::Queried {
-                        result: self.join(left, right, output_predicate, host)?,
+                        result: Box::new(self.join(left, right, output_predicate, host)?),
                     },
                     Command::Commit {
                         graph_id,
@@ -149,10 +205,13 @@ impl Engine {
                             data,
                             host,
                         )?;
-                        CommandResult::Committed { revision, event_id }
+                        match event_id {
+                            Some(event_id) => CommandResult::Committed { revision, event_id },
+                            None => CommandResult::Unchanged { revision },
+                        }
                     }
                     Command::Query { query } => CommandResult::Queried {
-                        result: self.query(query, host)?,
+                        result: Box::new(self.query(query, host)?),
                     },
                 };
                 materialized_bytes += json_size(
@@ -181,7 +240,7 @@ impl Engine {
         expected: Option<&str>,
         data: &GraphData,
         host: &HostContext,
-    ) -> Result<(String, String)> {
+    ) -> Result<(String, Option<String>)> {
         if !host.writable_graphs.contains(graph) {
             return Err(err(
                 "E_FORBIDDEN",
@@ -192,12 +251,18 @@ impl Engine {
             return Err(err("E_ID", "identifiers must not be empty"));
         }
         validate_graph(data)?;
+        self.validate_structures(graph, data)?;
         let head = self.head(graph, branch)?;
         if head.as_deref() != expected {
             return Err(err(
                 "E_CONFLICT",
                 "expected head differs from current branch head",
             ));
+        }
+        if let Some(revision) = &head {
+            if self.load(graph, revision)?.as_ref() == Some(data) {
+                return Ok((revision.clone(), None));
+            }
         }
         json_size(data, 16 * 1024 * 1024)?;
         let json = serde_json::to_string(data)?;
@@ -215,7 +280,9 @@ impl Engine {
         )?;
         self.conn.execute("INSERT INTO heads VALUES (?1,?2,?3) ON CONFLICT(graph_id,branch_id) DO UPDATE SET revision=excluded.revision",params![graph,branch,revision])?;
         self.conn.execute("INSERT INTO events(event_id,graph_id,branch_id,revision,actor) VALUES (?1,?2,?3,?4,?5)",params![event_id,graph,branch,revision,host.principal])?;
-        Ok((revision, event_id))
+        self.validate_required_metadata(data, host)?;
+        self.record_structures(graph, data)?;
+        Ok((revision, Some(event_id)))
     }
     pub fn head(&self, graph: &str, branch: &str) -> Result<Option<String>> {
         Ok(self
@@ -257,6 +324,11 @@ impl Engine {
         if query.max_depth > 32 {
             return Err(err("E_BUDGET", "metadata depth cannot exceed 32"));
         }
+        let read_transaction = if self.conn.is_autocommit() {
+            Some(self.conn.unchecked_transaction()?)
+        } else {
+            None
+        };
         let revision = match &query.revision {
             Some(rev) => rev.clone(),
             None => self
@@ -285,6 +357,10 @@ impl Engine {
                 .collect();
             graph.nodes.retain(|n| ids.contains(&n.id));
         }
+        graph
+            .attachments
+            .retain(|a| query.valid_at.is_none_or(|t| a.valid_time.contains(t)));
+        prune_attachments(&mut graph);
         let mut result = QueryResult {
             version: VERSION.into(),
             graph,
@@ -297,6 +373,7 @@ impl Engine {
             diagnostics: Vec::new(),
             provenance: Vec::new(),
             edge_origins: BTreeMap::new(),
+            attachment_origins: BTreeMap::new(),
             metadata_graphs: Vec::new(),
         };
 
@@ -308,6 +385,20 @@ impl Engine {
             );
         }
         let mut query_bytes = json_size(&result, MATERIALIZED_LIMIT)?;
+        for attachment in &result.graph.attachments {
+            let references = vec![AssertionRef {
+                graph_id: query.graph_id.clone(),
+                revision: revision.clone(),
+                assertion_id: attachment.id.clone(),
+            }];
+            query_bytes += json_size(
+                &(&attachment.id, &references),
+                MATERIALIZED_LIMIT.saturating_sub(query_bytes),
+            )?;
+            result
+                .attachment_origins
+                .insert(attachment.id.clone(), references);
+        }
         for edge in &result.graph.edges {
             let reference = AssertionRef {
                 graph_id: query.graph_id.clone(),
@@ -322,10 +413,31 @@ impl Engine {
             result.provenance.push(reference.clone());
             result.edge_origins.insert(edge.id.clone(), vec![reference]);
         }
+        let mut live_pins = BTreeMap::new();
+        let (initial_refs, unavailable_live) = self.query_refs(&result.graph, &mut live_pins)?;
+        metadata::pin_live_attachments(&mut result.graph, &live_pins);
+        if unavailable_live {
+            partial(
+                &mut result,
+                "E_DEPENDENCY_UNAVAILABLE",
+                "metadata dependency unavailable",
+            );
+        }
+        for ((graph_id, _), revision) in &live_pins {
+            if let Some(revision) = revision {
+                let reference = GraphRef {
+                    graph_id: graph_id.clone(),
+                    revision: revision.clone(),
+                };
+                if !result.input_snapshots.contains(&reference) {
+                    result.input_snapshots.push(reference);
+                }
+            }
+        }
         if query.include_metadata {
             let mut seen = HashSet::from([(query.graph_id.clone(), revision)]);
             let mut pending: std::collections::VecDeque<_> =
-                refs(&result.graph).into_iter().map(|r| (r, 1)).collect();
+                initial_refs.into_iter().map(|r| (r, 1)).collect();
             let mut visited = 0;
             while let Some((reference, depth)) = pending.pop_front() {
                 if !seen.insert((reference.graph_id.clone(), reference.revision.clone())) {
@@ -344,7 +456,7 @@ impl Engine {
                     ),
                     Some(data) => {
                         let was_empty = data.nodes.is_empty() && data.edges.is_empty();
-                        let (data, incomplete_derivation) = self.authorized(data, host)?;
+                        let (mut data, incomplete_derivation) = self.authorized(data, host)?;
                         if incomplete_derivation {
                             partial(
                                 &mut result,
@@ -360,10 +472,22 @@ impl Engine {
                             );
                             continue;
                         }
-                        pending.extend(refs(&data).into_iter().map(|r| (r, depth + 1)));
+                        let (references, unavailable_live) =
+                            self.query_refs(&data, &mut live_pins)?;
+                        if unavailable_live {
+                            partial(
+                                &mut result,
+                                "E_DEPENDENCY_UNAVAILABLE",
+                                "metadata dependency unavailable",
+                            );
+                        }
+                        metadata::pin_live_attachments(&mut data, &live_pins);
+                        pending.extend(references.into_iter().map(|r| (r, depth + 1)));
                         query_bytes +=
                             json_size(&data, MATERIALIZED_LIMIT.saturating_sub(query_bytes))?;
-                        result.input_snapshots.push(reference.clone());
+                        if !result.input_snapshots.contains(&reference) {
+                            result.input_snapshots.push(reference.clone());
+                        }
                         result.metadata_graphs.push(ResolvedGraph {
                             reference,
                             graph: data,
@@ -373,6 +497,9 @@ impl Engine {
             }
         }
         json_size(&result, MATERIALIZED_LIMIT)?;
+        if let Some(transaction) = read_transaction {
+            transaction.commit()?;
+        }
         Ok(result)
     }
     /// Identity-key path join. Pure over two pinned, authorized graph views.
@@ -408,6 +535,7 @@ impl Engine {
         if !valid_id(predicate) {
             return Err(err("E_ID", "join output predicate required"));
         }
+        let mut schema = typed::joined_schema(&l.graph, &r.graph, predicate)?;
         let pairs = l
             .graph
             .edges
@@ -438,6 +566,8 @@ impl Engine {
         let mut edges = Vec::new();
         let mut provenance = Vec::new();
         let mut edge_origins = BTreeMap::new();
+        let mut attachments = BTreeMap::new();
+        let mut attachment_origins = BTreeMap::new();
         for le in &l.graph.edges {
             for re in &r.graph.edges {
                 let a = ln[le.to.as_str()];
@@ -491,7 +621,30 @@ impl Engine {
                 // Results are scoped to the evaluating principal until a release policy exists.
                 source.readers = vec![host.principal.clone()];
                 target.readers = vec![host.principal.clone()];
+                let type_id = if let Some(output) = &mut schema {
+                    typed::type_join_node(
+                        &mut source,
+                        l.graph.schema.as_ref().expect("both schemas validated"),
+                        output,
+                        &mut join_bytes,
+                    )?;
+                    typed::type_join_node(
+                        &mut target,
+                        r.graph.schema.as_ref().expect("both schemas validated"),
+                        output,
+                        &mut join_bytes,
+                    )?;
+                    Some(typed::type_join_edge(
+                        &source,
+                        &target,
+                        output,
+                        &mut join_bytes,
+                    )?)
+                } else {
+                    None
+                };
                 let edge = Edge {
+                    type_id,
                     id: format!(
                         "join-edge:{:x}",
                         Sha256::digest(serde_json::to_vec(&(
@@ -524,6 +677,24 @@ impl Engine {
                 join_bytes += json_size(
                     &(&edge.id, &premises),
                     MATERIALIZED_LIMIT.saturating_sub(join_bytes),
+                )?;
+                metadata::carry_node_attachments(
+                    &l,
+                    ln[le.from.as_str()],
+                    &source,
+                    host,
+                    &mut attachments,
+                    &mut attachment_origins,
+                    &mut join_bytes,
+                )?;
+                metadata::carry_node_attachments(
+                    &r,
+                    rn[re.to.as_str()],
+                    &target,
+                    host,
+                    &mut attachments,
+                    &mut attachment_origins,
+                    &mut join_bytes,
                 )?;
                 nodes.insert(source.id.clone(), source);
                 nodes.insert(target.id.clone(), target);
@@ -577,9 +748,21 @@ impl Engine {
                 snapshots.insert(reference.graph_id.clone(), reference.revision.clone());
             }
         }
+        if let Some(schema) = &mut schema {
+            schema.id = format!(
+                "derived-schema:{:x}",
+                Sha256::digest(serde_json::to_vec(&(
+                    &schema.id,
+                    &schema.nodes,
+                    &schema.edges
+                ))?)
+            );
+        }
         let result = QueryResult {
             version: VERSION.into(),
             graph: GraphData {
+                schema,
+                attachments: attachments.into_values().collect(),
                 nodes: nodes.into_values().collect(),
                 edges,
             },
@@ -589,8 +772,10 @@ impl Engine {
             diagnostics,
             provenance,
             edge_origins,
+            attachment_origins,
             metadata_graphs,
         };
+        validate_graph(&result.graph)?;
         json_size(&result, MATERIALIZED_LIMIT)?;
         Ok(result)
     }
@@ -607,6 +792,14 @@ impl Engine {
         }
         *budget -= 1;
         match expression {
+            GraphExpression::Metadata {
+                input,
+                host: attachment_host,
+                key,
+            } => {
+                let input = self.expression(input, values, host, depth + 1, budget)?;
+                self.metadata_value(input, attachment_host, key, host)
+            }
             GraphExpression::Query { query } => self.query(query, host),
             GraphExpression::Reference { name } => values
                 .get(name)
@@ -641,6 +834,10 @@ impl Engine {
                         .collect();
                     value.graph.nodes.retain(|n| nodes.contains(&n.id));
                 }
+                prune_attachments(&mut value.graph);
+                value
+                    .attachment_origins
+                    .retain(|id, _| value.graph.attachments.iter().any(|a| &a.id == id));
                 let edges: HashSet<_> = value.graph.edges.iter().map(|e| e.id.as_str()).collect();
                 value
                     .edge_origins
@@ -662,18 +859,38 @@ impl Engine {
         for edge in data.edges {
             let mut visiting = HashSet::new();
             let mut budget = 1000usize;
-            if self.premises_visible(&edge, host, &mut visiting, &mut budget, 0)? {
+            if self.premises_visible(&edge.derived_from, host, &mut visiting, &mut budget, 0)? {
                 edges.push(edge);
             } else {
                 incomplete = true;
             }
         }
         data.edges = edges;
+        prune_attachments(&mut data);
+        let mut attachments = Vec::new();
+        for attachment in data.attachments {
+            let allowed = match &attachment.origin {
+                Some(reference) => self.premises_visible(
+                    std::slice::from_ref(reference),
+                    host,
+                    &mut HashSet::new(),
+                    &mut 1000,
+                    0,
+                )?,
+                None => true,
+            };
+            if allowed {
+                attachments.push(attachment);
+            } else {
+                incomplete = true;
+            }
+        }
+        data.attachments = attachments;
         Ok((data, incomplete))
     }
     fn premises_visible(
         &self,
-        edge: &Edge,
+        references: &[AssertionRef],
         host: &HostContext,
         visiting: &mut HashSet<(String, String, String)>,
         budget: &mut usize,
@@ -682,7 +899,7 @@ impl Engine {
         if depth > 32 {
             return Ok(false);
         }
-        for reference in &edge.derived_from {
+        for reference in references {
             if *budget == 0 {
                 return Ok(false);
             }
@@ -699,10 +916,29 @@ impl Engine {
                 return Ok(false);
             };
             let source = visible(source, &host.principal);
-            let Some(premise) = source.edges.iter().find(|e| e.id == reference.assertion_id) else {
+            let dependencies = if let Some(premise) =
+                source.edges.iter().find(|e| e.id == reference.assertion_id)
+            {
+                premise.derived_from.clone()
+            } else if let Some(attachment) = source
+                .attachments
+                .iter()
+                .find(|a| a.id == reference.assertion_id)
+            {
+                let mut dependencies: Vec<AssertionRef> =
+                    attachment.origin.iter().cloned().collect();
+                if let MetadataHost::Edge { id } = &attachment.host {
+                    if let Some(edge) = source.edges.iter().find(|e| &e.id == id) {
+                        dependencies.extend(edge.derived_from.clone());
+                    } else {
+                        return Ok(false);
+                    }
+                }
+                dependencies
+            } else {
                 return Ok(false);
             };
-            if !self.premises_visible(premise, host, visiting, budget, depth + 1)? {
+            if !self.premises_visible(&dependencies, host, visiting, budget, depth + 1)? {
                 return Ok(false);
             }
             visiting.remove(&key);
@@ -834,6 +1070,8 @@ fn visible(mut data: GraphData, principal: &str) -> GraphData {
             && nodes.contains(e.from.as_str())
             && nodes.contains(e.to.as_str())
     });
+    data.attachments.retain(|a| allowed(&a.readers, principal));
+    prune_attachments(&mut data);
     data
 }
 fn allowed(readers: &[String], principal: &str) -> bool {
@@ -844,8 +1082,24 @@ fn refs(data: &GraphData) -> Vec<GraphRef> {
         .iter()
         .flat_map(|n| n.metadata.clone())
         .chain(data.edges.iter().flat_map(|e| e.metadata.clone()))
+        .chain(data.attachments.iter().filter_map(|a| match &a.value {
+            MetadataValue::Graph { reference } => Some(reference.clone()),
+            _ => None,
+        }))
         .collect()
 }
+fn prune_attachments(data: &mut GraphData) {
+    let nodes: HashSet<_> = data.nodes.iter().map(|n| n.id.as_str()).collect();
+    let entities: HashSet<_> = data.nodes.iter().map(|n| n.entity_id.as_str()).collect();
+    let edges: HashSet<_> = data.edges.iter().map(|e| e.id.as_str()).collect();
+    data.attachments.retain(|a| match &a.host {
+        MetadataHost::Graph => true,
+        MetadataHost::Node { id } => nodes.contains(id.as_str()),
+        MetadataHost::Edge { id } => edges.contains(id.as_str()),
+        MetadataHost::Entity { id } => entities.contains(id.as_str()),
+    });
+}
+
 fn partial(result: &mut QueryResult, code: &str, message: &str) {
     result.coverage = Coverage::Partial;
     if !result.diagnostics.iter().any(|d| d.code == code) {
@@ -856,6 +1110,9 @@ fn partial(result: &mut QueryResult, code: &str, message: &str) {
     }
 }
 fn validate_graph(data: &GraphData) -> Result<()> {
+    if let Some(diagnostic) = validate_schema_graph(data).first() {
+        return Err(err(&diagnostic.code, &diagnostic.message));
+    }
     if data.nodes.len() > 100_000 || data.edges.len() > 100_000 {
         return Err(err("E_BUDGET", "graph exceeds 100000 nodes or edges"));
     }
@@ -905,6 +1162,38 @@ fn validate_graph(data: &GraphData) -> Result<()> {
             return Err(err("E_ID", "provenance identifiers require 1 to 512 bytes"));
         }
     }
+    let mut attachment_ids = HashSet::new();
+    for a in &data.attachments {
+        if !valid_id(&a.id)
+            || !valid_id(&a.key)
+            || !a.valid_time.valid()
+            || !attachment_ids.insert(&a.id)
+            || edge_ids.contains(&a.id)
+        {
+            return Err(err(
+                "E_ATTACHMENT",
+                "attachment identity, key and interval required",
+            ));
+        }
+        let host = match &a.host {
+            MetadataHost::Graph => true,
+            MetadataHost::Node { id } => data.nodes.iter().any(|n| &n.id == id),
+            MetadataHost::Edge { id } => data.edges.iter().any(|e| &e.id == id),
+            MetadataHost::Entity { id } => data.nodes.iter().any(|n| &n.entity_id == id),
+        };
+        if !host || a.readers.iter().any(|r| !valid_id(r)) {
+            return Err(err("E_ATTACHMENT", "attachment host or readers invalid"));
+        }
+        if let MetadataValue::LiveGraph {
+            graph_id,
+            branch_id,
+        } = &a.value
+        {
+            if !valid_id(graph_id) || !valid_id(branch_id) {
+                return Err(err("E_REFERENCE", "live graph reference invalid"));
+            }
+        }
+    }
     for reference in refs(data) {
         if !valid_id(&reference.graph_id) || !valid_id(&reference.revision) {
             return Err(err(
@@ -950,4 +1239,33 @@ fn json_size(value: &impl serde::Serialize, limit: usize) -> Result<usize> {
 
 fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 512
+}
+
+fn validate_expression_profile(expression: &GraphExpression, version: &str) -> Result<()> {
+    let mut pending = vec![(expression, 0usize)];
+    let mut count = 0;
+    while let Some((expression, depth)) = pending.pop() {
+        count += 1;
+        if count > 1000 || depth > 32 {
+            return Err(err("E_BUDGET", "expression structure exceeds budget"));
+        }
+        match expression {
+            GraphExpression::Metadata { input, .. } => {
+                if version != VERSION {
+                    return Err(err(
+                        "E_VERSION",
+                        "metadata expressions require contract 0.4.0",
+                    ));
+                }
+                pending.push((input, depth + 1));
+            }
+            GraphExpression::Filter { input, .. } => pending.push((input, depth + 1)),
+            GraphExpression::Join { left, right, .. } => {
+                pending.push((left, depth + 1));
+                pending.push((right, depth + 1));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }

@@ -6,6 +6,7 @@ fn host() -> HostContext {
 }
 fn node(id: &str, entity: &str, space: &str) -> Node {
     Node {
+        type_id: None,
         id: id.into(),
         entity_id: entity.into(),
         space_id: space.into(),
@@ -16,11 +17,14 @@ fn node(id: &str, entity: &str, space: &str) -> Node {
 }
 fn data() -> GraphData {
     GraphData {
+        schema: None,
+        attachments: vec![],
         nodes: vec![
             node("physical", "device", "physical"),
             node("operational", "device", "operational"),
         ],
         edges: vec![Edge {
+            type_id: None,
             id: "link".into(),
             predicate: "counterpart".into(),
             from: "physical".into(),
@@ -136,6 +140,8 @@ fn optimistic_head_prevents_lost_update() {
 fn node_and_edge_metadata_graphs_are_pinned_and_partial_when_missing() {
     let mut engine = Engine::memory().unwrap();
     let evidence = GraphData {
+        schema: None,
+        attachments: vec![],
         nodes: vec![node("source", "source", "docs")],
         edges: vec![],
     };
@@ -215,6 +221,8 @@ fn restricted_counterparts_edges_and_provenance_do_not_leak() {
 fn hidden_and_missing_metadata_have_same_diagnostic() {
     let mut engine = Engine::memory().unwrap();
     let mut secret = GraphData {
+        schema: None,
+        attachments: vec![],
         nodes: vec![node("secret", "secret", "secret")],
         edges: vec![],
     };
@@ -756,6 +764,8 @@ fn direct_query_bounds_metadata_bytes_during_expansion() {
                         name,
                         None,
                         GraphData {
+                            schema: None,
+                            attachments: vec![],
                             nodes: vec![n],
                             edges: vec![],
                         },
@@ -809,4 +819,74 @@ fn direct_join_bounds_repeated_provenance_before_output_accumulates() {
             .code,
         "E_BUDGET"
     );
+}
+
+#[test]
+fn legacy_hash_and_structural_registry_survive_upgrade() {
+    use sha2::{Digest, Sha256};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("legacy.db");
+    let mut engine = Engine::open(&path).unwrap();
+    let graph = data();
+    let legacy_json = serde_json::to_value(&graph).unwrap();
+    assert!(legacy_json.get("schema").is_none());
+    assert!(legacy_json.get("attachments").is_none());
+    assert!(legacy_json["nodes"][0].get("type_id").is_none());
+    let expected = format!(
+        "sha256:{:x}",
+        Sha256::digest(
+            serde_json::to_vec(&(
+                "weave-revision-v0.1",
+                "g",
+                "main",
+                Option::<String>::None,
+                &graph
+            ))
+            .unwrap()
+        )
+    );
+    let rev = revision(
+        &engine
+            .execute(&program(vec![commit("g", None, graph)]), &host())
+            .unwrap(),
+    );
+    assert_eq!(rev, expected);
+    drop(engine);
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("DELETE FROM edge_structures; PRAGMA user_version=3;")
+        .unwrap();
+    drop(conn);
+    let mut engine = Engine::open(&path).unwrap();
+    let mut changed = data();
+    changed.edges[0].predicate = "retargeted".into();
+    assert_eq!(
+        engine
+            .execute(&program(vec![commit("g", Some(rev), changed)]), &host())
+            .unwrap_err()
+            .code,
+        "E_EDGE_IDENTITY"
+    );
+    assert_eq!(engine.event_count().unwrap(), 1);
+}
+
+#[test]
+fn nested_metadata_requires_current_profile_and_rolls_back() {
+    let mut engine = Engine::memory().unwrap();
+    let mut p = program(vec![
+        commit("g", None, data()),
+        Command::Evaluate {
+            value: GraphExpression::Filter {
+                input: Box::new(GraphExpression::Metadata {
+                    input: Box::new(GraphExpression::Query { query: query("g") }),
+                    host: MetadataHost::Graph,
+                    key: "evidence".into(),
+                }),
+                predicate: None,
+                valid_at: None,
+            },
+        },
+    ]);
+    p.version = "0.3.0".into();
+    assert_eq!(engine.execute(&p, &host()).unwrap_err().code, "E_VERSION");
+    assert!(engine.head("g", "main").unwrap().is_none());
 }

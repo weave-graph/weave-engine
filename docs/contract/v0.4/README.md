@@ -1,0 +1,15 @@
+# Contract 0.4: schemas and named metadata snapshots
+
+Version 0.4 adds optional embedded immutable schema descriptors, node/edge type IDs, independently attributable named metadata attachments, `CommitBatch`, and the pure `Metadata` graph expression. Versions 0.1–0.3 remain explicitly recognized; nested new operators and typed writes reject older profile versions. Optional fields are omitted when absent, preserving legacy content digests.
+
+`CommitBatch` creates 1–100 whole graph snapshots in one transaction. References such as `logical:batch:graph` are allocated before content hashing, allowing required self/cyclic metadata. A sorted immutable snapshot manifest binds each logical revision to graph, branch, parent, and content digest. The manifest has its own SHA-256 identity. Reusing a batch/revision for different contents rejects equivocation. This provides local content integrity, not signer authentication. Batch graph IDs must be unique; the batch name uses ASCII letters, digits, underscore or hyphen, at most 64 bytes.
+
+A no-op ordinary write returns `unchanged`, and an entirely unchanged batch returns `batch_unchanged`. Neither produces new graph changes/events. Mixed batches return optional event IDs per receipt, suppressing events for unchanged members. Stale expected heads remain conflicts.
+
+Named attachments have a typed host, key, value, independent validity interval, readers, optional source and schema context, and required/optional dependency flag. Edge and attachment assertion IDs occupy disjoint namespaces within a revision. Live graph handles pin once per evaluation snapshot and materialize as pinned references. Required graph dependencies must resolve atomically, including same-batch cycles. Pure metadata selection uses already resolved graph values, carries every traversed attachment premise, intersects host/attachment/target validity, and preserves access restrictions. It does not persist derived values.
+
+Schemas currently validate signed integers, strings and booleans; required/nullable/closed properties; typed endpoints; and declared cross-space relations. Schema `(id, revision)` labels bind immutable descriptors, including within a batch and during import. Query/filter preserve schema. Typed joins synthesize namespaced endpoint types and explicit output edge types, with descriptor-sensitive schema identities. Mixed typed/untyped joins reject until explicit mappings exist.
+
+Database migration 5 backfills permanent structural edge identities and immutable schema registrations from historical revisions. Conflicting legacy identities fail migration; no history is silently rewritten. Capsule format 0.1 deliberately rejects logical-manifest roots and live handles; its transport successor must carry verified manifests before those snapshots are portable.
+
+This is a source-backed implementation profile, not full language/runtime conformance: separate structural-edge versus source-assertion records, richer schema algebra, signed capabilities, peer authenticity, and full transport/adapter lifecycle remain on the workflow.

@@ -1,7 +1,9 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.3.0";
+pub const VERSION: &str = "0.4.0";
+mod schema;
+pub use schema::*;
 pub const LEGACY_VERSION: &str = "0.1.0";
 fn main_branch() -> String {
     "main".into()
@@ -46,6 +48,8 @@ pub enum Polarity {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Node {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_id: Option<String>,
     pub id: String,
     pub entity_id: String,
     pub space_id: String,
@@ -60,6 +64,8 @@ pub struct Node {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Edge {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_id: Option<String>,
     pub id: String,
     pub predicate: String,
     pub from: String,
@@ -79,6 +85,10 @@ pub struct Edge {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct GraphData {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema: Option<GraphSchema>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<MetadataAttachment>,
     #[serde(default)]
     pub nodes: Vec<Node>,
     #[serde(default)]
@@ -108,6 +118,10 @@ pub struct QueryPlan {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    CommitBatch {
+        batch_id: String,
+        commits: Vec<SnapshotCommit>,
+    },
     Bind {
         name: String,
         value: GraphExpression,
@@ -136,6 +150,11 @@ pub enum Command {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphExpression {
+    Metadata {
+        input: Box<GraphExpression>,
+        host: MetadataHost,
+        key: String,
+    },
     Query {
         query: QueryPlan,
     },
@@ -190,6 +209,8 @@ pub struct QueryResult {
     pub provenance: Vec<AssertionRef>,
     #[serde(default)]
     pub edge_origins: BTreeMap<String, Vec<AssertionRef>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub attachment_origins: BTreeMap<String, Vec<AssertionRef>>,
     pub metadata_graphs: Vec<ResolvedGraph>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -211,6 +232,102 @@ pub struct Event {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CommandResult {
-    Committed { revision: String, event_id: String },
-    Queried { result: QueryResult },
+    Unchanged {
+        revision: String,
+    },
+    BatchUnchanged {
+        commits: Vec<CommitReceipt>,
+    },
+    BatchCommitted {
+        manifest_id: String,
+        commits: Vec<CommitReceipt>,
+    },
+    Committed {
+        revision: String,
+        event_id: String,
+    },
+    Queried {
+        result: Box<QueryResult>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SnapshotCommit {
+    pub graph_id: String,
+    #[serde(default = "main_branch")]
+    pub branch_id: String,
+    #[serde(default)]
+    pub expected_head: Option<String>,
+    pub data: GraphData,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum MetadataHost {
+    Node { id: String },
+    Edge { id: String },
+    Entity { id: String },
+    Graph,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum MetadataValue {
+    Literal {
+        value: serde_json::Value,
+    },
+    Graph {
+        reference: GraphRef,
+    },
+    LiveGraph {
+        graph_id: String,
+        #[serde(default = "main_branch")]
+        branch_id: String,
+    },
+    Object {
+        graph_id: String,
+        object_id: String,
+    },
+    Artifact {
+        uri: String,
+        digest: String,
+    },
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct MetadataAttachment {
+    pub id: String,
+    pub host: MetadataHost,
+    pub key: String,
+    pub value: MetadataValue,
+    pub valid_time: Interval,
+    #[serde(default)]
+    pub origin: Option<AssertionRef>,
+    #[serde(default)]
+    pub readers: Vec<String>,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub schema_revision: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ManifestMember {
+    pub graph_id: String,
+    pub branch_id: String,
+    pub revision: String,
+    pub parent: Option<String>,
+    pub content_digest: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SnapshotManifest {
+    pub batch_id: String,
+    pub members: Vec<ManifestMember>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CommitReceipt {
+    pub graph_id: String,
+    pub branch_id: String,
+    pub revision: String,
+    pub event_id: Option<String>,
 }

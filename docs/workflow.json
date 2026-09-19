@@ -37,7 +37,8 @@
       "required_by": [
         "E00",
         "E15"
-      ]
+      ],
+      "status": "resolved"
     }
   ],
   "nodes": [
@@ -51,11 +52,11 @@
         "R39"
       ],
       "evidence": [
-        {
-          "artifact": "docs/RECONCILIATION.md",
-          "result": "Original papers copied unchanged, hashed and reconciled; publication remains orchestrator owned"
-        }
-      ]
+        "docs/source/manifest.json",
+        "docs/RECONCILIATION.md",
+        "docs/PUBLICATION.md"
+      ],
+      "status": "passed"
     },
     {
       "id": "E01",

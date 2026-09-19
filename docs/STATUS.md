@@ -1,46 +1,21 @@
 # Implementation status and evidence
 
-This is a **foundation checkpoint**, not completion of the full project. Original papers are recovered and reconciled; full runtime semantics and public release remain open.
+Public MIT implementation in progress; recovered original papers are reconciled. This checkpoint implements a verified subset, not completion of the papers.
 
-## Implemented checkpoint
+## Implemented
 
-- Portable `weave-contract` serde types and explicitly versioned JSON plans.
-- Native SQLite immutable revisions, whole-snapshot commits with compare-and-swap, host recording time and half-open valid-time filtering.
-- Entity/manifestation/space separation, graph-valued node and edge metadata, pinned metadata expansion and explicit missing-dependency coverage.
-- Trusted host write grants and principal read filters. Transitive derivation restrictions withhold unauthorized/unavailable conclusions; incomplete derivations mark generic partial coverage. This is not signed capability authorization or a remote authentication boundary.
-- Contract 0.2 exact identity-space path joins, interval intersections, deterministic output IDs and complete multi-revision snapshot vectors; 0.1 plans retain explicit compatibility.
-- Contract 0.3 immutable program-local graph values and recursive query/join/filter/reference expressions, preserving leaf provenance without hidden persistence. Cumulative byte budgets reject repeated-reference amplification and roll back earlier commits.
-- Hash-verified unsigned snapshot capsules, idempotent quarantined receive, explicit acceptance and offline forks through the trusted Rust host API.
-- Whole-program atomic graph changes and durable event rows. A reference audit adapter supports pause, retry, dead letters, explicit dead-letter replay and durable duplicate suppression for local logical effects.
+- Versions 0.1–0.4: immutable SQLite snapshots/CAS, half-open time, principal-filtered pinned queries, interval-aware identity-space joins and reusable pure graph values.
+- Version 0.4 adds immutable embedded schemas, typed joins, named contextual metadata, atomic logical snapshot manifests with constructible metadata cycles, required dependency checks, live handle pinning, and no-op suppression. See [contract](contract/v0.4/README.md).
+- Trusted host read/write boundaries, transitive derivation restrictions, generic partial coverage, bounded materialization and whole-program rollback.
+- Durable graph event rows and reference local audit adapter with retry, deduplication, pause and dead-letter replay.
+- Unsigned hash-verified legacy snapshot capsules, quarantine receive, explicit acceptance and offline branches. Logical manifest transport is the next capsule format; unsupported exports fail explicitly.
 
-## Verified evidence
+## Evidence
 
-On the local macOS host, `cargo test --workspace --locked` passes 24 integration tests: 20 in `crates/weave-engine/tests/runtime.rs` and 4 independently authored review tests in `crates/weave-engine/tests/root_review.rs`. `cargo clippy --workspace --all-targets --locked -- -D warnings` and `cargo fmt --all -- --check` pass.
+`cargo test --workspace --locked`, formatting, clippy and the contract WASM target are checked locally. Independent executable acceptance is committed under `scripts/root_*`: language compilation into runtime, revision/CAS/time checks, joins, graph values, ten metadata checks, and eight original-paper example checks. Public CI executes native tests and contract WASM checks. Runtime SQLite remains native, not a browser/mobile persistence implementation.
 
-The orchestrator independently compiled the language example, executed it using the engine CLI, reopened the database in a separate process and checked pinned results, incomplete metadata coverage, half-open interval boundaries, denied write authority and stale-head rejection. Its local integration harness remains orchestrator-owned. `cargo check -p weave-contract --target wasm32-unknown-unknown --locked` also passes for the contract only. The native SQLite engine is not yet a portable WASM runtime. These checks do not establish CI success on GitHub, mobile/browser behavior or distributed conformance.
+## Gates
 
-## Gate status
+E00 is passed: original source files/hash provenance, reconciliation and public MIT repository baseline are verified. E01–E06 and E08–E09 remain in progress. Other gates remain open as recorded in [workflow](workflow.json). N-ary relations and reward-based traversal learning are optional in the papers; neither is a mandatory completion blocker.
 
-| Gate | Status | Evidence / remaining scope |
-|---|---|---|
-| E00 | in progress | Original papers recovered, hashed and reconciled; publication handled by orchestrator |
-| E01 | in progress | 0.1 compatibility and 0.2 typed contract implemented and consumed by language; broader contract/golden compatibility work pending |
-| E02 | in progress | Atomic immutable SQLite snapshots tested; n-ary model, migrations and general branch lifecycle pending |
-| E03 | in progress | Pinned filtered queries, provenance and two-input identity-space path joins tested; general graph functions and recursive rules pending |
-| E04 | in progress | Basic trusted-host read/write boundaries plus transitive evidence restriction tests; full capability/topology privacy not implemented |
-| E05 | in progress | Atomic event storage, ordering of event enumeration and durable delivery records; crash-injection matrix and streaming/checkpoint protocol pending |
-| E06 | in progress | Local reference audit adapter; full lifecycle/isolation and external effect broker pending |
-| E07 | proposed | Incremental views and live subscriptions remain open |
-| E08 | in progress | Whole-snapshot capsule export/receive and dependency boundaries tested; mounts and complete portable graph fragments pending |
-| E09 | in progress | Independent local branches and explicit accepted heads tested; signed peer exchange and governance pending |
-| E10–E15 | proposed | See complete requirements and workflow; not satisfied by this checkpoint |
-
-Source reconciliation is complete against the original papers. Implementation gates remain open according to their acceptance evidence; publication and final gates remain orchestrator-owned.
-
-## Limits
-
-No production authentication, signed capabilities, revocation, general join planning, accepted-view governance, decentralized sync, signed/full capsules, automatic clustering, geometry operators, mobile/browser persistent engine or arbitrary external adapter execution is claimed. System timestamps record host wall time; queries select historical system state through immutable revision IDs, not yet a system-time range operator. Metadata values are JSON values with pinned graph references; rich typed schemas are future work. Event enumeration is ordered, but callers manually selecting events can deliver out of order. Revision IDs and graph presence may disclose topology to local callers; a remote deployment must complete E04 first.
-
-The orchestrator independently verified actual compiled 0.2 joins and 0.3 join→filter→join execution, leaf provenance, input snapshot preservation and no hidden persistence. Same-transaction cyclic metadata remains unimplemented because current revision digests include pinned references; [ADR 0001](architecture/ADR-0001-revision-identity-and-content.md) records the future identity/content separation requirement.
-
-Resource checks also run directly against `Engine::query` and `Engine::join`: incremental metadata, output-node, edge, provenance and origin accounting rejects oversized materialization during construction, before program output is retained. The byte ceiling is a serialized-data bound, not a measured process-RSS guarantee; a hardened resource-isolated host remains part of E14.
+Remaining required work includes separate structural-edge/source-assertion identity, richer graph algebra/schema semantics, accepted-view governance, signed capability and topology privacy, scoped dispatcher/adapter recovery, subscriptions, authenticated sync, selective capsules, clustering/geometry, full portable runtime and system-level conformance. Existing reader filters operate inside a trusted local host boundary, not production remote authentication. System history selects revisions; general system-time range queries remain open. Serialized byte budgets are not measured process-RSS isolation guarantees.
