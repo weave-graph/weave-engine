@@ -50,7 +50,9 @@ pub enum Member {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Cluster {
+    /// Stable membership identity; never a unique cache key for an entire record.
     pub id: String,
+    pub revision: String,
     pub children: [Member; 2],
     pub leaves: Vec<String>,
     /// Source links wholly contained in this aggregate; IDs resolve through snapshot().
@@ -93,6 +95,7 @@ pub struct Hierarchy {
     work: usize,
     bytes: usize,
     work_limit: usize,
+    snapshot_revision: String,
 }
 
 fn valid_id(value: &str) -> bool {
@@ -129,6 +132,8 @@ impl Hierarchy {
             return Err(Error("E_CLUSTER_BUDGET"));
         }
         size(&source, MAX_INPUT)?;
+        weave_contract::context::validate_selection(&source.context)
+            .map_err(|_| Error("E_CLUSTER_INPUT"))?;
         if !valid_id(&source.perspective) || source.sources.len() > 4096 {
             return Err(Error("E_CLUSTER_INPUT"));
         }
@@ -169,6 +174,10 @@ impl Hierarchy {
                 return Err(Error("E_CLUSTER_INPUT"));
             }
         }
+        let snapshot_revision = format!(
+            "snapshot:{:x}",
+            Sha256::digest(serde_json::to_vec(&source).map_err(|_| Error("E_CLUSTER_INPUT"))?)
+        );
         let frontier = source.nodes.iter().cloned().map(Member::Leaf).collect();
         Ok(Self {
             source,
@@ -179,6 +188,7 @@ impl Hierarchy {
             work: 0,
             bytes: 0,
             work_limit,
+            snapshot_revision,
         })
     }
 
@@ -270,6 +280,7 @@ impl Hierarchy {
             );
             let cluster = Cluster {
                 id: id.clone(),
+                revision: String::new(),
                 children: [a.clone(), b.clone()],
                 leaves,
                 contributing_links: Vec::new(),
@@ -300,6 +311,20 @@ impl Hierarchy {
         }
         for (c, links) in created.iter_mut().zip(contributions) {
             c.contributing_links = links;
+            c.revision = format!(
+                "record:{:x}",
+                Sha256::digest(
+                    serde_json::to_vec(&(
+                        &self.snapshot_revision,
+                        &c.id,
+                        &c.children,
+                        &c.leaves,
+                        &c.contributing_links,
+                        c.level
+                    ))
+                    .map_err(|_| Error("E_CLUSTER_INPUT"))?
+                )
+            );
             bytes += size(c, MAX_OUTPUT.saturating_sub(bytes))?;
         }
         next.extend(self.frontier.iter().filter(|m| !used.contains(*m)).cloned());

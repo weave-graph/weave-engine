@@ -2,6 +2,38 @@ use std::collections::BTreeSet;
 use weave_cluster::*;
 use weave_contract::{AssertionRef, ContextSelection, GraphRef};
 
+#[test]
+fn stable_membership_has_separate_snapshot_bound_record_revision() {
+    let mut a = Hierarchy::new(graph(4, &[(0, 1), (2, 3), (1, 2)])).unwrap();
+    let mut b = Hierarchy::new(graph(4, &[(0, 2), (1, 3), (2, 3)])).unwrap();
+    let ma = finish(&mut a);
+    let mb = finish(&mut b);
+    assert_eq!(ma.frontier, mb.frontier);
+    let Member::Cluster(id) = &ma.frontier[0] else {
+        panic!()
+    };
+    let (a, b) = (a.cluster(id).unwrap(), b.cluster(id).unwrap());
+    assert_ne!(a.children, b.children);
+    assert_ne!(a.revision, b.revision);
+}
+
+#[test]
+fn malformed_context_pins_reject_before_repeated_matching_hashes() {
+    for id in [String::new(), "bad\ncontext".into(), "x".repeat(513)] {
+        let mut source = graph(2, &[(0, 1)]);
+        source.context = ContextSelection::Pinned {
+            reference: GraphRef {
+                graph_id: id,
+                revision: "r".into(),
+            },
+        };
+        assert!(matches!(
+            Hierarchy::new(source),
+            Err(Error("E_CLUSTER_INPUT"))
+        ));
+    }
+}
+
 fn graph(n: usize, pairs: &[(usize, usize)]) -> Snapshot {
     Snapshot {
         perspective: "topology".into(),
