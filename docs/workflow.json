@@ -71,8 +71,17 @@
           "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
           "contract_revision": "0.1.0",
           "host": "local macOS",
-          "commit": "foundation checkpoint pending commit",
+          "commit": "0cee0e1",
           "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
+        },
+        {
+          "artifact": "docs/contract/v0.2/README.md",
+          "command": "cargo test --workspace --locked",
+          "result": "15 tests pass with identity-space temporal path joins; full gate incomplete",
+          "contract_revision": "0.2.0",
+          "host": "local macOS",
+          "commit": "second checkpoint pending commit",
+          "unresolved_findings": "General plans, recursive functions and broader policy remain open"
         }
       ]
     },
@@ -97,7 +106,7 @@
           "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
           "contract_revision": "0.1.0",
           "host": "local macOS",
-          "commit": "foundation checkpoint pending commit",
+          "commit": "0cee0e1",
           "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
         }
       ]
@@ -126,8 +135,17 @@
           "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
           "contract_revision": "0.1.0",
           "host": "local macOS",
-          "commit": "foundation checkpoint pending commit",
+          "commit": "0cee0e1",
           "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
+        },
+        {
+          "artifact": "docs/contract/v0.2/README.md",
+          "command": "cargo test --workspace --locked",
+          "result": "15 tests pass with identity-space temporal path joins; full gate incomplete",
+          "contract_revision": "0.2.0",
+          "host": "local macOS",
+          "commit": "second checkpoint pending commit",
+          "unresolved_findings": "General plans, recursive functions and broader policy remain open"
         }
       ]
     },
@@ -152,7 +170,7 @@
           "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
           "contract_revision": "0.1.0",
           "host": "local macOS",
-          "commit": "foundation checkpoint pending commit",
+          "commit": "0cee0e1",
           "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
         }
       ]
@@ -178,7 +196,7 @@
           "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
           "contract_revision": "0.1.0",
           "host": "local macOS",
-          "commit": "foundation checkpoint pending commit",
+          "commit": "0cee0e1",
           "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
         }
       ]
@@ -204,7 +222,7 @@
           "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
           "contract_revision": "0.1.0",
           "host": "local macOS",
-          "commit": "foundation checkpoint pending commit",
+          "commit": "0cee0e1",
           "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
         }
       ]

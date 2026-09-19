@@ -1,7 +1,8 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.1.0";
+pub const VERSION: &str = "0.2.0";
+pub const LEGACY_VERSION: &str = "0.1.0";
 fn main_branch() -> String {
     "main".into()
 }
@@ -107,6 +108,12 @@ pub struct QueryPlan {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    Join {
+        left: QueryPlan,
+        right: QueryPlan,
+        output_predicate: String,
+        match_on: JoinMatch,
+    },
     Commit {
         graph_id: String,
         #[serde(default = "main_branch")]
@@ -118,6 +125,11 @@ pub enum Command {
     Query {
         query: QueryPlan,
     },
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum JoinMatch {
+    EntitySpaceToFrom,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -141,6 +153,8 @@ pub struct QueryResult {
     pub version: String,
     pub graph: GraphData,
     pub snapshots: BTreeMap<String, String>,
+    #[serde(default)]
+    pub input_snapshots: Vec<GraphRef>,
     pub coverage: Coverage,
     pub diagnostics: Vec<Diagnostic>,
     pub provenance: Vec<AssertionRef>,

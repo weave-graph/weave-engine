@@ -92,4 +92,14 @@ fn missing_premise_does_not_grant_public_visibility() {
         data(Some(("unavailable", "missing-revision")), false),
     );
     assert_eq!(edges_for(&engine, "derived", "bob"), 0);
+    let query: QueryPlan =
+        serde_json::from_value(serde_json::json!({"graph_id":"derived"})).unwrap();
+    let result = engine
+        .query(&query, &HostContext::new("bob", Vec::<String>::new()))
+        .unwrap();
+    assert_eq!(
+        result.coverage,
+        weave_contract::Coverage::Partial,
+        "a missing derivation premise cannot silently become complete absence"
+    );
 }

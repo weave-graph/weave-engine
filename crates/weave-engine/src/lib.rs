@@ -69,8 +69,16 @@ impl Engine {
         Ok(Self { conn })
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
-        if program.version != VERSION {
+        if program.version != VERSION && program.version != LEGACY_VERSION {
             return Err(err("E_VERSION", "unsupported contract version"));
+        }
+        if program.version == LEGACY_VERSION
+            && program
+                .commands
+                .iter()
+                .any(|c| matches!(c, Command::Join { .. }))
+        {
+            return Err(err("E_VERSION", "join requires contract 0.2.0"));
         }
         if program.commands.len() > 1000 {
             return Err(err("E_BUDGET", "at most 1000 commands"));
@@ -81,6 +89,14 @@ impl Engine {
             let mut out = Vec::new();
             for command in &program.commands {
                 out.push(match command {
+                    Command::Join {
+                        left,
+                        right,
+                        output_predicate,
+                        match_on: JoinMatch::EntitySpaceToFrom,
+                    } => CommandResult::Queried {
+                        result: self.join(left, right, output_predicate, host)?,
+                    },
                     Command::Commit {
                         graph_id,
                         branch_id,
@@ -221,6 +237,10 @@ impl Engine {
             version: VERSION.into(),
             graph,
             snapshots: BTreeMap::from([(query.graph_id.clone(), revision.clone())]),
+            input_snapshots: vec![GraphRef {
+                graph_id: query.graph_id.clone(),
+                revision: revision.clone(),
+            }],
             coverage: Coverage::Complete,
             diagnostics: Vec::new(),
             provenance: Vec::new(),
@@ -283,6 +303,7 @@ impl Engine {
                             continue;
                         }
                         pending.extend(refs(&data).into_iter().map(|r| (r, depth + 1)));
+                        result.input_snapshots.push(reference.clone());
                         result.metadata_graphs.push(ResolvedGraph {
                             reference,
                             graph: data,
@@ -292,6 +313,173 @@ impl Engine {
             }
         }
         Ok(result)
+    }
+    /// Identity-key path join. Pure over two pinned, authorized graph views.
+    pub fn join(
+        &self,
+        left: &QueryPlan,
+        right: &QueryPlan,
+        predicate: &str,
+        host: &HostContext,
+    ) -> Result<QueryResult> {
+        if predicate.is_empty() {
+            return Err(err("E_ID", "join output predicate required"));
+        }
+        let transaction = if self.conn.is_autocommit() {
+            Some(self.conn.unchecked_transaction()?)
+        } else {
+            None
+        };
+        let l = self.query(left, host)?;
+        let r = self.query(right, host)?;
+        let pairs = l
+            .graph
+            .edges
+            .len()
+            .checked_mul(r.graph.edges.len())
+            .ok_or_else(|| err("E_BUDGET", "join pair budget exceeded"))?;
+        if pairs > 1_000_000 {
+            return Err(err("E_BUDGET", "join pair budget exceeds 1000000"));
+        }
+        let ln: BTreeMap<_, _> = l.graph.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+        let rn: BTreeMap<_, _> = r.graph.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+        let lr = &l.snapshots[&left.graph_id];
+        let rr = &r.snapshots[&right.graph_id];
+        let mut nodes = BTreeMap::new();
+        let mut edges = Vec::new();
+        let mut provenance = Vec::new();
+        for le in &l.graph.edges {
+            for re in &r.graph.edges {
+                let a = ln[le.to.as_str()];
+                let b = rn[re.from.as_str()];
+                if a.entity_id != b.entity_id || a.space_id != b.space_id {
+                    continue;
+                }
+                // Negative support is not a positive path premise.
+                if le.polarity != Polarity::Positive || re.polarity != Polarity::Positive {
+                    continue;
+                }
+                let start = le.valid_time.start.max(re.valid_time.start);
+                let end = match (le.valid_time.end, re.valid_time.end) {
+                    (Some(a), Some(b)) => Some(a.min(b)),
+                    (a, None) => a,
+                    (None, b) => b,
+                };
+                if end.is_some_and(|end| start >= end) {
+                    continue;
+                }
+                let premises = vec![
+                    AssertionRef {
+                        graph_id: left.graph_id.clone(),
+                        revision: lr.clone(),
+                        assertion_id: le.id.clone(),
+                    },
+                    AssertionRef {
+                        graph_id: right.graph_id.clone(),
+                        revision: rr.clone(),
+                        assertion_id: re.id.clone(),
+                    },
+                ];
+                let mut source = ln[le.from.as_str()].clone();
+                let mut target = rn[re.to.as_str()].clone();
+                source.id = format!(
+                    "join-node:{:x}",
+                    Sha256::digest(serde_json::to_vec(&(
+                        left.graph_id.as_str(),
+                        lr,
+                        source.id.as_str()
+                    ))?)
+                );
+                target.id = format!(
+                    "join-node:{:x}",
+                    Sha256::digest(serde_json::to_vec(&(
+                        right.graph_id.as_str(),
+                        rr,
+                        target.id.as_str()
+                    ))?)
+                );
+                // Results are scoped to the evaluating principal until a release policy exists.
+                source.readers = vec![host.principal.clone()];
+                target.readers = vec![host.principal.clone()];
+                let edge = Edge {
+                    id: format!(
+                        "join-edge:{:x}",
+                        Sha256::digest(serde_json::to_vec(&(
+                            "weave-join-v0.2",
+                            predicate,
+                            &premises,
+                            start,
+                            end
+                        ))?)
+                    ),
+                    predicate: predicate.into(),
+                    from: source.id.clone(),
+                    to: target.id.clone(),
+                    valid_time: Interval { start, end },
+                    polarity: Polarity::Positive,
+                    properties: BTreeMap::new(),
+                    metadata: vec![],
+                    readers: vec![host.principal.clone()],
+                    derived_from: premises.clone(),
+                };
+                nodes.insert(source.id.clone(), source);
+                nodes.insert(target.id.clone(), target);
+                edges.push(edge);
+                provenance.extend(premises);
+            }
+        }
+        let mut input_snapshots = l.input_snapshots.clone();
+        for reference in r.input_snapshots {
+            if !input_snapshots.contains(&reference) {
+                input_snapshots.push(reference);
+            }
+        }
+        let mut metadata_graphs = l.metadata_graphs;
+        for resolved in r.metadata_graphs {
+            if !metadata_graphs
+                .iter()
+                .any(|x| x.reference == resolved.reference)
+            {
+                metadata_graphs.push(resolved);
+            }
+        }
+        let mut diagnostics = l.diagnostics;
+        for diagnostic in r.diagnostics {
+            if !diagnostics.contains(&diagnostic) {
+                diagnostics.push(diagnostic);
+            }
+        }
+        let coverage = if l.coverage == Coverage::Partial || r.coverage == Coverage::Partial {
+            Coverage::Partial
+        } else {
+            Coverage::Complete
+        };
+        // Legacy map only retains unambiguous graph IDs. The full vector is authoritative.
+        let mut snapshots = BTreeMap::new();
+        for reference in &input_snapshots {
+            if !input_snapshots
+                .iter()
+                .any(|x| x.graph_id == reference.graph_id && x.revision != reference.revision)
+            {
+                snapshots.insert(reference.graph_id.clone(), reference.revision.clone());
+            }
+        }
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
+        Ok(QueryResult {
+            version: VERSION.into(),
+            graph: GraphData {
+                nodes: nodes.into_values().collect(),
+                edges,
+            },
+            snapshots,
+            input_snapshots,
+            coverage,
+            diagnostics,
+            provenance,
+            metadata_graphs,
+        })
     }
     fn authorized(&self, data: GraphData, host: &HostContext) -> Result<(GraphData, bool)> {
         let mut data = visible(data, &host.principal);

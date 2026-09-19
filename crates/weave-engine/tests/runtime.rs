@@ -323,3 +323,139 @@ fn bounded_metadata_and_interval_end_are_explicit() {
     q.valid_at = Some(200);
     assert!(engine.query(&q, &host()).unwrap().graph.edges.is_empty());
 }
+
+#[test]
+fn path_join_intersects_time_and_preserves_both_snapshots_and_identity() {
+    let mut engine = Engine::memory().unwrap();
+    let mut left = data();
+    left.nodes[0].entity_id = "start".into();
+    left.nodes[1].entity_id = "middle".into();
+    let mut right = data();
+    right.nodes[0].entity_id = "middle".into();
+    right.nodes[0].space_id = "operational".into();
+    right.nodes[1].entity_id = "end".into();
+    right.edges[0].valid_time = Interval {
+        start: 150,
+        end: Some(250),
+    };
+    engine
+        .execute(
+            &program(vec![
+                commit("g", None, left),
+                commit("evidence", None, right),
+            ]),
+            &host(),
+        )
+        .unwrap();
+    let result = engine
+        .join(&query("g"), &query("evidence"), "path", &host())
+        .unwrap();
+    assert_eq!(result.graph.edges.len(), 1);
+    assert_eq!(
+        result.graph.edges[0].valid_time,
+        Interval {
+            start: 150,
+            end: Some(200)
+        }
+    );
+    assert_eq!(result.input_snapshots.len(), 2);
+    assert_eq!(result.graph.edges[0].derived_from.len(), 2);
+    assert_eq!(result.graph.nodes.len(), 2);
+    assert_ne!(result.graph.edges[0].from, result.graph.edges[0].to);
+    assert_eq!(result.graph.edges[0].readers, vec!["alice"]);
+    let again = engine
+        .join(&query("g"), &query("evidence"), "path", &host())
+        .unwrap();
+    assert_eq!(result, again);
+}
+#[test]
+fn path_join_rejects_disjoint_negative_hidden_and_cross_space_premises() {
+    for case in ["disjoint", "negative", "hidden", "cross_space"] {
+        let mut engine = Engine::memory().unwrap();
+        let left = data();
+        let mut right = data();
+        right.nodes[0].space_id = "operational".into();
+        match case {
+            "disjoint" => right.edges[0].valid_time.start = 200,
+            "negative" => right.edges[0].polarity = Polarity::Negative,
+            "hidden" => right.edges[0].readers = vec!["admin".into()],
+            "cross_space" => right.nodes[0].space_id = "other".into(),
+            _ => unreachable!(),
+        }
+        if case == "disjoint" {
+            right.edges[0].valid_time.end = Some(300);
+        }
+        engine
+            .execute(
+                &program(vec![
+                    commit("g", None, left),
+                    commit("evidence", None, right),
+                ]),
+                &host(),
+            )
+            .unwrap();
+        assert!(
+            engine
+                .join(&query("g"), &query("evidence"), "path", &host())
+                .unwrap()
+                .graph
+                .edges
+                .is_empty(),
+            "{case}"
+        );
+    }
+}
+#[test]
+fn same_graph_different_revision_join_retains_both_pins_and_legacy_rejects_join() {
+    let mut engine = Engine::memory().unwrap();
+    let old = revision(
+        &engine
+            .execute(&program(vec![commit("g", None, data())]), &host())
+            .unwrap(),
+    );
+    let mut changed = data();
+    changed.nodes[0].space_id = "operational".into();
+    let new = revision(
+        &engine
+            .execute(
+                &program(vec![commit("g", Some(old.clone()), changed)]),
+                &host(),
+            )
+            .unwrap(),
+    );
+    let mut left = query("g");
+    left.revision = Some(old.clone());
+    let mut right = query("g");
+    right.revision = Some(new.clone());
+    let result = engine.join(&left, &right, "path", &host()).unwrap();
+    assert_eq!(result.graph.edges.len(), 1);
+    assert_eq!(
+        result.input_snapshots,
+        vec![
+            GraphRef {
+                graph_id: "g".into(),
+                revision: old
+            },
+            GraphRef {
+                graph_id: "g".into(),
+                revision: new
+            }
+        ]
+    );
+    assert!(!result.snapshots.contains_key("g"));
+    let p = Program {
+        version: LEGACY_VERSION.into(),
+        commands: vec![Command::Join {
+            left,
+            right,
+            output_predicate: "path".into(),
+            match_on: JoinMatch::EntitySpaceToFrom,
+        }],
+    };
+    assert_eq!(engine.execute(&p, &host()).unwrap_err().code, "E_VERSION");
+    let p = Program {
+        version: LEGACY_VERSION.into(),
+        commands: vec![Command::Query { query: query("g") }],
+    };
+    assert!(engine.execute(&p, &host()).is_ok());
+}
