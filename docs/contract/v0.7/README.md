@@ -1,4 +1,4 @@
-# Contract 0.7: finite graph rules
+# Contract 0.7.0: finite graph rules
 
 Version 0.7 adds `GraphExpression::Reason { input, rules }`. Existing 0.1–0.6 program profiles remain explicit and accepted; any nested Reason under an older version rejects. The graph input is an authorized materialized value. The result retains input facts and adds the bounded fixed-point closure as another composable graph value. Reason is pure: no automatic persistence, external effects or clock reads.
 
