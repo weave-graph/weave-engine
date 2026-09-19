@@ -132,6 +132,15 @@ impl Engine {
                 ));
             }
         }
+        let mut typing = context_typing::merge(
+            input.graph.context_typing.as_ref(),
+            graph.context_typing.as_ref(),
+        )
+        .map_err(|d| err(&d.code, &d.message))?;
+        if let Some(t) = &mut typing {
+            t.selected = None;
+        }
+        graph.context_typing = typing.clone();
         // A contextual path remains qualified even for an empty target. Default navigation
         // does not implicitly assign the parent scope to independently qualified target claims.
         input.selected_context = path_context
@@ -141,11 +150,16 @@ impl Engine {
         if let MetadataHost::Edge { id } = &attachment.host {
             if let Some(edge) = input.graph.edges.iter().find(|e| &e.id == id) {
                 let Some(common) = intersect(&window, &edge.valid_time) else {
-                    input.graph = GraphData::default();
+                    input.graph = GraphData {
+                        context_typing: typing,
+                        ..GraphData::default()
+                    };
                     input.node_origins.clear();
                     input.edge_origins.clear();
                     input.attachment_origins.clear();
                     input.provenance.clear();
+                    context_typing::protect_result_generated(&mut input)
+                        .map_err(|d| err(&d.code, &d.message))?;
                     return Ok(input);
                 };
                 window = common;
@@ -309,12 +323,21 @@ impl Engine {
                 .attachment_origins
                 .insert(attachment.id.clone(), dependencies);
         }
+        context_typing::protect_result_generated(&mut input)
+            .map_err(|d| err(&d.code, &d.message))?;
         json_size(&input, MATERIALIZED_LIMIT)?;
         Ok(input)
     }
 }
 fn missing(mut input: QueryResult, message: &str) -> QueryResult {
-    input.graph = GraphData::default();
+    let mut typing = input.graph.context_typing.take();
+    if let Some(t) = &mut typing {
+        t.selected = None;
+    }
+    input.graph = GraphData {
+        context_typing: typing,
+        ..GraphData::default()
+    };
     input.node_origins.clear();
     input.edge_origins.clear();
     input.attachment_origins.clear();

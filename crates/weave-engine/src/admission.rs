@@ -614,6 +614,17 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
             // Primitive reader/endpoint filtering does not follow any dependency.
             // Hidden objects cannot influence traversal queues or materialization budgets.
             let data = visible(data, principal);
+            let data = if self.context_typing_visible(
+                &data,
+                &HostContext::new(principal, []),
+                &mut HashSet::new(),
+                &mut 1000,
+                0,
+            )? {
+                data
+            } else {
+                GraphData::default()
+            };
             bytes += json_size(&data, MATERIALIZED_LIMIT.saturating_sub(bytes))?;
             // Visible candidate conclusions still require their full provenance scope before release.
             for attachment in &data.attachments {

@@ -87,6 +87,7 @@ fn checked(mut result: QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     Ok(result)
 }
 pub(crate) fn preflight(result: &QueryResult, ctx: &AlgebraContext) -> Result<(), Diagnostic> {
+    crate::context_typing::validate_result(result)?;
     if result.graph.profile != GraphProfile::Legacy
         || !result.graph.structural_edges.is_empty()
         || !result.graph.assertions.is_empty()
@@ -141,6 +142,13 @@ fn envelope(left: &QueryResult, right: Option<&QueryResult>) -> Result<QueryResu
         right.map_or(&[], |r| r.source_revisions.as_slice()),
     )?;
     out.graph = GraphData::default();
+    out.graph.context_typing = match right {
+        Some(r) => crate::context_typing::merge(
+            left.graph.context_typing.as_ref(),
+            r.graph.context_typing.as_ref(),
+        )?,
+        None => left.graph.context_typing.clone(),
+    };
     out.node_origins.clear();
     out.edge_origins.clear();
     out.attachment_origins.clear();
@@ -936,6 +944,7 @@ pub fn support(
         out.edge_origins.insert(edge.id.clone(), origins);
         out.graph.edges.push(edge);
     }
+    crate::context_typing::protect_result_generated_bounded(&mut out, ctx.max_output_bytes)?;
     checked(out, ctx)
 }
 

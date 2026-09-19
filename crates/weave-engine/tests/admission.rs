@@ -538,3 +538,73 @@ fn signed_node_only_scalar_requires_isolated_node_scope_on_read_and_retry() {
     assert_eq!(e.admit_query(&narrow, &q, 201).unwrap_err().code, "E_SCOPE");
     assert!(e.admit_query(&broad, &q, 201).unwrap().duplicate);
 }
+#[test]
+fn typed_carrier_signed_reads_require_visible_descriptor_scope_and_hide_denied_carriers() {
+    use weave_contract::{context_axes::ContextSchema, CommandResult, GraphExpression};
+    for allowed in [false, true] {
+        let f = Fixture::new();
+        let mut e = Engine::memory().unwrap();
+        f.install(&e);
+        let schema = ContextSchema::from_json(
+            br#"{"reference":{"id":"World","revision":"1"},"axes":{"scenario":{"kind":"string"}}}"#,
+        )
+        .unwrap();
+        let readers = if allowed {
+            vec!["local".to_owned(), public_key(&f.user)]
+        } else {
+            vec!["local".to_owned()]
+        };
+        let definition:GraphData=serde_json::from_value(json!({"profile":"explicit","nodes":[{"id":"anchor","entity_id":"world","space_id":"context","readers":readers}],"structural_edges":[{"id":"describes","predicate":"weave:context:definition","from":"anchor","to":"anchor"}],"assertions":[{"id":"definition","edge_id":"describes","source":"author","valid_time":{"start":i64::MIN},"properties":{"weave.context":{"schema":schema,"values":{"scenario":"test"}}}}]})).unwrap();
+        let revision = write(&mut e, "evidence", "main", definition);
+        write(&mut e, "typed", "main", GraphData::default());
+        let expression = GraphExpression::TypedContext {
+            input: Box::new(GraphExpression::Query {
+                query: serde_json::from_value(json!({"graph_id":"typed"})).unwrap(),
+            }),
+            reference: GraphRef {
+                graph_id: "evidence".into(),
+                revision,
+            },
+            expected_schema: schema,
+        };
+        let result = e
+            .execute(
+                &Program {
+                    version: weave_contract::VERSION.into(),
+                    source_revisions: vec![],
+                    commands: vec![Command::Evaluate { value: expression }],
+                },
+                &HostContext::new("local", []),
+            )
+            .unwrap()
+            .remove(0);
+        let CommandResult::Queried { result } = result else {
+            panic!()
+        };
+        write(&mut e, "g", "main", result.graph);
+        let q: QueryPlan = serde_json::from_value(json!({"graph_id":"g"})).unwrap();
+        let narrow = f.proof(&q, Action::Read, "g", scopes(&["g"]), 90);
+        if allowed {
+            assert_eq!(e.admit_query(&narrow, &q, 200).unwrap_err().code, "E_SCOPE");
+            let broad = f.proof(&q, Action::Read, "g", scopes(&["g", "evidence"]), 91);
+            let response = e.admit_query(&broad, &q, 200).unwrap();
+            assert!(response.result.graph.context_typing.is_some());
+            assert!(response
+                .result
+                .input_snapshots
+                .iter()
+                .any(|r| r.graph_id == "evidence"));
+            let narrowed_retry = f.proof(&q, Action::Read, "g", scopes(&["g"]), 91);
+            assert_eq!(
+                e.admit_query(&narrowed_retry, &q, 201).unwrap_err().code,
+                "E_SCOPE"
+            );
+        } else {
+            let response = e.admit_query(&narrow, &q, 200).unwrap();
+            assert_eq!(response.result.coverage, weave_contract::Coverage::Partial);
+            assert!(response.result.graph.context_typing.is_none());
+            assert!(response.result.selected_context.is_none());
+            assert_eq!(response.result.input_snapshots.len(), 1);
+        }
+    }
+}

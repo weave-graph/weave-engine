@@ -106,6 +106,11 @@ pub fn select(
         out.graph.attachments.iter().map(|a| a.id.clone()).collect();
     out.attachment_origins.retain(|id, _| retained.contains(id));
     out.selected_context = Some(selection.clone());
+    if let Some(typing) = &mut out.graph.context_typing {
+        if typing.selected.as_ref() != selection.reference() {
+            typing.selected = None;
+        }
+    }
     crate::algebra::preflight(&out, ctx)?;
     Ok(out)
 }

@@ -305,6 +305,7 @@ impl Engine {
             .map(|e| (e.id.clone(), claim_proofs.clone()))
             .collect();
         value.provenance = claim_proofs;
+        output.context_typing = value.graph.context_typing.clone();
         value.graph = output;
         value.attachment_origins.clear();
         value.metadata_graphs.clear();
@@ -312,6 +313,8 @@ impl Engine {
         // navigation envelope relative to an absent private object. Exact pins remain observable.
         value.coverage = Coverage::Partial;
         value.diagnostics = vec![Diagnostic { code: "I_CLUSTER_SCOPED".into(), message: "Navigation covers authorized available evidence; exact queries must inspect source evidence".into() }];
+        context_typing::protect_result_generated(&mut value)
+            .map_err(|d| err(&d.code, &d.message))?;
         validate_graph(&value.graph)?;
         json_size(&value, MATERIALIZED_LIMIT)?;
         Ok(value)

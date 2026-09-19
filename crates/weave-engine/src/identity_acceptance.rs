@@ -259,6 +259,19 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
                     .load(&reference.graph_id, &reference.revision)?
                     .ok_or_else(|| err("E_IDENTITY_UNAVAILABLE", "identity source unavailable"))?;
                 let (data, _) = self.authorized(data, host)?;
+                if let Some(selected) = data
+                    .context_typing
+                    .as_ref()
+                    .and_then(|t| t.selected.as_ref())
+                {
+                    context::compatible_context(
+                        Some(&selection),
+                        Some(&ContextSelection::Pinned {
+                            reference: selected.clone(),
+                        }),
+                    )
+                    .map_err(|d| err(&d.code, &d.message))?;
+                }
                 let node = data
                     .nodes
                     .into_iter()
@@ -703,6 +716,25 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
                     if !value.input_snapshots.contains(&pin) {
                         value.input_snapshots.push(pin.clone());
                     }
+                    if let Some(source_data) = self.load(&pin.graph_id, &pin.revision)? {
+                        let (source_data, _) = self.authorized(source_data, host)?;
+                        if let Some(typing) = source_data.context_typing.as_ref() {
+                            if let Some(selected) = &typing.selected {
+                                context::compatible_context(
+                                    Some(&request.context),
+                                    Some(&ContextSelection::Pinned {
+                                        reference: selected.clone(),
+                                    }),
+                                )
+                                .map_err(|d| err(&d.code, &d.message))?;
+                            }
+                            value.graph.context_typing = context_typing::merge(
+                                value.graph.context_typing.as_ref(),
+                                Some(typing),
+                            )
+                            .map_err(|d| err(&d.code, &d.message))?;
+                        }
+                    }
                     value.snapshots.entry(pin.graph_id).or_insert(pin.revision);
                 }
                 output_nodes.insert(from.id.clone(), from);
@@ -724,6 +756,8 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
         value.node_origins = node_origins;
         value.attachment_origins.clear();
         value.provenance = provenance;
+        context_typing::protect_result_generated(&mut value)
+            .map_err(|d| err(&d.code, &d.message))?;
         validate_graph(&value.graph)?;
         json_size(&value, MATERIALIZED_LIMIT)?;
         Ok(value)

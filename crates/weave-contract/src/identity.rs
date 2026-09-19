@@ -183,6 +183,7 @@ fn size(value: &(impl Serialize + ?Sized), limit: usize) -> Result<usize, Diagno
 /// Explain only an already authorized result. No reads, hidden premise lookup or
 /// policy grants occur. Every alternative remains its own AND group in the graph.
 pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult, Diagnostic> {
+    crate::context_typing::validate_result(input)?;
     if ctx.principal.is_empty() {
         return Err(failure(
             "E_EXPLAIN_CONTEXT",
@@ -484,11 +485,12 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             .collect::<Vec<_>>(),
     )?;
     let node_origins = nodes.keys().map(|id| (id.clone(), Vec::new())).collect();
-    let result = QueryResult {
+    let mut result = QueryResult {
         selected_context: input.selected_context.clone(),
         source_revisions: input.source_revisions.clone(),
         version: VERSION.into(),
         graph: GraphData {
+            context_typing: input.graph.context_typing.clone(),
             schema: Some(schema),
             nodes: nodes.into_values().collect(),
             edges,
@@ -504,6 +506,8 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
         attachment_origins: BTreeMap::new(),
         metadata_graphs: vec![],
     };
+    crate::context_typing::protect_result_generated_bounded(&mut result, ctx.max_output_bytes)?;
+    crate::context_typing::validate_result(&result)?;
     size(&result, ctx.max_output_bytes)?;
     Ok(result)
 }

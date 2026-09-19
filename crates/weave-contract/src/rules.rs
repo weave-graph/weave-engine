@@ -290,6 +290,7 @@ pub fn reason(
             "Rules consume authorized materialized graph values",
         ));
     }
+    crate::context_typing::validate_result(&input)?;
     bytes(&input, ctx.max_output_bytes)?;
     bytes(set, ctx.max_output_bytes)?;
     if let Some(d) = validate_schema_graph(&input.graph).into_iter().next() {
@@ -325,6 +326,13 @@ pub fn reason(
             }
         }
     }
+    let context_premises = input
+        .graph
+        .context_typing
+        .as_ref()
+        .map(crate::context_typing::gates)
+        .transpose()?
+        .map_or_else(Vec::new, |g| g.0);
     let mut facts = Facts::new();
     let mut fact_bytes = ctx.max_output_bytes;
     for edge in &input.graph.edges {
@@ -345,7 +353,12 @@ pub fn reason(
             start: edge.valid_time.start,
             end: edge.valid_time.end,
         };
-        for proof in source_proofs(&input, edge)? {
+        for mut proof in source_proofs(&input, edge)? {
+            if proof.leaves.len().saturating_add(context_premises.len()) > 1000 {
+                return Err(error("E_RULE_BUDGET", "Context proof bound exceeded"));
+            }
+            proof.leaves.extend(context_premises.iter().cloned());
+            proof.leaves = unique(proof.leaves);
             insert(&mut facts, fact.clone(), proof, limits, &mut fact_bytes)?;
         }
     }

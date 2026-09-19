@@ -74,6 +74,7 @@ pub(crate) fn materialize(
     }
     let structures: BTreeMap<_, _> = data.structural_edges.iter().map(|e| (&e.id, e)).collect();
     let mut out = GraphData {
+        context_typing: data.context_typing.clone(),
         nodes: data.nodes.clone(),
         schema: data.schema.clone(),
         ..GraphData::default()

@@ -20,6 +20,7 @@ fn node(id: &str, entity: &str, space: &str) -> Node {
 }
 fn data() -> GraphData {
     GraphData {
+        context_typing: None,
         profile: GraphProfile::Legacy,
         structural_edges: vec![],
         assertions: vec![],
@@ -152,6 +153,7 @@ fn optimistic_head_prevents_lost_update() {
 fn node_and_edge_metadata_graphs_are_pinned_and_partial_when_missing() {
     let mut engine = Engine::memory().unwrap();
     let evidence = GraphData {
+        context_typing: None,
         profile: GraphProfile::Legacy,
         structural_edges: vec![],
         assertions: vec![],
@@ -236,6 +238,7 @@ fn restricted_counterparts_edges_and_provenance_do_not_leak() {
 fn hidden_and_missing_metadata_have_same_diagnostic() {
     let mut engine = Engine::memory().unwrap();
     let mut secret = GraphData {
+        context_typing: None,
         profile: GraphProfile::Legacy,
         structural_edges: vec![],
         assertions: vec![],
@@ -785,6 +788,7 @@ fn direct_query_bounds_metadata_bytes_during_expansion() {
                         name,
                         None,
                         GraphData {
+                            context_typing: None,
                             profile: GraphProfile::Legacy,
                             structural_edges: vec![],
                             assertions: vec![],

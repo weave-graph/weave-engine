@@ -1,11 +1,14 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
+pub mod context_axes;
+pub mod context_typing;
+pub use context_typing::{ContextTyping, TypedContextWitness};
 pub mod host_types;
 pub use host_types::{ClusterRequest, IdentityPolicyRef, IdentityResolve};
 pub mod decimal;
 pub mod quantity;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.13.0";
+pub const VERSION: &str = "0.14.0";
 pub mod counterpart;
 mod geometry_types;
 pub use geometry_types::*;
@@ -123,6 +126,8 @@ pub struct Edge {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct GraphData {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_typing: Option<ContextTyping>,
     #[serde(default, skip_serializing_if = "GraphProfile::is_legacy")]
     pub profile: GraphProfile,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -203,6 +208,11 @@ pub struct CounterpartSelection {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphExpression {
+    TypedContext {
+        input: Box<GraphExpression>,
+        reference: GraphRef,
+        expected_schema: context_axes::ContextSchema,
+    },
     ResolveIdentity {
         selection: IdentityResolve,
     },
