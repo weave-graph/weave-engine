@@ -693,10 +693,11 @@ impl Engine {
             if count >= 10000 {
                 return Err(failure("E_BUDGET"));
             }
-            let decision = digest(&(
-                "weave-governance-decision-v1", &proposal.view_id,
-                &proposal_hash, &proposal.expected_head,
-            ))?;
+            // Occurrence identity must not be a public dictionary-testable commitment
+            // to a private policy roster. The transaction/receipt makes this nonce durable.
+            let decision: String = self.conn.query_row(
+                "SELECT 'decision:' || lower(hex(randomblob(24)))", [], |row| row.get(0),
+            )?;
             let event_id = digest(&("weave-governance-event-v1", &decision))?;
             let (next_policy, source, event_type) = match &proposal.action {
                 GovernanceAction::Publish { source, .. } => (
