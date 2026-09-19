@@ -1,7 +1,7 @@
 //! Bounded, pure operators over runtime-authorized graph values.
 use crate::*;
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Write};
@@ -273,6 +273,61 @@ fn node_key(input: &QueryResult, node: &Node) -> Result<String, Diagnostic> {
     ))
 }
 fn edge_key(input: &QueryResult, edge: &Edge) -> Result<String, Diagnostic> {
+    if input.edge_origins.get(&edge.id).is_some_and(Vec::is_empty)
+        && edge.derived_from.is_empty()
+        && edge.derivations.is_empty()
+    {
+        let endpoint = |id: &str| -> Result<String, Diagnostic> {
+            let node = input
+                .graph
+                .nodes
+                .iter()
+                .find(|n| n.id == id)
+                .ok_or_else(|| err("E_ENDPOINT", "Synthetic edge endpoint is unavailable"))?;
+            let grounded = !node.derived_nodes.is_empty()
+                || !node.derived_from.is_empty()
+                || input
+                    .node_origins
+                    .get(id)
+                    .is_some_and(|origins| !origins.is_empty());
+            if !grounded {
+                return Err(err(
+                    "E_ORIGIN_MISSING",
+                    "Synthetic relation requires grounded endpoints",
+                ));
+            }
+            node_key(input, node)
+        };
+        let from = endpoint(&edge.from)?;
+        let to = endpoint(&edge.to)?;
+        let type_id = match (&input.graph.schema, &edge.type_id) {
+            (Some(schema), Some(id)) => Some(type_key(schema, id)),
+            (_, id) => id.clone(),
+        };
+        // Hash semantics and canonical endpoints, never a recursively rewritten output ID.
+        // These are graph-value relations, not new independently corroborating assertions.
+        return Ok(format!(
+            "synthetic-edge:{}",
+            key(&(
+                (
+                    &from,
+                    &to,
+                    &type_id,
+                    &edge.predicate,
+                    &edge.valid_time,
+                    &edge.polarity
+                ),
+                (
+                    &edge.properties,
+                    &edge.assertion_properties,
+                    &edge.assertion_source,
+                    &edge.assertion_context,
+                    &edge.structural_ref,
+                    &edge.metadata
+                )
+            ))
+        ));
+    }
     let origins = input.edge_origins.get(&edge.id).filter(|v| !v.is_empty());
     if edge.derivations.is_empty() {
         let origins = origins.ok_or_else(|| {
@@ -749,19 +804,23 @@ pub fn support(
             ("state".into(), json!(state)),
             (
                 "context_graph_id".into(),
-                json!(input
-                    .selected_context
-                    .as_ref()
-                    .and_then(ContextSelection::reference)
-                    .map(|r| &r.graph_id)),
+                json!(
+                    input
+                        .selected_context
+                        .as_ref()
+                        .and_then(ContextSelection::reference)
+                        .map(|r| &r.graph_id)
+                ),
             ),
             (
                 "context_revision".into(),
-                json!(input
-                    .selected_context
-                    .as_ref()
-                    .and_then(ContextSelection::reference)
-                    .map(|r| &r.revision)),
+                json!(
+                    input
+                        .selected_context
+                        .as_ref()
+                        .and_then(ContextSelection::reference)
+                        .map(|r| &r.revision)
+                ),
             ),
             ("valid_at".into(), json!(valid_at)),
             (
@@ -1022,11 +1081,13 @@ mod tests {
         let empty = project(a.clone(), &[], &[], &ctx()).unwrap();
         let delta = diff(a, empty, &ctx()).unwrap();
         assert_eq!(delta.graph.edges[0].polarity, Polarity::Positive);
-        assert!(delta
-            .graph
-            .attachments
-            .iter()
-            .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed")));
+        assert!(
+            delta
+                .graph
+                .attachments
+                .iter()
+                .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed"))
+        );
     }
     #[test]
     fn support_four_states_are_time_specific_and_open_world() {
@@ -1072,10 +1133,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.graph.edges[0].derivations.len(), 2);
-        assert!(r.graph.edges[0]
-            .derivations
-            .iter()
-            .all(|d| d.premises.len() == 2));
+        assert!(
+            r.graph.edges[0]
+                .derivations
+                .iter()
+                .all(|d| d.premises.len() == 2)
+        );
     }
     #[test]
     fn byte_object_and_missing_origin_limits_fail_closed() {
@@ -1164,9 +1227,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(d[0].input_snapshots.len(), 2);
-        assert!(!serde_json::to_string(&d)
-            .unwrap()
-            .contains("private-other-path"));
+        assert!(
+            !serde_json::to_string(&d)
+                .unwrap()
+                .contains("private-other-path")
+        );
     }
     #[test]
     fn contextual_support_is_not_silently_treated_as_universal() {
@@ -1223,11 +1288,13 @@ mod tests {
         assert!(unknown.graph.edges.is_empty());
         assert_eq!(unknown.graph.nodes[0].derived_from, input.edge_origins["e"]);
         let explanation = crate::identity::explain(&input, &ctx()).unwrap();
-        assert!(explanation
-            .graph
-            .nodes
-            .iter()
-            .all(|n| !n.derived_from.is_empty()));
+        assert!(
+            explanation
+                .graph
+                .nodes
+                .iter()
+                .all(|n| !n.derived_from.is_empty())
+        );
         let mut altered = input.clone();
         altered.graph.nodes[0].derived_from = input.edge_origins["e"].clone();
         assert_eq!(
@@ -1244,11 +1311,13 @@ mod tests {
         }
         let first = union(input.clone(), input.clone(), &ctx()).unwrap();
         assert_eq!(first.graph.nodes.len(), 2);
-        assert!(first
-            .graph
-            .nodes
-            .iter()
-            .all(|n| n.id.starts_with("derived-node:")));
+        assert!(
+            first
+                .graph
+                .nodes
+                .iter()
+                .all(|n| n.id.starts_with("derived-node:"))
+        );
         assert!(first.node_origins.values().all(Vec::is_empty));
         let nested = union(first.clone(), input.clone(), &ctx()).unwrap();
         assert_eq!(nested.graph, first.graph);
@@ -1265,6 +1334,70 @@ mod tests {
         assert_eq!(
             union(first, altered, &ctx()).unwrap_err().code,
             "E_ORIGIN_CONFLICT"
+        );
+    }
+    fn isolated_navigation() -> QueryResult {
+        let mut value = fixture("source", "positive", 0, 1);
+        value.graph.edges[0].predicate = "weave:cluster:frontier".into();
+        value.edge_origins.get_mut("e").unwrap().clear();
+        value.provenance.clear();
+        for node in &mut value.graph.nodes {
+            node.derived_nodes = value.node_origins[&node.id].clone();
+        }
+        for origins in value.node_origins.values_mut() {
+            origins.clear();
+        }
+        value
+    }
+    #[test]
+    fn grounded_synthetic_edges_compose_without_fabricating_assertion_origins() {
+        let value = isolated_navigation();
+        let first = union(value.clone(), value.clone(), &ctx()).unwrap();
+        assert_eq!(first.graph.edges.len(), 1);
+        assert!(first.edge_origins.values().all(Vec::is_empty));
+        assert!(first.graph.edges[0].derived_from.is_empty());
+        assert!(first.graph.edges[0].derivations.is_empty());
+        assert_eq!(
+            union(first.clone(), value.clone(), &ctx()).unwrap().graph,
+            first.graph
+        );
+        assert_eq!(
+            union(first.clone(), first.clone(), &ctx()).unwrap().graph,
+            first.graph
+        );
+        let identical = diff(first.clone(), value.clone(), &ctx()).unwrap();
+        assert!(identical.graph.attachments.is_empty());
+        let empty = project(value.clone(), &["a".into(), "b".into()], &[], &ctx()).unwrap();
+        let removed = diff(value.clone(), empty, &ctx()).unwrap();
+        assert_eq!(removed.graph.edges.len(), 1);
+        assert!(
+            removed
+                .graph
+                .attachments
+                .iter()
+                .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed"))
+        );
+        let mut relation = value.clone();
+        relation.graph.edges[0].predicate = "weave:cluster:member".into();
+        assert_eq!(
+            union(value.clone(), relation, &ctx())
+                .unwrap()
+                .graph
+                .edges
+                .len(),
+            2
+        );
+        let mut missing = value.clone();
+        missing.edge_origins.clear();
+        assert_eq!(
+            union(missing, value.clone(), &ctx()).unwrap_err().code,
+            "E_ORIGIN_MISSING"
+        );
+        let mut ungrounded = value.clone();
+        ungrounded.graph.nodes[0].derived_nodes.clear();
+        assert_eq!(
+            union(ungrounded, value, &ctx()).unwrap_err().code,
+            "E_ORIGIN_MISSING"
         );
     }
 }
