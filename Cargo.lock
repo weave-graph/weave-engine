@@ -694,6 +694,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "weave-native"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "weave-contract",
+ "weave-engine",
+]
+
+[[package]]
 name = "weave-policy"
 version = "0.1.0"
 dependencies = [

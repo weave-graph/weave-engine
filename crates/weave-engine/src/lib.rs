@@ -2085,7 +2085,7 @@ fn validate_graph(data: &GraphData) -> Result<()> {
     Ok(())
 }
 
-const MATERIALIZED_LIMIT: usize = 32 * 1024 * 1024;
+pub const MATERIALIZED_LIMIT: usize = 32 * 1024 * 1024;
 /// Count serialized bytes without allocating a second serialization buffer.
 fn json_size(value: &impl serde::Serialize, limit: usize) -> Result<usize> {
     struct Counter {
