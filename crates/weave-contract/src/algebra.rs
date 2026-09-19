@@ -273,6 +273,61 @@ fn node_key(input: &QueryResult, node: &Node) -> Result<String, Diagnostic> {
     ))
 }
 fn edge_key(input: &QueryResult, edge: &Edge) -> Result<String, Diagnostic> {
+    if input.edge_origins.get(&edge.id).is_some_and(Vec::is_empty)
+        && edge.derived_from.is_empty()
+        && edge.derivations.is_empty()
+    {
+        let endpoint = |id: &str| -> Result<String, Diagnostic> {
+            let node = input
+                .graph
+                .nodes
+                .iter()
+                .find(|n| n.id == id)
+                .ok_or_else(|| err("E_ENDPOINT", "Synthetic edge endpoint is unavailable"))?;
+            let grounded = !node.derived_nodes.is_empty()
+                || !node.derived_from.is_empty()
+                || input
+                    .node_origins
+                    .get(id)
+                    .is_some_and(|origins| !origins.is_empty());
+            if !grounded {
+                return Err(err(
+                    "E_ORIGIN_MISSING",
+                    "Synthetic relation requires grounded endpoints",
+                ));
+            }
+            node_key(input, node)
+        };
+        let from = endpoint(&edge.from)?;
+        let to = endpoint(&edge.to)?;
+        let type_id = match (&input.graph.schema, &edge.type_id) {
+            (Some(schema), Some(id)) => Some(type_key(schema, id)),
+            (_, id) => id.clone(),
+        };
+        // Hash semantics and canonical endpoints, never a recursively rewritten output ID.
+        // These are graph-value relations, not new independently corroborating assertions.
+        return Ok(format!(
+            "synthetic-edge:{}",
+            key(&(
+                (
+                    &from,
+                    &to,
+                    &type_id,
+                    &edge.predicate,
+                    &edge.valid_time,
+                    &edge.polarity
+                ),
+                (
+                    &edge.properties,
+                    &edge.assertion_properties,
+                    &edge.assertion_source,
+                    &edge.assertion_context,
+                    &edge.structural_ref,
+                    &edge.metadata
+                )
+            ))
+        ));
+    }
     let origins = input.edge_origins.get(&edge.id).filter(|v| !v.is_empty());
     if edge.derivations.is_empty() {
         let origins = origins.ok_or_else(|| {
@@ -1265,6 +1320,68 @@ mod tests {
         assert_eq!(
             union(first, altered, &ctx()).unwrap_err().code,
             "E_ORIGIN_CONFLICT"
+        );
+    }
+    fn isolated_navigation() -> QueryResult {
+        let mut value = fixture("source", "positive", 0, 1);
+        value.graph.edges[0].predicate = "weave:cluster:frontier".into();
+        value.edge_origins.get_mut("e").unwrap().clear();
+        value.provenance.clear();
+        for node in &mut value.graph.nodes {
+            node.derived_nodes = value.node_origins[&node.id].clone();
+        }
+        for origins in value.node_origins.values_mut() {
+            origins.clear();
+        }
+        value
+    }
+    #[test]
+    fn grounded_synthetic_edges_compose_without_fabricating_assertion_origins() {
+        let value = isolated_navigation();
+        let first = union(value.clone(), value.clone(), &ctx()).unwrap();
+        assert_eq!(first.graph.edges.len(), 1);
+        assert!(first.edge_origins.values().all(Vec::is_empty));
+        assert!(first.graph.edges[0].derived_from.is_empty());
+        assert!(first.graph.edges[0].derivations.is_empty());
+        assert_eq!(
+            union(first.clone(), value.clone(), &ctx()).unwrap().graph,
+            first.graph
+        );
+        assert_eq!(
+            union(first.clone(), first.clone(), &ctx()).unwrap().graph,
+            first.graph
+        );
+        let identical = diff(first.clone(), value.clone(), &ctx()).unwrap();
+        assert!(identical.graph.attachments.is_empty());
+        let empty = project(value.clone(), &["a".into(), "b".into()], &[], &ctx()).unwrap();
+        let removed = diff(value.clone(), empty, &ctx()).unwrap();
+        assert_eq!(removed.graph.edges.len(), 1);
+        assert!(removed
+            .graph
+            .attachments
+            .iter()
+            .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed")));
+        let mut relation = value.clone();
+        relation.graph.edges[0].predicate = "weave:cluster:member".into();
+        assert_eq!(
+            union(value.clone(), relation, &ctx())
+                .unwrap()
+                .graph
+                .edges
+                .len(),
+            2
+        );
+        let mut missing = value.clone();
+        missing.edge_origins.clear();
+        assert_eq!(
+            union(missing, value.clone(), &ctx()).unwrap_err().code,
+            "E_ORIGIN_MISSING"
+        );
+        let mut ungrounded = value.clone();
+        ungrounded.graph.nodes[0].derived_nodes.clear();
+        assert_eq!(
+            union(ungrounded, value, &ctx()).unwrap_err().code,
+            "E_ORIGIN_MISSING"
         );
     }
 }

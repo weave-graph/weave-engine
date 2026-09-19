@@ -1,0 +1,9 @@
+# Grounded synthetic graph relations
+
+Authorized materialized graph values can contain synthetic relations grounded only by their endpoint node influences, such as navigation over isolated source nodes. They have an explicitly empty `edge_origins` entry, no assertion derivation groups, and no `derived_from` assertions. Both endpoints must have pinned node origins or node/assertion dependencies. Missing origin-map entries and ungrounded endpoints still produce `E_ORIGIN_MISSING`.
+
+Union, projection and diff preserve these values without inventing an assertion reference. Synthetic edge identity hashes canonical endpoint keys, normalized schema type identity, predicate, time, polarity, properties, assertion attribution/context, structural reference and graph-reference metadata. It excludes the rewritten edge ID and current-principal reader list. Repeated/nested union therefore stays stable; different relations remain distinct. Named attachments retain their existing separate host-remapping semantics. Identical synthetic relations deduplicate by meaning; this is not independent corroboration.
+
+This rule applies inside the existing trusted, already-authorized graph-value boundary. It does not authenticate a supplied graph, make source claims true or grant a capability. Endpoint proof gates remain part of the actual nodes and protect saved relations. Direct Support/Join over node-only synthetic relations is not promised to infer assertion premises: those operators may require persistence and a subsequent authorized read that supplies genuine assertion origins. No empty fabricated proof group substitutes for that boundary.
+
+Portable tests cover self/nested union, canonical relation distinctions, missing/ungrounded origins, projection and diff. A runtime test saves the result, reads real stored AssertionRefs and executes support over those persisted navigation claims.
