@@ -55,6 +55,26 @@ impl Engine {
             ));
         }
         let attachment = &candidates[0];
+        context::ensure_consumable(input.selected_context.as_ref(), attachment.context.as_ref())
+            .map_err(|d| err(&d.code, &d.message))?;
+        if let MetadataHost::Edge { id } = &attachment.host {
+            if let Some(edge) = input.graph.edges.iter().find(|e| &e.id == id) {
+                context::ensure_consumable(
+                    input.selected_context.as_ref(),
+                    edge.assertion_context.as_ref(),
+                )
+                .map_err(|d| err(&d.code, &d.message))?;
+            }
+        }
+        if let MetadataHost::Node { id } = &attachment.host {
+            if let Some(node) = input.graph.nodes.iter().find(|n| &n.id == id) {
+                if let Some(scope) = &node.context_scope {
+                    context::compatible_context(input.selected_context.as_ref(), Some(scope))
+                        .map_err(|d| err(&d.code, &d.message))?;
+                }
+            }
+        }
+        let path_context = attachment.context.clone();
         let MetadataValue::Graph { reference } = &attachment.value else {
             return Ok(missing(input, "metadata graph unavailable"));
         };
@@ -92,6 +112,31 @@ impl Engine {
         };
         let resolved_origins = resolved.attachment_origins.clone();
         let mut graph = resolved.graph.clone();
+        if let Some(required) = &path_context {
+            if graph.nodes.iter().any(|n| {
+                n.context_scope
+                    .as_ref()
+                    .is_some_and(|scope| scope.reference() != Some(required))
+            }) || graph
+                .edges
+                .iter()
+                .any(|e| e.assertion_context.as_ref() != Some(required))
+                || graph
+                    .attachments
+                    .iter()
+                    .any(|a| a.context.as_ref() != Some(required))
+            {
+                return Err(err(
+                    "E_CONTEXT_MISMATCH",
+                    "metadata target qualifiers do not match contextual access path",
+                ));
+            }
+        }
+        // A contextual path remains qualified even for an empty target. Default navigation
+        // does not implicitly assign the parent scope to independently qualified target claims.
+        input.selected_context = path_context
+            .clone()
+            .map(|reference| ContextSelection::Pinned { reference });
         let mut window = attachment.valid_time.clone();
         if let MetadataHost::Edge { id } = &attachment.host {
             if let Some(edge) = input.graph.edges.iter().find(|e| &e.id == id) {
@@ -249,6 +294,7 @@ impl Engine {
 }
 fn missing(mut input: QueryResult, message: &str) -> QueryResult {
     input.graph = GraphData::default();
+    input.node_origins.clear();
     input.edge_origins.clear();
     input.attachment_origins.clear();
     input.provenance.clear();

@@ -660,7 +660,7 @@ dependencies = [
 
 [[package]]
 name = "weave-contract"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -669,7 +669,7 @@ dependencies = [
 
 [[package]]
 name = "weave-engine"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "ed25519-dalek",
  "rusqlite",

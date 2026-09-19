@@ -129,7 +129,8 @@ impl Engine {
         Ok(engine)
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
-        if ![VERSION, "0.6.0", "0.5.0", "0.4.0", "0.3.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0"]
+            .contains(&program.version.as_str())
             && program.version != "0.2.0"
             && program.version != "0.3.0"
             && program.version != LEGACY_VERSION
@@ -144,7 +145,8 @@ impl Engine {
         {
             return Err(err("E_VERSION", "join requires contract 0.2.0"));
         }
-        if ![VERSION, "0.6.0", "0.5.0", "0.4.0", "0.3.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0"]
+            .contains(&program.version.as_str())
             && program
                 .commands
                 .iter()
@@ -152,8 +154,8 @@ impl Engine {
         {
             return Err(err("E_VERSION", "graph expressions require contract 0.3.0"));
         }
-        if ![VERSION, "0.6.0", "0.5.0", "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
-        if ![VERSION, "0.6.0", "0.5.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.7.0", "0.6.0", "0.5.0", "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
+        if ![VERSION, "0.7.0", "0.6.0", "0.5.0"].contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => {
                     data.edges.iter().any(|e| !e.derivations.is_empty())
@@ -169,7 +171,7 @@ impl Engine {
                 "derivation alternatives require contract 0.5.0",
             ));
         }
-        if ![VERSION, "0.6.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.7.0", "0.6.0"].contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => requires_explicit_profile(data),
                 Command::CommitBatch { commits, .. } => {
@@ -183,13 +185,31 @@ impl Engine {
                 "explicit assertions require contract 0.6.0",
             ));
         }
+        if program.version != VERSION
+            && program.commands.iter().any(|c| match c {
+                Command::Commit { data, .. } => {
+                    data.attachments.iter().any(|a| a.context.is_some())
+                        || data.nodes.iter().any(|n| n.context_scope.is_some())
+                }
+                Command::CommitBatch { commits, .. } => commits.iter().any(|c| {
+                    c.data.attachments.iter().any(|a| a.context.is_some())
+                        || c.data.nodes.iter().any(|n| n.context_scope.is_some())
+                }),
+                _ => false,
+            })
+        {
+            return Err(err(
+                "E_VERSION",
+                "attachment/node context requires contract 0.8.0",
+            ));
+        }
         for command in &program.commands {
             if let Command::Bind { value, .. } | Command::Evaluate { value } = command {
                 validate_expression_profile(value, &program.version)?;
             }
         }
         if !program.source_revisions.is_empty()
-            && ![VERSION, "0.6.0"].contains(&program.version.as_str())
+            && ![VERSION, "0.7.0", "0.6.0"].contains(&program.version.as_str())
         {
             return Err(err(
                 "E_VERSION",
@@ -231,7 +251,8 @@ impl Engine {
             for command in &program.commands {
                 let mut command_result = match command {
                     Command::CommitBatch { batch_id, commits } => {
-                        if ![VERSION, "0.6.0", "0.5.0", "0.4.0"].contains(&program.version.as_str())
+                        if ![VERSION, "0.7.0", "0.6.0", "0.5.0", "0.4.0"]
+                            .contains(&program.version.as_str())
                         {
                             return Err(err(
                                 "E_VERSION",
@@ -510,6 +531,7 @@ impl Engine {
             .retain(|a| query.valid_at.is_none_or(|t| a.valid_time.contains(t)));
         prune_attachments(&mut graph);
         let mut result = QueryResult {
+            selected_context: None,
             source_revisions: vec![],
             version: VERSION.into(),
             graph,
@@ -731,6 +753,9 @@ impl Engine {
                 return Err(err("E_BUDGET", "join byte budget exceeded"));
             }
         }
+        let selected_context =
+            context::compatible_context(l.selected_context.as_ref(), r.selected_context.as_ref())
+                .map_err(|d| err(&d.code, &d.message))?;
         let ln: BTreeMap<_, _> = l.graph.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
         let rn: BTreeMap<_, _> = r.graph.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
         let mut nodes = BTreeMap::new();
@@ -760,11 +785,26 @@ impl Engine {
                 if end.is_some_and(|end| start >= end) {
                     continue;
                 }
-                if le.assertion_context.is_some() || re.assertion_context.is_some() {
-                    return Err(err(
-                        "E_CONTEXT_REQUIRED",
-                        "contextual assertions require an explicit context-aware join scope",
-                    ));
+                context::ensure_consumable(
+                    l.selected_context.as_ref(),
+                    le.assertion_context.as_ref(),
+                )
+                .map_err(|d| err(&d.code, &d.message))?;
+                context::ensure_consumable(
+                    r.selected_context.as_ref(),
+                    re.assertion_context.as_ref(),
+                )
+                .map_err(|d| err(&d.code, &d.message))?;
+                for node in [
+                    ln[le.from.as_str()],
+                    ln[le.to.as_str()],
+                    rn[re.from.as_str()],
+                    rn[re.to.as_str()],
+                ] {
+                    if let Some(scope) = &node.context_scope {
+                        context::compatible_context(selected_context.as_ref(), Some(scope))
+                            .map_err(|d| err(&d.code, &d.message))?;
+                    }
                 }
                 let mut premises = l
                     .edge_origins
@@ -861,7 +901,9 @@ impl Engine {
                 };
                 let edge = Edge {
                     assertion_source: None,
-                    assertion_context: None,
+                    assertion_context: selected_context
+                        .as_ref()
+                        .and_then(|c| c.reference().cloned()),
                     structural_ref: None,
                     assertion_properties: BTreeMap::new(),
                     type_id,
@@ -980,6 +1022,7 @@ impl Engine {
             );
         }
         let mut result = QueryResult {
+            selected_context,
             source_revisions: algebra::merge_source_revisions(
                 &l.source_revisions,
                 &r.source_revisions,
@@ -1023,6 +1066,11 @@ impl Engine {
         }
         *budget -= 1;
         match expression {
+            GraphExpression::Context { input, selection } => {
+                let input = self.expression(input, values, host, depth + 1, budget)?;
+                context::select(input, selection, &algebra_context(host))
+                    .map_err(|d| err(&d.code, &d.message))
+            }
             GraphExpression::Reason { input, rules: set } => {
                 let input = self.expression(input, values, host, depth + 1, budget)?;
                 rules::reason(
@@ -1491,7 +1539,18 @@ fn refs(data: &GraphData) -> Vec<GraphRef> {
     data.nodes
         .iter()
         .flat_map(|n| n.metadata.clone())
+        .chain(data.nodes.iter().filter_map(|n| {
+            n.context_scope
+                .as_ref()
+                .and_then(ContextSelection::reference)
+                .cloned()
+        }))
         .chain(data.edges.iter().flat_map(|e| e.metadata.clone()))
+        .chain(
+            data.edges
+                .iter()
+                .filter_map(|e| e.assertion_context.clone()),
+        )
         .chain(
             data.structural_edges
                 .iter()
@@ -1502,6 +1561,7 @@ fn refs(data: &GraphData) -> Vec<GraphRef> {
                 .iter()
                 .flat_map(|a| a.metadata.iter().chain(a.context.iter()).cloned()),
         )
+        .chain(data.attachments.iter().filter_map(|a| a.context.clone()))
         .chain(data.attachments.iter().filter_map(|a| match &a.value {
             MetadataValue::Graph { reference } => Some(reference.clone()),
             _ => None,
@@ -1537,6 +1597,14 @@ fn partial(result: &mut QueryResult, code: &str, message: &str) {
     }
 }
 fn validate_graph(data: &GraphData) -> Result<()> {
+    for reference in refs(data) {
+        if !valid_id(&reference.graph_id) || !valid_id(&reference.revision) {
+            return Err(err(
+                "E_REFERENCE",
+                "metadata/context reference must pin bounded graph and revision IDs",
+            ));
+        }
+    }
     if data.profile == GraphProfile::Explicit {
         if let Some(d) = validate_schema_graph(data).first() {
             return Err(err(&d.code, &d.message));
@@ -1722,8 +1790,17 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             return Err(err("E_BUDGET", "expression structure exceeds budget"));
         }
         match expression {
-            GraphExpression::Reason { input, .. } => {
+            GraphExpression::Context { input, .. } => {
                 if version != VERSION {
+                    return Err(err(
+                        "E_VERSION",
+                        "context selection requires contract 0.8.0",
+                    ));
+                }
+                pending.push((input, depth + 1));
+            }
+            GraphExpression::Reason { input, .. } => {
+                if ![VERSION, "0.7.0"].contains(&version) {
                     return Err(err("E_VERSION", "finite rules require contract 0.7.0"));
                 }
                 pending.push((input, depth + 1));
@@ -1733,28 +1810,28 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 before: left,
                 after: right,
             } => {
-                if ![VERSION, "0.6.0", "0.5.0"].contains(&version) {
+                if ![VERSION, "0.7.0", "0.6.0", "0.5.0"].contains(&version) {
                     return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
                 }
                 pending.push((left, depth + 1));
                 pending.push((right, depth + 1));
             }
             GraphExpression::Project { input, .. } | GraphExpression::Support { input, .. } => {
-                if ![VERSION, "0.6.0", "0.5.0"].contains(&version) {
+                if ![VERSION, "0.7.0", "0.6.0", "0.5.0"].contains(&version) {
                     return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
                 }
                 pending.push((input, depth + 1));
             }
             GraphExpression::Metadata { input, host, .. } => {
                 if matches!(host, MetadataHost::Assertion { .. })
-                    && ![VERSION, "0.6.0"].contains(&version)
+                    && ![VERSION, "0.7.0", "0.6.0"].contains(&version)
                 {
                     return Err(err(
                         "E_VERSION",
                         "assertion metadata hosts require contract 0.6.0",
                     ));
                 }
-                if ![VERSION, "0.6.0", "0.5.0", "0.4.0"].contains(&version) {
+                if ![VERSION, "0.7.0", "0.6.0", "0.5.0", "0.4.0"].contains(&version) {
                     return Err(err(
                         "E_VERSION",
                         "metadata expressions require contract 0.4.0",

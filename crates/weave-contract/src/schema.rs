@@ -112,6 +112,48 @@ fn properties(
 /// Runtime authorization and graph structural/history validation are additional obligations.
 pub fn validate_schema_graph(graph: &GraphData) -> Vec<Diagnostic> {
     let mut errors = Vec::new();
+    for node in &graph.nodes {
+        if let Some(scope) = &node.context_scope {
+            if let Err(d) = crate::context::validate_selection(scope) {
+                errors.push(d);
+            }
+        }
+    }
+    let scopes: BTreeMap<_, _> = graph
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            node.context_scope
+                .as_ref()
+                .map(|scope| (node.id.as_str(), scope))
+        })
+        .collect();
+    let mut check_scope = |from: &str, to: &str, context: Option<&crate::GraphRef>| {
+        if [from, to].iter().any(|id| {
+            scopes
+                .get(id)
+                .is_some_and(|scope| scope.reference() != context)
+        }) {
+            error(
+                &mut errors,
+                "E_CONTEXT_SCOPE",
+                "Claim endpoints have an incompatible value context".into(),
+            );
+        }
+    };
+    for edge in &graph.edges {
+        check_scope(&edge.from, &edge.to, edge.assertion_context.as_ref());
+    }
+    let structural_by_id: BTreeMap<_, _> = graph
+        .structural_edges
+        .iter()
+        .map(|edge| (&edge.id, edge))
+        .collect();
+    for assertion in &graph.assertions {
+        if let Some(edge) = structural_by_id.get(&assertion.edge_id) {
+            check_scope(&edge.from, &edge.to, assertion.context.as_ref());
+        }
+    }
     let structural_values: Vec<Edge>;
     let edges = match graph.profile {
         GraphProfile::Legacy => {

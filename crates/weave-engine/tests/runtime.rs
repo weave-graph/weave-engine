@@ -6,6 +6,7 @@ fn host() -> HostContext {
 }
 fn node(id: &str, entity: &str, space: &str) -> Node {
     Node {
+        context_scope: None,
         type_id: None,
         id: id.into(),
         entity_id: entity.into(),

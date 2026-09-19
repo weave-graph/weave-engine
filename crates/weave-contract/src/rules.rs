@@ -216,7 +216,11 @@ fn source_proofs(input: &QueryResult, edge: &Edge) -> Result<Vec<Proof>, Diagnos
                 leaves: unique(d.premises),
                 trace,
                 external,
-                contextual: edge.assertion_context.is_some(),
+                contextual: crate::context::ensure_consumable(
+                    input.selected_context.as_ref(),
+                    edge.assertion_context.as_ref(),
+                )
+                .is_err(),
             })
         })
         .collect()
@@ -483,7 +487,10 @@ pub fn reason(
         if proofs.is_empty() {
             continue;
         }
-        let id = format!("rule:{}", hash(&(&set_digest, &fact)));
+        let id = format!(
+            "rule:{}",
+            hash(&(&set_digest, &fact, &input.selected_context))
+        );
         let mut type_id = None;
         if let Some(schema) = &mut input.graph.schema {
             let from_type = nodes[&fact.from].type_id.clone().ok_or_else(|| {
@@ -532,7 +539,10 @@ pub fn reason(
                         "module".into(),
                         json!({"id":set.id,"revision":set.revision,"digest":set_digest}),
                     ),
-                    ("context".into(), json!("default")),
+                    (
+                        "context".into(),
+                        json!(input.selected_context.clone().unwrap_or_default()),
+                    ),
                     (
                         "trace".into(),
                         json!(proof.trace.into_values().collect::<Vec<_>>()),
@@ -552,7 +562,11 @@ pub fn reason(
             type_id,
             structural_ref: None,
             assertion_source: None,
-            assertion_context: None,
+            assertion_context: input
+                .selected_context
+                .as_ref()
+                .and_then(ContextSelection::reference)
+                .cloned(),
             assertion_properties: BTreeMap::new(),
             predicate: fact.predicate,
             from: fact.from,

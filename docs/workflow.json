@@ -168,7 +168,10 @@
         "crates/weave-contract/src/identity.rs",
         "docs/contract/v0.7/README.md",
         "crates/weave-contract/src/rules.rs",
-        "crates/weave-engine/tests/rules.rs"
+        "crates/weave-engine/tests/rules.rs",
+        "docs/contract/v0.8/README.md",
+        "crates/weave-contract/src/context.rs",
+        "crates/weave-engine/tests/context.rs"
       ]
     },
     {
@@ -198,7 +201,10 @@
         "docs/ADMISSION.md",
         "crates/weave-engine/src/admission.rs",
         "crates/weave-engine/tests/admission.rs",
-        "crates/weave-policy/tests/admission.rs"
+        "crates/weave-policy/tests/admission.rs",
+        "docs/contract/v0.8/README.md",
+        "crates/weave-contract/src/context.rs",
+        "crates/weave-engine/tests/context.rs"
       ]
     },
     {

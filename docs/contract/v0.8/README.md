@@ -1,0 +1,21 @@
+# Contract 0.8.0: exact context selection
+
+This additive profile introduces `GraphExpression::Context { input, selection }` and the result field `selected_context`. A `ContextSelection` is explicitly Default or Pinned to one exact graph ID and immutable revision. Default is one scope, never a wildcard. Existing 0.1–0.7 profiles remain accepted, but nested Context operators and contextual attachments require 0.8.
+
+Selection filters the already-authorized materialized claim edges by their exact `assertion_context`. Ordinary nodes remain unqualified representations. Derived status and explanation nodes may carry explicit `context_scope` (Default or Pinned), so an unknown result with no evidence edge retains its scope after mixed Union clears the enclosing selection. Selection keeps unqualified or matching nodes and rejects a selected edge whose scoped endpoints disagree; it never invents a context. Named attachments have an independently optional pinned `context` and are filtered by that qualifier plus existing host validity. Selection preserves input coverage, original source provenance and immutable revision pins. Selecting a different scope from an already selected value rejects: discarded evidence cannot be recovered by relabeling the remaining graph.
+
+Queries begin unselected. Context-free legacy premises can be consumed in the default scope. Contextual premises require explicit matching selection. Support, Join and finite Reason preserve the selected pin on derived claims and result envelopes. Same graph ID with a different context revision is a different scope. Join never broadcasts default into a pinned world; incompatible scopes reject, even when no edges match. Union can retain mixed qualified claims but clears a common selection when input scopes differ. Diff requires compatible scope because membership changes across worlds do not imply a temporal correction.
+
+## Metadata paths
+
+An attachment's context is an independent assertion qualifier, not executable policy and not an instruction to assert its entire target graph. Using a contextual attachment C requires explicit selected C; a contextual edge host must also be consumable in that scope. Every materialized target claim and target attachment must already be qualified by exactly C. A default or D-qualified target rejects with `E_CONTEXT_MISMATCH`; this profile does not invent context conjunction, projection or broadcast.
+
+After those checks, the access-path result retains selected C, including an empty result, and includes the attachment's original assertion in its derivation provenance. The target claims are not relabeled. An independent direct read of a public target is unaffected by the private or contextual attachment that references it. Ordinary default attachment navigation returns the target's independently qualified claims without implicitly selecting a parent context.
+
+Attachment context, scoped derived-node context and materialized assertion context are pinned graph dependencies for query expansion, capsule closure, validation and signed admission scope checks. Capsule receipt preserves the qualifier without interpreting its contents. Hash compatibility is maintained by omitting absent new fields from serialization.
+
+## Limits and evidence
+
+Context selection is pure and bounded by the existing object/byte ceilings. It reads no context graph and grants no authority; authorization remains a separate host/admission responsibility. A context reference identifies a scope, not a claim that the scope description is true or globally authoritative. Full typed scenario axes, explicit context mappings/conjunctions, broadcast operators and completeness certificates remain open.
+
+Portable tests cover exact default/pinned filtering, preserved representations, contextual attachments, selected Support/Reason, mixed Union and forbidden reselection. Native `tests/context.rs` exercises actual command execution, same-context joins, incompatible joins, contextual metadata paths, independent target reads, revision-exact selection, ticked support expiry, capsule dependency round trips and whole-program version rejection. See the implementation status for independent cross-project and hosted evidence.

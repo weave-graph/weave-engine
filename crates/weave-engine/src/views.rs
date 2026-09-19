@@ -363,7 +363,8 @@ fn clock_expression(
         }
         GraphExpression::Metadata { input, .. }
         | GraphExpression::Project { input, .. }
-        | GraphExpression::Reason { input, .. } => {
+        | GraphExpression::Reason { input, .. }
+        | GraphExpression::Context { input, .. } => {
             **input = clock_expression(input, clock, tick, depth + 1, budget)?;
         }
     }
@@ -396,7 +397,8 @@ fn collect_heads(expression: &GraphExpression, heads: &mut BTreeMap<(String, Str
         | GraphExpression::Support { input, .. }
         | GraphExpression::Metadata { input, .. }
         | GraphExpression::Project { input, .. }
-        | GraphExpression::Reason { input, .. } => collect_heads(input, heads),
+        | GraphExpression::Reason { input, .. }
+        | GraphExpression::Context { input, .. } => collect_heads(input, heads),
         GraphExpression::Reference { .. } => {}
     }
 }

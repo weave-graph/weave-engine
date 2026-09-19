@@ -75,7 +75,7 @@ fn checked(mut result: QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     preflight(&result, ctx)?;
     Ok(result)
 }
-fn preflight(result: &QueryResult, ctx: &AlgebraContext) -> Result<(), Diagnostic> {
+pub(crate) fn preflight(result: &QueryResult, ctx: &AlgebraContext) -> Result<(), Diagnostic> {
     if result.graph.profile != GraphProfile::Legacy
         || !result.graph.structural_edges.is_empty()
         || !result.graph.assertions.is_empty()
@@ -134,6 +134,9 @@ fn envelope(left: &QueryResult, right: Option<&QueryResult>) -> Result<QueryResu
     out.edge_origins.clear();
     out.attachment_origins.clear();
     if let Some(r) = right {
+        if left.selected_context != r.selected_context {
+            out.selected_context = None;
+        }
         out.input_snapshots = unique(
             left.input_snapshots
                 .iter()
@@ -229,7 +232,12 @@ fn node_key(input: &QueryResult, node: &Node) -> Result<String, Diagnostic> {
     })?;
     Ok(format!(
         "node:{}",
-        key(&(unique(origins.clone()), &node.entity_id, &node.space_id))
+        key(&(
+            unique(origins.clone()),
+            &node.entity_id,
+            &node.space_id,
+            &node.context_scope
+        ))
     ))
 }
 fn edge_key(input: &QueryResult, edge: &Edge) -> Result<String, Diagnostic> {
@@ -443,6 +451,12 @@ pub fn diff(
 ) -> Result<QueryResult, Diagnostic> {
     preflight(&before, ctx)?;
     preflight(&after, ctx)?;
+    if before.selected_context != after.selected_context {
+        return Err(err(
+            "E_CONTEXT_INCOMPATIBLE",
+            "Diff inputs must retain the same exact selected scope",
+        ));
+    }
     let before_edges: BTreeSet<_> = before
         .graph
         .edges
@@ -519,6 +533,7 @@ pub fn diff(
                 value: json!(status),
             },
             valid_time: edge.valid_time.clone(),
+            context: edge.assertion_context.clone(),
             origin: None,
             readers: vec![ctx.principal.clone()],
             required: false,
@@ -533,6 +548,15 @@ pub fn diff(
     for (id, status) in node_statuses {
         let attachment = MetadataAttachment {
             id: format!("weave:diff:{}", key(&(&id, status))),
+            context: out
+                .graph
+                .nodes
+                .iter()
+                .find(|node| node.id == id)
+                .and_then(|node| node.context_scope.as_ref())
+                .or(out.selected_context.as_ref())
+                .and_then(ContextSelection::reference)
+                .cloned(),
             host: MetadataHost::Node { id },
             key: "weave:diff:membership".into(),
             value: MetadataValue::Literal {
@@ -579,12 +603,10 @@ pub fn support(
         {
             continue;
         }
-        if edge.assertion_context.is_some() {
-            return Err(err(
-                "E_CONTEXT_REQUIRED",
-                "Contextual support requires an explicit compatible context selection",
-            ));
-        }
+        crate::context::ensure_consumable(
+            input.selected_context.as_ref(),
+            edge.assertion_context.as_ref(),
+        )?;
         let origins = input
             .edge_origins
             .get(&edge.id)
@@ -614,6 +636,10 @@ pub fn support(
         ("to".into(), json!(to)),
         ("valid_at".into(), json!(valid_at)),
         ("state".into(), json!(state)),
+        (
+            "context".into(),
+            json!(input.selected_context.clone().unwrap_or_default()),
+        ),
     ]
     .into();
     let mut out = envelope(&input, None)?;
@@ -661,12 +687,29 @@ pub fn support(
     }
     let id = format!("support:{}", key(&(&parameters, &input.input_snapshots)));
     let node = Node {
+        context_scope: Some(input.selected_context.clone().unwrap_or_default()),
         id: id.clone(),
         type_id: Some("Support".into()),
         entity_id: id.clone(),
         space_id: "weave:analysis".into(),
         properties: [
             ("state".into(), json!(state)),
+            (
+                "context_graph_id".into(),
+                json!(input
+                    .selected_context
+                    .as_ref()
+                    .and_then(ContextSelection::reference)
+                    .map(|r| &r.graph_id)),
+            ),
+            (
+                "context_revision".into(),
+                json!(input
+                    .selected_context
+                    .as_ref()
+                    .and_then(ContextSelection::reference)
+                    .map(|r| &r.revision)),
+            ),
             ("valid_at".into(), json!(valid_at)),
             (
                 "coverage".into(),
@@ -684,11 +727,27 @@ pub fn support(
     budget.add(&node)?;
     out.graph.schema = Some(GraphSchema {
         id: "weave:support:status".into(),
-        revision: "1".into(),
+        revision: "2".into(),
         nodes: [(
             "Support".into(),
             NodeSchema {
                 properties: [
+                    (
+                        "context_graph_id".into(),
+                        PropertySchema {
+                            value_type: ScalarType::String,
+                            required: true,
+                            nullable: true,
+                        },
+                    ),
+                    (
+                        "context_revision".into(),
+                        PropertySchema {
+                            value_type: ScalarType::String,
+                            required: true,
+                            nullable: true,
+                        },
+                    ),
                     (
                         "state".into(),
                         PropertySchema {
@@ -743,7 +802,11 @@ pub fn support(
         let edge = Edge {
             structural_ref: None,
             assertion_source: None,
-            assertion_context: None,
+            assertion_context: input
+                .selected_context
+                .as_ref()
+                .and_then(ContextSelection::reference)
+                .cloned(),
             assertion_properties: BTreeMap::new(),
             id: format!("{id}:evidence"),
             type_id: Some("SupportEvidence".into()),

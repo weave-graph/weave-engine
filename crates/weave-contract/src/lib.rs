@@ -1,7 +1,10 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.7.0";
+pub const VERSION: &str = "0.8.0";
+pub mod context;
+mod context_types;
+pub use context_types::*;
 pub mod rules;
 mod rules_types;
 pub use rules_types::*;
@@ -58,6 +61,8 @@ pub enum Polarity {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Node {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_scope: Option<ContextSelection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub type_id: Option<String>,
     pub id: String,
@@ -176,6 +181,10 @@ pub enum Command {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphExpression {
+    Context {
+        input: Box<GraphExpression>,
+        selection: ContextSelection,
+    },
     Reason {
         input: Box<GraphExpression>,
         rules: RuleSet,
@@ -251,6 +260,8 @@ pub struct Diagnostic {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct QueryResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_context: Option<ContextSelection>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_revisions: Vec<SourceRevision>,
     pub version: String,
@@ -354,6 +365,8 @@ pub enum MetadataValue {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct MetadataAttachment {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<GraphRef>,
     pub id: String,
     pub host: MetadataHost,
     pub key: String,

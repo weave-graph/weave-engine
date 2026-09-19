@@ -179,36 +179,44 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     let mut nodes: BTreeMap<String, Node> = BTreeMap::new();
     let mut edges = Vec::new();
     let mut edge_origins = BTreeMap::new();
-    let mut add_node = |id: String, kind: &str| -> Result<(), Diagnostic> {
-        if let std::collections::btree_map::Entry::Vacant(entry) = nodes.entry(id.clone()) {
-            let n = Node {
-                id: id.clone(),
-                entity_id: id,
-                space_id: "weave:explanation".into(),
-                type_id: Some("Part".into()),
-                properties: [("kind".into(), json!(kind))].into(),
-                metadata: vec![],
-                readers: vec![ctx.principal.clone()],
-            };
-            remaining = remaining
-                .checked_sub(size(&n, remaining)?)
-                .ok_or_else(|| failure("E_EXPLAIN_LIMIT", "Explanation byte budget exceeded"))?;
-            objects += 1;
-            if objects > ctx.max_objects {
-                return Err(failure(
-                    "E_EXPLAIN_LIMIT",
-                    "Explanation object budget exceeded",
-                ));
+    let mut add_node =
+        |id: String, kind: &str, scope: &crate::ContextSelection| -> Result<(), Diagnostic> {
+            if let std::collections::btree_map::Entry::Vacant(entry) = nodes.entry(id.clone()) {
+                let n = Node {
+                    context_scope: Some(scope.clone()),
+                    id: id.clone(),
+                    entity_id: id,
+                    space_id: "weave:explanation".into(),
+                    type_id: Some("Part".into()),
+                    properties: [("kind".into(), json!(kind))].into(),
+                    metadata: vec![],
+                    readers: vec![ctx.principal.clone()],
+                };
+                remaining = remaining.checked_sub(size(&n, remaining)?).ok_or_else(|| {
+                    failure("E_EXPLAIN_LIMIT", "Explanation byte budget exceeded")
+                })?;
+                objects += 1;
+                if objects > ctx.max_objects {
+                    return Err(failure(
+                        "E_EXPLAIN_LIMIT",
+                        "Explanation object budget exceeded",
+                    ));
+                }
+                entry.insert(n);
             }
-            entry.insert(n);
-        }
-        Ok(())
-    };
+            Ok(())
+        };
     // Collect bounded node/edge records separately so every emitted edge is gated
     // by exactly the alternative it explains, not a flattened union of alternatives.
     let mut records = Vec::new();
     let mut record_bytes = ctx.max_output_bytes;
-    let mut add_record = |link: (String, String, &'static str, String),
+    let mut add_record = |link: (
+        String,
+        String,
+        &'static str,
+        String,
+        crate::ContextSelection,
+    ),
                           group: &Derivation|
      -> Result<(), Diagnostic> {
         if records.len() >= ctx.max_objects {
@@ -228,6 +236,22 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
         Ok(())
     };
     for edge in &input.graph.edges {
+        let scope = match &edge.assertion_context {
+            Some(reference) => crate::ContextSelection::Pinned {
+                reference: reference.clone(),
+            },
+            None => crate::ContextSelection::Default,
+        };
+        if input
+            .selected_context
+            .as_ref()
+            .is_some_and(|selected| selected != &scope)
+        {
+            return Err(failure(
+                "E_CONTEXT_SCOPE",
+                "Explanation input contradicts its selected context",
+            ));
+        }
         let groups = if edge.derivations.is_empty() {
             vec![Derivation {
                 operator: "weave:source".into(),
@@ -252,17 +276,21 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             "conclusion:{}",
             digest(
                 "conclusion",
-                &(&edge.id, &edge.structural_ref),
+                &(&edge.id, &edge.structural_ref, &scope),
                 ctx.max_output_bytes
             )?
         );
-        add_node(conclusion.clone(), "conclusion")?;
+        add_node(conclusion.clone(), "conclusion", &scope)?;
         for group in groups {
             let group_id = format!(
                 "derivation:{}",
-                digest("derivation", &(&edge.id, &group), ctx.max_output_bytes)?
+                digest(
+                    "derivation",
+                    &(&edge.id, &group, &scope),
+                    ctx.max_output_bytes
+                )?
             );
-            add_node(group_id.clone(), "derivation")?;
+            add_node(group_id.clone(), "derivation", &scope)?;
             add_record(
                 (
                     conclusion.clone(),
@@ -270,15 +298,16 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                     "alternative",
                     serde_json::to_string(&group)
                         .map_err(|_| failure("E_IDENTITY_ENCODING", "Cannot encode derivation"))?,
+                    scope.clone(),
                 ),
                 &group,
             )?;
             for premise in &group.premises {
                 let id = format!(
                     "premise:{}",
-                    digest("premise", premise, ctx.max_output_bytes)?
+                    digest("premise", &(premise, &scope), ctx.max_output_bytes)?
                 );
-                add_node(id.clone(), "premise")?;
+                add_node(id.clone(), "premise", &scope)?;
                 add_record(
                     (
                         group_id.clone(),
@@ -286,6 +315,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                         "joint_premise",
                         serde_json::to_string(premise)
                             .map_err(|_| failure("E_IDENTITY_ENCODING", "Cannot encode premise"))?,
+                        scope.clone(),
                     ),
                     &group,
                 )?;
@@ -294,7 +324,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     }
     #[allow(clippy::drop_non_drop)]
     drop(add_node);
-    for ((from, to, label, payload), group) in records {
+    for ((from, to, label, payload, scope), group) in records {
         let id = format!(
             "explanation:{}",
             digest(
@@ -318,7 +348,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             structural_ref: None,
             assertion_properties: BTreeMap::new(),
             assertion_source: None,
-            assertion_context: None,
+            assertion_context: scope.reference().cloned(),
             type_id: Some("Evidence".into()),
             predicate: format!("weave:explanation:{label}"),
             from,
@@ -404,6 +434,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     )?;
     let node_origins = nodes.keys().map(|id| (id.clone(), Vec::new())).collect();
     let result = QueryResult {
+        selected_context: input.selected_context.clone(),
         source_revisions: input.source_revisions.clone(),
         version: VERSION.into(),
         graph: GraphData {
