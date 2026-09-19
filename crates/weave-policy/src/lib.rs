@@ -208,7 +208,7 @@ fn decode<const N: usize>(value: &str) -> Result<[u8; N]> {
         return Err(Error("E_ENCODING"));
     }
     let mut result = [0; N];
-    for (i, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
+    for (i, chunk) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         let digit = |b: u8| if b <= b'9' { b - b'0' } else { b - b'a' + 10 };
         result[i] = digit(chunk[0]) * 16 + digit(chunk[1]);
     }
