@@ -15,6 +15,49 @@ fn member_id(m: &Member) -> &str {
         Member::Leaf(id) | Member::Cluster(id) => id,
     }
 }
+fn require_repersistable(graph: &GraphData) -> Result<()> {
+    if graph
+        .nodes
+        .iter()
+        .any(|n| n.derived_from.len().saturating_add(n.derived_nodes.len()) > 999)
+    {
+        return Err(err(
+            "E_CLUSTER_BUDGET",
+            "context-protected influence leaves no repersistence pin",
+        ));
+    }
+    Ok(())
+}
+fn require_proof_capacity(
+    claims: &[AssertionRef],
+    nodes: &[NodeRef],
+    typing: Option<&ContextTyping>,
+) -> Result<()> {
+    let (extra_claims, extra_nodes) = typing
+        .map(context_typing::gates)
+        .transpose()
+        .map_err(|d| err(&d.code, &d.message))?
+        .unwrap_or_default();
+    let claim_count = claims
+        .iter()
+        .chain(&extra_claims)
+        .map(|r| (&r.graph_id, &r.revision, &r.assertion_id))
+        .collect::<BTreeSet<_>>()
+        .len();
+    let node_count = nodes
+        .iter()
+        .chain(&extra_nodes)
+        .map(|r| (&r.graph_id, &r.revision, &r.node_id))
+        .collect::<BTreeSet<_>>()
+        .len();
+    if claim_count + node_count > 999 {
+        return Err(err(
+            "E_CLUSTER_BUDGET",
+            "context-protected influence leaves no repersistence pin",
+        ));
+    }
+    Ok(())
+}
 impl Engine {
     fn cluster_input(&self, request: &ClusterRequest, host: &HostContext) -> Result<QueryResult> {
         if !valid_id(&request.predicate) || request.levels > 10_000 {
@@ -99,6 +142,11 @@ impl Engine {
         }
         let node_proofs: Vec<_> = nodes.into_values().cloned().collect();
         let claim_proofs: Vec<_> = claims.into_values().cloned().collect();
+        require_proof_capacity(
+            &claim_proofs,
+            &node_proofs,
+            value.graph.context_typing.as_ref(),
+        )?;
         let snapshot = Snapshot {
             // Include source graph identity but not whole-revision hash in membership identity.
             perspective: format!(
@@ -322,6 +370,7 @@ impl Engine {
         value.diagnostics = vec![Diagnostic { code: "I_CLUSTER_SCOPED".into(), message: "Navigation covers authorized available evidence; exact queries must inspect source evidence".into() }];
         context_typing::protect_result_generated(&mut value)
             .map_err(|d| err(&d.code, &d.message))?;
+        require_repersistable(&value.graph)?;
         validate_graph(&value.graph)?;
         json_size(&value, MATERIALIZED_LIMIT)?;
         Ok(value)
@@ -344,6 +393,11 @@ impl Engine {
                 "lineage requires the same source domain, predicate and context",
             ));
         }
+        let transaction = if self.conn.is_autocommit() {
+            Some(self.conn.unchecked_transaction()?)
+        } else {
+            None
+        };
         let mut left = self.cluster_input(before, host)?;
         let mut right = self.cluster_input(after, host)?;
         let hierarchy = |request: &ClusterRequest, value: &QueryResult| -> Result<Hierarchy> {
@@ -409,6 +463,12 @@ impl Engine {
         }
         let derived_nodes: Vec<_> = nodes.into_values().cloned().collect();
         let derived_from: Vec<_> = assertions.into_values().cloned().collect();
+        let typing = context_typing::merge(
+            left.graph.context_typing.as_ref(),
+            right.graph.context_typing.as_ref(),
+        )
+        .map_err(|d| err(&d.code, &d.message))?;
+        require_proof_capacity(&derived_from, &derived_nodes, typing.as_ref())?;
         let proof_bytes = json_size(&(&derived_nodes, &derived_from), MATERIALIZED_LIMIT)?;
         json_size(
             &lineage,
@@ -459,8 +519,12 @@ impl Engine {
         }];
         context_typing::protect_result_generated(&mut result)
             .map_err(|d| err(&d.code, &d.message))?;
+        require_repersistable(&result.graph)?;
         validate_graph(&result.graph)?;
         json_size(&result, MATERIALIZED_LIMIT)?;
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
         Ok(result)
     }
 }

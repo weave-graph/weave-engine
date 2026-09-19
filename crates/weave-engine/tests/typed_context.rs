@@ -598,3 +598,72 @@ fn root_native_lineage_empty_typed_inputs_protect_reader_cleared_summary() {
         1
     );
 }
+
+#[test]
+fn root_typed_lineage_records_match_navigation_and_context_gates_reserve_a_pin() {
+    let (mut e, c) = setup();
+    let graph: GraphData = serde_json::from_value(json!({
+        "nodes":[{"id":"a","entity_id":"a","space_id":"s"},{"id":"b","entity_id":"b","space_id":"s"}],
+        "edges":[{"id":"ab","from":"a","to":"b","predicate":"p","assertion_context":c,"valid_time":{"start":0}}]
+    })).unwrap();
+    write(&mut e, "g", graph);
+    let typed_value = evaluate(&mut e, typed(query("g"), &c), "alice").unwrap();
+    let source = write(&mut e, "g", typed_value.graph);
+    let request = ClusterRequest {
+        source,
+        context: ContextSelection::Pinned {
+            reference: c.clone(),
+        },
+        valid_at: 5,
+        predicate: "p".into(),
+        levels: 1,
+    };
+    let navigation = e.cluster_navigation(&request, &host("alice")).unwrap();
+    let cluster = navigation
+        .graph
+        .nodes
+        .iter()
+        .find(|n| n.properties["kind"] == "cluster")
+        .unwrap();
+    let lineage = e
+        .cluster_lineage(&request, &request, &host("alice"))
+        .unwrap();
+    let overlap = &lineage.graph.nodes[0].properties["lineage"]["overlaps"][0];
+    assert_eq!(
+        overlap["before"]["revision"],
+        cluster.properties["record"]["revision"]
+    );
+    assert_eq!(
+        overlap["after"]["revision"],
+        cluster.properties["record"]["revision"]
+    );
+    let many: GraphData = serde_json::from_value(json!({"nodes":(0..998).map(|i|json!({"id":format!("n{i}"),"entity_id":format!("n{i}"),"space_id":"s"})).collect::<Vec<_>>()})).unwrap();
+    write(&mut e, "source", many);
+    let mut typed_value = evaluate(&mut e, typed(query("source"), &c), "alice").unwrap();
+    // This snapshot's whole-value carrier protects public original nodes. Avoid
+    // redundant per-record gates here to isolate the generated output capacity.
+    for node in &mut typed_value.graph.nodes {
+        node.derived_from.clear();
+        node.derived_nodes.clear();
+    }
+    let source = write(&mut e, "source", typed_value.graph);
+    let request = ClusterRequest {
+        source,
+        context: ContextSelection::Pinned { reference: c },
+        valid_at: 5,
+        predicate: "p".into(),
+        levels: 0,
+    };
+    assert_eq!(
+        e.cluster_lineage(&request, &request, &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_CLUSTER_BUDGET"
+    );
+    assert_eq!(
+        e.cluster_navigation(&request, &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_CLUSTER_BUDGET"
+    );
+}
