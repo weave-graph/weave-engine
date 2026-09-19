@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use weave_contract::*;
 mod admission;
 mod assertions;
+mod read_budget;
 pub use admission::{Admitted, ProposalReceipt};
 mod capsule;
 use assertions::{assertion_edge, materialize, validate_explicit};
@@ -65,6 +66,7 @@ impl HostContext {
 }
 pub struct Engine {
     conn: Connection,
+    read_budget: read_budget::ReadBudget,
 }
 impl Engine {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -93,7 +95,10 @@ impl Engine {
             ));
         }
         conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;")?;
-        let engine = Self { conn };
+        let engine = Self {
+            conn,
+            read_budget: read_budget::ReadBudget::default(),
+        };
         let initialization = rusqlite::Transaction::new_unchecked(
             &engine.conn,
             rusqlite::TransactionBehavior::Immediate,
@@ -141,6 +146,7 @@ impl Engine {
         Ok(engine)
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
+        let _read_scope = self.read_budget.enter();
         if ![VERSION, "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0"]
             .contains(&program.version.as_str())
             && program.version != "0.2.0"
@@ -433,19 +439,27 @@ impl Engine {
         )?)
     }
     fn load(&self, graph: &str, revision: &str) -> Result<Option<GraphData>> {
+        self.read_budget.request()?;
+        let limit = self.read_budget.remaining().min(16 * 1024 * 1024);
         let row: Option<(String, Option<String>, Option<String>)> = self
             .conn
             .query_row(
-                "SELECT substr(branch_id,1,513),substr(parent,1,513),CASE WHEN length(CAST(data AS BLOB))<=16777216 THEN data ELSE NULL END FROM revisions WHERE graph_id=?1 AND revision=?2",
-                params![graph, revision],
+                "SELECT substr(branch_id,1,513),substr(parent,1,513),CASE WHEN length(CAST(data AS BLOB))<=?3 THEN data ELSE NULL END FROM revisions WHERE graph_id=?1 AND revision=?2",
+                params![graph, revision, limit as i64],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .optional()?;
         let Some((branch, parent, encoded)) = row else {
             return Ok(None);
         };
-        let encoded =
-            encoded.ok_or_else(|| err("E_INTEGRITY", "stored revision exceeds format bounds"))?;
+        let encoded = encoded.ok_or_else(|| {
+            if limit < 16 * 1024 * 1024 {
+                err("E_BUDGET", "cumulative graph-read byte budget exceeded")
+            } else {
+                err("E_INTEGRITY", "stored revision exceeds format bounds")
+            }
+        })?;
+        self.read_budget.charge(encoded.len())?;
         if !valid_id(&branch) || parent.as_ref().is_some_and(|p| !valid_id(p)) {
             return Err(err("E_INTEGRITY", "stored revision exceeds format bounds"));
         }
@@ -453,13 +467,20 @@ impl Engine {
             .map_err(|_| err("E_INTEGRITY", "stored revision is malformed"))?;
         let digest = snapshot::content_digest(graph, &branch, &parent, &data)?;
         if revision.starts_with("logical:") {
+            let limit = self.read_budget.remaining().min(16 * 1024 * 1024);
             let integrity: Option<(String, String, Option<String>)> = self.conn.query_row(
-                "SELECT substr(i.content_digest,1,129),substr(i.manifest_id,1,129),CASE WHEN length(CAST(m.manifest AS BLOB))<=16777216 THEN m.manifest ELSE NULL END FROM revision_integrity i JOIN snapshot_manifests m ON m.id=i.manifest_id WHERE i.revision=?1",
-                [revision], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
+                "SELECT substr(i.content_digest,1,129),substr(i.manifest_id,1,129),CASE WHEN length(CAST(m.manifest AS BLOB))<=?2 THEN m.manifest ELSE NULL END FROM revision_integrity i JOIN snapshot_manifests m ON m.id=i.manifest_id WHERE i.revision=?1",
+                params![revision,limit as i64], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
             let (stored_digest, id, manifest) = integrity
                 .ok_or_else(|| err("E_INTEGRITY", "stored logical revision lacks its manifest"))?;
-            let manifest = manifest
-                .ok_or_else(|| err("E_INTEGRITY", "stored manifest exceeds format bounds"))?;
+            let manifest = manifest.ok_or_else(|| {
+                if limit < 16 * 1024 * 1024 {
+                    err("E_BUDGET", "cumulative graph-read byte budget exceeded")
+                } else {
+                    err("E_INTEGRITY", "stored manifest exceeds format bounds")
+                }
+            })?;
+            self.read_budget.charge(manifest.len())?;
             let manifest: SnapshotManifest = serde_json::from_str(&manifest)
                 .map_err(|_| err("E_INTEGRITY", "stored manifest is malformed"))?;
             let hash = format!(
@@ -494,6 +515,7 @@ impl Engine {
         Ok(Some(data))
     }
     pub fn query(&self, query: &QueryPlan, host: &HostContext) -> Result<QueryResult> {
+        let _read_scope = self.read_budget.enter();
         if !valid_id(&query.graph_id)
             || !valid_id(&query.branch_id)
             || !valid_id(&host.principal)
@@ -715,6 +737,7 @@ impl Engine {
         predicate: &str,
         host: &HostContext,
     ) -> Result<QueryResult> {
+        let _read_scope = self.read_budget.enter();
         if !valid_id(predicate) {
             return Err(err("E_ID", "join output predicate required"));
         }

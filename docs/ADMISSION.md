@@ -18,6 +18,11 @@ Before native authorization follows provenance, admission first applies primitiv
 
 Bounds are 1,000 dependency revisions, 32 MiB cumulative dependency serialization, 1,000 ancestry depth per branch walk and 10,000 ancestry steps across closure checks. Native principal readers still apply after capability admission. Capability scope never clears object restrictions.
 
+The complete signed operation also shares the [native physical read budget](READ_BUDGETS.md)
+with its nested query/publication work. This charges whole stored snapshots and
+therefore is separate from visible-data limits; it does not promise to conceal
+physical work or denied-request activity associated with restricted content.
+
 ## Retry and durable response limits
 
 A successful query stores its original pinned response plus the exact admitted dependency closure, including resolved live targets and provenance that may not appear in the requested output. A response-lost retry returns that same response only after verifying a currently valid proof, the same body/operation/subject/nonce, the same installed policy epoch, and sufficient current scopes for the cached dependency closure. A narrower proof cannot retrieve a broader cached result. Expired or revoked proofs do not retrieve cached results. Epoch changes require a fresh request and nonce.
