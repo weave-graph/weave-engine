@@ -1,9 +1,11 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
+pub mod host_types;
+pub use host_types::{ClusterRequest, IdentityPolicyRef, IdentityResolve};
 pub mod decimal;
 pub mod quantity;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.12.0";
+pub const VERSION: &str = "0.13.0";
 pub mod counterpart;
 mod geometry_types;
 pub use geometry_types::*;
@@ -201,6 +203,12 @@ pub struct CounterpartSelection {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphExpression {
+    ResolveIdentity {
+        selection: IdentityResolve,
+    },
+    Cluster {
+        selection: ClusterRequest,
+    },
     Counterparts {
         input: Box<GraphExpression>,
         selection: CounterpartSelection,

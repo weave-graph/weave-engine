@@ -398,6 +398,16 @@ fn clock_expression(
     *budget -= 1;
     let mut value = expression.clone();
     match &mut value {
+        GraphExpression::ResolveIdentity { selection } => {
+            if let Some(t) = tick {
+                selection.valid_at = t;
+            }
+        }
+        GraphExpression::Cluster { selection } => {
+            if let Some(t) = tick {
+                selection.valid_at = t;
+            }
+        }
         GraphExpression::Counterparts { input, selection } => {
             **input = clock_expression(input, clock, tick, depth + 1, budget)?;
             if let Some(t) = tick {
@@ -497,7 +507,9 @@ fn collect_heads(expression: &GraphExpression, heads: &mut BTreeMap<(String, Str
         | GraphExpression::Context { input, .. }
         | GraphExpression::Explain { input }
         | GraphExpression::Counterparts { input, .. } => collect_heads(input, heads),
-        GraphExpression::Reference { .. } => {}
+        GraphExpression::Reference { .. }
+        | GraphExpression::ResolveIdentity { .. }
+        | GraphExpression::Cluster { .. } => {}
     }
 }
 fn changes<T: PartialEq>(

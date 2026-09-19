@@ -7,12 +7,6 @@ const PREFIX: &str = "weave:identity:";
 const LIMIT: usize = 1024 * 1024;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-pub struct IdentityPolicyRef {
-    pub id: String,
-    pub revision: String,
-}
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
 pub struct IdentityPolicy {
     pub reference: IdentityPolicyRef,
     pub proposers: Vec<String>,
@@ -47,17 +41,6 @@ pub struct IdentityDecisionReceipt {
     pub event_id: Option<String>,
     pub changed: bool,
     pub duplicate: bool,
-}
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct IdentityResolve {
-    pub mapping_id: String,
-    pub revision: String,
-    pub policy: IdentityPolicyRef,
-    pub source: NodeRef,
-    pub target_space: String,
-    pub valid_at: i64,
-    pub context: ContextSelection,
 }
 pub(crate) fn reserved(graph: &str) -> bool {
     graph.starts_with(PREFIX)

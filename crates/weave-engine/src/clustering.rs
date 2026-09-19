@@ -1,21 +1,9 @@
 //! Authorized, snapshot-scoped graph navigation. No approximate query pruning.
 use super::*;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::BTreeSet;
 use weave_cluster::{Hierarchy, Link, Member, Snapshot};
 
-/// Host API; source is an exact immutable pin, never a caller-supplied authorized snapshot.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ClusterRequest {
-    pub source: GraphRef,
-    pub context: ContextSelection,
-    pub valid_at: i64,
-    pub predicate: String,
-    /// Number of lazy levels to materialize, bounded by the input node count.
-    pub levels: usize,
-}
 fn failure(e: weave_cluster::Error) -> Error {
     err(
         e.0,

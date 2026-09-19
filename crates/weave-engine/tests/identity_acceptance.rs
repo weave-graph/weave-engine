@@ -906,3 +906,57 @@ fn revoked_identity_policy_blocks_signed_cached_response_retry() {
         "E_UNAVAILABLE"
     );
 }
+
+#[test]
+fn program_identity_selector_is_a_pinned_read_not_acceptance_authority() {
+    let (mut e, mut c) = setup();
+    c.groups[0].pop();
+    e.submit_identity_candidate(&c, &host("alice")).unwrap();
+    let receipt = e
+        .accept_identity_candidate(&request(&c, None, "accept"), &host("reviewer"))
+        .unwrap();
+    let selection = selection(&c, &receipt.reference.revision, "operations");
+    let expected = e.resolve_identity(&selection, &host("bob")).unwrap();
+    let expression = GraphExpression::ResolveIdentity { selection };
+    let program = Program {
+        version: VERSION.into(),
+        source_revisions: vec![],
+        commands: vec![Command::Evaluate {
+            value: expression.clone(),
+        }],
+    };
+    let events = e.event_count().unwrap();
+    let results = e.execute(&program, &host("bob")).unwrap();
+    let CommandResult::Queried { result } = &results[0] else {
+        panic!("query result required")
+    };
+    assert_eq!(**result, expected);
+    assert_eq!(e.event_count().unwrap(), events);
+    let mut old = program.clone();
+    old.version = "0.12.0".into();
+    old.commands = vec![
+        Command::Commit {
+            graph_id: "copy".into(),
+            branch_id: "main".into(),
+            expected_head: None,
+            data: GraphData::default(),
+        },
+        Command::Evaluate {
+            value: GraphExpression::Filter {
+                input: Box::new(expression),
+                predicate: None,
+                valid_at: None,
+            },
+        },
+    ];
+    assert_eq!(
+        e.execute(&old, &host("alice")).unwrap_err().code,
+        "E_VERSION"
+    );
+    assert!(e.head("copy", "main").unwrap().is_none());
+    e.revoke_identity_policy(&c.policy).unwrap();
+    assert_eq!(
+        e.execute(&program, &host("bob")).unwrap_err().code,
+        "E_IDENTITY_UNAVAILABLE"
+    );
+}
