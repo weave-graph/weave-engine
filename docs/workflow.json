@@ -46,7 +46,7 @@
       "id": "E00",
       "title": "Source recovery and public MIT baseline",
       "owner": "orchestrator",
-      "state": "in_progress",
+      "state": "passed",
       "depends_on": [],
       "requirements": [
         "R39"
@@ -55,8 +55,7 @@
         "docs/source/manifest.json",
         "docs/RECONCILIATION.md",
         "docs/PUBLICATION.md"
-      ],
-      "status": "passed"
+      ]
     },
     {
       "id": "E01",
@@ -161,7 +160,9 @@
           "contract_revision": "0.3.0",
           "commit": "7cdf6b4",
           "unresolved_findings": "General recursive rules and effects remain open"
-        }
+        },
+        "docs/contract/v0.5/README.md",
+        "crates/weave-contract/src/algebra.rs"
       ]
     },
     {
@@ -213,7 +214,10 @@
           "host": "local macOS",
           "commit": "0cee0e1",
           "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
-        }
+        },
+        "docs/DISPATCH.md",
+        "crates/weave-engine/tests/dispatch.rs",
+        "scripts/root_dispatch.py"
       ]
     },
     {
@@ -239,7 +243,10 @@
           "host": "local macOS",
           "commit": "0cee0e1",
           "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
-        }
+        },
+        "docs/DISPATCH.md",
+        "crates/weave-engine/tests/dispatch.rs",
+        "scripts/root_dispatch.py"
       ]
     },
     {
@@ -281,7 +288,9 @@
           "contract_revision": "capsule0.1 / program0.3",
           "commit": "7cdf6b4",
           "unresolved_findings": "Unsigned local APIs; no peer authenticity, mounts, governance or mobile support"
-        }
+        },
+        "docs/CAPSULES.md",
+        "crates/weave-engine/tests/root_capsule.rs"
       ]
     },
     {
@@ -382,7 +391,7 @@
       "id": "E14",
       "title": "Recovery fuzzing and measurements",
       "owner": "engine",
-      "state": "proposed",
+      "state": "in_progress",
       "depends_on": [
         "E06",
         "E10",
@@ -394,7 +403,11 @@
         "R37",
         "R38"
       ],
-      "evidence": []
+      "evidence": [
+        "docs/benchmarks",
+        "scripts/root_benchmark.py",
+        "scripts/root_dispatch.py"
+      ]
     },
     {
       "id": "E15",
@@ -421,7 +434,7 @@
     "unresolved_findings"
   ],
   "provisional_execution": {
-    "reason": "Implement explicit recovered requirements while original paper recovery is blocked",
+    "reason": "Original papers recovered and reconciled; remaining gates track partial implementation and acceptance evidence.",
     "does_not_waive": [
       "E00",
       "E15"

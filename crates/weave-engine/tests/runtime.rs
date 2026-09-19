@@ -38,6 +38,7 @@ fn data() -> GraphData {
             metadata: vec![],
             readers: vec![],
             derived_from: vec![],
+            derivations: vec![],
         }],
     }
 }
@@ -889,4 +890,61 @@ fn nested_metadata_requires_current_profile_and_rolls_back() {
     p.version = "0.3.0".into();
     assert_eq!(engine.execute(&p, &host()).unwrap_err().code, "E_VERSION");
     assert!(engine.head("g", "main").unwrap().is_none());
+}
+
+#[test]
+fn alternative_derivations_preserve_visible_support_without_leaking_hidden_group() {
+    let mut engine = Engine::memory().unwrap();
+    let h = HostContext::new(
+        "alice",
+        ["private".into(), "public".into(), "result".into()],
+    );
+    let mut private = data();
+    private.edges[0].readers = vec!["alice".into()];
+    let a = revision(
+        &engine
+            .execute(&program(vec![commit("private", None, private)]), &h)
+            .unwrap(),
+    );
+    let b = revision(
+        &engine
+            .execute(&program(vec![commit("public", None, data())]), &h)
+            .unwrap(),
+    );
+    let refs = vec![
+        AssertionRef {
+            graph_id: "private".into(),
+            revision: a,
+            assertion_id: "link".into(),
+        },
+        AssertionRef {
+            graph_id: "public".into(),
+            revision: b,
+            assertion_id: "link".into(),
+        },
+    ];
+    let mut result = data();
+    result.edges[0].derived_from = refs.clone();
+    result.edges[0].derivations = refs
+        .iter()
+        .map(|p| Derivation {
+            operator: "rule:test".into(),
+            premises: vec![p.clone()],
+            parameters: BTreeMap::new(),
+            input_snapshots: vec![GraphRef {
+                graph_id: p.graph_id.clone(),
+                revision: p.revision.clone(),
+            }],
+        })
+        .collect();
+    engine
+        .execute(&program(vec![commit("result", None, result)]), &h)
+        .unwrap();
+    let bob = HostContext::new("bob", []);
+    let value = engine.query(&query("result"), &bob).unwrap();
+    assert_eq!(value.graph.edges.len(), 1);
+    assert_eq!(value.graph.edges[0].derivations.len(), 1);
+    assert_eq!(value.graph.edges[0].derived_from[0].graph_id, "public");
+    assert_eq!(value.coverage, Coverage::Partial);
+    assert!(!serde_json::to_string(&value).unwrap().contains("private"));
 }

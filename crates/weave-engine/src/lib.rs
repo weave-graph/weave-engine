@@ -6,6 +6,10 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use weave_contract::*;
 mod capsule;
+mod dispatch;
+pub use dispatch::{
+    AdapterManifest, DispatchEnvelope, EffectIntent, HandlerReceipt, SubscriptionScope,
+};
 mod metadata;
 mod snapshot;
 mod typed;
@@ -99,10 +103,11 @@ impl Engine {
             transaction.pragma_update(None, "user_version", 5)?;
             transaction.commit()?;
         }
+        engine.initialize_dispatch()?;
         Ok(engine)
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
-        if ![VERSION, "0.3.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.4.0", "0.3.0"].contains(&program.version.as_str())
             && program.version != "0.2.0"
             && program.version != "0.3.0"
             && program.version != LEGACY_VERSION
@@ -117,7 +122,7 @@ impl Engine {
         {
             return Err(err("E_VERSION", "join requires contract 0.2.0"));
         }
-        if ![VERSION, "0.3.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.4.0", "0.3.0"].contains(&program.version.as_str())
             && program
                 .commands
                 .iter()
@@ -125,7 +130,23 @@ impl Engine {
         {
             return Err(err("E_VERSION", "graph expressions require contract 0.3.0"));
         }
-        if program.version != VERSION && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
+        if ![VERSION, "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
+        if program.version != VERSION
+            && program.commands.iter().any(|c| match c {
+                Command::Commit { data, .. } => {
+                    data.edges.iter().any(|e| !e.derivations.is_empty())
+                }
+                Command::CommitBatch { commits, .. } => commits
+                    .iter()
+                    .any(|c| c.data.edges.iter().any(|e| !e.derivations.is_empty())),
+                _ => false,
+            })
+        {
+            return Err(err(
+                "E_VERSION",
+                "derivation alternatives require contract 0.5.0",
+            ));
+        }
         for command in &program.commands {
             if let Command::Bind { value, .. } | Command::Evaluate { value } = command {
                 validate_expression_profile(value, &program.version)?;
@@ -135,7 +156,7 @@ impl Engine {
             return Err(err("E_BUDGET", "at most 1000 commands"));
         }
         // One program transaction: a later rejection cannot leave earlier graph changes or events.
-        self.conn.execute_batch("BEGIN IMMEDIATE")?;
+        self.conn.execute_batch("SAVEPOINT weave_program")?;
         let result = (|| {
             let mut out = Vec::new();
             let mut values = BTreeMap::new();
@@ -144,7 +165,7 @@ impl Engine {
             for command in &program.commands {
                 let command_result = match command {
                     Command::CommitBatch { batch_id, commits } => {
-                        if program.version != VERSION {
+                        if ![VERSION, "0.4.0"].contains(&program.version.as_str()) {
                             return Err(err(
                                 "E_VERSION",
                                 "snapshot batches require contract 0.4.0",
@@ -224,11 +245,12 @@ impl Engine {
         })();
         match result {
             Ok(out) => {
-                self.conn.execute_batch("COMMIT")?;
+                self.conn.execute_batch("RELEASE weave_program")?;
                 Ok(out)
             }
             Err(e) => {
-                self.conn.execute_batch("ROLLBACK")?;
+                self.conn
+                    .execute_batch("ROLLBACK TO weave_program; RELEASE weave_program")?;
                 Err(e)
             }
         }
@@ -373,6 +395,7 @@ impl Engine {
             diagnostics: Vec::new(),
             provenance: Vec::new(),
             edge_origins: BTreeMap::new(),
+            node_origins: BTreeMap::new(),
             attachment_origins: BTreeMap::new(),
             metadata_graphs: Vec::new(),
         };
@@ -385,6 +408,18 @@ impl Engine {
             );
         }
         let mut query_bytes = json_size(&result, MATERIALIZED_LIMIT)?;
+        for node in &result.graph.nodes {
+            let origins = vec![NodeRef {
+                graph_id: query.graph_id.clone(),
+                revision: revision.clone(),
+                node_id: node.id.clone(),
+            }];
+            query_bytes += json_size(
+                &(&node.id, &origins),
+                MATERIALIZED_LIMIT.saturating_sub(query_bytes),
+            )?;
+            result.node_origins.insert(node.id.clone(), origins);
+        }
         for attachment in &result.graph.attachments {
             let references = vec![AssertionRef {
                 graph_id: query.graph_id.clone(),
@@ -566,6 +601,7 @@ impl Engine {
         let mut edges = Vec::new();
         let mut provenance = Vec::new();
         let mut edge_origins = BTreeMap::new();
+        let mut node_origins = BTreeMap::new();
         let mut attachments = BTreeMap::new();
         let mut attachment_origins = BTreeMap::new();
         for le in &l.graph.edges {
@@ -602,6 +638,30 @@ impl Engine {
                         premises.push(reference.clone());
                     }
                 }
+                let derivations = algebra::combine_derivations(
+                    le,
+                    l.edge_origins.get(&le.id).expect("checked origin"),
+                    re,
+                    r.edge_origins.get(&re.id).expect("checked origin"),
+                    "weave:join",
+                    BTreeMap::from([(
+                        "predicate".into(),
+                        serde_json::Value::String(predicate.into()),
+                    )]),
+                    &l.input_snapshots
+                        .iter()
+                        .chain(&r.input_snapshots)
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                    &algebra_context(host),
+                )
+                .map_err(|d| err(&d.code, &d.message))?;
+                premises.clear();
+                for reference in derivations.iter().flat_map(|d| &d.premises) {
+                    if !premises.contains(reference) {
+                        premises.push(reference.clone());
+                    }
+                }
                 let mut source = ln[le.from.as_str()].clone();
                 let mut target = rn[re.to.as_str()].clone();
                 source.id = format!(
@@ -618,6 +678,20 @@ impl Engine {
                         target.id.as_str()
                     ))?)
                 );
+                for (id, input, old_id) in [(&source.id, &l, &le.from), (&target.id, &r, &re.to)] {
+                    if !node_origins.contains_key(id) {
+                        let origins = input
+                            .node_origins
+                            .get(old_id)
+                            .cloned()
+                            .ok_or_else(|| err("E_PROVENANCE", "missing node origin"))?;
+                        join_bytes += json_size(
+                            &(id, &origins),
+                            MATERIALIZED_LIMIT.saturating_sub(join_bytes),
+                        )?;
+                        node_origins.insert(id.clone(), origins);
+                    }
+                }
                 // Results are scoped to the evaluating principal until a release policy exists.
                 source.readers = vec![host.principal.clone()];
                 target.readers = vec![host.principal.clone()];
@@ -664,6 +738,7 @@ impl Engine {
                     metadata: vec![],
                     readers: vec![host.principal.clone()],
                     derived_from: premises.clone(),
+                    derivations,
                 };
                 if !nodes.contains_key(&source.id) {
                     join_bytes +=
@@ -772,6 +847,7 @@ impl Engine {
             diagnostics,
             provenance,
             edge_origins,
+            node_origins,
             attachment_origins,
             metadata_graphs,
         };
@@ -792,6 +868,43 @@ impl Engine {
         }
         *budget -= 1;
         match expression {
+            GraphExpression::Union { left, right } => {
+                let l = self.expression(left, values, host, depth + 1, budget)?;
+                let r = self.expression(right, values, host, depth + 1, budget)?;
+                algebra::union(l, r, &algebra_context(host)).map_err(|d| err(&d.code, &d.message))
+            }
+            GraphExpression::Diff { before, after } => {
+                let l = self.expression(before, values, host, depth + 1, budget)?;
+                let r = self.expression(after, values, host, depth + 1, budget)?;
+                algebra::diff(l, r, &algebra_context(host)).map_err(|d| err(&d.code, &d.message))
+            }
+            GraphExpression::Project {
+                input,
+                node_ids,
+                edge_ids,
+            } => {
+                let input = self.expression(input, values, host, depth + 1, budget)?;
+                algebra::project(input, node_ids, edge_ids, &algebra_context(host))
+                    .map_err(|d| err(&d.code, &d.message))
+            }
+            GraphExpression::Support {
+                input,
+                predicate,
+                from,
+                to,
+                valid_at,
+            } => {
+                let input = self.expression(input, values, host, depth + 1, budget)?;
+                algebra::support(
+                    input,
+                    predicate,
+                    from,
+                    to,
+                    *valid_at,
+                    &algebra_context(host),
+                )
+                .map_err(|d| err(&d.code, &d.message))
+            }
             GraphExpression::Metadata {
                 input,
                 host: attachment_host,
@@ -834,6 +947,9 @@ impl Engine {
                         .collect();
                     value.graph.nodes.retain(|n| nodes.contains(&n.id));
                 }
+                value
+                    .node_origins
+                    .retain(|id, _| value.graph.nodes.iter().any(|n| &n.id == id));
                 prune_attachments(&mut value.graph);
                 value
                     .attachment_origins
@@ -856,13 +972,46 @@ impl Engine {
         let mut data = visible(data, &host.principal);
         let mut edges = Vec::new();
         let mut incomplete = false;
-        for edge in data.edges {
+        for mut edge in data.edges {
             let mut visiting = HashSet::new();
             let mut budget = 1000usize;
-            if self.premises_visible(&edge.derived_from, host, &mut visiting, &mut budget, 0)? {
-                edges.push(edge);
+            if edge.derivations.is_empty() {
+                if self.premises_visible(&edge.derived_from, host, &mut visiting, &mut budget, 0)? {
+                    edges.push(edge);
+                } else {
+                    incomplete = true;
+                }
             } else {
-                incomplete = true;
+                let mut groups = Vec::new();
+                for mut group in edge.derivations {
+                    if self.premises_visible(
+                        &group.premises,
+                        host,
+                        &mut HashSet::new(),
+                        &mut budget,
+                        0,
+                    )? {
+                        group.input_snapshots.retain(|r| {
+                            group
+                                .premises
+                                .iter()
+                                .any(|p| p.graph_id == r.graph_id && p.revision == r.revision)
+                        });
+                        groups.push(group);
+                    } else {
+                        incomplete = true;
+                    }
+                }
+                edge.derived_from = Vec::new();
+                for premise in groups.iter().flat_map(|g| &g.premises) {
+                    if !edge.derived_from.contains(premise) {
+                        edge.derived_from.push(premise.clone());
+                    }
+                }
+                edge.derivations = groups;
+                if !edge.derivations.is_empty() {
+                    edges.push(edge);
+                }
             }
         }
         data.edges = edges;
@@ -916,34 +1065,60 @@ impl Engine {
                 return Ok(false);
             };
             let source = visible(source, &host.principal);
-            let dependencies = if let Some(premise) =
+            let permitted = if let Some(premise) =
                 source.edges.iter().find(|e| e.id == reference.assertion_id)
             {
-                premise.derived_from.clone()
+                self.edge_dependencies_visible(premise, host, visiting, budget, depth + 1)?
             } else if let Some(attachment) = source
                 .attachments
                 .iter()
                 .find(|a| a.id == reference.assertion_id)
             {
-                let mut dependencies: Vec<AssertionRef> =
-                    attachment.origin.iter().cloned().collect();
-                if let MetadataHost::Edge { id } = &attachment.host {
-                    if let Some(edge) = source.edges.iter().find(|e| &e.id == id) {
-                        dependencies.extend(edge.derived_from.clone());
-                    } else {
-                        return Ok(false);
+                let own = self.premises_visible(
+                    &attachment.origin.iter().cloned().collect::<Vec<_>>(),
+                    host,
+                    visiting,
+                    budget,
+                    depth + 1,
+                )?;
+                let host_visible = if let MetadataHost::Edge { id } = &attachment.host {
+                    match source.edges.iter().find(|e| &e.id == id) {
+                        Some(edge) => {
+                            self.edge_dependencies_visible(edge, host, visiting, budget, depth + 1)?
+                        }
+                        None => false,
                     }
-                }
-                dependencies
+                } else {
+                    true
+                };
+                own && host_visible
             } else {
-                return Ok(false);
+                false
             };
-            if !self.premises_visible(&dependencies, host, visiting, budget, depth + 1)? {
+            if !permitted {
                 return Ok(false);
             }
             visiting.remove(&key);
         }
         Ok(true)
+    }
+    fn edge_dependencies_visible(
+        &self,
+        edge: &Edge,
+        host: &HostContext,
+        visiting: &mut HashSet<(String, String, String)>,
+        budget: &mut usize,
+        depth: u32,
+    ) -> Result<bool> {
+        if edge.derivations.is_empty() {
+            return self.premises_visible(&edge.derived_from, host, visiting, budget, depth);
+        }
+        for group in &edge.derivations {
+            if self.premises_visible(&group.premises, host, &mut visiting.clone(), budget, depth)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
     /// Trusted host administration only; this is deliberately not a plan operation.
     pub fn register_adapter(&self, id: &str, graph: &str) -> Result<()> {
@@ -1143,6 +1318,38 @@ fn validate_graph(data: &GraphData) -> Result<()> {
         if !e.valid_time.valid() {
             return Err(err("E_INTERVAL", "valid time end must exceed start"));
         }
+        if e.derivations.len() > 128
+            || e.derivations
+                .iter()
+                .any(|d| !valid_id(&d.operator) || d.premises.is_empty() || d.premises.len() > 1000)
+        {
+            return Err(err(
+                "E_DERIVATION",
+                "derivation groups need an operator and bounded nonempty premises",
+            ));
+        }
+        if !e.derivations.is_empty() {
+            let grouped: HashSet<_> = e
+                .derivations
+                .iter()
+                .flat_map(|g| {
+                    g.premises
+                        .iter()
+                        .map(|p| (&p.graph_id, &p.revision, &p.assertion_id))
+                })
+                .collect();
+            let flattened: HashSet<_> = e
+                .derived_from
+                .iter()
+                .map(|p| (&p.graph_id, &p.revision, &p.assertion_id))
+                .collect();
+            if grouped != flattened {
+                return Err(err(
+                    "E_DERIVATION",
+                    "flat compatibility index must equal derivation premise union",
+                ));
+            }
+        }
     }
     for reader in data
         .nodes
@@ -1250,8 +1457,25 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             return Err(err("E_BUDGET", "expression structure exceeds budget"));
         }
         match expression {
-            GraphExpression::Metadata { input, .. } => {
+            GraphExpression::Union { left, right }
+            | GraphExpression::Diff {
+                before: left,
+                after: right,
+            } => {
                 if version != VERSION {
+                    return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
+                }
+                pending.push((left, depth + 1));
+                pending.push((right, depth + 1));
+            }
+            GraphExpression::Project { input, .. } | GraphExpression::Support { input, .. } => {
+                if version != VERSION {
+                    return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
+                }
+                pending.push((input, depth + 1));
+            }
+            GraphExpression::Metadata { input, .. } => {
+                if ![VERSION, "0.4.0"].contains(&version) {
                     return Err(err(
                         "E_VERSION",
                         "metadata expressions require contract 0.4.0",
@@ -1268,4 +1492,12 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
         }
     }
     Ok(())
+}
+
+fn algebra_context(host: &HostContext) -> AlgebraContext {
+    AlgebraContext {
+        principal: host.principal.clone(),
+        max_objects: 100_000,
+        max_output_bytes: MATERIALIZED_LIMIT,
+    }
 }

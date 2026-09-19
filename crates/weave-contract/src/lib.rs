@@ -1,8 +1,11 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.4.0";
+pub const VERSION: &str = "0.5.0";
+pub mod algebra;
+mod algebra_types;
 mod schema;
+pub use algebra_types::*;
 pub use schema::*;
 pub const LEGACY_VERSION: &str = "0.1.0";
 fn main_branch() -> String {
@@ -81,6 +84,8 @@ pub struct Edge {
     pub readers: Vec<String>,
     #[serde(default)]
     pub derived_from: Vec<AssertionRef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derivations: Vec<Derivation>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
@@ -150,6 +155,26 @@ pub enum Command {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphExpression {
+    Union {
+        left: Box<GraphExpression>,
+        right: Box<GraphExpression>,
+    },
+    Diff {
+        before: Box<GraphExpression>,
+        after: Box<GraphExpression>,
+    },
+    Project {
+        input: Box<GraphExpression>,
+        node_ids: Vec<String>,
+        edge_ids: Vec<String>,
+    },
+    Support {
+        input: Box<GraphExpression>,
+        predicate: String,
+        from: EntitySpace,
+        to: EntitySpace,
+        valid_at: i64,
+    },
     Metadata {
         input: Box<GraphExpression>,
         host: MetadataHost,
@@ -209,6 +234,8 @@ pub struct QueryResult {
     pub provenance: Vec<AssertionRef>,
     #[serde(default)]
     pub edge_origins: BTreeMap<String, Vec<AssertionRef>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub node_origins: BTreeMap<String, Vec<NodeRef>>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub attachment_origins: BTreeMap<String, Vec<AssertionRef>>,
     pub metadata_graphs: Vec<ResolvedGraph>,

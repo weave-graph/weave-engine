@@ -83,6 +83,7 @@ impl Engine {
             if let Some(edge) = input.graph.edges.iter().find(|e| &e.id == id) {
                 let Some(common) = intersect(&window, &edge.valid_time) else {
                     input.graph = GraphData::default();
+                    input.node_origins.clear();
                     input.edge_origins.clear();
                     input.attachment_origins.clear();
                     input.provenance.clear();
@@ -128,12 +129,25 @@ impl Engine {
         input.edge_origins.clear();
         input.attachment_origins.clear();
         input.provenance.clear();
+        input.node_origins.clear();
         let mut bytes = json_size(&input, MATERIALIZED_LIMIT)?;
+        for node in &input.graph.nodes {
+            let origins = vec![NodeRef {
+                graph_id: reference.graph_id.clone(),
+                revision: reference.revision.clone(),
+                node_id: node.id.clone(),
+            }];
+            bytes += json_size(
+                &(&node.id, &origins),
+                MATERIALIZED_LIMIT.saturating_sub(bytes),
+            )?;
+            input.node_origins.insert(node.id.clone(), origins);
+        }
         for dependency in &origin {
             bytes += json_size(dependency, MATERIALIZED_LIMIT.saturating_sub(bytes))?;
             input.provenance.push(dependency.clone());
         }
-        for edge in &input.graph.edges {
+        for edge in &mut input.graph.edges {
             let source = AssertionRef {
                 graph_id: reference.graph_id.clone(),
                 revision: reference.revision.clone(),
@@ -149,6 +163,47 @@ impl Engine {
                 &(&edge.id, &dependencies),
                 MATERIALIZED_LIMIT.saturating_sub(bytes),
             )?;
+            if edge.derivations.is_empty() {
+                edge.derivations = vec![Derivation {
+                    operator: "weave:metadata".into(),
+                    premises: dependencies.clone(),
+                    parameters: BTreeMap::from([(
+                        "key".into(),
+                        serde_json::Value::String(key.into()),
+                    )]),
+                    input_snapshots: dependencies
+                        .iter()
+                        .map(|p| GraphRef {
+                            graph_id: p.graph_id.clone(),
+                            revision: p.revision.clone(),
+                        })
+                        .collect(),
+                }];
+            } else {
+                for group in &mut edge.derivations {
+                    for p in &origin {
+                        if !group.premises.contains(p) {
+                            group.premises.push(p.clone());
+                        }
+                    }
+                    group.input_snapshots = group
+                        .premises
+                        .iter()
+                        .map(|p| GraphRef {
+                            graph_id: p.graph_id.clone(),
+                            revision: p.revision.clone(),
+                        })
+                        .collect();
+                }
+                dependencies.clear();
+                for p in edge.derivations.iter().flat_map(|g| &g.premises) {
+                    if !dependencies.contains(p) {
+                        dependencies.push(p.clone());
+                    }
+                }
+            }
+            edge.derived_from = dependencies.clone();
+            bytes += json_size(&edge.derivations, MATERIALIZED_LIMIT.saturating_sub(bytes))?;
             input.edge_origins.insert(edge.id.clone(), dependencies);
         }
         for attachment in &input.graph.attachments {

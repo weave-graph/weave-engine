@@ -1,6 +1,6 @@
 [package]
 name = "weave-contract"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 license = "MIT"
 description = "Portable versioned Weave language-runtime contract"
@@ -8,3 +8,4 @@ description = "Portable versioned Weave language-runtime contract"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
