@@ -104,19 +104,36 @@ fn unique<T: Serialize + Clone>(values: impl IntoIterator<Item = T>) -> Vec<T> {
         .into_values()
         .collect()
 }
-fn envelope(left: &QueryResult, right: Option<&QueryResult>) -> QueryResult {
+/// Merge descriptive source identities without accepting conflicting labels.
+pub fn merge_source_revisions(
+    left: &[SourceRevision],
+    right: &[SourceRevision],
+) -> Result<Vec<SourceRevision>, Diagnostic> {
+    let mut sources = BTreeMap::new();
+    for source in left.iter().chain(right) {
+        let label = (source.name.clone(), source.revision.clone());
+        if let Some(old) = sources.insert(label, source.clone()) {
+            if old.digest != source.digest {
+                return Err(err(
+                    "E_SOURCE_REVISION",
+                    "Source label has conflicting digests",
+                ));
+            }
+        }
+    }
+    Ok(sources.into_values().collect())
+}
+fn envelope(left: &QueryResult, right: Option<&QueryResult>) -> Result<QueryResult, Diagnostic> {
     let mut out = left.clone();
+    out.source_revisions = merge_source_revisions(
+        &left.source_revisions,
+        right.map_or(&[], |r| r.source_revisions.as_slice()),
+    )?;
     out.graph = GraphData::default();
     out.node_origins.clear();
     out.edge_origins.clear();
     out.attachment_origins.clear();
     if let Some(r) = right {
-        out.source_revisions = unique(
-            left.source_revisions
-                .iter()
-                .chain(&r.source_revisions)
-                .cloned(),
-        );
         out.input_snapshots = unique(
             left.input_snapshots
                 .iter()
@@ -142,7 +159,7 @@ fn envelope(left: &QueryResult, right: Option<&QueryResult>) -> QueryResult {
         }
     }
     out.version = VERSION.into();
-    out
+    Ok(out)
 }
 const TYPE_PREFIX: &str = "weave:algebra:type:";
 fn type_key(schema: &GraphSchema, id: &str) -> String {
@@ -254,7 +271,7 @@ pub fn union(
 ) -> Result<QueryResult, Diagnostic> {
     preflight(&left, ctx)?;
     preflight(&right, ctx)?;
-    let mut out = envelope(&left, Some(&right));
+    let mut out = envelope(&left, Some(&right))?;
     out.graph.schema = merge_schema(left.graph.schema.as_ref(), right.graph.schema.as_ref())?;
     let mut nodes: BTreeMap<String, Node> = BTreeMap::new();
     let mut edges: BTreeMap<String, Edge> = BTreeMap::new();
@@ -599,7 +616,7 @@ pub fn support(
         ("state".into(), json!(state)),
     ]
     .into();
-    let mut out = envelope(&input, None);
+    let mut out = envelope(&input, None)?;
     let mut budget = Budget::new(ctx);
     let mut derivations = Vec::new();
     let mut append = |parents: Vec<&Derivation>| -> Result<(), Diagnostic> {
@@ -1050,5 +1067,29 @@ mod tests {
         );
         let result = support(input, "other", &target("A"), &target("B"), 5, &ctx()).unwrap();
         assert_eq!(state(&result), "unknown");
+    }
+    #[test]
+    fn source_manifest_merges_reject_conflicting_labels() {
+        let source = SourceRevision {
+            name: "R".into(),
+            revision: "1".into(),
+            digest: "a".into(),
+        };
+        let changed = SourceRevision {
+            digest: "b".into(),
+            ..source.clone()
+        };
+        assert_eq!(
+            merge_source_revisions(std::slice::from_ref(&source), &[changed])
+                .unwrap_err()
+                .code,
+            "E_SOURCE_REVISION"
+        );
+        assert_eq!(
+            merge_source_revisions(std::slice::from_ref(&source), std::slice::from_ref(&source))
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }

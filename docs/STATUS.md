@@ -4,11 +4,12 @@ Public MIT implementation in progress; recovered original papers are reconciled.
 
 ## Implemented
 
-- Versions 0.1–0.6: immutable SQLite snapshots/CAS, half-open time, principal-filtered pinned queries, interval-aware identity-space joins and reusable pure graph values.
+- Versions 0.1–0.7: immutable SQLite snapshots/CAS, half-open time, principal-filtered pinned queries, interval-aware identity-space joins and reusable pure graph values.
 - Version 0.4 adds immutable embedded schemas, typed joins, named contextual metadata, atomic logical snapshot manifests with constructible metadata cycles, required dependency checks, live handle pinning, and no-op suppression. See [contract](contract/v0.4/README.md).
 - Signed per-operation native Query/Publish/Propose admission with durable nonce receipts, accepted-branch scope checks, isolated proposal quarantine and subject-scoped egress; [security boundary](ADMISSION.md). No remote arbitrary-program authority or transport server is implied.
 - Trusted host read/write boundaries, transitive derivation restrictions, generic partial coverage, bounded materialization and whole-program rollback.
 - Version 0.6 explicitly separates structural edges from source assertions, preserving source/context/identity through graph values; source manifests and portable computation/explanation identities are included.
+- Version 0.7 finite range-restricted graph rules with temporal proof closure, host work budgets, explicit negative evidence and live-view retraction; [profile](contract/v0.7/README.md).
 - Version 0.5 bounded union/diff/project and time-specific four-valued support, with typed composition, pinned node origins and persisted alternative derivation groups.
 - Durable principal-scoped named views, exact-snapshot recomputation, explicit freshness, time ticks and membership retractions; [view boundaries](VIEWS.md).
 - Scoped durable adapter dispatch with leases, lifecycle/retry/dead letters, atomic graph writes plus receipt/checkpoint, and explicit unknown external effect intents; [recovery boundary](DISPATCH.md).

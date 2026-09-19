@@ -1,7 +1,10 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.6.0";
+pub const VERSION: &str = "0.7.0";
+pub mod rules;
+mod rules_types;
+pub use rules_types::*;
 pub mod algebra;
 pub mod identity;
 pub use identity::SourceRevision;
@@ -173,6 +176,10 @@ pub enum Command {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphExpression {
+    Reason {
+        input: Box<GraphExpression>,
+        rules: RuleSet,
+    },
     Union {
         left: Box<GraphExpression>,
         right: Box<GraphExpression>,

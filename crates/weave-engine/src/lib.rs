@@ -116,7 +116,7 @@ impl Engine {
         Ok(engine)
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
-        if ![VERSION, "0.5.0", "0.4.0", "0.3.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.6.0", "0.5.0", "0.4.0", "0.3.0"].contains(&program.version.as_str())
             && program.version != "0.2.0"
             && program.version != "0.3.0"
             && program.version != LEGACY_VERSION
@@ -131,7 +131,7 @@ impl Engine {
         {
             return Err(err("E_VERSION", "join requires contract 0.2.0"));
         }
-        if ![VERSION, "0.5.0", "0.4.0", "0.3.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.6.0", "0.5.0", "0.4.0", "0.3.0"].contains(&program.version.as_str())
             && program
                 .commands
                 .iter()
@@ -139,8 +139,8 @@ impl Engine {
         {
             return Err(err("E_VERSION", "graph expressions require contract 0.3.0"));
         }
-        if ![VERSION, "0.5.0", "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
-        if ![VERSION, "0.5.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.6.0", "0.5.0", "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
+        if ![VERSION, "0.6.0", "0.5.0"].contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => {
                     data.edges.iter().any(|e| !e.derivations.is_empty())
@@ -156,7 +156,7 @@ impl Engine {
                 "derivation alternatives require contract 0.5.0",
             ));
         }
-        if program.version != VERSION
+        if ![VERSION, "0.6.0"].contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => requires_explicit_profile(data),
                 Command::CommitBatch { commits, .. } => {
@@ -175,7 +175,9 @@ impl Engine {
                 validate_expression_profile(value, &program.version)?;
             }
         }
-        if !program.source_revisions.is_empty() && program.version != VERSION {
+        if !program.source_revisions.is_empty()
+            && ![VERSION, "0.6.0"].contains(&program.version.as_str())
+        {
             return Err(err(
                 "E_VERSION",
                 "source revision manifests require contract 0.6.0",
@@ -216,7 +218,8 @@ impl Engine {
             for command in &program.commands {
                 let mut command_result = match command {
                     Command::CommitBatch { batch_id, commits } => {
-                        if ![VERSION, "0.5.0", "0.4.0"].contains(&program.version.as_str()) {
+                        if ![VERSION, "0.6.0", "0.5.0", "0.4.0"].contains(&program.version.as_str())
+                        {
                             return Err(err(
                                 "E_VERSION",
                                 "snapshot batches require contract 0.4.0",
@@ -239,11 +242,7 @@ impl Engine {
                             ));
                         }
                         let mut result = self.expression(value, &values, host, 0, &mut 1000)?;
-                        for source in &program.source_revisions {
-                            if !result.source_revisions.contains(source) {
-                                result.source_revisions.push(source.clone());
-                            }
-                        }
+                        merge_sources(&mut result.source_revisions, &program.source_revisions)?;
                         value_size += result.graph.nodes.len() + result.graph.edges.len();
                         if value_size > 200_000 {
                             return Err(err("E_BUDGET", "bound graph value budget exceeded"));
@@ -292,11 +291,7 @@ impl Engine {
                     },
                 };
                 if let CommandResult::Queried { result } = &mut command_result {
-                    for source in &program.source_revisions {
-                        if !result.source_revisions.contains(source) {
-                            result.source_revisions.push(source.clone());
-                        }
-                    }
+                    merge_sources(&mut result.source_revisions, &program.source_revisions)?;
                     if let Command::Bind { name, .. } = command {
                         if let Some(bound) = values.get_mut(name) {
                             bound.source_revisions = result.source_revisions.clone();
@@ -922,13 +917,12 @@ impl Engine {
                 ))?)
             );
         }
-        let result = QueryResult {
-            source_revisions: l
-                .source_revisions
-                .iter()
-                .chain(&r.source_revisions)
-                .cloned()
-                .collect(),
+        let mut result = QueryResult {
+            source_revisions: algebra::merge_source_revisions(
+                &l.source_revisions,
+                &r.source_revisions,
+            )
+            .map_err(|d| err(&d.code, &d.message))?,
             version: VERSION.into(),
             graph: GraphData {
                 profile: GraphProfile::Legacy,
@@ -949,6 +943,7 @@ impl Engine {
             attachment_origins,
             metadata_graphs,
         };
+        merge_sources(&mut result.source_revisions, &[])?;
         validate_graph(&result.graph)?;
         json_size(&result, MATERIALIZED_LIMIT)?;
         Ok(result)
@@ -966,6 +961,21 @@ impl Engine {
         }
         *budget -= 1;
         match expression {
+            GraphExpression::Reason { input, rules: set } => {
+                let input = self.expression(input, values, host, depth + 1, budget)?;
+                rules::reason(
+                    input,
+                    set,
+                    &RuleBudget {
+                        max_steps: 100_000,
+                        max_rounds: 128,
+                        max_facts: 10_000,
+                        max_derivations: 128,
+                    },
+                    &algebra_context(host),
+                )
+                .map_err(|d| err(&d.code, &d.message))
+            }
             GraphExpression::Union { left, right } => {
                 let l = self.expression(left, values, host, depth + 1, budget)?;
                 let r = self.expression(right, values, host, depth + 1, budget)?;
@@ -1650,31 +1660,39 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             return Err(err("E_BUDGET", "expression structure exceeds budget"));
         }
         match expression {
+            GraphExpression::Reason { input, .. } => {
+                if version != VERSION {
+                    return Err(err("E_VERSION", "finite rules require contract 0.7.0"));
+                }
+                pending.push((input, depth + 1));
+            }
             GraphExpression::Union { left, right }
             | GraphExpression::Diff {
                 before: left,
                 after: right,
             } => {
-                if ![VERSION, "0.5.0"].contains(&version) {
+                if ![VERSION, "0.6.0", "0.5.0"].contains(&version) {
                     return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
                 }
                 pending.push((left, depth + 1));
                 pending.push((right, depth + 1));
             }
             GraphExpression::Project { input, .. } | GraphExpression::Support { input, .. } => {
-                if ![VERSION, "0.5.0"].contains(&version) {
+                if ![VERSION, "0.6.0", "0.5.0"].contains(&version) {
                     return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
                 }
                 pending.push((input, depth + 1));
             }
             GraphExpression::Metadata { input, host, .. } => {
-                if matches!(host, MetadataHost::Assertion { .. }) && version != VERSION {
+                if matches!(host, MetadataHost::Assertion { .. })
+                    && ![VERSION, "0.6.0"].contains(&version)
+                {
                     return Err(err(
                         "E_VERSION",
                         "assertion metadata hosts require contract 0.6.0",
                     ));
                 }
-                if ![VERSION, "0.5.0", "0.4.0"].contains(&version) {
+                if ![VERSION, "0.6.0", "0.5.0", "0.4.0"].contains(&version) {
                     return Err(err(
                         "E_VERSION",
                         "metadata expressions require contract 0.4.0",
@@ -1715,4 +1733,35 @@ fn requires_explicit_profile(data: &GraphData) -> bool {
             .attachments
             .iter()
             .any(|a| matches!(a.host, MetadataHost::Assertion { .. }))
+}
+
+fn merge_sources(target: &mut Vec<SourceRevision>, sources: &[SourceRevision]) -> Result<()> {
+    let mut labels = BTreeMap::new();
+    for source in target.iter().chain(sources) {
+        if labels
+            .insert((&source.name, &source.revision), &source.digest)
+            .is_some_and(|prior| prior != &source.digest)
+        {
+            return Err(err(
+                "E_SOURCE_REVISION",
+                "source revision label has conflicting content identity",
+            ));
+        }
+    }
+    for source in sources {
+        if target.iter().any(|prior| {
+            prior.name == source.name
+                && prior.revision == source.revision
+                && prior.digest != source.digest
+        }) {
+            return Err(err(
+                "E_SOURCE_REVISION",
+                "source revision label has conflicting content identity",
+            ));
+        }
+        if !target.contains(source) {
+            target.push(source.clone());
+        }
+    }
+    Ok(())
 }

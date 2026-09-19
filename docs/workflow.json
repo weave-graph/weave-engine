@@ -165,7 +165,10 @@
         },
         "docs/contract/v0.5/README.md",
         "crates/weave-contract/src/algebra.rs",
-        "crates/weave-contract/src/identity.rs"
+        "crates/weave-contract/src/identity.rs",
+        "docs/contract/v0.7/README.md",
+        "crates/weave-contract/src/rules.rs",
+        "crates/weave-engine/tests/rules.rs"
       ]
     },
     {
@@ -273,7 +276,10 @@
       "evidence": [
         "docs/VIEWS.md",
         "crates/weave-engine/src/views.rs",
-        "crates/weave-engine/tests/views.rs"
+        "crates/weave-engine/tests/views.rs",
+        "docs/contract/v0.7/README.md",
+        "crates/weave-contract/src/rules.rs",
+        "crates/weave-engine/tests/rules.rs"
       ]
     },
     {
