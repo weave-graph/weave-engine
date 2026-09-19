@@ -687,3 +687,222 @@ fn metadata_navigation_keeps_the_same_scoped_coverage_with_hidden_members() {
     }
     assert_eq!(results[0], results[1]);
 }
+
+#[test]
+fn revoked_identity_policy_invalidates_cached_views_transitions_and_dispatch_without_head_change() {
+    let (mut e, mut c) = setup();
+    c.groups[0].pop();
+    e.submit_identity_candidate(&c, &host("alice")).unwrap();
+    let accepted = e
+        .accept_identity_candidate(&request(&c, None, "accept"), &host("reviewer"))
+        .unwrap();
+    let mut data = e
+        .resolve_identity(
+            &selection(&c, &accepted.reference.revision, "operations"),
+            &host("bob"),
+        )
+        .unwrap()
+        .graph;
+    for n in &mut data.nodes {
+        n.readers.clear();
+    }
+    for edge in &mut data.edges {
+        edge.readers.clear();
+    }
+    e.execute(
+        &Program {
+            version: VERSION.into(),
+            source_revisions: vec![],
+            commands: vec![Command::Commit {
+                graph_id: "copy".into(),
+                branch_id: "main".into(),
+                expected_head: None,
+                data,
+            }],
+        },
+        &host("alice"),
+    )
+    .unwrap();
+    let head = e.head("copy", "main").unwrap();
+    let view = ViewDefinition {
+        id: "accepted".into(),
+        expression: GraphExpression::Query {
+            query: serde_json::from_value(json!({"graph_id":"copy"})).unwrap(),
+        },
+        clock: ViewClock::Fixed,
+    };
+    let registered = e.register_view(&view, None, &host("bob")).unwrap();
+    assert!(registered.current);
+    assert_eq!(registered.result.graph.edges.len(), 1);
+    assert!(e
+        .view_changes("accepted", 0, &host("bob"))
+        .unwrap()
+        .is_some());
+    for (id, graph) in [
+        ("copy-adapter", "copy"),
+        ("mapping-adapter", accepted.reference.graph_id.as_str()),
+    ] {
+        e.install_adapter(
+            &AdapterManifest {
+                id: id.into(),
+                version: "1".into(),
+                artifact_digest: format!("sha256:{}", "a".repeat(64)),
+                config_revision: "1".into(),
+                principal: "bob".into(),
+                subscriptions: vec![SubscriptionScope {
+                    graph_id: graph.into(),
+                    branch_id: "main".into(),
+                }],
+                output_graphs: vec![],
+                effect_destinations: vec![],
+                max_attempts: 3,
+                lease_ms: 100,
+                max_pending_events: 100,
+                projection_replay: false,
+            },
+            &host("bob"),
+        )
+        .unwrap();
+        e.set_adapter_state(id, "running").unwrap();
+        assert!(e.poll_adapter(id, 0).unwrap().is_some());
+    }
+    e.revoke_identity_policy(&c.policy).unwrap();
+    assert_eq!(e.head("copy", "main").unwrap(), head);
+    for freshness in [ViewFreshness::RequireCurrent, ViewFreshness::AllowStale] {
+        assert_eq!(
+            e.read_view("accepted", None, freshness, &host("bob"))
+                .unwrap_err()
+                .code,
+            "E_UNAVAILABLE"
+        );
+    }
+    assert_eq!(
+        e.view_changes("accepted", 0, &host("bob"))
+            .unwrap_err()
+            .code,
+        "E_UNAVAILABLE"
+    );
+    for id in ["copy-adapter", "mapping-adapter"] {
+        assert_eq!(e.poll_adapter(id, 101).unwrap_err().code, "E_UNAVAILABLE");
+    }
+    let refreshed = e.refresh_view("accepted", None, &host("bob")).unwrap();
+    assert!(refreshed.result.graph.nodes.is_empty());
+    // A fresh empty result must not expose removed private member IDs through its old transition.
+    assert_eq!(
+        e.view_changes("accepted", 1, &host("bob"))
+            .unwrap_err()
+            .code,
+        "E_UNAVAILABLE"
+    );
+    assert!(e
+        .read_view("accepted", None, ViewFreshness::AllowStale, &host("bob"))
+        .unwrap()
+        .result
+        .graph
+        .nodes
+        .is_empty());
+}
+
+#[test]
+fn revoked_identity_policy_blocks_signed_cached_response_retry() {
+    use ed25519_dalek::SigningKey;
+    use weave_policy::{
+        Action, AdmissionContext, AdmissionProof, Capability, Operation, Request, RootAuthority,
+        Scope,
+    };
+    let (mut e, mut c) = setup();
+    c.groups[0].pop();
+    e.submit_identity_candidate(&c, &host("alice")).unwrap();
+    let accepted = e
+        .accept_identity_candidate(&request(&c, None, "accept"), &host("reviewer"))
+        .unwrap();
+    let root = SigningKey::from_bytes(&[17; 32]);
+    let user = SigningKey::from_bytes(&[18; 32]);
+    let mut scopes: Vec<_> = [
+        accepted.reference.graph_id.as_str(),
+        "physical",
+        "operations",
+    ]
+    .into_iter()
+    .map(|id| Scope {
+        graph_id: id.into(),
+        branch_id: "main".into(),
+        actions: [Action::Read, Action::Traverse].into(),
+    })
+    .collect();
+    scopes.sort();
+    let context = AdmissionContext {
+        audience: "replica".into(),
+        now_ms: 200,
+        policy_epoch: "epoch".into(),
+        roots: vec![RootAuthority {
+            issuer: weave_policy::public_key(&root),
+            audience: "replica".into(),
+            policy_revision: "1".into(),
+            scopes: scopes.clone(),
+            not_before_ms: 0,
+            expires_at_ms: 10000,
+            max_delegations: 1,
+        }],
+        revoked_capabilities: Default::default(),
+        revoked_keys: Default::default(),
+        consumed_nonces: Default::default(),
+    };
+    e.install_admission_policy(&context).unwrap();
+    let query: QueryPlan =
+        serde_json::from_value(json!({"graph_id":accepted.reference.graph_id})).unwrap();
+    let cap = weave_policy::sign_capability(
+        Capability {
+            version: weave_policy::VERSION.into(),
+            issuer: weave_policy::public_key(&root),
+            subject: weave_policy::public_key(&user),
+            audience: "replica".into(),
+            policy_revision: "1".into(),
+            scopes,
+            not_before_ms: 10,
+            expires_at_ms: 9000,
+            delegations_remaining: 0,
+            parent: None,
+        },
+        &root,
+    )
+    .unwrap();
+    let request = weave_policy::sign_request(
+        Request {
+            version: weave_policy::REQUEST_VERSION.into(),
+            subject: weave_policy::public_key(&user),
+            audience: "replica".into(),
+            capability_id: weave_policy::capability_id(&cap).unwrap(),
+            nonce: "12".repeat(32),
+            issued_at_ms: 100,
+            expires_at_ms: 1000,
+            operation: Operation {
+                action: Action::Read,
+                graph_id: accepted.reference.graph_id.clone(),
+                branch_id: "main".into(),
+            },
+            body_digest: weave_policy::body_digest(&serde_json::to_vec(&query).unwrap()),
+        },
+        &user,
+    )
+    .unwrap();
+    let proof = AdmissionProof {
+        chain: vec![cap],
+        request,
+    };
+    assert_eq!(
+        e.admit_query(&proof, &query, 200)
+            .unwrap()
+            .result
+            .graph
+            .nodes
+            .len(),
+        2
+    );
+    assert!(e.admit_query(&proof, &query, 201).unwrap().duplicate);
+    e.revoke_identity_policy(&c.policy).unwrap();
+    assert_eq!(
+        e.admit_query(&proof, &query, 202).unwrap_err().code,
+        "E_UNAVAILABLE"
+    );
+}

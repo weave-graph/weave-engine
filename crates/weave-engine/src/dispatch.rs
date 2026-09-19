@@ -187,10 +187,13 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         {
             return Ok(None);
         }
+        let host = HostContext::new(&manifest.principal, manifest.output_graphs.clone());
+        if !self.identity_reference_allowed(&graph, &revision, &host)? {
+            return Ok(None);
+        }
         let Some(data) = self.load(&graph, &revision)? else {
             return Ok(None);
         };
-        let host = HostContext::new(&manifest.principal, manifest.output_graphs.clone());
         let (visible, incomplete) = self.authorized(data.clone(), &host)?;
         if incomplete || visible != data {
             return Ok(None);

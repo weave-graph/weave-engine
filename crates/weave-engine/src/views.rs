@@ -55,6 +55,7 @@ impl Engine {
     pub(crate) fn initialize_views(&self) -> Result<()> {
         self.conn.execute_batch("CREATE TABLE IF NOT EXISTS live_views(id TEXT NOT NULL,principal TEXT NOT NULL,definition TEXT NOT NULL,tick INTEGER,generation INTEGER NOT NULL,result TEXT NOT NULL,dependencies TEXT NOT NULL,PRIMARY KEY(id,principal));
 CREATE TABLE IF NOT EXISTS live_view_changes(id TEXT NOT NULL,principal TEXT NOT NULL,generation INTEGER NOT NULL,transition TEXT NOT NULL,PRIMARY KEY(id,principal));
+CREATE TABLE IF NOT EXISTS view_change_authorization(id TEXT NOT NULL,principal TEXT NOT NULL,prior_result TEXT NOT NULL,PRIMARY KEY(id,principal));
 CREATE TABLE IF NOT EXISTS view_dependencies(id TEXT NOT NULL,principal TEXT NOT NULL,graph_id TEXT NOT NULL,branch_id TEXT NOT NULL,PRIMARY KEY(id,principal,graph_id,branch_id));
 CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,branch_id);")?;
         Ok(())
@@ -104,7 +105,13 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
                 serde_json::to_string(&dependencies)?
             ],
         )?;
-        self.record_view_change(&definition.id, &host.principal, &change, &dependencies)?;
+        self.record_view_change(
+            &definition.id,
+            &host.principal,
+            &change,
+            &dependencies,
+            &result,
+        )?;
         tx.commit()?;
         Ok(ViewSnapshot {
             generation: 1,
@@ -201,6 +208,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             None
         };
         let record = self.load_view(id, host)?;
+        self.require_current_result_authority(&record.result, host)?;
         let current = self.view_current(&record, tick)?;
         if !current && freshness == ViewFreshness::RequireCurrent {
             return Err(err("E_FRESHNESS", "view requires explicit refresh"));
@@ -242,7 +250,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         self.conn.execute("UPDATE live_views SET tick=?3,generation=?4,result=?5,dependencies=?6 WHERE id=?1 AND principal=?2",params![id,host.principal,tick,generation,serde_json::to_string(&result)?,serde_json::to_string(&dependencies)?])?;
         if changed {
             let change = change_between(Some(&old.result), &result, generation as u64, tick);
-            self.record_view_change(id, &host.principal, &change, &dependencies)?;
+            self.record_view_change(id, &host.principal, &change, &dependencies, &old.result)?;
         }
         tx.commit()?;
         Ok(ViewSnapshot {
@@ -258,8 +266,11 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         principal: &str,
         change: &ViewChange,
         dependencies: &[HeadDependency],
+        previous: &QueryResult,
     ) -> Result<()> {
         json_size(change, MATERIALIZED_LIMIT)?;
+        json_size(previous, MATERIALIZED_LIMIT)?;
+        self.conn.execute("INSERT INTO view_change_authorization VALUES (?1,?2,?3) ON CONFLICT(id,principal) DO UPDATE SET prior_result=excluded.prior_result", params![id,principal,serde_json::to_string(previous)?])?;
         self.conn.execute("INSERT INTO live_view_changes VALUES (?1,?2,?3,?4) ON CONFLICT(id,principal) DO UPDATE SET generation=excluded.generation,transition=excluded.transition",params![id,principal,i64::try_from(change.generation).map_err(|_|err("E_BUDGET","view generation out of range"))?,serde_json::to_string(change)?])?;
         self.conn.execute(
             "DELETE FROM view_dependencies WHERE id=?1 AND principal=?2",
@@ -273,6 +284,33 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         }
         Ok(())
     }
+    /// Revalidate stored values before returning them; stale data is never stale authority.
+    pub(crate) fn require_current_result_authority(
+        &self,
+        value: &QueryResult,
+        host: &HostContext,
+    ) -> Result<()> {
+        for reference in &value.input_snapshots {
+            if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
+                return Err(err(
+                    "E_UNAVAILABLE",
+                    "stored result unavailable under current authority",
+                ));
+            }
+        }
+        for data in
+            std::iter::once(&value.graph).chain(value.metadata_graphs.iter().map(|g| &g.graph))
+        {
+            let (authorized, incomplete) = self.authorized(data.clone(), host)?;
+            if incomplete || &authorized != data {
+                return Err(err(
+                    "E_UNAVAILABLE",
+                    "stored result unavailable under current authority",
+                ));
+            }
+        }
+        Ok(())
+    }
     /// One retained transition per view. Gaps explicitly require snapshot resynchronization.
     pub fn view_changes(
         &self,
@@ -280,12 +318,22 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         after_generation: u64,
         host: &HostContext,
     ) -> Result<Option<ViewChange>> {
+        let _read_scope = self.read_budget.enter();
+        let tx = if self.conn.is_autocommit() {
+            Some(self.conn.unchecked_transaction()?)
+        } else {
+            None
+        };
         let record = self.load_view(id, host)?;
+        self.require_current_result_authority(&record.result, host)?;
         let current = record.generation as u64;
         if after_generation > current {
             return Err(err("E_VIEW_CURSOR", "cursor is newer than this view"));
         }
         if after_generation == current {
+            if let Some(tx) = tx {
+                tx.commit()?;
+            }
             return Ok(None);
         }
         if current - after_generation > 1 {
@@ -294,12 +342,34 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
                 "view transition expired; read the current snapshot",
             ));
         }
-        let json: String = self.conn.query_row(
-            "SELECT transition FROM live_view_changes WHERE id=?1 AND principal=?2",
-            params![id, host.principal],
+        self.read_budget.request()?;
+        let limit = self.read_budget.remaining().min(MATERIALIZED_LIMIT) as i64;
+        let prior:Option<Option<String>>=self.conn.query_row("SELECT CASE WHEN length(CAST(prior_result AS BLOB))<=?3 THEN prior_result END FROM view_change_authorization WHERE id=?1 AND principal=?2",params![id,host.principal,limit],|r|r.get(0)).optional()?;
+        let prior = prior
+            .ok_or_else(|| {
+                err(
+                    "E_REPLAY_WINDOW",
+                    "transition authorization unavailable; resynchronize from snapshot",
+                )
+            })?
+            .ok_or_else(|| err("E_BUDGET", "view authorization exceeds read budget"))?;
+        self.read_budget.charge(prior.len())?;
+        self.require_current_result_authority(&serde_json::from_str(&prior)?, host)?;
+        self.read_budget.request()?;
+        let limit = self.read_budget.remaining().min(MATERIALIZED_LIMIT) as i64;
+        let json: Option<String> = self.conn.query_row(
+            "SELECT CASE WHEN length(CAST(transition AS BLOB))<=?3 THEN transition END FROM live_view_changes WHERE id=?1 AND principal=?2",
+            params![id, host.principal,limit],
             |r| r.get(0),
         )?;
-        Ok(Some(serde_json::from_str(&json)?))
+        let json = json.ok_or_else(|| err("E_BUDGET", "view transition exceeds read budget"))?;
+        self.read_budget.charge(json.len())?;
+        let value: ViewChange = serde_json::from_str(&json)?;
+        self.require_current_result_authority(&value.result, host)?;
+        if let Some(tx) = tx {
+            tx.commit()?;
+        }
+        Ok(Some(value))
     }
 }
 fn validate_tick(clock: &ViewClock, tick: Option<i64>) -> Result<()> {

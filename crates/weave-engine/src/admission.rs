@@ -259,6 +259,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
                 scopes,
                 verified.principal(),
             )?;
+            self.require_current_result_authority(&prior.result, &host)?;
             ReadReceipt {
                 result: prior.result.clone(),
                 dependencies: prior.dependencies.clone(),
@@ -596,6 +597,16 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
                 return Err(err("E_BUDGET", "admission dependency budget exceeded"));
             }
             self.require_reference_scope(&reference, scopes, &mut ancestry_steps)?;
+            if !self.identity_reference_allowed(
+                &reference.graph_id,
+                &reference.revision,
+                &HostContext::new(principal, []),
+            )? {
+                return Err(err(
+                    "E_UNAVAILABLE",
+                    "dependency unavailable under current authority",
+                ));
+            }
             dependencies.push(reference.clone());
             let data = self
                 .load(&reference.graph_id, &reference.revision)?
