@@ -328,6 +328,12 @@ fn clock_expression(
     *budget -= 1;
     let mut value = expression.clone();
     match &mut value {
+        GraphExpression::Counterparts { input, selection } => {
+            **input = clock_expression(input, clock, tick, depth + 1, budget)?;
+            if let Some(t) = tick {
+                selection.valid_at = t;
+            }
+        }
         GraphExpression::Geometry {
             operation,
             valid_at,
@@ -419,7 +425,8 @@ fn collect_heads(expression: &GraphExpression, heads: &mut BTreeMap<(String, Str
         | GraphExpression::Project { input, .. }
         | GraphExpression::Reason { input, .. }
         | GraphExpression::Context { input, .. }
-        | GraphExpression::Explain { input } => collect_heads(input, heads),
+        | GraphExpression::Explain { input }
+        | GraphExpression::Counterparts { input, .. } => collect_heads(input, heads),
         GraphExpression::Reference { .. } => {}
     }
 }

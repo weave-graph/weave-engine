@@ -1,6 +1,6 @@
 [package]
 name = "weave-engine"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2021"
 license = "MIT"
 description = "Local-first Weave graph runtime foundation"
@@ -8,7 +8,7 @@ description = "Local-first Weave graph runtime foundation"
 [dependencies]
 weave-spaces = { path = "../weave-spaces", version = "0.1.0" }
 weave-policy = { path = "../weave-policy", version = "0.1.0" }
-weave-contract = { path = "../weave-contract", version = "0.9.0" }
+weave-contract = { path = "../weave-contract", version = "0.10.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.38", features = ["bundled"] }

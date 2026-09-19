@@ -1,7 +1,8 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.9.0";
+pub const VERSION: &str = "0.10.0";
+pub mod counterpart;
 mod geometry_types;
 pub use geometry_types::*;
 pub mod context;
@@ -183,9 +184,22 @@ pub enum Command {
         query: QueryPlan,
     },
 }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CounterpartSelection {
+    pub predicate: String,
+    pub entity_id: String,
+    pub from_space_id: String,
+    pub to_space_id: String,
+    pub valid_at: i64,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphExpression {
+    Counterparts {
+        input: Box<GraphExpression>,
+        selection: CounterpartSelection,
+    },
     Geometry {
         operation: GeometryOperation,
         valid_at: i64,

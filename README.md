@@ -13,10 +13,12 @@ The CLI is a **trusted local host**: `--actor` selects a principal and `--write`
 
 The companion [Weave language](https://github.com/weave-graph/weave-language) compiles into the shared versioned contract. The engine owns the canonical I/O-free [`weave-contract`](crates/weave-contract/src/lib.rs) crate; the language vendors an exact copy for independent builds.
 
-See [current evidence and limitations](docs/STATUS.md), [implementation plan](docs/IMPLEMENTATION_PLAN.md), [workflow DAG](docs/WORKFLOW.md), [contract](docs/contract/v0.9/README.md) and [source provenance](docs/SOURCES.md). General joins, signed peer synchronization, capabilities/governance, real mobile/browser persistence, broader geometry and automatic clustering remain open. The [original white papers](docs/source/README.md) have been recovered and [reconciled](docs/RECONCILIATION.md). MIT licensed.
+See [current evidence and limitations](docs/STATUS.md), [implementation plan](docs/IMPLEMENTATION_PLAN.md), [workflow DAG](docs/WORKFLOW.md), [contract](docs/contract/v0.10/README.md) and [source provenance](docs/SOURCES.md). General joins, signed peer synchronization, capabilities/governance, real mobile/browser persistence, broader geometry and automatic clustering remain open. The [original white papers](docs/source/README.md) have been recovered and [reconciled](docs/RECONCILIATION.md). MIT licensed.
 
 Finite rule closure is available through the [0.7 contract](docs/contract/v0.7/README.md); signed host admission has a separate [security boundary](docs/ADMISSION.md).
 
 Exact context selection and qualified metadata access are described in the [0.8 contract](docs/contract/v0.8/README.md).
 
 Authorized assertion-backed geometry and graph-valued explanations are described in the [0.9 contract](docs/contract/v0.9/README.md).
+
+Declared counterpart bridge selection is available in the [0.10 contract](docs/contract/v0.10/README.md); it does not yet implement governed identity merging or splitting.
