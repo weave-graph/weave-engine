@@ -1,6 +1,6 @@
 # Accepted-view governance — next bounded native stage
 
-Status: design for review, not implemented. Targets E11 requirements R25/R26 and the engine paper §§9–10.2. Optional means a deployment may choose owner publication or reviewed publication; the requested project still needs both profiles. This stage does not close federation consensus, policy-graph interpretation or all governance requirements.
+Status: native pointer/approval/atomic decision stages implemented; see [current profile and evidence](GOVERNANCE.md). Graph-valued decisions, authorized streams and the broader stages below remain design, not completed. Targets E11 requirements R25/R26 and the engine paper §§9–10.2. Optional means a deployment may choose owner publication or reviewed publication; the requested project still needs both profiles. This stage does not close federation consensus, policy-graph interpretation or all governance requirements.
 
 ## Boundary and proposed API
 

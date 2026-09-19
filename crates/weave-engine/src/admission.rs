@@ -537,7 +537,12 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
             "dependency outside authorized accepted history",
         ))
     }
-    fn reachable_revision(&self, graph: &str, branch: &str, revision: &str) -> Result<bool> {
+    pub(crate) fn reachable_revision(
+        &self,
+        graph: &str,
+        branch: &str,
+        revision: &str,
+    ) -> Result<bool> {
         self.reachable_revision_bounded(graph, branch, revision, &mut 0)
     }
     fn reachable_revision_bounded(

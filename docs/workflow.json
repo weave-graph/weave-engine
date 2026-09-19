@@ -444,7 +444,7 @@
       "id": "E11",
       "title": "Optional governance and acceptance",
       "owner": "engine",
-      "state": "proposed",
+      "state": "in_progress",
       "depends_on": [
         "E04",
         "E09"
@@ -454,7 +454,11 @@
         "R25",
         "R26"
       ],
-      "evidence": []
+      "evidence": [
+        "docs/GOVERNANCE.md",
+        "crates/weave-engine/tests/governance.rs",
+        "scripts/check_governance_recovery.py"
+      ]
     },
     {
       "id": "E12",
