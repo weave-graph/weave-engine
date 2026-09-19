@@ -5,6 +5,8 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use weave_contract::*;
+mod capsule;
+pub use capsule::{Capsule, CapsuleRevision};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Error {
@@ -69,7 +71,10 @@ impl Engine {
         Ok(Self { conn })
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
-        if program.version != VERSION && program.version != LEGACY_VERSION {
+        if program.version != VERSION
+            && program.version != "0.2.0"
+            && program.version != LEGACY_VERSION
+        {
             return Err(err("E_VERSION", "unsupported contract version"));
         }
         if program.version == LEGACY_VERSION
@@ -80,6 +85,14 @@ impl Engine {
         {
             return Err(err("E_VERSION", "join requires contract 0.2.0"));
         }
+        if program.version != VERSION
+            && program
+                .commands
+                .iter()
+                .any(|c| matches!(c, Command::Bind { .. } | Command::Evaluate { .. }))
+        {
+            return Err(err("E_VERSION", "graph expressions require contract 0.3.0"));
+        }
         if program.commands.len() > 1000 {
             return Err(err("E_BUDGET", "at most 1000 commands"));
         }
@@ -87,8 +100,34 @@ impl Engine {
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
         let result = (|| {
             let mut out = Vec::new();
+            let mut values = BTreeMap::new();
+            let mut value_size = 0usize;
+            let mut materialized_bytes = 0usize;
             for command in &program.commands {
-                out.push(match command {
+                let command_result = match command {
+                    Command::Bind { name, value } => {
+                        if !valid_id(name) || values.contains_key(name) {
+                            return Err(err(
+                                "E_BINDING",
+                                "graph value name must be nonempty and unique",
+                            ));
+                        }
+                        let result = self.expression(value, &values, host, 0, &mut 1000)?;
+                        value_size += result.graph.nodes.len() + result.graph.edges.len();
+                        if value_size > 200_000 {
+                            return Err(err("E_BUDGET", "bound graph value budget exceeded"));
+                        }
+                        materialized_bytes += json_size(
+                            &result,
+                            MATERIALIZED_LIMIT.saturating_sub(materialized_bytes),
+                        )?;
+                        values.insert(name.clone(), result.clone());
+                        CommandResult::Queried { result }
+                    }
+                    Command::Evaluate { value } => CommandResult::Queried {
+                        result: self.expression(value, &values, host, 0, &mut 1000)?,
+                    },
+
                     Command::Join {
                         left,
                         right,
@@ -115,7 +154,12 @@ impl Engine {
                     Command::Query { query } => CommandResult::Queried {
                         result: self.query(query, host)?,
                     },
-                });
+                };
+                materialized_bytes += json_size(
+                    &command_result,
+                    MATERIALIZED_LIMIT.saturating_sub(materialized_bytes),
+                )?;
+                out.push(command_result);
             }
             Ok(out)
         })();
@@ -144,7 +188,7 @@ impl Engine {
                 "host has not granted graph write authority",
             ));
         }
-        if graph.is_empty() || branch.is_empty() || host.principal.is_empty() {
+        if !valid_id(graph) || !valid_id(branch) || !valid_id(&host.principal) {
             return Err(err("E_ID", "identifiers must not be empty"));
         }
         validate_graph(data)?;
@@ -155,6 +199,7 @@ impl Engine {
                 "expected head differs from current branch head",
             ));
         }
+        json_size(data, 16 * 1024 * 1024)?;
         let json = serde_json::to_string(data)?;
         let bytes = serde_json::to_vec(&("weave-revision-v0.1", graph, branch, &head, data))?;
         let revision = format!("sha256:{:x}", Sha256::digest(bytes));
@@ -202,6 +247,13 @@ impl Engine {
             .transpose()
     }
     pub fn query(&self, query: &QueryPlan, host: &HostContext) -> Result<QueryResult> {
+        if !valid_id(&query.graph_id)
+            || !valid_id(&query.branch_id)
+            || !valid_id(&host.principal)
+            || query.revision.as_ref().is_some_and(|v| !valid_id(v))
+        {
+            return Err(err("E_ID", "identifiers require 1 to 512 UTF-8 bytes"));
+        }
         if query.max_depth > 32 {
             return Err(err("E_BUDGET", "metadata depth cannot exceed 32"));
         }
@@ -244,6 +296,7 @@ impl Engine {
             coverage: Coverage::Complete,
             diagnostics: Vec::new(),
             provenance: Vec::new(),
+            edge_origins: BTreeMap::new(),
             metadata_graphs: Vec::new(),
         };
 
@@ -264,6 +317,12 @@ impl Engine {
                 assertion_id: edge.id.clone(),
             })
             .collect();
+        result.edge_origins = result
+            .provenance
+            .iter()
+            .map(|r| (r.assertion_id.clone(), vec![r.clone()]))
+            .collect();
+        let mut query_bytes = json_size(&result, MATERIALIZED_LIMIT)?;
         if query.include_metadata {
             let mut seen = HashSet::from([(query.graph_id.clone(), revision)]);
             let mut pending: std::collections::VecDeque<_> =
@@ -303,6 +362,8 @@ impl Engine {
                             continue;
                         }
                         pending.extend(refs(&data).into_iter().map(|r| (r, depth + 1)));
+                        query_bytes +=
+                            json_size(&data, MATERIALIZED_LIMIT.saturating_sub(query_bytes))?;
                         result.input_snapshots.push(reference.clone());
                         result.metadata_graphs.push(ResolvedGraph {
                             reference,
@@ -322,7 +383,7 @@ impl Engine {
         predicate: &str,
         host: &HostContext,
     ) -> Result<QueryResult> {
-        if predicate.is_empty() {
+        if !valid_id(predicate) {
             return Err(err("E_ID", "join output predicate required"));
         }
         let transaction = if self.conn.is_autocommit() {
@@ -332,6 +393,21 @@ impl Engine {
         };
         let l = self.query(left, host)?;
         let r = self.query(right, host)?;
+        let result = Self::join_values(l, r, predicate, host)?;
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
+        Ok(result)
+    }
+    fn join_values(
+        l: QueryResult,
+        r: QueryResult,
+        predicate: &str,
+        host: &HostContext,
+    ) -> Result<QueryResult> {
+        if !valid_id(predicate) {
+            return Err(err("E_ID", "join output predicate required"));
+        }
         let pairs = l
             .graph
             .edges
@@ -343,11 +419,10 @@ impl Engine {
         }
         let ln: BTreeMap<_, _> = l.graph.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
         let rn: BTreeMap<_, _> = r.graph.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
-        let lr = &l.snapshots[&left.graph_id];
-        let rr = &r.snapshots[&right.graph_id];
         let mut nodes = BTreeMap::new();
         let mut edges = Vec::new();
         let mut provenance = Vec::new();
+        let mut edge_origins = BTreeMap::new();
         for le in &l.graph.edges {
             for re in &r.graph.edges {
                 let a = ln[le.to.as_str()];
@@ -368,33 +443,33 @@ impl Engine {
                 if end.is_some_and(|end| start >= end) {
                     continue;
                 }
-                let premises = vec![
-                    AssertionRef {
-                        graph_id: left.graph_id.clone(),
-                        revision: lr.clone(),
-                        assertion_id: le.id.clone(),
-                    },
-                    AssertionRef {
-                        graph_id: right.graph_id.clone(),
-                        revision: rr.clone(),
-                        assertion_id: re.id.clone(),
-                    },
-                ];
+                let mut premises = l
+                    .edge_origins
+                    .get(&le.id)
+                    .cloned()
+                    .ok_or_else(|| err("E_PROVENANCE", "missing left edge origin"))?;
+                for reference in r
+                    .edge_origins
+                    .get(&re.id)
+                    .ok_or_else(|| err("E_PROVENANCE", "missing right edge origin"))?
+                {
+                    if !premises.contains(reference) {
+                        premises.push(reference.clone());
+                    }
+                }
                 let mut source = ln[le.from.as_str()].clone();
                 let mut target = rn[re.to.as_str()].clone();
                 source.id = format!(
                     "join-node:{:x}",
                     Sha256::digest(serde_json::to_vec(&(
-                        left.graph_id.as_str(),
-                        lr,
+                        &l.input_snapshots,
                         source.id.as_str()
                     ))?)
                 );
                 target.id = format!(
                     "join-node:{:x}",
                     Sha256::digest(serde_json::to_vec(&(
-                        right.graph_id.as_str(),
-                        rr,
+                        &r.input_snapshots,
                         target.id.as_str()
                     ))?)
                 );
@@ -424,8 +499,16 @@ impl Engine {
                 };
                 nodes.insert(source.id.clone(), source);
                 nodes.insert(target.id.clone(), target);
+                edge_origins.insert(edge.id.clone(), premises.clone());
                 edges.push(edge);
-                provenance.extend(premises);
+                if edges.len() > 100_000 {
+                    return Err(err("E_BUDGET", "join output edge budget exceeded"));
+                }
+                for reference in premises {
+                    if !provenance.contains(&reference) {
+                        provenance.push(reference);
+                    }
+                }
             }
         }
         let mut input_snapshots = l.input_snapshots.clone();
@@ -464,9 +547,6 @@ impl Engine {
                 snapshots.insert(reference.graph_id.clone(), reference.revision.clone());
             }
         }
-        if let Some(transaction) = transaction {
-            transaction.commit()?;
-        }
         Ok(QueryResult {
             version: VERSION.into(),
             graph: GraphData {
@@ -478,8 +558,70 @@ impl Engine {
             coverage,
             diagnostics,
             provenance,
+            edge_origins,
             metadata_graphs,
         })
+    }
+    fn expression(
+        &self,
+        expression: &GraphExpression,
+        values: &BTreeMap<String, QueryResult>,
+        host: &HostContext,
+        depth: u32,
+        budget: &mut usize,
+    ) -> Result<QueryResult> {
+        if depth > 32 || *budget == 0 {
+            return Err(err("E_BUDGET", "graph expression budget exceeded"));
+        }
+        *budget -= 1;
+        match expression {
+            GraphExpression::Query { query } => self.query(query, host),
+            GraphExpression::Reference { name } => values
+                .get(name)
+                .cloned()
+                .ok_or_else(|| err("E_BINDING", "graph value is not bound")),
+            GraphExpression::Join {
+                left,
+                right,
+                output_predicate,
+                match_on: JoinMatch::EntitySpaceToFrom,
+            } => {
+                let l = self.expression(left, values, host, depth + 1, budget)?;
+                let r = self.expression(right, values, host, depth + 1, budget)?;
+                Self::join_values(l, r, output_predicate, host)
+            }
+            GraphExpression::Filter {
+                input,
+                predicate,
+                valid_at,
+            } => {
+                let mut value = self.expression(input, values, host, depth + 1, budget)?;
+                value.graph.edges.retain(|e| {
+                    predicate.as_ref().is_none_or(|p| p == &e.predicate)
+                        && valid_at.is_none_or(|t| e.valid_time.contains(t))
+                });
+                if predicate.is_some() || valid_at.is_some() {
+                    let nodes: HashSet<_> = value
+                        .graph
+                        .edges
+                        .iter()
+                        .flat_map(|e| [e.from.clone(), e.to.clone()])
+                        .collect();
+                    value.graph.nodes.retain(|n| nodes.contains(&n.id));
+                }
+                let edges: HashSet<_> = value.graph.edges.iter().map(|e| e.id.as_str()).collect();
+                value
+                    .edge_origins
+                    .retain(|id, _| edges.contains(id.as_str()));
+                value.provenance = Vec::new();
+                for reference in value.edge_origins.values().flatten() {
+                    if !value.provenance.contains(reference) {
+                        value.provenance.push(reference.clone());
+                    }
+                }
+                Ok(value)
+            }
+        }
     }
     fn authorized(&self, data: GraphData, host: &HostContext) -> Result<(GraphData, bool)> {
         let mut data = visible(data, &host.principal);
@@ -632,7 +774,14 @@ impl Engine {
         let rows = stmt.query_map([], |r| {
             Ok(Event {
                 version: VERSION.into(),
-                event_type: "graph.committed".into(),
+                event_type: {
+                    let id: String = r.get(0)?;
+                    if id.starts_with("accept:") {
+                        "graph.accepted".into()
+                    } else {
+                        "graph.committed".into()
+                    }
+                },
                 event_id: r.get(0)?,
                 graph_id: r.get(1)?,
                 branch_id: r.get(2)?,
@@ -680,9 +829,9 @@ fn validate_graph(data: &GraphData) -> Result<()> {
     }
     let mut ids = HashSet::new();
     for n in &data.nodes {
-        if n.id.is_empty()
-            || n.entity_id.is_empty()
-            || n.space_id.is_empty()
+        if !valid_id(&n.id)
+            || !valid_id(&n.entity_id)
+            || !valid_id(&n.space_id)
             || !ids.insert(n.id.as_str())
         {
             return Err(err(
@@ -693,7 +842,7 @@ fn validate_graph(data: &GraphData) -> Result<()> {
     }
     let mut edge_ids = HashSet::new();
     for e in &data.edges {
-        if e.id.is_empty() || e.predicate.is_empty() || !edge_ids.insert(&e.id) {
+        if !valid_id(&e.id) || !valid_id(&e.predicate) || !edge_ids.insert(&e.id) {
             return Err(err(
                 "E_ID",
                 "edge IDs and predicates required; edge IDs unique",
@@ -706,8 +855,26 @@ fn validate_graph(data: &GraphData) -> Result<()> {
             return Err(err("E_INTERVAL", "valid time end must exceed start"));
         }
     }
+    for reader in data
+        .nodes
+        .iter()
+        .flat_map(|n| &n.readers)
+        .chain(data.edges.iter().flat_map(|e| &e.readers))
+    {
+        if !valid_id(reader) {
+            return Err(err("E_ID", "reader identifiers require 1 to 512 bytes"));
+        }
+    }
+    for reference in data.edges.iter().flat_map(|e| &e.derived_from) {
+        if !valid_id(&reference.graph_id)
+            || !valid_id(&reference.revision)
+            || !valid_id(&reference.assertion_id)
+        {
+            return Err(err("E_ID", "provenance identifiers require 1 to 512 bytes"));
+        }
+    }
     for reference in refs(data) {
-        if reference.graph_id.is_empty() || reference.revision.is_empty() {
+        if !valid_id(&reference.graph_id) || !valid_id(&reference.revision) {
             return Err(err(
                 "E_REFERENCE",
                 "metadata reference must pin graph and revision",
@@ -715,4 +882,40 @@ fn validate_graph(data: &GraphData) -> Result<()> {
         }
     }
     Ok(())
+}
+
+const MATERIALIZED_LIMIT: usize = 32 * 1024 * 1024;
+/// Count serialized bytes without allocating a second serialization buffer.
+fn json_size(value: &impl serde::Serialize, limit: usize) -> Result<usize> {
+    struct Counter {
+        size: usize,
+        limit: usize,
+    }
+    impl std::io::Write for Counter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.size = self
+                .size
+                .checked_add(bytes.len())
+                .ok_or_else(|| std::io::Error::other("size overflow"))?;
+            if self.size > self.limit {
+                return Err(std::io::Error::other("materialization limit"));
+            }
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut counter = Counter { size: 0, limit };
+    serde_json::to_writer(&mut counter, value).map_err(|_| {
+        err(
+            "E_BUDGET",
+            "serialized materialization byte budget exceeded",
+        )
+    })?;
+    Ok(counter.size)
+}
+
+fn valid_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 512
 }

@@ -459,3 +459,283 @@ fn same_graph_different_revision_join_retains_both_pins_and_legacy_rejects_join(
     };
     assert!(engine.execute(&p, &host()).is_ok());
 }
+
+fn expression(graph: &str) -> GraphExpression {
+    GraphExpression::Query {
+        query: query(graph),
+    }
+}
+fn joined(left: GraphExpression, right: GraphExpression, predicate: &str) -> GraphExpression {
+    GraphExpression::Join {
+        left: Box::new(left),
+        right: Box::new(right),
+        output_predicate: predicate.into(),
+        match_on: JoinMatch::EntitySpaceToFrom,
+    }
+}
+#[test]
+fn named_graphs_compose_without_persistence_and_keep_leaf_provenance() {
+    let mut engine = Engine::memory().unwrap();
+    let h = HostContext::new("alice", ["g".into(), "evidence".into(), "third".into()]);
+    let mut commands = Vec::new();
+    for (graph, start, end) in [("g", "A", "B"), ("evidence", "B", "C"), ("third", "C", "D")] {
+        let mut d = data();
+        d.nodes[0].entity_id = start.into();
+        d.nodes[1].entity_id = end.into();
+        d.nodes
+            .iter_mut()
+            .for_each(|n| n.space_id = "operational".into());
+        if graph == "g" {
+            d.edges[0].metadata.push(GraphRef {
+                graph_id: "missing".into(),
+                revision: "r0".into(),
+            });
+        }
+        commands.push(commit(graph, None, d));
+    }
+    engine.execute(&program(commands), &h).unwrap();
+    let before = engine.event_count().unwrap();
+    let p = program(vec![
+        Command::Bind {
+            name: "first".into(),
+            value: joined(expression("g"), expression("evidence"), "A_C"),
+        },
+        Command::Evaluate {
+            value: joined(
+                GraphExpression::Filter {
+                    input: Box::new(GraphExpression::Reference {
+                        name: "first".into(),
+                    }),
+                    predicate: Some("A_C".into()),
+                    valid_at: Some(150),
+                },
+                expression("third"),
+                "A_D",
+            ),
+        },
+    ]);
+    let result = engine.execute(&p, &h).unwrap();
+    let CommandResult::Queried { result } = &result[1] else {
+        panic!()
+    };
+    assert_eq!(result.graph.edges.len(), 1);
+    assert_eq!(result.graph.edges[0].derived_from.len(), 3);
+    assert_eq!(result.provenance.len(), 3);
+    assert_eq!(result.input_snapshots.len(), 3);
+    assert_eq!(result.coverage, Coverage::Partial);
+    assert_eq!(result.edge_origins[&result.graph.edges[0].id].len(), 3);
+    assert_eq!(engine.event_count().unwrap(), before);
+    assert!(engine.head("first", "main").unwrap().is_none());
+}
+#[test]
+fn duplicate_unbound_and_excessive_graph_expressions_reject_atomically() {
+    let mut engine = Engine::memory().unwrap();
+    let p = program(vec![
+        commit("g", None, data()),
+        Command::Evaluate {
+            value: GraphExpression::Reference {
+                name: "future".into(),
+            },
+        },
+    ]);
+    assert_eq!(engine.execute(&p, &host()).unwrap_err().code, "E_BINDING");
+    assert_eq!(engine.event_count().unwrap(), 0);
+    engine
+        .execute(&program(vec![commit("g", None, data())]), &host())
+        .unwrap();
+    let bound = Command::Bind {
+        name: "same".into(),
+        value: expression("g"),
+    };
+    assert_eq!(
+        engine
+            .execute(&program(vec![bound.clone(), bound]), &host())
+            .unwrap_err()
+            .code,
+        "E_BINDING"
+    );
+    let mut value = expression("g");
+    for _ in 0..34 {
+        value = GraphExpression::Filter {
+            input: Box::new(value),
+            predicate: None,
+            valid_at: None,
+        };
+    }
+    assert_eq!(
+        engine
+            .execute(&program(vec![Command::Evaluate { value }]), &host())
+            .unwrap_err()
+            .code,
+        "E_BUDGET"
+    );
+    let old = Program {
+        version: "0.2.0".into(),
+        commands: vec![Command::Evaluate {
+            value: expression("g"),
+        }],
+    };
+    assert_eq!(engine.execute(&old, &host()).unwrap_err().code, "E_VERSION");
+}
+
+#[test]
+fn malicious_json_cannot_mint_authority_or_bind_itself() {
+    let mut engine = Engine::memory().unwrap();
+    let self_reference:Program=serde_json::from_str(r#"{"version":"0.3.0","commands":[{"op":"bind","name":"self","value":{"kind":"reference","name":"self"}}]}"#).unwrap();
+    assert_eq!(
+        engine.execute(&self_reference, &host()).unwrap_err().code,
+        "E_BINDING"
+    );
+    let widened = r#"{"version":"0.3.0","commands":[{"op":"evaluate","value":{"kind":"query","query":{"graph_id":"secret","actor":"admin"}}}]}"#;
+    assert!(serde_json::from_str::<Program>(widened).is_err());
+    let extra = r#"{"version":"0.3.0","commands":[{"op":"bind","name":"x","value":{"kind":"reference","name":"x","grant":"all"}}]}"#;
+    assert!(serde_json::from_str::<Program>(extra).is_err());
+    assert_eq!(engine.event_count().unwrap(), 0);
+}
+
+#[test]
+fn capsule_receive_is_idempotent_quarantined_and_fork_edits_are_independent() {
+    let mut source = Engine::memory().unwrap();
+    let rev = revision(
+        &source
+            .execute(&program(vec![commit("g", None, data())]), &host())
+            .unwrap(),
+    );
+    let reference = GraphRef {
+        graph_id: "g".into(),
+        revision: rev.clone(),
+    };
+    let capsule = source.export_capsule(&reference, &host()).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("offline.db");
+    let mut dest = Engine::open(&path).unwrap();
+    assert_eq!(dest.receive_capsule(&capsule, &host()).unwrap(), 1);
+    assert_eq!(dest.receive_capsule(&capsule, &host()).unwrap(), 0);
+    assert!(dest.head("g", "main").unwrap().is_none());
+    assert_eq!(dest.event_count().unwrap(), 0);
+    dest.accept_revision(&reference, "main", None, &host())
+        .unwrap();
+    dest.fork_branch(&reference, "offline", &host()).unwrap();
+    let mut changed = data();
+    changed.nodes[0]
+        .properties
+        .insert("offline".into(), true.into());
+    let command = Command::Commit {
+        graph_id: "g".into(),
+        branch_id: "offline".into(),
+        expected_head: Some(rev.clone()),
+        data: changed,
+    };
+    dest.execute(&program(vec![command]), &host()).unwrap();
+    assert_eq!(dest.head("g", "main").unwrap(), Some(rev.clone()));
+    assert_ne!(dest.head("g", "offline").unwrap(), Some(rev));
+    drop(dest);
+    let dest = Engine::open(path).unwrap();
+    assert_eq!(dest.event_count().unwrap(), 3);
+    assert_eq!(dest.events().unwrap()[0].event_type, "graph.accepted");
+}
+#[test]
+fn capsule_tamper_undeclared_dependency_and_unauthorized_acceptance_fail() {
+    let mut source = Engine::memory().unwrap();
+    let mut d = data();
+    d.edges[0].metadata.push(GraphRef {
+        graph_id: "missing".into(),
+        revision: "r0".into(),
+    });
+    let rev = revision(
+        &source
+            .execute(&program(vec![commit("g", None, d)]), &host())
+            .unwrap(),
+    );
+    let reference = GraphRef {
+        graph_id: "g".into(),
+        revision: rev,
+    };
+    let capsule = source.export_capsule(&reference, &host()).unwrap();
+    assert_eq!(capsule.external_dependencies.len(), 1);
+    let mut dest = Engine::memory().unwrap();
+    let mut tampered = capsule.clone();
+    tampered.revisions[0].data.nodes[0].entity_id = "tampered".into();
+    assert_eq!(
+        dest.receive_capsule(&tampered, &host()).unwrap_err().code,
+        "E_INTEGRITY"
+    );
+    let mut hidden_boundary = capsule.clone();
+    hidden_boundary.external_dependencies.clear();
+    assert_eq!(
+        dest.receive_capsule(&hidden_boundary, &host())
+            .unwrap_err()
+            .code,
+        "E_INTEGRITY"
+    );
+    dest.receive_capsule(&capsule, &host()).unwrap();
+    let bob = HostContext::new("bob", Vec::<String>::new());
+    assert_eq!(
+        dest.accept_revision(&reference, "main", None, &bob)
+            .unwrap_err()
+            .code,
+        "E_FORBIDDEN"
+    );
+    assert!(dest.head("g", "main").unwrap().is_none());
+    assert_eq!(dest.event_count().unwrap(), 0);
+}
+
+#[test]
+fn repeated_accepted_transitions_have_distinct_events_and_strict_cas() {
+    let mut engine = Engine::memory().unwrap();
+    let a = revision(
+        &engine
+            .execute(&program(vec![commit("g", None, data())]), &host())
+            .unwrap(),
+    );
+    let mut changed = data();
+    changed.nodes[0]
+        .properties
+        .insert("change".into(), true.into());
+    let b = revision(
+        &engine
+            .execute(
+                &program(vec![commit("g", Some(a.clone()), changed)]),
+                &host(),
+            )
+            .unwrap(),
+    );
+    let ra = GraphRef {
+        graph_id: "g".into(),
+        revision: a.clone(),
+    };
+    let rb = GraphRef {
+        graph_id: "g".into(),
+        revision: b.clone(),
+    };
+    engine
+        .accept_revision(&ra, "main", Some(&b), &host())
+        .unwrap();
+    engine
+        .accept_revision(&rb, "main", Some(&a), &host())
+        .unwrap();
+    engine
+        .accept_revision(&ra, "main", Some(&b), &host())
+        .unwrap();
+    engine
+        .accept_revision(&rb, "main", Some(&a), &host())
+        .unwrap();
+    let before = engine.event_count().unwrap();
+    assert_eq!(before, 6);
+    engine
+        .accept_revision(&rb, "main", Some(&b), &host())
+        .unwrap();
+    assert_eq!(engine.event_count().unwrap(), before);
+    assert_eq!(
+        engine
+            .accept_revision(&ra, "main", Some(&a), &host())
+            .unwrap_err()
+            .code,
+        "E_CONFLICT"
+    );
+    assert_eq!(engine.event_count().unwrap(), before);
+    let events = engine.events().unwrap();
+    let ids: std::collections::HashSet<_> = events.iter().map(|e| e.event_id.clone()).collect();
+    assert_eq!(ids.len(), 6);
+    assert!(events[2..].iter().all(|e| e.event_type == "graph.accepted"));
+}

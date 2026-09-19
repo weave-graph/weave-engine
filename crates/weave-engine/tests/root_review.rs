@@ -103,3 +103,38 @@ fn missing_premise_does_not_grant_public_visibility() {
         "a missing derivation premise cannot silently become complete absence"
     );
 }
+
+#[test]
+fn repeated_graph_values_cannot_amplify_a_small_plan_without_bound() {
+    let mut engine = Engine::memory().unwrap();
+    let mut commands = vec![
+        serde_json::json!({
+            "op":"commit", "graph_id":"Budget", "data":{
+                "nodes":[{"id":"large", "entity_id":"large", "space_id":"test",
+                    "properties":{"payload":"x".repeat(128 * 1024)}}]
+            }
+        }),
+        serde_json::json!({"op":"bind", "name":"Large", "value":{
+            "kind":"query", "query":{"graph_id":"Budget"}
+        }}),
+    ];
+    for _ in 0..300 {
+        commands.push(serde_json::json!({"op":"evaluate", "value":{
+            "kind":"reference", "name":"Large"
+        }}));
+    }
+    let program: Program = serde_json::from_value(serde_json::json!({
+        "version":VERSION, "commands":commands
+    }))
+    .unwrap();
+    let error = engine
+        .execute(&program, &HostContext::new("alice", ["Budget".into()]))
+        .unwrap_err();
+    assert_eq!(error.code, "E_BUDGET");
+    assert_eq!(
+        engine.event_count().unwrap(),
+        0,
+        "budget failure must roll back preceding mutations"
+    );
+    assert!(engine.head("Budget", "main").unwrap().is_none());
+}

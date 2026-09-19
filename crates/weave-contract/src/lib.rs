@@ -1,7 +1,7 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.2.0";
+pub const VERSION: &str = "0.3.0";
 pub const LEGACY_VERSION: &str = "0.1.0";
 fn main_branch() -> String {
     "main".into()
@@ -108,6 +108,13 @@ pub struct QueryPlan {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    Bind {
+        name: String,
+        value: GraphExpression,
+    },
+    Evaluate {
+        value: GraphExpression,
+    },
     Join {
         left: QueryPlan,
         right: QueryPlan,
@@ -124,6 +131,29 @@ pub enum Command {
     },
     Query {
         query: QueryPlan,
+    },
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum GraphExpression {
+    Query {
+        query: QueryPlan,
+    },
+    Reference {
+        name: String,
+    },
+    Filter {
+        input: Box<GraphExpression>,
+        #[serde(default)]
+        predicate: Option<String>,
+        #[serde(default)]
+        valid_at: Option<i64>,
+    },
+    Join {
+        left: Box<GraphExpression>,
+        right: Box<GraphExpression>,
+        output_predicate: String,
+        match_on: JoinMatch,
     },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -158,6 +188,8 @@ pub struct QueryResult {
     pub coverage: Coverage,
     pub diagnostics: Vec<Diagnostic>,
     pub provenance: Vec<AssertionRef>,
+    #[serde(default)]
+    pub edge_origins: BTreeMap<String, Vec<AssertionRef>>,
     pub metadata_graphs: Vec<ResolvedGraph>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

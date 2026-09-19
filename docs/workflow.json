@@ -80,7 +80,7 @@
           "result": "15 tests pass with identity-space temporal path joins; full gate incomplete",
           "contract_revision": "0.2.0",
           "host": "local macOS",
-          "commit": "second checkpoint pending commit",
+          "commit": "1100193",
           "unresolved_findings": "General plans, recursive functions and broader policy remain open"
         }
       ]
@@ -144,8 +144,17 @@
           "result": "15 tests pass with identity-space temporal path joins; full gate incomplete",
           "contract_revision": "0.2.0",
           "host": "local macOS",
-          "commit": "second checkpoint pending commit",
+          "commit": "1100193",
           "unresolved_findings": "General plans, recursive functions and broader policy remain open"
+        },
+        {
+          "artifact": "docs/contract/v0.3/README.md",
+          "command": "cargo test --workspace --locked",
+          "host": "local macOS",
+          "result": "Reusable graph-value composition and cumulative resource budget tests pass",
+          "contract_revision": "0.3.0",
+          "commit": "third checkpoint pending commit",
+          "unresolved_findings": "General recursive rules and effects remain open"
         }
       ]
     },
@@ -247,7 +256,7 @@
       "id": "E08",
       "title": "Capsules and attach detach",
       "owner": "engine",
-      "state": "proposed",
+      "state": "in_progress",
       "depends_on": [
         "E02",
         "E04"
@@ -257,13 +266,23 @@
         "R16",
         "R17"
       ],
-      "evidence": []
+      "evidence": [
+        {
+          "artifact": "docs/CAPSULES.md",
+          "command": "cargo test --workspace --locked",
+          "host": "local macOS",
+          "result": "Hash integrity, quarantine/acceptance, offline independence tests pass; full gate incomplete",
+          "contract_revision": "capsule0.1 / program0.3",
+          "commit": "third checkpoint pending commit",
+          "unresolved_findings": "Unsigned local APIs; no peer authenticity, mounts, governance or mobile support"
+        }
+      ]
     },
     {
       "id": "E09",
       "title": "Offline branches and peer sync",
       "owner": "engine",
-      "state": "proposed",
+      "state": "in_progress",
       "depends_on": [
         "E08",
         "E06"
@@ -274,7 +293,17 @@
         "R21",
         "R24"
       ],
-      "evidence": []
+      "evidence": [
+        {
+          "artifact": "docs/CAPSULES.md",
+          "command": "cargo test --workspace --locked",
+          "host": "local macOS",
+          "result": "Hash integrity, quarantine/acceptance, offline independence tests pass; full gate incomplete",
+          "contract_revision": "capsule0.1 / program0.3",
+          "commit": "third checkpoint pending commit",
+          "unresolved_findings": "Unsigned local APIs; no peer authenticity, mounts, governance or mobile support"
+        }
+      ]
     },
     {
       "id": "E10",
