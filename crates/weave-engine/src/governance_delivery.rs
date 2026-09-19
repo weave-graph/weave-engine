@@ -1,7 +1,43 @@
 //! Typed native governance delivery. No graph mutation or external effect is executed.
+const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS governance_subscriptions(adapter TEXT NOT NULL,view_id TEXT NOT NULL,state TEXT NOT NULL,checkpoint INTEGER NOT NULL DEFAULT 0,ordinal INTEGER NOT NULL DEFAULT 0,epoch INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(adapter,view_id));
+CREATE TABLE IF NOT EXISTS governance_delivery_pending(adapter TEXT NOT NULL,view_id TEXT NOT NULL,event_id TEXT NOT NULL,sequence INTEGER NOT NULL,ordinal INTEGER NOT NULL,lease TEXT NOT NULL,expires INTEGER NOT NULL,attempts INTEGER NOT NULL,status TEXT NOT NULL,PRIMARY KEY(adapter,view_id));
+CREATE TABLE IF NOT EXISTS governance_delivery_receipts(adapter TEXT NOT NULL,view_id TEXT NOT NULL,event_id TEXT NOT NULL,lease TEXT NOT NULL,ordinal INTEGER NOT NULL,epoch INTEGER NOT NULL,PRIMARY KEY(adapter,view_id,event_id));";
+const BEGIN_DELIVERY: &str = "SAVEPOINT governance_delivery";
+const COMMIT_DELIVERY: &str = "RELEASE governance_delivery";
+const ROLLBACK_DELIVERY: &str = "ROLLBACK TO governance_delivery; RELEASE governance_delivery";
+const LOAD_ADAPTER: &str = "SELECT CASE WHEN length(CAST(manifest AS BLOB))<=65536 THEN manifest ELSE NULL END,substr(state,1,16) FROM dispatch_adapters WHERE id=?1";
+const LOAD_SUBSCRIPTION: &str = "SELECT substr(state,1,16),checkpoint,ordinal,epoch FROM governance_subscriptions WHERE adapter=?1 AND view_id=?2";
+const LOAD_PENDING: &str = "SELECT substr(event_id,1,513),sequence,ordinal,substr(lease,1,49),expires,attempts,status='dead_letter' FROM governance_delivery_pending WHERE adapter=?1 AND view_id=?2";
+const LOAD_SUBSCRIPTION_STATE: &str =
+    "SELECT substr(state,1,16) FROM governance_subscriptions WHERE adapter=?1 AND view_id=?2";
+const COUNT_SUBSCRIPTIONS: &str = "SELECT count(*) FROM governance_subscriptions WHERE adapter=?1";
+const INSERT_SUBSCRIPTION: &str =
+    "INSERT INTO governance_subscriptions(adapter,view_id,state) VALUES (?1,?2,'active')";
+const CANCEL_SUBSCRIPTION: &str = "UPDATE governance_subscriptions SET state='canceled',epoch=epoch+1 WHERE adapter=?1 AND view_id=?2";
+const DELETE_PENDING: &str =
+    "DELETE FROM governance_delivery_pending WHERE adapter=?1 AND view_id=?2";
+const INVALIDATE_ACK_EPOCHS: &str =
+    "UPDATE governance_subscriptions SET epoch=epoch+1 WHERE adapter=?1";
+const INVALIDATE_PENDING_LEASES: &str =
+    "UPDATE governance_delivery_pending SET lease='',expires=0 WHERE adapter=?1";
+const MARK_DEAD_LETTER: &str =
+    "UPDATE governance_delivery_pending SET status='dead_letter' WHERE adapter=?1 AND view_id=?2";
+const LOAD_EVENT_PAGE: &str = "SELECT substr(id,1,513),sequence FROM governance_events WHERE view_id=?1 AND sequence>?2 ORDER BY sequence LIMIT 1001";
+const ADVANCE_CHECKPOINT: &str =
+    "UPDATE governance_subscriptions SET checkpoint=?3 WHERE adapter=?1 AND view_id=?2";
+const ADVANCE_ORDINAL: &str =
+    "UPDATE governance_subscriptions SET ordinal=?3 WHERE adapter=?1 AND view_id=?2";
+const RANDOM_LEASE: &str = "SELECT lower(hex(randomblob(24)))";
+const UPSERT_PENDING: &str = "INSERT INTO governance_delivery_pending VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'leased') ON CONFLICT(adapter,view_id) DO UPDATE SET lease=excluded.lease,expires=excluded.expires,attempts=excluded.attempts,status='leased'";
+const LOAD_SOURCE_ID: &str = "SELECT substr(source,1,513) FROM engine_identity WHERE id=1";
+const LOAD_ACK_RECEIPT: &str = "SELECT substr(lease,1,49),ordinal,epoch FROM governance_delivery_receipts WHERE adapter=?1 AND view_id=?2 AND event_id=?3";
+const COUNT_ACK_RECEIPTS: &str =
+    "SELECT count(*) FROM governance_delivery_receipts WHERE adapter=?1 AND view_id=?2";
+const INSERT_ACK_RECEIPT: &str =
+    "INSERT INTO governance_delivery_receipts VALUES (?1,?2,?3,?4,?5,?6)";
+const REPLAY_DEAD_LETTER: &str = "UPDATE governance_delivery_pending SET status='leased',lease='',expires=0,attempts=0 WHERE adapter=?1 AND view_id=?2";
 use super::*;
 use serde::{Deserialize, Serialize};
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GovernanceEvent {
@@ -45,27 +81,21 @@ fn unavailable() -> Error {
 }
 impl Engine {
     pub(crate) fn initialize_governance_delivery(&self) -> Result<()> {
-        self.conn.execute_batch("CREATE TABLE IF NOT EXISTS governance_subscriptions(adapter TEXT NOT NULL,view_id TEXT NOT NULL,state TEXT NOT NULL,checkpoint INTEGER NOT NULL DEFAULT 0,ordinal INTEGER NOT NULL DEFAULT 0,epoch INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(adapter,view_id));
-CREATE TABLE IF NOT EXISTS governance_delivery_pending(adapter TEXT NOT NULL,view_id TEXT NOT NULL,event_id TEXT NOT NULL,sequence INTEGER NOT NULL,ordinal INTEGER NOT NULL,lease TEXT NOT NULL,expires INTEGER NOT NULL,attempts INTEGER NOT NULL,status TEXT NOT NULL,PRIMARY KEY(adapter,view_id));
-CREATE TABLE IF NOT EXISTS governance_delivery_receipts(adapter TEXT NOT NULL,view_id TEXT NOT NULL,event_id TEXT NOT NULL,lease TEXT NOT NULL,ordinal INTEGER NOT NULL,epoch INTEGER NOT NULL,PRIMARY KEY(adapter,view_id,event_id));")?;
+        self.conn.execute_batch(SCHEMA)?;
         Ok(())
     }
     fn governance_delivery_atomic<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
-        self.conn.execute_batch("SAVEPOINT governance_delivery")?;
+        self.conn.execute_batch(BEGIN_DELIVERY)?;
         match f() {
             Ok(value) => {
-                if let Err(error) = self.conn.execute_batch("RELEASE governance_delivery") {
-                    self.conn.execute_batch(
-                        "ROLLBACK TO governance_delivery; RELEASE governance_delivery",
-                    )?;
+                if let Err(error) = self.conn.execute_batch(COMMIT_DELIVERY) {
+                    self.conn.execute_batch(ROLLBACK_DELIVERY)?;
                     return Err(error.into());
                 }
                 Ok(value)
             }
             Err(error) => {
-                self.conn.execute_batch(
-                    "ROLLBACK TO governance_delivery; RELEASE governance_delivery",
-                )?;
+                self.conn.execute_batch(ROLLBACK_DELIVERY)?;
                 Err(error)
             }
         }
@@ -79,10 +109,10 @@ CREATE TABLE IF NOT EXISTS governance_delivery_receipts(adapter TEXT NOT NULL,vi
             return Err(unavailable());
         }
         self.read_budget.request()?;
-        let row: Option<(Option<String>,String)> = self.conn.query_row(
-            "SELECT CASE WHEN length(CAST(manifest AS BLOB))<=65536 THEN manifest ELSE NULL END,substr(state,1,16) FROM dispatch_adapters WHERE id=?1",
-            [adapter],|r|Ok((r.get(0)?,r.get(1)?)),
-        ).optional()?;
+        let row: Option<(Option<String>, String)> = self
+            .conn
+            .query_row(LOAD_ADAPTER, [adapter], |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()?;
         let (body, state) = row.ok_or_else(unavailable)?;
         let body =
             body.ok_or_else(|| err("E_BUDGET", "governance adapter manifest exceeds limit"))?;
@@ -103,10 +133,12 @@ CREATE TABLE IF NOT EXISTS governance_delivery_receipts(adapter TEXT NOT NULL,vi
         if !valid_id(view) {
             return Err(unavailable());
         }
-        let row:Option<(String,i64,i64,i64)>=self.conn.query_row(
-            "SELECT substr(state,1,16),checkpoint,ordinal,epoch FROM governance_subscriptions WHERE adapter=?1 AND view_id=?2",
-            params![adapter,view],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)),
-        ).optional()?;
+        let row: Option<(String, i64, i64, i64)> = self
+            .conn
+            .query_row(LOAD_SUBSCRIPTION, params![adapter, view], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })
+            .optional()?;
         let Some((state, checkpoint, ordinal, epoch)) = row else {
             return Err(unavailable());
         };
@@ -120,10 +152,20 @@ CREATE TABLE IF NOT EXISTS governance_delivery_receipts(adapter TEXT NOT NULL,vi
         })
     }
     fn governance_pending(&self, adapter: &str, view: &str) -> Result<Option<Pending>> {
-        self.conn.query_row(
-            "SELECT substr(event_id,1,513),sequence,ordinal,substr(lease,1,49),expires,attempts,status='dead_letter' FROM governance_delivery_pending WHERE adapter=?1 AND view_id=?2",
-            params![adapter,view],|r|Ok(Pending{event:r.get(0)?,sequence:r.get(1)?,ordinal:r.get(2)?,lease:r.get(3)?,expires:r.get(4)?,attempts:r.get(5)?,dead:r.get(6)?}),
-        ).optional().map_err(Into::into)
+        self.conn
+            .query_row(LOAD_PENDING, params![adapter, view], |r| {
+                Ok(Pending {
+                    event: r.get(0)?,
+                    sequence: r.get(1)?,
+                    ordinal: r.get(2)?,
+                    lease: r.get(3)?,
+                    expires: r.get(4)?,
+                    attempts: r.get(5)?,
+                    dead: r.get(6)?,
+                })
+            })
+            .optional()
+            .map_err(Into::into)
     }
     /// Uses an existing immutable adapter manifest and principal. A canceled subscription cannot restart.
     pub fn subscribe_governance(
@@ -135,19 +177,28 @@ CREATE TABLE IF NOT EXISTS governance_delivery_receipts(adapter TEXT NOT NULL,vi
     ) -> Result<bool> {
         let _scope = self.read_budget.enter();
         self.governance_delivery_atomic(|| {
-            self.governance_adapter(adapter,host)?;
-            self.inspect_governance_head(view,now,host)?;
-            let prior:Option<String>=self.conn.query_row(
-                "SELECT substr(state,1,16) FROM governance_subscriptions WHERE adapter=?1 AND view_id=?2",
-                params![adapter,view],|r|r.get(0),
-            ).optional()?;
-            if let Some(state)=prior {
-                if state!="active" { return Err(unavailable()); }
+            self.governance_adapter(adapter, host)?;
+            self.inspect_governance_head(view, now, host)?;
+            let prior: Option<String> = self
+                .conn
+                .query_row(LOAD_SUBSCRIPTION_STATE, params![adapter, view], |r| {
+                    r.get(0)
+                })
+                .optional()?;
+            if let Some(state) = prior {
+                if state != "active" {
+                    return Err(unavailable());
+                }
                 return Ok(false);
             }
-            let count:i64=self.conn.query_row("SELECT count(*) FROM governance_subscriptions WHERE adapter=?1",[adapter],|r|r.get(0))?;
-            if count>=32 { return Err(err("E_BUDGET","governance subscription limit")); }
-            self.conn.execute("INSERT INTO governance_subscriptions(adapter,view_id,state) VALUES (?1,?2,'active')",params![adapter,view])?;
+            let count: i64 = self
+                .conn
+                .query_row(COUNT_SUBSCRIPTIONS, [adapter], |r| r.get(0))?;
+            if count >= 32 {
+                return Err(err("E_BUDGET", "governance subscription limit"));
+            }
+            self.conn
+                .execute(INSERT_SUBSCRIPTION, params![adapter, view])?;
             Ok(true)
         })
     }
@@ -160,22 +211,17 @@ CREATE TABLE IF NOT EXISTS governance_delivery_receipts(adapter TEXT NOT NULL,vi
     ) -> Result<()> {
         let _scope = self.read_budget.enter();
         self.governance_delivery_atomic(|| {
-            self.governance_adapter(adapter,host)?;
-            self.governance_subscription(adapter,view)?;
-            self.conn.execute("UPDATE governance_subscriptions SET state='canceled',epoch=epoch+1 WHERE adapter=?1 AND view_id=?2",params![adapter,view])?;
-            self.conn.execute("DELETE FROM governance_delivery_pending WHERE adapter=?1 AND view_id=?2",params![adapter,view])?;
+            self.governance_adapter(adapter, host)?;
+            self.governance_subscription(adapter, view)?;
+            self.conn
+                .execute(CANCEL_SUBSCRIPTION, params![adapter, view])?;
+            self.conn.execute(DELETE_PENDING, params![adapter, view])?;
             Ok(())
         })
     }
     pub(crate) fn invalidate_governance_leases(&self, adapter: &str) -> Result<()> {
-        self.conn.execute(
-            "UPDATE governance_subscriptions SET epoch=epoch+1 WHERE adapter=?1",
-            [adapter],
-        )?;
-        self.conn.execute(
-            "UPDATE governance_delivery_pending SET lease='',expires=0 WHERE adapter=?1",
-            [adapter],
-        )?;
+        self.conn.execute(INVALIDATE_ACK_EPOCHS, [adapter])?;
+        self.conn.execute(INVALIDATE_PENDING_LEASES, [adapter])?;
         Ok(())
     }
     pub fn poll_governance(
@@ -190,49 +236,90 @@ CREATE TABLE IF NOT EXISTS governance_delivery_receipts(adapter TEXT NOT NULL,vi
             return Err(err("E_CLOCK", "negative delivery clock"));
         }
         self.governance_delivery_atomic(|| {
-            let (manifest,state)=self.governance_adapter(adapter,host)?;
-            if state!="running" && state!="draining" { return Err(err("E_PAUSED","adapter is not running")); }
-            let sub=self.governance_subscription(adapter,view)?;
-            self.inspect_governance_head(view,now,host)?;
-            let pending=self.governance_pending(adapter,view)?;
-            let (event,sequence,ordinal,attempts)=if let Some(pending)=pending {
+            let (manifest, state) = self.governance_adapter(adapter, host)?;
+            if state != "running" && state != "draining" {
+                return Err(err("E_PAUSED", "adapter is not running"));
+            }
+            let sub = self.governance_subscription(adapter, view)?;
+            self.inspect_governance_head(view, now, host)?;
+            let pending = self.governance_pending(adapter, view)?;
+            let (event, sequence, ordinal, attempts) = if let Some(pending) = pending {
                 // Recheck original source before considering delivery timing or exposing its identity.
-                let Some(event)=self.governance_delivery_event(view,&pending.event,now,host)? else { return Err(unavailable()); };
-                if pending.dead || now<pending.expires { return Ok(None); }
-                if pending.attempts>=manifest.max_attempts {
-                    self.conn.execute("UPDATE governance_delivery_pending SET status='dead_letter' WHERE adapter=?1 AND view_id=?2",params![adapter,view])?;
+                let Some(event) =
+                    self.governance_delivery_event(view, &pending.event, now, host)?
+                else {
+                    return Err(unavailable());
+                };
+                if pending.dead || now < pending.expires {
                     return Ok(None);
                 }
-                (event,pending.sequence,pending.ordinal,pending.attempts+1)
-            } else {
-                if state=="draining" { return Ok(None); }
-                let mut statement=self.conn.prepare("SELECT substr(id,1,513),sequence FROM governance_events WHERE view_id=?1 AND sequence>?2 ORDER BY sequence LIMIT 1001")?;
-                let rows=statement.query_map(params![view,sub.checkpoint],|r|Ok((r.get::<_,String>(0)?,r.get::<_,i64>(1)?)))?;
-                let mut selected=None;
-                let mut checkpoint=sub.checkpoint;
-                let mut visible=0u32;
-                for row in rows {
-                    let (id,sequence)=row?;
-                    if let Some(event)=self.governance_delivery_event(view,&id,now,host)? {
-                        visible+=1;
-                        if selected.is_none() { selected=Some((event,sequence)); }
-                    } else if selected.is_none() { checkpoint=sequence; }
+                if pending.attempts >= manifest.max_attempts {
+                    self.conn
+                        .execute(MARK_DEAD_LETTER, params![adapter, view])?;
+                    return Ok(None);
                 }
-                if visible>manifest.max_pending_events { return Err(err("E_BACKPRESSURE","governance backlog requires host review")); }
-                self.conn.execute("UPDATE governance_subscriptions SET checkpoint=?3 WHERE adapter=?1 AND view_id=?2",params![adapter,view,checkpoint])?;
-                let Some((event,sequence))=selected else { return Ok(None); };
-                let ordinal=sub.ordinal.checked_add(1).ok_or_else(||err("E_BUDGET","delivery ordinal exhausted"))?;
-                self.conn.execute("UPDATE governance_subscriptions SET ordinal=?3 WHERE adapter=?1 AND view_id=?2",params![adapter,view,ordinal])?;
-                (event,sequence,ordinal,1)
+                (
+                    event,
+                    pending.sequence,
+                    pending.ordinal,
+                    pending.attempts + 1,
+                )
+            } else {
+                if state == "draining" {
+                    return Ok(None);
+                }
+                let mut statement = self.conn.prepare(LOAD_EVENT_PAGE)?;
+                let rows = statement.query_map(params![view, sub.checkpoint], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+                })?;
+                let mut selected = None;
+                let mut checkpoint = sub.checkpoint;
+                let mut visible = 0u32;
+                for row in rows {
+                    let (id, sequence) = row?;
+                    if let Some(event) = self.governance_delivery_event(view, &id, now, host)? {
+                        visible += 1;
+                        if selected.is_none() {
+                            selected = Some((event, sequence));
+                        }
+                    } else if selected.is_none() {
+                        checkpoint = sequence;
+                    }
+                }
+                if visible > manifest.max_pending_events {
+                    return Err(err(
+                        "E_BACKPRESSURE",
+                        "governance backlog requires host review",
+                    ));
+                }
+                self.conn
+                    .execute(ADVANCE_CHECKPOINT, params![adapter, view, checkpoint])?;
+                let Some((event, sequence)) = selected else {
+                    return Ok(None);
+                };
+                let ordinal = sub
+                    .ordinal
+                    .checked_add(1)
+                    .ok_or_else(|| err("E_BUDGET", "delivery ordinal exhausted"))?;
+                self.conn
+                    .execute(ADVANCE_ORDINAL, params![adapter, view, ordinal])?;
+                (event, sequence, ordinal, 1)
             };
-            let lease:String=self.conn.query_row("SELECT lower(hex(randomblob(24)))",[],|r|r.get(0))?;
-            let expires=now.checked_add(manifest.lease_ms).ok_or_else(||err("E_CLOCK","delivery clock overflow"))?;
+            let lease: String = self.conn.query_row(RANDOM_LEASE, [], |r| r.get(0))?;
+            let expires = now
+                .checked_add(manifest.lease_ms)
+                .ok_or_else(|| err("E_CLOCK", "delivery clock overflow"))?;
             self.conn.execute(
-                "INSERT INTO governance_delivery_pending VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'leased') ON CONFLICT(adapter,view_id) DO UPDATE SET lease=excluded.lease,expires=excluded.expires,attempts=excluded.attempts,status='leased'",
-                params![adapter,view,event.id,sequence,ordinal,lease,expires,attempts],
+                UPSERT_PENDING,
+                params![adapter, view, event.id, sequence, ordinal, lease, expires, attempts],
             )?;
-            let source:String=self.conn.query_row("SELECT substr(source,1,513) FROM engine_identity WHERE id=1",[],|r|r.get(0))?;
-            Ok(Some(GovernanceDelivery{event,source,ordinal:u64::try_from(ordinal).map_err(|_|unavailable())?,lease}))
+            let source: String = self.conn.query_row(LOAD_SOURCE_ID, [], |r| r.get(0))?;
+            Ok(Some(GovernanceDelivery {
+                event,
+                source,
+                ordinal: u64::try_from(ordinal).map_err(|_| unavailable())?,
+                lease,
+            }))
         })
     }
     pub fn acknowledge_governance(
@@ -280,27 +367,56 @@ CREATE TABLE IF NOT EXISTS governance_delivery_receipts(adapter TEXT NOT NULL,vi
             return Err(unavailable());
         }
         self.governance_delivery_atomic(|| {
-            let (_,state)=self.governance_adapter(adapter,host)?;
-            if state!="running" && state!="draining" { return Err(err("E_PAUSED","adapter is not running")); }
-            let sub=self.governance_subscription(adapter,view)?;
-            self.governance_delivery_event(view,event,now,host)?.ok_or_else(unavailable)?;
-            let prior:Option<(String,i64,i64)>=self.conn.query_row(
-                "SELECT substr(lease,1,49),ordinal,epoch FROM governance_delivery_receipts WHERE adapter=?1 AND view_id=?2 AND event_id=?3",
-                params![adapter,view,event],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)),
-            ).optional()?;
-            if let Some((prior_lease,ordinal,epoch))=prior {
-                if lease!=prior_lease || epoch!=sub.epoch { return Err(err("E_LEASE","governance lease is no longer current")); }
-                return Ok(GovernanceAcknowledgment{ordinal:u64::try_from(ordinal).map_err(|_|unavailable())?,duplicate:true});
+            let (_, state) = self.governance_adapter(adapter, host)?;
+            if state != "running" && state != "draining" {
+                return Err(err("E_PAUSED", "adapter is not running"));
             }
-            let pending=self.governance_pending(adapter,view)?.ok_or_else(unavailable)?;
-            if pending.event!=event || pending.lease!=lease || pending.dead || now>=pending.expires { return Err(err("E_LEASE","governance lease is no longer current")); }
-            let count:i64=self.conn.query_row("SELECT count(*) FROM governance_delivery_receipts WHERE adapter=?1 AND view_id=?2",params![adapter,view],|r|r.get(0))?;
-            if count>=10000 { return Err(err("E_BUDGET","governance receipt limit")); }
-            self.conn.execute("INSERT INTO governance_delivery_receipts VALUES (?1,?2,?3,?4,?5,?6)",params![adapter,view,event,lease,pending.ordinal,sub.epoch])?;
-            self.conn.execute("UPDATE governance_subscriptions SET checkpoint=?3 WHERE adapter=?1 AND view_id=?2",params![adapter,view,pending.sequence])?;
-            self.conn.execute("DELETE FROM governance_delivery_pending WHERE adapter=?1 AND view_id=?2",params![adapter,view])?;
+            let sub = self.governance_subscription(adapter, view)?;
+            self.governance_delivery_event(view, event, now, host)?
+                .ok_or_else(unavailable)?;
+            let prior: Option<(String, i64, i64)> = self
+                .conn
+                .query_row(LOAD_ACK_RECEIPT, params![adapter, view, event], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })
+                .optional()?;
+            if let Some((prior_lease, ordinal, epoch)) = prior {
+                if lease != prior_lease || epoch != sub.epoch {
+                    return Err(err("E_LEASE", "governance lease is no longer current"));
+                }
+                return Ok(GovernanceAcknowledgment {
+                    ordinal: u64::try_from(ordinal).map_err(|_| unavailable())?,
+                    duplicate: true,
+                });
+            }
+            let pending = self
+                .governance_pending(adapter, view)?
+                .ok_or_else(unavailable)?;
+            if pending.event != event
+                || pending.lease != lease
+                || pending.dead
+                || now >= pending.expires
+            {
+                return Err(err("E_LEASE", "governance lease is no longer current"));
+            }
+            let count: i64 =
+                self.conn
+                    .query_row(COUNT_ACK_RECEIPTS, params![adapter, view], |r| r.get(0))?;
+            if count >= 10000 {
+                return Err(err("E_BUDGET", "governance receipt limit"));
+            }
+            self.conn.execute(
+                INSERT_ACK_RECEIPT,
+                params![adapter, view, event, lease, pending.ordinal, sub.epoch],
+            )?;
+            self.conn
+                .execute(ADVANCE_CHECKPOINT, params![adapter, view, pending.sequence])?;
+            self.conn.execute(DELETE_PENDING, params![adapter, view])?;
             hook();
-            Ok(GovernanceAcknowledgment{ordinal:u64::try_from(pending.ordinal).map_err(|_|unavailable())?,duplicate:false})
+            Ok(GovernanceAcknowledgment {
+                ordinal: u64::try_from(pending.ordinal).map_err(|_| unavailable())?,
+                duplicate: false,
+            })
         })
     }
     pub fn replay_governance_dead_letter(
@@ -311,14 +427,25 @@ CREATE TABLE IF NOT EXISTS governance_delivery_receipts(adapter TEXT NOT NULL,vi
         host: &HostContext,
     ) -> Result<()> {
         let _scope = self.read_budget.enter();
+        if now < 0 {
+            return Err(err("E_CLOCK", "negative delivery clock"));
+        }
         self.governance_delivery_atomic(|| {
-            let (_,state)=self.governance_adapter(adapter,host)?;
-            if state!="running" { return Err(err("E_PAUSED","adapter is not running")); }
-            self.governance_subscription(adapter,view)?;
-            let pending=self.governance_pending(adapter,view)?.ok_or_else(unavailable)?;
-            self.governance_delivery_event(view,&pending.event,now,host)?.ok_or_else(unavailable)?;
-            if !pending.dead { return Err(err("E_LIFECYCLE","delivery is not dead lettered")); }
-            self.conn.execute("UPDATE governance_delivery_pending SET status='leased',lease='',expires=0,attempts=0 WHERE adapter=?1 AND view_id=?2",params![adapter,view])?;
+            let (_, state) = self.governance_adapter(adapter, host)?;
+            if state != "running" {
+                return Err(err("E_PAUSED", "adapter is not running"));
+            }
+            self.governance_subscription(adapter, view)?;
+            let pending = self
+                .governance_pending(adapter, view)?
+                .ok_or_else(unavailable)?;
+            self.governance_delivery_event(view, &pending.event, now, host)?
+                .ok_or_else(unavailable)?;
+            if !pending.dead {
+                return Err(err("E_LIFECYCLE", "delivery is not dead lettered"));
+            }
+            self.conn
+                .execute(REPLAY_DEAD_LETTER, params![adapter, view])?;
             Ok(())
         })
     }

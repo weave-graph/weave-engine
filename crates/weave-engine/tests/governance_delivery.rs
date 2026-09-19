@@ -342,6 +342,12 @@ fn expiration_dead_letter_drain_cancel_and_removal_reject_stale_lease() {
         .poll_governance("reader", "team", 220, &reader)
         .unwrap()
         .is_none());
+    assert_eq!(
+        e.replay_governance_dead_letter("reader", "team", -1, &reader)
+            .unwrap_err()
+            .code,
+        "E_CLOCK"
+    );
     e.replay_governance_dead_letter("reader", "team", 221, &reader)
         .unwrap();
     let replay = e
