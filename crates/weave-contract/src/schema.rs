@@ -1,5 +1,5 @@
 //! Portable schema validation shared by source compilers and runtime clients.
-use crate::{Diagnostic, GraphData};
+use crate::{Diagnostic, Edge, GraphData, GraphProfile, Interval, Polarity};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -112,9 +112,126 @@ fn properties(
 /// Runtime authorization and graph structural/history validation are additional obligations.
 pub fn validate_schema_graph(graph: &GraphData) -> Vec<Diagnostic> {
     let mut errors = Vec::new();
+    let structural_values: Vec<Edge>;
+    let edges = match graph.profile {
+        GraphProfile::Legacy => {
+            if !graph.structural_edges.is_empty() || !graph.assertions.is_empty() {
+                error(
+                    &mut errors,
+                    "E_ASSERTION_PROFILE",
+                    "Legacy snapshots cannot carry explicit structural edges or assertions".into(),
+                );
+            }
+            &graph.edges
+        }
+        GraphProfile::Explicit => {
+            if !graph.edges.is_empty() {
+                error(
+                    &mut errors,
+                    "E_ASSERTION_PROFILE",
+                    "Explicit snapshots cannot carry legacy edges".into(),
+                );
+            }
+            let mut ids: std::collections::BTreeSet<_> =
+                graph.nodes.iter().map(|n| n.id.as_str()).collect();
+            let edge_ids: std::collections::BTreeSet<_> = graph
+                .structural_edges
+                .iter()
+                .map(|e| e.id.as_str())
+                .collect();
+            for edge in &graph.structural_edges {
+                if edge.id.is_empty() || !ids.insert(&edge.id) {
+                    error(
+                        &mut errors,
+                        "E_ASSERTION_ID",
+                        "Structural IDs must be nonempty and unambiguous".into(),
+                    );
+                }
+            }
+            for assertion in &graph.assertions {
+                if assertion.id.is_empty() || !ids.insert(&assertion.id) {
+                    error(
+                        &mut errors,
+                        "E_ASSERTION_ID",
+                        "Assertion IDs must be nonempty and unambiguous".into(),
+                    );
+                }
+                if !edge_ids.contains(assertion.edge_id.as_str()) {
+                    error(
+                        &mut errors,
+                        "E_ASSERTION_EDGE",
+                        format!(
+                            "Assertion '{}' references an absent structural edge",
+                            assertion.id
+                        ),
+                    );
+                }
+                if assertion.source.is_empty() {
+                    error(
+                        &mut errors,
+                        "E_ASSERTION_SOURCE",
+                        format!("Assertion '{}' requires a source label", assertion.id),
+                    );
+                }
+                if !assertion.valid_time.valid() {
+                    error(
+                        &mut errors,
+                        "E_ASSERTION_INTERVAL",
+                        format!("Assertion '{}' has an empty valid interval", assertion.id),
+                    );
+                }
+            }
+            for attachment in &graph.attachments {
+                if attachment.id.is_empty() || !ids.insert(&attachment.id) {
+                    error(
+                        &mut errors,
+                        "E_ASSERTION_ID",
+                        "Attachment IDs must be nonempty and unambiguous".into(),
+                    );
+                }
+            }
+            structural_values = graph
+                .structural_edges
+                .iter()
+                .map(|e| Edge {
+                    id: e.id.clone(),
+                    structural_ref: None,
+                    assertion_source: None,
+                    assertion_context: None,
+                    assertion_properties: BTreeMap::new(),
+                    type_id: e.type_id.clone(),
+                    predicate: e.predicate.clone(),
+                    from: e.from.clone(),
+                    to: e.to.clone(),
+                    properties: e.properties.clone(),
+                    metadata: e.metadata.clone(),
+                    readers: e.readers.clone(),
+                    valid_time: Interval {
+                        start: 0,
+                        end: None,
+                    },
+                    polarity: Polarity::Positive,
+                    derived_from: vec![],
+                    derivations: vec![],
+                })
+                .collect();
+            &structural_values
+        }
+    };
+    let node_ids: std::collections::BTreeSet<_> =
+        graph.nodes.iter().map(|n| n.id.as_str()).collect();
+    for edge in edges {
+        if !node_ids.contains(edge.from.as_str()) || !node_ids.contains(edge.to.as_str()) {
+            error(
+                &mut errors,
+                "E_SCHEMA_ENDPOINT",
+                format!("Edge '{}' has unavailable endpoints", edge.id),
+            );
+        }
+    }
     let Some(schema) = &graph.schema else {
         if graph.nodes.iter().any(|n| n.type_id.is_some())
-            || graph.edges.iter().any(|e| e.type_id.is_some())
+            || edges.iter().any(|e| e.type_id.is_some())
         {
             error(
                 &mut errors,
@@ -190,7 +307,7 @@ pub fn validate_schema_graph(graph: &GraphData) -> Vec<Diagnostic> {
             &mut errors,
         );
     }
-    for edge in &graph.edges {
+    for edge in edges {
         let Some(definition) = edge.type_id.as_ref().and_then(|id| schema.edges.get(id)) else {
             error(
                 &mut errors,
@@ -306,5 +423,35 @@ mod tests {
         assert!(validate_schema_graph(&graph)
             .iter()
             .any(|d| d.message.contains("count")));
+    }
+    #[test]
+    fn explicit_structure_is_not_an_implicit_assertion() {
+        let mut g = fixture();
+        let e = g.edges.remove(0);
+        g.profile = GraphProfile::Explicit;
+        g.structural_edges.push(crate::StructuralEdge {
+            id: e.id.clone(),
+            predicate: e.predicate,
+            from: e.from,
+            to: e.to,
+            type_id: e.type_id,
+            properties: e.properties,
+            metadata: e.metadata,
+            readers: e.readers,
+        });
+        assert!(validate_schema_graph(&g).is_empty());
+        assert!(g.assertions.is_empty());
+        for (id, polarity) in [("positive", "positive"), ("negative", "negative")] {
+            g.assertions.push(serde_json::from_value(serde_json::json!({"id":id,"edge_id":"e","source":id,"valid_time":{"start":0,"end":10},"polarity":polarity})).unwrap());
+        }
+        assert!(validate_schema_graph(&g).is_empty());
+        g.assertions[1].edge_id = "missing".into();
+        assert!(validate_schema_graph(&g)
+            .iter()
+            .any(|e| e.code == "E_ASSERTION_EDGE"));
+        g.profile = GraphProfile::Legacy;
+        assert!(validate_schema_graph(&g)
+            .iter()
+            .any(|e| e.code == "E_ASSERTION_PROFILE"));
     }
 }

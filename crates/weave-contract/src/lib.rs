@@ -1,11 +1,15 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.5.0";
+pub const VERSION: &str = "0.6.0";
 pub mod algebra;
+pub mod identity;
+pub use identity::SourceRevision;
 mod algebra_types;
+mod assertions;
 mod schema;
 pub use algebra_types::*;
+pub use assertions::*;
 pub use schema::*;
 pub const LEGACY_VERSION: &str = "0.1.0";
 fn main_branch() -> String {
@@ -68,6 +72,14 @@ pub struct Node {
 #[serde(deny_unknown_fields)]
 pub struct Edge {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assertion_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assertion_context: Option<GraphRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structural_ref: Option<StructuralRef>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub assertion_properties: BTreeMap<String, serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub type_id: Option<String>,
     pub id: String,
     pub predicate: String,
@@ -90,6 +102,12 @@ pub struct Edge {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct GraphData {
+    #[serde(default, skip_serializing_if = "GraphProfile::is_legacy")]
+    pub profile: GraphProfile,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub structural_edges: Vec<StructuralEdge>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assertions: Vec<Assertion>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schema: Option<GraphSchema>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -208,6 +226,8 @@ pub enum JoinMatch {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Program {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_revisions: Vec<SourceRevision>,
     pub version: String,
     pub commands: Vec<Command>,
 }
@@ -224,6 +244,8 @@ pub struct Diagnostic {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct QueryResult {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_revisions: Vec<SourceRevision>,
     pub version: String,
     pub graph: GraphData,
     pub snapshots: BTreeMap<String, String>,
@@ -242,6 +264,8 @@ pub struct QueryResult {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ResolvedGraph {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub attachment_origins: BTreeMap<String, Vec<AssertionRef>>,
     pub reference: GraphRef,
     pub graph: GraphData,
 }
@@ -291,6 +315,7 @@ pub struct SnapshotCommit {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MetadataHost {
+    Assertion { id: String },
     Node { id: String },
     Edge { id: String },
     Entity { id: String },

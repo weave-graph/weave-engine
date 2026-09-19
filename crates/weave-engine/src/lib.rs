@@ -5,7 +5,9 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use weave_contract::*;
+mod assertions;
 mod capsule;
+use assertions::{assertion_edge, materialize, validate_explicit};
 mod dispatch;
 mod views;
 pub use dispatch::{
@@ -79,6 +81,7 @@ impl Engine {
  CREATE TABLE IF NOT EXISTS schema_registry(id TEXT NOT NULL,revision TEXT NOT NULL,descriptor TEXT NOT NULL,PRIMARY KEY(id,revision));
  CREATE TABLE IF NOT EXISTS snapshot_manifests(id TEXT PRIMARY KEY,batch_id TEXT UNIQUE NOT NULL,manifest TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS revision_integrity(revision TEXT PRIMARY KEY REFERENCES revisions(revision),content_digest TEXT NOT NULL,manifest_id TEXT NOT NULL REFERENCES snapshot_manifests(id));
+ CREATE TABLE IF NOT EXISTS assertion_structures(graph_id TEXT NOT NULL,assertion_id TEXT NOT NULL,edge_id TEXT NOT NULL,source TEXT NOT NULL,PRIMARY KEY(graph_id,assertion_id));
  CREATE TABLE IF NOT EXISTS edge_structures(graph_id TEXT NOT NULL,edge_id TEXT NOT NULL,from_id TEXT NOT NULL,to_id TEXT NOT NULL,predicate TEXT NOT NULL,PRIMARY KEY(graph_id,edge_id));
  CREATE TABLE IF NOT EXISTS effects(adapter TEXT NOT NULL,event_id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(adapter,event_id));")?;
         let engine = Self { conn };
@@ -86,7 +89,7 @@ impl Engine {
         if engine
             .conn
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?
-            < 5
+            < 6
         {
             let transaction = engine.conn.unchecked_transaction()?;
             {
@@ -102,7 +105,7 @@ impl Engine {
                     engine.record_structures(&graph, &data)?;
                 }
             }
-            transaction.pragma_update(None, "user_version", 5)?;
+            transaction.pragma_update(None, "user_version", 6)?;
             transaction.commit()?;
         }
         engine.initialize_dispatch()?;
@@ -110,7 +113,7 @@ impl Engine {
         Ok(engine)
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
-        if ![VERSION, "0.4.0", "0.3.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.5.0", "0.4.0", "0.3.0"].contains(&program.version.as_str())
             && program.version != "0.2.0"
             && program.version != "0.3.0"
             && program.version != LEGACY_VERSION
@@ -125,7 +128,7 @@ impl Engine {
         {
             return Err(err("E_VERSION", "join requires contract 0.2.0"));
         }
-        if ![VERSION, "0.4.0", "0.3.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.5.0", "0.4.0", "0.3.0"].contains(&program.version.as_str())
             && program
                 .commands
                 .iter()
@@ -133,8 +136,8 @@ impl Engine {
         {
             return Err(err("E_VERSION", "graph expressions require contract 0.3.0"));
         }
-        if ![VERSION, "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
-        if program.version != VERSION
+        if ![VERSION, "0.5.0", "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
+        if ![VERSION, "0.5.0"].contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => {
                     data.edges.iter().any(|e| !e.derivations.is_empty())
@@ -150,10 +153,52 @@ impl Engine {
                 "derivation alternatives require contract 0.5.0",
             ));
         }
+        if program.version != VERSION
+            && program.commands.iter().any(|c| match c {
+                Command::Commit { data, .. } => requires_explicit_profile(data),
+                Command::CommitBatch { commits, .. } => {
+                    commits.iter().any(|c| requires_explicit_profile(&c.data))
+                }
+                _ => false,
+            })
+        {
+            return Err(err(
+                "E_VERSION",
+                "explicit assertions require contract 0.6.0",
+            ));
+        }
         for command in &program.commands {
             if let Command::Bind { value, .. } | Command::Evaluate { value } = command {
                 validate_expression_profile(value, &program.version)?;
             }
+        }
+        if !program.source_revisions.is_empty() && program.version != VERSION {
+            return Err(err(
+                "E_VERSION",
+                "source revision manifests require contract 0.6.0",
+            ));
+        }
+        json_size(&program.source_revisions, 1024 * 1024)?;
+        let mut source_labels = BTreeMap::new();
+        for source in &program.source_revisions {
+            if !valid_id(&source.name) || !valid_id(&source.revision) || !valid_id(&source.digest) {
+                return Err(err(
+                    "E_SOURCE_REVISION",
+                    "source revision fields must be bounded identifiers",
+                ));
+            }
+            if source_labels
+                .insert((&source.name, &source.revision), &source.digest)
+                .is_some_and(|prior| prior != &source.digest)
+            {
+                return Err(err(
+                    "E_SOURCE_REVISION",
+                    "conflicting source revision labels",
+                ));
+            }
+        }
+        if program.source_revisions.len() > 1000 {
+            return Err(err("E_BUDGET", "source manifest exceeds budget"));
         }
         if program.commands.len() > 1000 {
             return Err(err("E_BUDGET", "at most 1000 commands"));
@@ -166,9 +211,9 @@ impl Engine {
             let mut value_size = 0usize;
             let mut materialized_bytes = 0usize;
             for command in &program.commands {
-                let command_result = match command {
+                let mut command_result = match command {
                     Command::CommitBatch { batch_id, commits } => {
-                        if ![VERSION, "0.4.0"].contains(&program.version.as_str()) {
+                        if ![VERSION, "0.5.0", "0.4.0"].contains(&program.version.as_str()) {
                             return Err(err(
                                 "E_VERSION",
                                 "snapshot batches require contract 0.4.0",
@@ -190,7 +235,12 @@ impl Engine {
                                 "graph value name must be nonempty and unique",
                             ));
                         }
-                        let result = self.expression(value, &values, host, 0, &mut 1000)?;
+                        let mut result = self.expression(value, &values, host, 0, &mut 1000)?;
+                        for source in &program.source_revisions {
+                            if !result.source_revisions.contains(source) {
+                                result.source_revisions.push(source.clone());
+                            }
+                        }
                         value_size += result.graph.nodes.len() + result.graph.edges.len();
                         if value_size > 200_000 {
                             return Err(err("E_BUDGET", "bound graph value budget exceeded"));
@@ -238,6 +288,18 @@ impl Engine {
                         result: Box::new(self.query(query, host)?),
                     },
                 };
+                if let CommandResult::Queried { result } = &mut command_result {
+                    for source in &program.source_revisions {
+                        if !result.source_revisions.contains(source) {
+                            result.source_revisions.push(source.clone());
+                        }
+                    }
+                    if let Command::Bind { name, .. } = command {
+                        if let Some(bound) = values.get_mut(name) {
+                            bound.source_revisions = result.source_revisions.clone();
+                        }
+                    }
+                }
                 materialized_bytes += json_size(
                     &command_result,
                     MATERIALIZED_LIMIT.saturating_sub(materialized_bytes),
@@ -363,7 +425,8 @@ impl Engine {
         let data = self
             .load(&query.graph_id, &revision)?
             .ok_or_else(|| err("E_UNAVAILABLE", "graph unavailable"))?;
-        let (mut graph, incomplete_derivation) = self.authorized(data, host)?;
+        let (graph, incomplete_derivation) = self.authorized(data, host)?;
+        let (mut graph, materialized_origins) = materialize(graph, &query.graph_id, &revision)?;
         graph.edges.retain(|e| {
             query.predicate.as_ref().is_none_or(|p| p == &e.predicate)
                 && query.from.as_ref().is_none_or(|p| p == &e.from)
@@ -387,6 +450,7 @@ impl Engine {
             .retain(|a| query.valid_at.is_none_or(|t| a.valid_time.contains(t)));
         prune_attachments(&mut graph);
         let mut result = QueryResult {
+            source_revisions: vec![],
             version: VERSION.into(),
             graph,
             snapshots: BTreeMap::from([(query.graph_id.clone(), revision.clone())]),
@@ -399,7 +463,7 @@ impl Engine {
             provenance: Vec::new(),
             edge_origins: BTreeMap::new(),
             node_origins: BTreeMap::new(),
-            attachment_origins: BTreeMap::new(),
+            attachment_origins: materialized_origins,
             metadata_graphs: Vec::new(),
         };
 
@@ -424,11 +488,17 @@ impl Engine {
             result.node_origins.insert(node.id.clone(), origins);
         }
         for attachment in &result.graph.attachments {
-            let references = vec![AssertionRef {
-                graph_id: query.graph_id.clone(),
-                revision: revision.clone(),
-                assertion_id: attachment.id.clone(),
-            }];
+            let references = result
+                .attachment_origins
+                .get(&attachment.id)
+                .cloned()
+                .unwrap_or_else(|| {
+                    vec![AssertionRef {
+                        graph_id: query.graph_id.clone(),
+                        revision: revision.clone(),
+                        assertion_id: attachment.id.clone(),
+                    }]
+                });
             query_bytes += json_size(
                 &(&attachment.id, &references),
                 MATERIALIZED_LIMIT.saturating_sub(query_bytes),
@@ -494,7 +564,9 @@ impl Engine {
                     ),
                     Some(data) => {
                         let was_empty = data.nodes.is_empty() && data.edges.is_empty();
-                        let (mut data, incomplete_derivation) = self.authorized(data, host)?;
+                        let (data, incomplete_derivation) = self.authorized(data, host)?;
+                        let (mut data, attachment_origins) =
+                            materialize(data, &reference.graph_id, &reference.revision)?;
                         if incomplete_derivation {
                             partial(
                                 &mut result,
@@ -527,6 +599,7 @@ impl Engine {
                             result.input_snapshots.push(reference.clone());
                         }
                         result.metadata_graphs.push(ResolvedGraph {
+                            attachment_origins,
                             reference,
                             graph: data,
                         });
@@ -627,6 +700,12 @@ impl Engine {
                 if end.is_some_and(|end| start >= end) {
                     continue;
                 }
+                if le.assertion_context.is_some() || re.assertion_context.is_some() {
+                    return Err(err(
+                        "E_CONTEXT_REQUIRED",
+                        "contextual assertions require an explicit context-aware join scope",
+                    ));
+                }
                 let mut premises = l
                     .edge_origins
                     .get(&le.id)
@@ -721,6 +800,10 @@ impl Engine {
                     None
                 };
                 let edge = Edge {
+                    assertion_source: None,
+                    assertion_context: None,
+                    structural_ref: None,
+                    assertion_properties: BTreeMap::new(),
                     type_id,
                     id: format!(
                         "join-edge:{:x}",
@@ -837,8 +920,17 @@ impl Engine {
             );
         }
         let result = QueryResult {
+            source_revisions: l
+                .source_revisions
+                .iter()
+                .chain(&r.source_revisions)
+                .cloned()
+                .collect(),
             version: VERSION.into(),
             graph: GraphData {
+                profile: GraphProfile::Legacy,
+                structural_edges: vec![],
+                assertions: vec![],
                 schema,
                 attachments: attachments.into_values().collect(),
                 nodes: nodes.into_values().collect(),
@@ -976,47 +1068,25 @@ impl Engine {
         let mut edges = Vec::new();
         let mut incomplete = false;
         for mut edge in data.edges {
-            let mut visiting = HashSet::new();
-            let mut budget = 1000usize;
-            if edge.derivations.is_empty() {
-                if self.premises_visible(&edge.derived_from, host, &mut visiting, &mut budget, 0)? {
-                    edges.push(edge);
-                } else {
-                    incomplete = true;
-                }
-            } else {
-                let mut groups = Vec::new();
-                for mut group in edge.derivations {
-                    if self.premises_visible(
-                        &group.premises,
-                        host,
-                        &mut HashSet::new(),
-                        &mut budget,
-                        0,
-                    )? {
-                        group.input_snapshots.retain(|r| {
-                            group
-                                .premises
-                                .iter()
-                                .any(|p| p.graph_id == r.graph_id && p.revision == r.revision)
-                        });
-                        groups.push(group);
-                    } else {
-                        incomplete = true;
-                    }
-                }
-                edge.derived_from = Vec::new();
-                for premise in groups.iter().flat_map(|g| &g.premises) {
-                    if !edge.derived_from.contains(premise) {
-                        edge.derived_from.push(premise.clone());
-                    }
-                }
-                edge.derivations = groups;
-                if !edge.derivations.is_empty() {
-                    edges.push(edge);
-                }
+            if self.authorize_edge_groups(&mut edge, host, &mut incomplete)? {
+                edges.push(edge);
             }
         }
+        let mut claims = Vec::new();
+        for mut assertion in data.assertions {
+            let structure = data
+                .structural_edges
+                .iter()
+                .find(|e| e.id == assertion.edge_id)
+                .ok_or_else(|| err("E_ASSERTION", "structural edge unavailable"))?;
+            let mut edge = assertion_edge(&assertion, structure, None);
+            if self.authorize_edge_groups(&mut edge, host, &mut incomplete)? {
+                assertion.derived_from = edge.derived_from;
+                assertion.derivations = edge.derivations;
+                claims.push(assertion);
+            }
+        }
+        data.assertions = claims;
         data.edges = edges;
         prune_attachments(&mut data);
         let mut attachments = Vec::new();
@@ -1039,6 +1109,47 @@ impl Engine {
         }
         data.attachments = attachments;
         Ok((data, incomplete))
+    }
+    fn authorize_edge_groups(
+        &self,
+        edge: &mut Edge,
+        host: &HostContext,
+        incomplete: &mut bool,
+    ) -> Result<bool> {
+        let mut budget = 1000;
+        if edge.derivations.is_empty() {
+            let allowed = self.premises_visible(
+                &edge.derived_from,
+                host,
+                &mut HashSet::new(),
+                &mut budget,
+                0,
+            )?;
+            *incomplete |= !allowed;
+            return Ok(allowed);
+        }
+        let mut groups = Vec::new();
+        for mut group in std::mem::take(&mut edge.derivations) {
+            if self.premises_visible(&group.premises, host, &mut HashSet::new(), &mut budget, 0)? {
+                group.input_snapshots.retain(|r| {
+                    group
+                        .premises
+                        .iter()
+                        .any(|p| p.graph_id == r.graph_id && p.revision == r.revision)
+                });
+                groups.push(group);
+            } else {
+                *incomplete = true;
+            }
+        }
+        edge.derived_from = Vec::new();
+        for p in groups.iter().flat_map(|g| &g.premises) {
+            if !edge.derived_from.contains(p) {
+                edge.derived_from.push(p.clone());
+            }
+        }
+        edge.derivations = groups;
+        Ok(!edge.derivations.is_empty())
     }
     fn premises_visible(
         &self,
@@ -1072,6 +1183,23 @@ impl Engine {
                 source.edges.iter().find(|e| e.id == reference.assertion_id)
             {
                 self.edge_dependencies_visible(premise, host, visiting, budget, depth + 1)?
+            } else if let Some(assertion) = source
+                .assertions
+                .iter()
+                .find(|a| a.id == reference.assertion_id)
+            {
+                let structure = source
+                    .structural_edges
+                    .iter()
+                    .find(|e| e.id == assertion.edge_id)
+                    .ok_or_else(|| err("E_ASSERTION", "missing structural edge"))?;
+                self.edge_dependencies_visible(
+                    &assertion_edge(assertion, structure, None),
+                    host,
+                    visiting,
+                    budget,
+                    depth + 1,
+                )?
             } else if let Some(attachment) = source
                 .attachments
                 .iter()
@@ -1084,12 +1212,29 @@ impl Engine {
                     budget,
                     depth + 1,
                 )?;
-                let host_visible = if let MetadataHost::Edge { id } = &attachment.host {
+                let host_visible = if let MetadataHost::Assertion { id } = &attachment.host {
+                    if let Some(assertion) = source.assertions.iter().find(|a| &a.id == id) {
+                        let structure = source
+                            .structural_edges
+                            .iter()
+                            .find(|e| e.id == assertion.edge_id)
+                            .ok_or_else(|| err("E_ASSERTION", "missing structural edge"))?;
+                        self.edge_dependencies_visible(
+                            &assertion_edge(assertion, structure, None),
+                            host,
+                            visiting,
+                            budget,
+                            depth + 1,
+                        )?
+                    } else {
+                        false
+                    }
+                } else if let MetadataHost::Edge { id } = &attachment.host {
                     match source.edges.iter().find(|e| &e.id == id) {
                         Some(edge) => {
                             self.edge_dependencies_visible(edge, host, visiting, budget, depth + 1)?
                         }
-                        None => false,
+                        None => source.structural_edges.iter().any(|e| &e.id == id),
                     }
                 } else {
                     true
@@ -1248,6 +1393,18 @@ fn visible(mut data: GraphData, principal: &str) -> GraphData {
             && nodes.contains(e.from.as_str())
             && nodes.contains(e.to.as_str())
     });
+    data.structural_edges.retain(|e| {
+        allowed(&e.readers, principal)
+            && nodes.contains(e.from.as_str())
+            && nodes.contains(e.to.as_str())
+    });
+    let structures: HashSet<_> = data
+        .structural_edges
+        .iter()
+        .map(|e| e.id.as_str())
+        .collect();
+    data.assertions
+        .retain(|a| allowed(&a.readers, principal) && structures.contains(a.edge_id.as_str()));
     data.attachments.retain(|a| allowed(&a.readers, principal));
     prune_attachments(&mut data);
     data
@@ -1260,6 +1417,16 @@ fn refs(data: &GraphData) -> Vec<GraphRef> {
         .iter()
         .flat_map(|n| n.metadata.clone())
         .chain(data.edges.iter().flat_map(|e| e.metadata.clone()))
+        .chain(
+            data.structural_edges
+                .iter()
+                .flat_map(|e| e.metadata.clone()),
+        )
+        .chain(
+            data.assertions
+                .iter()
+                .flat_map(|a| a.metadata.iter().chain(a.context.iter()).cloned()),
+        )
         .chain(data.attachments.iter().filter_map(|a| match &a.value {
             MetadataValue::Graph { reference } => Some(reference.clone()),
             _ => None,
@@ -1269,11 +1436,18 @@ fn refs(data: &GraphData) -> Vec<GraphRef> {
 fn prune_attachments(data: &mut GraphData) {
     let nodes: HashSet<_> = data.nodes.iter().map(|n| n.id.as_str()).collect();
     let entities: HashSet<_> = data.nodes.iter().map(|n| n.entity_id.as_str()).collect();
-    let edges: HashSet<_> = data.edges.iter().map(|e| e.id.as_str()).collect();
+    let edges: HashSet<_> = data
+        .edges
+        .iter()
+        .map(|e| e.id.as_str())
+        .chain(data.structural_edges.iter().map(|e| e.id.as_str()))
+        .collect();
+    let assertions: HashSet<_> = data.assertions.iter().map(|a| a.id.as_str()).collect();
     data.attachments.retain(|a| match &a.host {
         MetadataHost::Graph => true,
         MetadataHost::Node { id } => nodes.contains(id.as_str()),
         MetadataHost::Edge { id } => edges.contains(id.as_str()),
+        MetadataHost::Assertion { id } => assertions.contains(id.as_str()),
         MetadataHost::Entity { id } => entities.contains(id.as_str()),
     });
 }
@@ -1288,6 +1462,18 @@ fn partial(result: &mut QueryResult, code: &str, message: &str) {
     }
 }
 fn validate_graph(data: &GraphData) -> Result<()> {
+    if data.profile == GraphProfile::Explicit {
+        if let Some(d) = validate_schema_graph(data).first() {
+            return Err(err(&d.code, &d.message));
+        }
+        return validate_explicit(data);
+    }
+    if !data.structural_edges.is_empty() || !data.assertions.is_empty() {
+        return Err(err(
+            "E_PROFILE",
+            "explicit records require explicit graph profile",
+        ));
+    }
     if let Some(diagnostic) = validate_schema_graph(data).first() {
         return Err(err(&diagnostic.code, &diagnostic.message));
     }
@@ -1389,6 +1575,7 @@ fn validate_graph(data: &GraphData) -> Result<()> {
             MetadataHost::Graph => true,
             MetadataHost::Node { id } => data.nodes.iter().any(|n| &n.id == id),
             MetadataHost::Edge { id } => data.edges.iter().any(|e| &e.id == id),
+            MetadataHost::Assertion { .. } => false,
             MetadataHost::Entity { id } => data.nodes.iter().any(|n| &n.entity_id == id),
         };
         if !host || a.readers.iter().any(|r| !valid_id(r)) {
@@ -1465,20 +1652,26 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 before: left,
                 after: right,
             } => {
-                if version != VERSION {
+                if ![VERSION, "0.5.0"].contains(&version) {
                     return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
                 }
                 pending.push((left, depth + 1));
                 pending.push((right, depth + 1));
             }
             GraphExpression::Project { input, .. } | GraphExpression::Support { input, .. } => {
-                if version != VERSION {
+                if ![VERSION, "0.5.0"].contains(&version) {
                     return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
                 }
                 pending.push((input, depth + 1));
             }
-            GraphExpression::Metadata { input, .. } => {
-                if ![VERSION, "0.4.0"].contains(&version) {
+            GraphExpression::Metadata { input, host, .. } => {
+                if matches!(host, MetadataHost::Assertion { .. }) && version != VERSION {
+                    return Err(err(
+                        "E_VERSION",
+                        "assertion metadata hosts require contract 0.6.0",
+                    ));
+                }
+                if ![VERSION, "0.5.0", "0.4.0"].contains(&version) {
                     return Err(err(
                         "E_VERSION",
                         "metadata expressions require contract 0.4.0",
@@ -1503,4 +1696,20 @@ fn algebra_context(host: &HostContext) -> AlgebraContext {
         max_objects: 100_000,
         max_output_bytes: MATERIALIZED_LIMIT,
     }
+}
+
+fn requires_explicit_profile(data: &GraphData) -> bool {
+    data.profile == GraphProfile::Explicit
+        || !data.structural_edges.is_empty()
+        || !data.assertions.is_empty()
+        || data.edges.iter().any(|e| {
+            e.structural_ref.is_some()
+                || e.assertion_source.is_some()
+                || e.assertion_context.is_some()
+                || !e.assertion_properties.is_empty()
+        })
+        || data
+            .attachments
+            .iter()
+            .any(|a| matches!(a.host, MetadataHost::Assertion { .. }))
 }

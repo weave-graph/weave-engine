@@ -222,14 +222,51 @@ impl Engine {
                 ));
             }
         }
-        for edge in &data.edges {
-            let prior:Option<(String,String,String)>=self.conn.query_row("SELECT from_id,to_id,predicate FROM edge_structures WHERE graph_id=?1 AND edge_id=?2",params![graph,edge.id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
-            if prior
-                .is_some_and(|p| p != (edge.from.clone(), edge.to.clone(), edge.predicate.clone()))
-            {
+        for (id, from, to, predicate) in data
+            .edges
+            .iter()
+            .map(|e| (&e.id, &e.from, &e.to, &e.predicate))
+            .chain(
+                data.structural_edges
+                    .iter()
+                    .map(|e| (&e.id, &e.from, &e.to, &e.predicate)),
+            )
+        {
+            let prior:Option<(String,String,String)>=self.conn.query_row("SELECT from_id,to_id,predicate FROM edge_structures WHERE graph_id=?1 AND edge_id=?2",params![graph,id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
+            if prior.is_some_and(|p| p != (from.clone(), to.clone(), predicate.clone())) {
                 return Err(err(
                     "E_EDGE_IDENTITY",
                     "changing edge endpoints or predicate requires a new edge identity",
+                ));
+            }
+        }
+        for assertion in &data.assertions {
+            let edge_collision: bool = self.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM edge_structures WHERE graph_id=?1 AND edge_id=?2)",
+                params![graph, assertion.id],
+                |r| r.get(0),
+            )?;
+            let prior:Option<(String,String)>=self.conn.query_row("SELECT edge_id,source FROM assertion_structures WHERE graph_id=?1 AND assertion_id=?2",params![graph,assertion.id],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
+            if edge_collision
+                || prior.is_some_and(|p| p != (assertion.edge_id.clone(), assertion.source.clone()))
+            {
+                return Err(err(
+                    "E_ASSERTION_IDENTITY",
+                    "assertion ID cannot rebind its structural edge or source",
+                ));
+            }
+        }
+        for id in data
+            .edges
+            .iter()
+            .map(|e| &e.id)
+            .chain(data.structural_edges.iter().map(|e| &e.id))
+        {
+            let collision:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM assertion_structures WHERE graph_id=?1 AND assertion_id=?2)",params![graph,id],|r|r.get(0))?;
+            if collision {
+                return Err(err(
+                    "E_ASSERTION_IDENTITY",
+                    "assertion identity cannot be reused as a structural edge",
                 ));
             }
         }
@@ -242,10 +279,25 @@ impl Engine {
                 params![schema.id, schema.revision, serde_json::to_string(schema)?],
             )?;
         }
-        for edge in &data.edges {
+        for (id, from, to, predicate) in data
+            .edges
+            .iter()
+            .map(|e| (&e.id, &e.from, &e.to, &e.predicate))
+            .chain(
+                data.structural_edges
+                    .iter()
+                    .map(|e| (&e.id, &e.from, &e.to, &e.predicate)),
+            )
+        {
             self.conn.execute(
                 "INSERT OR IGNORE INTO edge_structures VALUES (?1,?2,?3,?4,?5)",
-                params![graph, edge.id, edge.from, edge.to, edge.predicate],
+                params![graph, id, from, to, predicate],
+            )?;
+        }
+        for assertion in &data.assertions {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO assertion_structures VALUES (?1,?2,?3,?4)",
+                params![graph, assertion.id, assertion.edge_id, assertion.source],
             )?;
         }
         Ok(())

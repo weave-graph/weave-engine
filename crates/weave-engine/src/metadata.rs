@@ -28,11 +28,23 @@ impl Engine {
         key: &str,
         principal: &HostContext,
     ) -> Result<QueryResult> {
+        let resolved_host = match host {
+            MetadataHost::Assertion { id }
+                if input
+                    .graph
+                    .edges
+                    .iter()
+                    .any(|e| &e.id == id && e.structural_ref.is_some()) =>
+            {
+                MetadataHost::Edge { id: id.clone() }
+            }
+            other => other.clone(),
+        };
         let candidates: Vec<_> = input
             .graph
             .attachments
             .iter()
-            .filter(|a| &a.host == host && a.key == key)
+            .filter(|a| a.host == resolved_host && a.key == key)
             .take(2)
             .cloned()
             .collect();
@@ -62,6 +74,7 @@ impl Engine {
                 .any(|m| m.reference == original)
             {
                 input.metadata_graphs.push(ResolvedGraph {
+                    attachment_origins: input.attachment_origins.clone(),
                     reference: original,
                     graph: input.graph.clone(),
                 });
@@ -77,6 +90,7 @@ impl Engine {
                 "metadata graph not materialized; query with include_metadata",
             ));
         };
+        let resolved_origins = resolved.attachment_origins.clone();
         let mut graph = resolved.graph.clone();
         let mut window = attachment.valid_time.clone();
         if let MetadataHost::Edge { id } = &attachment.host {
@@ -213,7 +227,12 @@ impl Engine {
                 assertion_id: attachment.id.clone(),
             };
             let mut dependencies = origin.clone();
-            if !dependencies.contains(&source) {
+            for p in resolved_origins.get(&attachment.id).into_iter().flatten() {
+                if !dependencies.contains(p) {
+                    dependencies.push(p.clone());
+                }
+            }
+            if !resolved_origins.contains_key(&attachment.id) && !dependencies.contains(&source) {
                 dependencies.push(source);
             }
             bytes += json_size(

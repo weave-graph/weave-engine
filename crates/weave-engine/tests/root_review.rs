@@ -25,6 +25,7 @@ fn commit(engine: &mut Engine, graph: &str, data: GraphData) -> String {
     let result = engine
         .execute(
             &Program {
+                source_revisions: vec![],
                 version: VERSION.into(),
                 commands: vec![Command::Commit {
                     graph_id: graph.into(),

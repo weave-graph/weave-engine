@@ -37,8 +37,14 @@ impl CapsuleRevision {
     }
     fn dependencies(&self) -> Vec<GraphRef> {
         let mut dependencies = refs(&self.data);
-        for edge in &self.data.edges {
-            dependencies.extend(edge.derived_from.iter().map(|r| GraphRef {
+        for premises in self
+            .data
+            .edges
+            .iter()
+            .map(|e| &e.derived_from)
+            .chain(self.data.assertions.iter().map(|a| &a.derived_from))
+        {
+            dependencies.extend(premises.iter().map(|r| GraphRef {
                 graph_id: r.graph_id.clone(),
                 revision: r.revision.clone(),
             }));

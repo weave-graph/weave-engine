@@ -28,6 +28,7 @@ fn program(graph: &str, readers: serde_json::Value) -> Program {
 }
 fn empty() -> Program {
     Program {
+        source_revisions: vec![],
         version: VERSION.into(),
         commands: vec![],
     }
@@ -219,5 +220,27 @@ fn bounded_retries_dead_letter_and_drain_are_explicit() {
             .unwrap_err()
             .code,
         "E_LIFECYCLE"
+    );
+}
+
+#[test]
+fn explicit_handler_output_requires_structural_and_assertion_restrictions() {
+    let mut e = Engine::memory().unwrap();
+    setup(&mut e);
+    let d = e.poll_adapter("test-adapter-v1", 0).unwrap().unwrap();
+    let mut p:Program=serde_json::from_value(json!({"version":VERSION,"commands":[{"op":"commit","graph_id":"output","data":{"profile":"explicit","nodes":[{"id":"n","entity_id":"N","space_id":"s","readers":["alice"]}],"structural_edges":[{"id":"relation","predicate":"p","from":"n","to":"n"}],"assertions":[{"id":"claim","edge_id":"relation","source":"local","readers":["alice"],"valid_time":{"start":0}}]}}]})).unwrap();
+    assert_eq!(
+        e.complete_handler("test-adapter-v1", &d.id, &d.lease, &p)
+            .unwrap_err()
+            .code,
+        "E_EGRESS"
+    );
+    if let Command::Commit { data, .. } = &mut p.commands[0] {
+        data.structural_edges[0].readers = vec!["alice".into()];
+    }
+    assert!(
+        !e.complete_handler("test-adapter-v1", &d.id, &d.lease, &p)
+            .unwrap()
+            .duplicate
     );
 }

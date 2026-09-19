@@ -76,6 +76,15 @@ fn checked(mut result: QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     Ok(result)
 }
 fn preflight(result: &QueryResult, ctx: &AlgebraContext) -> Result<(), Diagnostic> {
+    if result.graph.profile != GraphProfile::Legacy
+        || !result.graph.structural_edges.is_empty()
+        || !result.graph.assertions.is_empty()
+    {
+        return Err(err(
+            "E_ALGEBRA_PROFILE",
+            "Algebra consumes materialized graph values, not raw explicit snapshots",
+        ));
+    }
     let count = result
         .graph
         .nodes
@@ -102,6 +111,12 @@ fn envelope(left: &QueryResult, right: Option<&QueryResult>) -> QueryResult {
     out.edge_origins.clear();
     out.attachment_origins.clear();
     if let Some(r) = right {
+        out.source_revisions = unique(
+            left.source_revisions
+                .iter()
+                .chain(&r.source_revisions)
+                .cloned(),
+        );
         out.input_snapshots = unique(
             left.input_snapshots
                 .iter()
@@ -222,6 +237,10 @@ fn edge_key(input: &QueryResult, edge: &Edge) -> Result<String, Diagnostic> {
                 &edge.valid_time,
                 &edge.polarity,
                 &edge.properties,
+                &edge.assertion_properties,
+                &edge.assertion_source,
+                &edge.assertion_context,
+                &edge.structural_ref,
                 &edge.derivations
             ))
         ))
@@ -314,6 +333,14 @@ pub fn union(
                         .ok_or_else(|| err("E_ATTACHMENT_HOST", "Missing node attachment host"))?
                         .clone(),
                 },
+                MetadataHost::Assertion { id } => MetadataHost::Assertion {
+                    id: edge_ids
+                        .get(id)
+                        .ok_or_else(|| {
+                            err("E_ATTACHMENT_HOST", "Missing assertion attachment host")
+                        })?
+                        .clone(),
+                },
                 MetadataHost::Edge { id } => MetadataHost::Edge {
                     id: edge_ids
                         .get(id)
@@ -381,7 +408,7 @@ pub fn project(
     out.graph.attachments.retain(|a| match &a.host {
         MetadataHost::Graph => true,
         MetadataHost::Node { id } => ns.contains(id),
-        MetadataHost::Edge { id } => es.contains(id),
+        MetadataHost::Edge { id } | MetadataHost::Assertion { id } => es.contains(id),
         MetadataHost::Entity { id } => entities.contains(id),
     });
     out.node_origins.retain(|id, _| ns.contains(id));
@@ -534,6 +561,12 @@ pub fn support(
             || b.space_id != to.space_id
         {
             continue;
+        }
+        if edge.assertion_context.is_some() {
+            return Err(err(
+                "E_CONTEXT_REQUIRED",
+                "Contextual support requires an explicit compatible context selection",
+            ));
         }
         let origins = input
             .edge_origins
@@ -691,6 +724,10 @@ pub fn support(
     if !derivations.is_empty() {
         let origins = unique(derivations.iter().flat_map(|d| d.premises.clone()));
         let edge = Edge {
+            structural_ref: None,
+            assertion_source: None,
+            assertion_context: None,
+            assertion_properties: BTreeMap::new(),
             id: format!("{id}:evidence"),
             type_id: Some("SupportEvidence".into()),
             predicate: "weave:support:evidence".into(),
@@ -997,5 +1034,21 @@ mod tests {
         assert!(!serde_json::to_string(&d)
             .unwrap()
             .contains("private-other-path"));
+    }
+    #[test]
+    fn contextual_support_is_not_silently_treated_as_universal() {
+        let mut input = fixture("a", "positive", 0, 10);
+        input.graph.edges[0].assertion_context = Some(GraphRef {
+            graph_id: "scenario".into(),
+            revision: "1".into(),
+        });
+        assert_eq!(
+            support(input.clone(), "p", &target("A"), &target("B"), 5, &ctx())
+                .unwrap_err()
+                .code,
+            "E_CONTEXT_REQUIRED"
+        );
+        let result = support(input, "other", &target("A"), &target("B"), 5, &ctx()).unwrap();
+        assert_eq!(state(&result), "unknown");
     }
 }

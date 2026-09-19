@@ -465,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "weave-contract"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "weave-engine"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "rusqlite",
  "serde",

@@ -14,6 +14,7 @@ fn write(e: &mut Engine, graph: &str, data: GraphData) {
     let expected_head = e.head(graph, "main").unwrap();
     e.execute(
         &Program {
+            source_revisions: vec![],
             version: VERSION.into(),
             commands: vec![Command::Commit {
                 graph_id: graph.into(),

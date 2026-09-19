@@ -17,6 +17,9 @@ fn node(id: &str, entity: &str, space: &str) -> Node {
 }
 fn data() -> GraphData {
     GraphData {
+        profile: GraphProfile::Legacy,
+        structural_edges: vec![],
+        assertions: vec![],
         schema: None,
         attachments: vec![],
         nodes: vec![
@@ -24,6 +27,10 @@ fn data() -> GraphData {
             node("operational", "device", "operational"),
         ],
         edges: vec![Edge {
+            assertion_source: None,
+            assertion_context: None,
+            structural_ref: None,
+            assertion_properties: BTreeMap::new(),
             type_id: None,
             id: "link".into(),
             predicate: "counterpart".into(),
@@ -52,6 +59,7 @@ fn commit(graph: &str, head: Option<String>, data: GraphData) -> Command {
 }
 fn program(commands: Vec<Command>) -> Program {
     Program {
+        source_revisions: vec![],
         version: VERSION.into(),
         commands,
     }
@@ -141,6 +149,9 @@ fn optimistic_head_prevents_lost_update() {
 fn node_and_edge_metadata_graphs_are_pinned_and_partial_when_missing() {
     let mut engine = Engine::memory().unwrap();
     let evidence = GraphData {
+        profile: GraphProfile::Legacy,
+        structural_edges: vec![],
+        assertions: vec![],
         schema: None,
         attachments: vec![],
         nodes: vec![node("source", "source", "docs")],
@@ -222,6 +233,9 @@ fn restricted_counterparts_edges_and_provenance_do_not_leak() {
 fn hidden_and_missing_metadata_have_same_diagnostic() {
     let mut engine = Engine::memory().unwrap();
     let mut secret = GraphData {
+        profile: GraphProfile::Legacy,
+        structural_edges: vec![],
+        assertions: vec![],
         schema: None,
         attachments: vec![],
         nodes: vec![node("secret", "secret", "secret")],
@@ -453,6 +467,7 @@ fn same_graph_different_revision_join_retains_both_pins_and_legacy_rejects_join(
     );
     assert!(!result.snapshots.contains_key("g"));
     let p = Program {
+        source_revisions: vec![],
         version: LEGACY_VERSION.into(),
         commands: vec![Command::Join {
             left,
@@ -463,6 +478,7 @@ fn same_graph_different_revision_join_retains_both_pins_and_legacy_rejects_join(
     };
     assert_eq!(engine.execute(&p, &host()).unwrap_err().code, "E_VERSION");
     let p = Program {
+        source_revisions: vec![],
         version: LEGACY_VERSION.into(),
         commands: vec![Command::Query { query: query("g") }],
     };
@@ -579,6 +595,7 @@ fn duplicate_unbound_and_excessive_graph_expressions_reject_atomically() {
         "E_BUDGET"
     );
     let old = Program {
+        source_revisions: vec![],
         version: "0.2.0".into(),
         commands: vec![Command::Evaluate {
             value: expression("g"),
@@ -765,6 +782,9 @@ fn direct_query_bounds_metadata_bytes_during_expansion() {
                         name,
                         None,
                         GraphData {
+                            profile: GraphProfile::Legacy,
+                            structural_edges: vec![],
+                            assertions: vec![],
                             schema: None,
                             attachments: vec![],
                             nodes: vec![n],

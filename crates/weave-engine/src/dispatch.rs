@@ -381,6 +381,14 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                             .iter()
                             .any(|e| e.readers != [manifest.principal.clone()])
                         || data
+                            .structural_edges
+                            .iter()
+                            .any(|e| e.readers != [manifest.principal.clone()])
+                        || data
+                            .assertions
+                            .iter()
+                            .any(|a| a.readers != [manifest.principal.clone()])
+                        || data
                             .attachments
                             .iter()
                             .any(|a| a.readers != [manifest.principal.clone()])
