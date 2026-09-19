@@ -7,9 +7,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use weave_contract::*;
 mod capsule;
 mod dispatch;
+mod views;
 pub use dispatch::{
     AdapterManifest, DispatchEnvelope, EffectIntent, HandlerReceipt, SubscriptionScope,
 };
+pub use views::{ViewChange, ViewClock, ViewDefinition, ViewFreshness, ViewSnapshot};
 mod metadata;
 mod snapshot;
 mod typed;
@@ -104,6 +106,7 @@ impl Engine {
             transaction.commit()?;
         }
         engine.initialize_dispatch()?;
+        engine.initialize_views()?;
         Ok(engine)
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {

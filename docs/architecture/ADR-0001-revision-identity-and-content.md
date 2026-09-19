@@ -18,7 +18,7 @@ Same-transaction references can then resolve through the enclosing manifest. Cro
 
 Do not reinterpret existing `sha256:` IDs silently. Preserve their current decoding and validation. A new version must define logical revision namespaces, manifest ownership/signing, collision/equivocation handling, canonical encoding, atomic publication, and migration. Capsules built on the current checkpoint must explicitly call their revision ID a content-bound checkpoint ID and must not claim metadata-cycle support or signer authenticity from a hash alone.
 
-The language/runtime contract change needs both project owners and golden cycle fixtures. Full paper reconciliation may refine this design before adoption. Implementing a casual revision alias without these integrity rules would introduce an identity-spoofing gap, so this ADR does not claim that the replacement is finished.
+The language/runtime contract change needs both project owners and golden cycle fixtures. The recovered papers specify this logical-cycle/storage separation. Implementing a casual revision alias without these integrity rules would introduce an identity-spoofing gap, so this ADR does not claim that the replacement is finished.
 
 ## Implemented 0.4 profile
 

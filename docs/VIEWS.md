@@ -1,0 +1,13 @@
+# Durable named live views
+
+`register_view` accepts an immutable `ViewDefinition` with a standalone graph expression and exact trusted principal. It persists the evaluated graph, selected snapshots, schema, provenance groups, coverage and head dependencies. Another principal receives a generic unavailable response; cache lookup never falls back to another visibility class. Program-local graph names must be expanded before registering a standalone expression.
+
+`read_view(..., RequireCurrent, ...)` checks selected live heads in one SQLite snapshot and returns `E_FRESHNESS` when recomputation is required. `AllowStale` explicitly returns the old value with `current=false`. Unresolved partial coverage conservatively cannot certify cached freshness. `refresh_view` reevaluates the pure expression and atomically persists its result, dependency list, generation and membership transition. Full recomputation is the correctness oracle; no differential or constant-time performance claim is made.
+
+Live metadata handles participate in dependency tracking. Pinned metadata remains pinned when its graph head changes. A reverse dependency table indexes graph/branch subscriptions for future batched invalidation scheduling. The current host explicitly calls refresh; there is no background worker or push delivery guarantee.
+
+Fixed-clock views preserve the expression's time selectors and reject a supplied tick. Tick-clock views require an explicit instant and substitute all query/filter/support time selectors with that instant. Moving a registered tick backwards rejects; a distinct historical view can be registered. Expiry can retract an edge without producing a source graph commit. No wall-clock read or hidden timer changes a pure result.
+
+`view_changes` reports added, removed and changed node/edge IDs plus the complete new result. Removal is view membership, not an assertion of falsity. Partial/unavailable inputs remain explicit in the result. Schema, metadata and coverage changes are carried by the full result even if node/edge membership does not change. Only the latest transition is retained; a consumer more than one generation behind receives `E_REPLAY_WINDOW` and must resynchronize from a snapshot.
+
+Native restart, deletion/correction, live metadata, expiry and full-recomputation comparisons are tested. Remaining E07 work includes efficient incremental operators, priority/fan-out scheduling, durable ticking adapters, event-driven push subscriptions, configurable history/retention quotas, and richer versioned policy contexts. The current visibility rule is immutable snapshot readers plus the local trusted principal; this is not remote capability revocation.

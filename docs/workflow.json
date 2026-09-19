@@ -253,7 +253,7 @@
       "id": "E07",
       "title": "Incremental living views",
       "owner": "engine",
-      "state": "proposed",
+      "state": "in_progress",
       "depends_on": [
         "E03",
         "E04",
@@ -263,7 +263,11 @@
         "R15",
         "R23"
       ],
-      "evidence": []
+      "evidence": [
+        "docs/VIEWS.md",
+        "crates/weave-engine/src/views.rs",
+        "crates/weave-engine/tests/views.rs"
+      ]
     },
     {
       "id": "E08",
