@@ -1,0 +1,194 @@
+{
+  "profile": "protocol 0.3 public ring with no metadata, adapters, or peers",
+  "measurement": "fresh process, JSON input, SQLite commit+query, JSON output; no build/generation time",
+  "host": {
+    "system": "Darwin",
+    "release": "25.6.0",
+    "machine": "arm64",
+    "logical_cpus": 14
+  },
+  "limitations": [
+    "synthetic single-principal workload; no production SLO",
+    "tail statistic is nearest-rank p95 of a small declared sample",
+    "budget rejection is not demonstrated capacity",
+    "RSS is the engine child only; excludes harness"
+  ],
+  "cases": [
+    {
+      "objects": 10000,
+      "nodes": 5000,
+      "edges": 5000,
+      "input_bytes": 724603,
+      "metadata_depth": 0,
+      "visibility_partitions": 1,
+      "samples": [
+        {
+          "exit_code": 0,
+          "elapsed_seconds": 0.44887829083018005,
+          "peak_rss_bytes": 29786112,
+          "stdout_bytes": 4941957,
+          "outcome": "passed"
+        },
+        {
+          "exit_code": 0,
+          "elapsed_seconds": 0.03717383393086493,
+          "peak_rss_bytes": 28016640,
+          "stdout_bytes": 4941957,
+          "outcome": "passed"
+        },
+        {
+          "exit_code": 0,
+          "elapsed_seconds": 0.03403258393518627,
+          "peak_rss_bytes": 27934720,
+          "stdout_bytes": 4941957,
+          "outcome": "passed"
+        },
+        {
+          "exit_code": 0,
+          "elapsed_seconds": 0.03380404086783528,
+          "peak_rss_bytes": 27934720,
+          "stdout_bytes": 4941957,
+          "outcome": "passed"
+        },
+        {
+          "exit_code": 0,
+          "elapsed_seconds": 0.03413008316420019,
+          "peak_rss_bytes": 28000256,
+          "stdout_bytes": 4941957,
+          "outcome": "passed"
+        }
+      ],
+      "median_seconds": 0.03413008316420019,
+      "p95_seconds": 0.44887829083018005,
+      "max_peak_rss_bytes": 29786112,
+      "outcomes": [
+        "passed"
+      ]
+    },
+    {
+      "objects": 100000,
+      "nodes": 50000,
+      "edges": 50000,
+      "input_bytes": 7494603,
+      "metadata_depth": 0,
+      "visibility_partitions": 1,
+      "samples": [
+        {
+          "exit_code": 0,
+          "elapsed_seconds": 0.3115322501398623,
+          "peak_rss_bytes": 246923264,
+          "stdout_bytes": 49811957,
+          "outcome": "passed"
+        },
+        {
+          "exit_code": 0,
+          "elapsed_seconds": 0.3250338330399245,
+          "peak_rss_bytes": 246972416,
+          "stdout_bytes": 49811957,
+          "outcome": "passed"
+        },
+        {
+          "exit_code": 0,
+          "elapsed_seconds": 0.31873924983665347,
+          "peak_rss_bytes": 246923264,
+          "stdout_bytes": 49811957,
+          "outcome": "passed"
+        },
+        {
+          "exit_code": 0,
+          "elapsed_seconds": 0.32359487493522465,
+          "peak_rss_bytes": 246923264,
+          "stdout_bytes": 49811957,
+          "outcome": "passed"
+        },
+        {
+          "exit_code": 0,
+          "elapsed_seconds": 0.31188179086893797,
+          "peak_rss_bytes": 246824960,
+          "stdout_bytes": 49811957,
+          "outcome": "passed"
+        }
+      ],
+      "median_seconds": 0.31873924983665347,
+      "p95_seconds": 0.3250338330399245,
+      "max_peak_rss_bytes": 246972416,
+      "outcomes": [
+        "passed"
+      ]
+    },
+    {
+      "objects": 1000000,
+      "nodes": 500000,
+      "edges": 500000,
+      "input_bytes": 77444603,
+      "metadata_depth": 0,
+      "visibility_partitions": 1,
+      "samples": [
+        {
+          "exit_code": 1,
+          "elapsed_seconds": 0.006221583113074303,
+          "peak_rss_bytes": 20807680,
+          "stdout_bytes": 0,
+          "diagnostic": {
+            "code": "E_INPUT",
+            "message": "plan exceeds 16 MiB"
+          },
+          "outcome": "rejected_by_limit"
+        },
+        {
+          "exit_code": 1,
+          "elapsed_seconds": 0.004256125073879957,
+          "peak_rss_bytes": 20824064,
+          "stdout_bytes": 0,
+          "diagnostic": {
+            "code": "E_INPUT",
+            "message": "plan exceeds 16 MiB"
+          },
+          "outcome": "rejected_by_limit"
+        },
+        {
+          "exit_code": 1,
+          "elapsed_seconds": 0.004275958985090256,
+          "peak_rss_bytes": 20824064,
+          "stdout_bytes": 0,
+          "diagnostic": {
+            "code": "E_INPUT",
+            "message": "plan exceeds 16 MiB"
+          },
+          "outcome": "rejected_by_limit"
+        },
+        {
+          "exit_code": 1,
+          "elapsed_seconds": 0.004042583983391523,
+          "peak_rss_bytes": 20824064,
+          "stdout_bytes": 0,
+          "diagnostic": {
+            "code": "E_INPUT",
+            "message": "plan exceeds 16 MiB"
+          },
+          "outcome": "rejected_by_limit"
+        },
+        {
+          "exit_code": 1,
+          "elapsed_seconds": 0.004469000035896897,
+          "peak_rss_bytes": 20807680,
+          "stdout_bytes": 0,
+          "diagnostic": {
+            "code": "E_INPUT",
+            "message": "plan exceeds 16 MiB"
+          },
+          "outcome": "rejected_by_limit"
+        }
+      ],
+      "median_seconds": 0.004275958985090256,
+      "p95_seconds": 0.006221583113074303,
+      "max_peak_rss_bytes": 20824064,
+      "outcomes": [
+        "rejected_by_limit"
+      ]
+    }
+  ],
+  "build_revision": "938cde7629d5acb5b381b393cf67af8752a7f253",
+  "build_profile": "cargo build --release --locked -p weave-engine",
+  "compiler": "rustc 1.94.0 (4a4ef493e 2026-03-02)"
+}
