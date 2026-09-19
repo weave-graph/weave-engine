@@ -92,6 +92,7 @@ impl Engine {
     /// Export exact authorized snapshots. Logical snapshots include their whole manifest.
     /// Hidden manifest members cannot be disclosed through hashes or membership lists.
     pub fn export_capsule(&self, root: &GraphRef, host: &HostContext) -> Result<Capsule> {
+        let _read_scope = self.read_budget.enter();
         let mut pending = std::collections::VecDeque::from([(root.clone(), 0usize)]);
         let mut seen = HashSet::new();
         let mut included = HashSet::new();
@@ -258,6 +259,7 @@ impl Engine {
     /// Verify and quarantine snapshots. Receipt never advances accepted heads or emits events.
     /// Hashes authenticate byte consistency only, not a peer or an assertion's truth.
     pub fn receive_capsule(&mut self, capsule: &Capsule, host: &HostContext) -> Result<usize> {
+        let _read_scope = self.read_budget.enter();
         if !["weave-capsule-0.1", "weave-capsule-0.2"].contains(&capsule.format.as_str()) {
             return Err(err("E_VERSION", "unsupported capsule format"));
         }
@@ -480,6 +482,7 @@ impl Engine {
         expected: Option<&str>,
         host: &HostContext,
     ) -> Result<()> {
+        let _read_scope = self.read_budget.enter();
         if !valid_id(branch) || !valid_id(&host.principal) {
             return Err(err("E_ID", "branch and principal required"));
         }

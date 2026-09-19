@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         query: &QueryPlan,
         now_ms: i64,
     ) -> Result<Admitted<QueryResult>> {
+        let _read_scope = self.read_budget.enter();
         json_size(query, 1024 * 1024)?;
         let body = serde_json::to_vec(query)?;
         let operation = Operation {
@@ -323,6 +324,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         now_ms: i64,
         before_commit: impl FnOnce(),
     ) -> Result<Admitted<CommitReceipt>> {
+        let _read_scope = self.read_budget.enter();
         json_size(commit, 16 * 1024 * 1024)?;
         let body = serde_json::to_vec(commit)?;
         let operation = Operation {
@@ -396,6 +398,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         capsule: &Capsule,
         now_ms: i64,
     ) -> Result<Admitted<ProposalReceipt>> {
+        let _read_scope = self.read_budget.enter();
         json_size(capsule, 16 * 1024 * 1024)?;
         let root = capsule
             .revisions

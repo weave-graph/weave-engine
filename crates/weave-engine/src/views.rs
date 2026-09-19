@@ -66,6 +66,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         tick: Option<i64>,
         host: &HostContext,
     ) -> Result<ViewSnapshot> {
+        let _read_scope = self.read_budget.enter();
         if !valid_id(&definition.id) || !valid_id(&host.principal) {
             return Err(err("E_VIEW", "view and principal IDs required"));
         }
@@ -193,6 +194,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         freshness: ViewFreshness,
         host: &HostContext,
     ) -> Result<ViewSnapshot> {
+        let _read_scope = self.read_budget.enter();
         let tx = if self.conn.is_autocommit() {
             Some(self.conn.unchecked_transaction()?)
         } else {
@@ -221,6 +223,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         tick: Option<i64>,
         host: &HostContext,
     ) -> Result<ViewSnapshot> {
+        let _read_scope = self.read_budget.enter();
         let tx = self.conn.unchecked_transaction()?;
         let old = self.load_view(id, host)?;
         validate_tick(&old.definition.clock, tick)?;
