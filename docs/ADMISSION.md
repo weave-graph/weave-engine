@@ -33,3 +33,11 @@ Propose does not imply Read, Publish or acceptance. Every capsule record needs a
 ## Evidence
 
 `cargo test -p weave-engine --test admission` covers durable pinned read replay across reopen, nonce/body conflict, pinned branch escape and accepted fork history, metadata/provenance scope checks, narrower retry denial, epoch ABA/revocation, subject-scoped publication and deduplication, exact schema installation, isolated proposal poisoning prevention, receipt-capacity transaction rollback, unsupported live publication, expired retry rejection, hidden dependency noninterference for visible payload/coverage, and original live dependency retention after head changes. These are host API tests, not a production network or process-crash acceptance claim. The independent policy verifier has its own signature/delegation adversarial tests and WASM build.
+
+`python3 scripts/root_admission.py` separately terminates a fixed-key test host
+after publication/receipt SQL but before COMMIT (exit80), and after COMMIT before
+response (exit81). New processes verify rollback or exact durable retry, stable
+head/event/receipt counts, same-nonce body conflict rejection and private-egress
+rollback. The before-COMMIT observer only exists under `recovery-testing`; no
+environment variable activates it. This proves these local SQLite process-death
+boundaries, not a production transport or arbitrary network exactly-once guarantee.

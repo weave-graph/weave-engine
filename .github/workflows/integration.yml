@@ -30,3 +30,4 @@ jobs:
           python3 weave-language/scripts/check_assertions.py --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
           python3 weave-engine/scripts/root_assertions.py
           python3 weave-engine/scripts/root_dispatch.py
+          python3 weave-engine/scripts/root_admission.py

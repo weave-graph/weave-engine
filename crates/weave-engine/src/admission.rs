@@ -303,6 +303,26 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         commit: &SnapshotCommit,
         now_ms: i64,
     ) -> Result<Admitted<CommitReceipt>> {
+        self.admit_publish_boundary(proof, commit, now_ms, || {})
+    }
+    /// Test-only process termination boundary, absent from ordinary builds.
+    #[cfg(feature = "recovery-testing")]
+    pub fn admit_publish_test_before_commit(
+        &mut self,
+        proof: &AdmissionProof,
+        commit: &SnapshotCommit,
+        now_ms: i64,
+        before_commit: impl FnOnce(),
+    ) -> Result<Admitted<CommitReceipt>> {
+        self.admit_publish_boundary(proof, commit, now_ms, before_commit)
+    }
+    fn admit_publish_boundary(
+        &mut self,
+        proof: &AdmissionProof,
+        commit: &SnapshotCommit,
+        now_ms: i64,
+        before_commit: impl FnOnce(),
+    ) -> Result<Admitted<CommitReceipt>> {
         json_size(commit, 16 * 1024 * 1024)?;
         let body = serde_json::to_vec(commit)?;
         let operation = Operation {
@@ -362,6 +382,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
             event_id,
         };
         self.record_admission(&verified, &result)?;
+        before_commit();
         tx.commit()?;
         Ok(Admitted {
             duplicate: false,
