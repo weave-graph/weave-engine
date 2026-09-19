@@ -44,7 +44,10 @@ not graph-scoped capsules or a remote signed operation.
   event equality, and an independent subsequent commit in the restored store.
 
 Actual process termination around graph/receipt commits is tested separately by
-`scripts/root_dispatch.py` and `scripts/root_admission.py`. The migration rollback
-test injects a validation failure; it is not a process-kill migration test. Broader
+`scripts/root_dispatch.py` and `scripts/root_admission.py`. `scripts/root_migration.py`
+terminates a process after backfill/table creation but before schema COMMIT (exit82),
+then verifies that identities, new tables and the version marker all rolled back.
+A new process completes the upgrade while preserving evidence/events; another
+reopen is idempotent. The callback exists only under `recovery-testing`. Broader
 historical upgrade fixtures, fuzzing and production backup operations remain open
 under E14.

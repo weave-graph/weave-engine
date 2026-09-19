@@ -74,6 +74,17 @@ impl Engine {
         Self::from_connection(Connection::open_in_memory()?)
     }
     fn from_connection(conn: Connection) -> Result<Self> {
+        Self::from_connection_boundary(conn, || {})
+    }
+    /// Test-only interruption after schema/backfill SQL, before its outer COMMIT.
+    #[cfg(feature = "recovery-testing")]
+    pub fn open_test_before_schema_commit(
+        path: impl AsRef<Path>,
+        before_commit: impl FnOnce(),
+    ) -> Result<Self> {
+        Self::from_connection_boundary(Connection::open(path)?, before_commit)
+    }
+    fn from_connection_boundary(conn: Connection, before_commit: impl FnOnce()) -> Result<Self> {
         let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
         if !(0..=6).contains(&version) {
             return Err(err(
@@ -125,6 +136,7 @@ impl Engine {
         engine.initialize_dispatch()?;
         engine.initialize_views()?;
         engine.initialize_admission()?;
+        before_commit();
         initialization.commit()?;
         Ok(engine)
     }
