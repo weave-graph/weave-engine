@@ -1,6 +1,7 @@
 //! Independent integrity, migration rollback and SQLite backup acceptance.
 use rusqlite::{params, Connection};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use weave_contract::{GraphData, Program, QueryPlan, VERSION};
 use weave_engine::{Engine, HostContext};
 fn host() -> HostContext {
@@ -107,7 +108,14 @@ fn failed_legacy_backfill_rolls_back_all_schema_and_identity_changes() {
     let mut conflicting = original.clone();
     conflicting.edges[0].from = "b".into();
     conflicting.edges[0].to = "a".into();
-    for (revision, d) in [("first", original), ("second", conflicting)] {
+    for d in [original, conflicting] {
+        let revision = format!(
+            "sha256:{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&("weave-revision-v0.1", "g", "main", None::<String>, &d))
+                    .unwrap()
+            )
+        );
         c.execute(
             "INSERT INTO revisions VALUES (?1,'g','main',NULL,0,?2)",
             params![revision, serde_json::to_string(&d).unwrap()],
@@ -170,4 +178,70 @@ fn sqlite_backup_restores_same_pins_results_events_and_independent_future() {
         restored.head("g", "main").unwrap(),
         e.head("g", "main").unwrap()
     );
+}
+
+#[test]
+fn legacy_corruption_cannot_poison_backfill_and_repaired_fixture_upgrades() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("old.db");
+    let mut e = Engine::open(&path).unwrap();
+    commit(&mut e, false);
+    let expected = e.query(&query(), &host()).unwrap();
+    drop(e);
+    let c = Connection::open(&path).unwrap();
+    let original: String = c
+        .query_row("SELECT data FROM revisions", [], |r| r.get(0))
+        .unwrap();
+    c.execute("DELETE FROM edge_structures", []).unwrap();
+    c.pragma_update(None, "user_version", 5).unwrap();
+    let mut bad = data();
+    bad.edges[0].predicate = "poison".into();
+    c.execute(
+        "UPDATE revisions SET data=?1",
+        [serde_json::to_string(&bad).unwrap()],
+    )
+    .unwrap();
+    let error = match Engine::open(&path) {
+        Ok(_) => panic!("corrupt migration accepted"),
+        Err(e) => e,
+    };
+    assert_eq!(error.code, "E_INTEGRITY");
+    assert_eq!(
+        c.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+            .unwrap(),
+        5
+    );
+    assert_eq!(
+        c.query_row("SELECT COUNT(*) FROM edge_structures", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    c.execute("UPDATE revisions SET data=?1", [original])
+        .unwrap();
+    let upgraded = Engine::open(&path).unwrap();
+    assert_eq!(upgraded.query(&query(), &host()).unwrap(), expected);
+    assert_eq!(
+        c.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+            .unwrap(),
+        6
+    );
+    assert_eq!(
+        c.query_row("SELECT COUNT(*) FROM edge_structures", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn oversized_corrupt_cell_is_rejected_by_bounded_sql_extraction() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("oversized.db");
+    let mut e = Engine::open(&path).unwrap();
+    commit(&mut e, false);
+    let c = Connection::open(&path).unwrap();
+    c.execute("UPDATE revisions SET data=zeroblob(16777217)", [])
+        .unwrap();
+    assert_eq!(e.query(&query(), &host()).unwrap_err().code, "E_INTEGRITY");
 }

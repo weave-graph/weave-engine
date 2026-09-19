@@ -5,6 +5,7 @@ rejects future versions before creating tables or attempting migration. Schema
 creation, legacy structural-identity backfill, version-marker advancement, and
 dispatcher/view/admission table initialization share one SQLite immediate
 transaction. A failed migration leaves the previous records and schema unchanged.
+Backfill verifies each retained revision before installing its structural identities.
 WAL mode selection occurs before the transaction as required by SQLite.
 
 Graph loads verify canonical graph/branch/parent/content against content-addressed
@@ -14,6 +15,8 @@ an exact member binding to graph, branch, parent and content. Malformed, oversiz
 missing-integrity and mismatched stored objects fail with `E_INTEGRITY` instead of
 being evaluated as evidence. This adds hashing work to reads. It does not turn a
 claimed author into an authenticated source.
+Bounded SQL extraction prevents oversized corrupt data/manifest cells from being
+copied into Rust strings before the 16 MiB per-record format limit is checked.
 
 These checks detect stored corruption relative to retained anchors. They do not
 protect against a database administrator replacing every anchor, rollback to an
@@ -35,6 +38,8 @@ not graph-scoped capsules or a remote signed operation.
 - missing logical integrity records and modified manifests;
 - refusal of an unknown future schema without creating tables;
 - repeated failed legacy identity backfill with complete DDL/record rollback;
+- corruption rejection before backfill, followed by a repaired version-5 fixture
+  upgrade, and rejection of an oversized corrupt cell;
 - a SQLite snapshot backup while the source is open, exact restored query and
   event equality, and an independent subsequent commit in the restored store.
 

@@ -108,12 +108,14 @@ impl Engine {
             {
                 let mut statement = engine
                     .conn
-                    .prepare("SELECT graph_id,data FROM revisions ORDER BY rowid")?;
+                    .prepare("SELECT substr(graph_id,1,513),substr(revision,1,513) FROM revisions ORDER BY rowid")?;
                 let rows = statement
                     .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
                 for row in rows {
-                    let (graph, json) = row?;
-                    let data: GraphData = serde_json::from_str(&json)?;
+                    let (graph, revision) = row?;
+                    let data = engine.load(&graph, &revision)?.ok_or_else(|| {
+                        err("E_INTEGRITY", "legacy revision unavailable during backfill")
+                    })?;
                     engine.validate_structures(&graph, &data)?;
                     engine.record_structures(&graph, &data)?;
                 }
@@ -398,10 +400,10 @@ impl Engine {
         )?)
     }
     fn load(&self, graph: &str, revision: &str) -> Result<Option<GraphData>> {
-        let row: Option<(String, Option<String>, String)> = self
+        let row: Option<(String, Option<String>, Option<String>)> = self
             .conn
             .query_row(
-                "SELECT branch_id,parent,data FROM revisions WHERE graph_id=?1 AND revision=?2",
+                "SELECT substr(branch_id,1,513),substr(parent,1,513),CASE WHEN length(CAST(data AS BLOB))<=16777216 THEN data ELSE NULL END FROM revisions WHERE graph_id=?1 AND revision=?2",
                 params![graph, revision],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
@@ -409,21 +411,22 @@ impl Engine {
         let Some((branch, parent, encoded)) = row else {
             return Ok(None);
         };
-        if encoded.len() > 16 * 1024 * 1024 {
+        let encoded =
+            encoded.ok_or_else(|| err("E_INTEGRITY", "stored revision exceeds format bounds"))?;
+        if !valid_id(&branch) || parent.as_ref().is_some_and(|p| !valid_id(p)) {
             return Err(err("E_INTEGRITY", "stored revision exceeds format bounds"));
         }
         let data: GraphData = serde_json::from_str(&encoded)
             .map_err(|_| err("E_INTEGRITY", "stored revision is malformed"))?;
         let digest = snapshot::content_digest(graph, &branch, &parent, &data)?;
         if revision.starts_with("logical:") {
-            let integrity: Option<(String, String, String)> = self.conn.query_row(
-                "SELECT i.content_digest,i.manifest_id,m.manifest FROM revision_integrity i JOIN snapshot_manifests m ON m.id=i.manifest_id WHERE i.revision=?1",
+            let integrity: Option<(String, String, Option<String>)> = self.conn.query_row(
+                "SELECT substr(i.content_digest,1,129),substr(i.manifest_id,1,129),CASE WHEN length(CAST(m.manifest AS BLOB))<=16777216 THEN m.manifest ELSE NULL END FROM revision_integrity i JOIN snapshot_manifests m ON m.id=i.manifest_id WHERE i.revision=?1",
                 [revision], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
             let (stored_digest, id, manifest) = integrity
                 .ok_or_else(|| err("E_INTEGRITY", "stored logical revision lacks its manifest"))?;
-            if manifest.len() > 16 * 1024 * 1024 {
-                return Err(err("E_INTEGRITY", "stored manifest exceeds format bounds"));
-            }
+            let manifest = manifest
+                .ok_or_else(|| err("E_INTEGRITY", "stored manifest exceeds format bounds"))?;
             let manifest: SnapshotManifest = serde_json::from_str(&manifest)
                 .map_err(|_| err("E_INTEGRITY", "stored manifest is malformed"))?;
             let hash = format!(
@@ -441,7 +444,7 @@ impl Engine {
                 })
                 || revision != format!("logical:{}:{graph}", manifest.batch_id)
                 || manifest.members.is_empty()
-                || manifest.members.len() > 1000
+                || manifest.members.len() > 100
                 || manifest
                     .members
                     .windows(2)
