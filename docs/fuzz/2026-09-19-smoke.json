@@ -1,0 +1,65 @@
+{
+  "date": "2026-09-19",
+  "engine_base": "d184eaa54716cbccbd968b4d30ba2017a3f72575",
+  "host": "aarch64-apple-darwin",
+  "compiler": "rustc 1.100.0-nightly (420ed2a0c 2026-09-18)",
+  "cargo_fuzz": "0.13.2",
+  "sanitizer": "address (cargo-fuzz default)",
+  "limits": {
+    "max_total_time_seconds": 30,
+    "per_input_timeout_seconds": 5,
+    "rss_limit_mb": 1024,
+    "max_input_bytes": 131072,
+    "policy_initial_max_input_bytes": 65537
+  },
+  "runs": [
+    {
+      "inputs": 488311,
+      "libfuzzer_cov": 1865,
+      "libfuzzer_features": 3603,
+      "reported_rss_mib": 529,
+      "target": "capsule_receive",
+      "run": "capsule_receive",
+      "seconds": 31,
+      "exit_code": 0
+    },
+    {
+      "inputs": 3318373,
+      "libfuzzer_cov": 2296,
+      "libfuzzer_features": 5289,
+      "reported_rss_mib": 671,
+      "target": "policy_wire",
+      "run": "policy_wire",
+      "seconds": 31,
+      "exit_code": 0
+    },
+    {
+      "inputs": 260885,
+      "libfuzzer_cov": 11624,
+      "libfuzzer_features": 30535,
+      "reported_rss_mib": 563,
+      "target": "program_atomic",
+      "run": "program_atomic-verified-seed",
+      "seconds": 31,
+      "exit_code": 0
+    },
+    {
+      "inputs": 247142,
+      "libfuzzer_cov": 11409,
+      "libfuzzer_features": 29046,
+      "reported_rss_mib": 519,
+      "target": "program_atomic",
+      "run": "program_atomic",
+      "seconds": 31,
+      "exit_code": 0
+    }
+  ],
+  "seed_sha256": {
+    "fuzz/seeds/program_atomic/geometry.json": "e9d8ac6ecd3f0bc091a5b982e82419fe0cb852bf85ad23510bff29ccad9fc38a",
+    "fuzz/seeds/program_atomic/empty.json": "da55ac07ff9d89fc8b08e0c7c1d30f24880e005efc10673af4a38d93102a5348",
+    "fuzz/seeds/program_atomic/rollback.json": "7698046ce0296f0b4ea5a51ddb86d7abc6adac70307c7a6cbef54c3a8bccec5c",
+    "fuzz/seeds/capsule_receive/empty-graph.json": "6a805138b1432c05811f8256879d57bd4ca99b85b6d54bdf19370927dfcef3c1",
+    "fuzz/seeds/policy_wire/untrusted-root.json": "be48ef035d450d0c29d2d5515330817eca5ea70ee9ee05744b5bd59c26f5608b",
+    "fuzz/seeds/policy_wire/empty-chain.json": "dcc01679936bcf06d4ed1b46e7eac066dcc32208d1b8ea7f09541cab4ad03be2"
+  }
+}

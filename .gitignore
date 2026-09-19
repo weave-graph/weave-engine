@@ -4,3 +4,9 @@
 *.db
 *.db-shm
 *.db-wal
+
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/
+/fuzz/coverage/
+/fuzz/runlogs/
