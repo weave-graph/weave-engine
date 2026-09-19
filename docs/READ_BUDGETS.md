@@ -1,7 +1,7 @@
 # Cumulative native read work
 
-Nested graph reads in one program, query, join, signed admission, capsule operation
-or live-view read/refresh share limits of 4,096 load attempts and 128 MiB of stored
+Nested graph reads in one program, query, join, signed admission, capsule operation,
+structural/assertion resolver or live-view read/refresh share limits of 4,096 load attempts and 128 MiB of stored
 graph/manifest text. Missing references count as attempts. Repeated references
 count again: this is a work limit, not a cache or a unique-object allowance.
 
@@ -29,5 +29,5 @@ future work; no output authority is widened to avoid a limit.
 
 `cargo test -p weave-engine --test root_read_budget` verifies repeated large
 premises hit the cumulative byte limit with prior-command rollback, thousands of
-small repeated premises hit the load-count limit, bounded requests succeed, the
+small repeated premises and source-assertion resolution hit the load-count limit, bounded requests succeed, the
 same engine remains usable after an error, and moving it to a host thread works.

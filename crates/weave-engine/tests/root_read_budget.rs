@@ -129,3 +129,34 @@ fn engine_retains_send_for_host_actor_threads() {
         1
     );
 }
+
+#[test]
+fn source_assertion_resolution_uses_the_same_operation_budget() {
+    let mut e = Engine::memory().unwrap();
+    let revision = commit(&mut e, "source", graph());
+    let original = graph();
+    let assertions:Vec<_>=(0..4200).map(|i|json!({"id":format!("claim:{i}"),"edge_id":"relation","source":"test","valid_time":{"start":0},"derived_from":[{"graph_id":"source","revision":revision,"assertion_id":"e"}]})).collect();
+    let explicit:GraphData=serde_json::from_value(json!({"profile":"explicit","nodes":original.nodes,"structural_edges":[{"id":"relation","predicate":"p","from":"a","to":"b"}],"assertions":assertions})).unwrap();
+    let revision = commit(&mut e, "derived", explicit);
+    let reference = weave_contract::AssertionRef {
+        graph_id: "derived".into(),
+        revision: revision.clone(),
+        assertion_id: "claim:4199".into(),
+    };
+    assert_eq!(
+        e.resolve_assertion(&reference, &host()).unwrap_err().code,
+        "E_BUDGET"
+    );
+    let structure = weave_contract::StructuralRef {
+        graph_id: "derived".into(),
+        revision,
+        edge_id: "relation".into(),
+    };
+    assert_eq!(
+        e.resolve_structural(&structure, &host())
+            .unwrap()
+            .unwrap()
+            .id,
+        "relation"
+    );
+}
