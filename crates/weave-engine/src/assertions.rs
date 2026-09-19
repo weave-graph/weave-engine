@@ -265,6 +265,8 @@ impl Engine {
         reference: &StructuralRef,
         host: &HostContext,
     ) -> Result<Option<StructuralEdge>> {
+        let _snapshot = self.optional_read_transaction()?;
+        let _clock_scope = self.operation_scope()?;
         let _read_scope = self.read_budget.enter();
         if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
             return Ok(None);
@@ -284,6 +286,8 @@ impl Engine {
         reference: &AssertionRef,
         host: &HostContext,
     ) -> Result<Option<Assertion>> {
+        let _snapshot = self.optional_read_transaction()?;
+        let _clock_scope = self.operation_scope()?;
         let _read_scope = self.read_budget.enter();
         if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
             return Ok(None);

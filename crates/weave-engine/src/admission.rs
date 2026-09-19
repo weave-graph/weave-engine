@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
             &self.conn,
             rusqlite::TransactionBehavior::Immediate,
         )?;
+        let _clock_scope = self.operation_write_scope()?;
         let old: Option<(String, String)> = self
             .conn
             .query_row(
@@ -116,7 +117,8 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         tx.commit()?;
         Ok(())
     }
-    fn admission_context(&self, now_ms: i64) -> Result<AdmissionContext> {
+    fn admission_context(&self) -> Result<AdmissionContext> {
+        let now_ms = self.operation_time()?;
         let policy: Option<String> = self
             .conn
             .query_row("SELECT policy FROM admission_policy WHERE id=1", [], |r| {
@@ -153,9 +155,8 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         proof: &AdmissionProof,
         body: &[u8],
         operation: &Operation,
-        now_ms: i64,
     ) -> Result<VerifiedRequest> {
-        let context = self.admission_context(now_ms)?;
+        let context = self.admission_context()?;
         let verified =
             weave_policy::verify_request(proof, body, operation, &context).map_err(policy_error)?;
         verified
@@ -223,7 +224,6 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         &mut self,
         proof: &AdmissionProof,
         query: &QueryPlan,
-        now_ms: i64,
     ) -> Result<Admitted<QueryResult>> {
         let _read_scope = self.read_budget.enter();
         json_size(query, 1024 * 1024)?;
@@ -237,7 +237,8 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
             &self.conn,
             rusqlite::TransactionBehavior::Immediate,
         )?;
-        let verified = self.verify_admission(proof, &body, &operation, now_ms)?;
+        let _clock_scope = self.operation_write_scope()?;
+        let verified = self.verify_admission(proof, &body, &operation)?;
         let scopes = &proof
             .chain
             .last()
@@ -303,9 +304,8 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         &mut self,
         proof: &AdmissionProof,
         commit: &SnapshotCommit,
-        now_ms: i64,
     ) -> Result<Admitted<CommitReceipt>> {
-        self.admit_publish_boundary(proof, commit, now_ms, || {})
+        self.admit_publish_boundary(proof, commit, || {})
     }
     /// Test-only process termination boundary, absent from ordinary builds.
     #[cfg(feature = "recovery-testing")]
@@ -313,16 +313,14 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         &mut self,
         proof: &AdmissionProof,
         commit: &SnapshotCommit,
-        now_ms: i64,
         before_commit: impl FnOnce(),
     ) -> Result<Admitted<CommitReceipt>> {
-        self.admit_publish_boundary(proof, commit, now_ms, before_commit)
+        self.admit_publish_boundary(proof, commit, before_commit)
     }
     fn admit_publish_boundary(
         &mut self,
         proof: &AdmissionProof,
         commit: &SnapshotCommit,
-        now_ms: i64,
         before_commit: impl FnOnce(),
     ) -> Result<Admitted<CommitReceipt>> {
         let _read_scope = self.read_budget.enter();
@@ -337,7 +335,8 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
             &self.conn,
             rusqlite::TransactionBehavior::Immediate,
         )?;
-        let verified = self.verify_admission(proof, &body, &operation, now_ms)?;
+        let _clock_scope = self.operation_write_scope()?;
+        let verified = self.verify_admission(proof, &body, &operation)?;
         if let Some(result) = self.prior_admission(&verified)? {
             tx.commit()?;
             return Ok(Admitted {
@@ -397,7 +396,6 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         &mut self,
         proof: &AdmissionProof,
         capsule: &Capsule,
-        now_ms: i64,
     ) -> Result<Admitted<ProposalReceipt>> {
         let _read_scope = self.read_budget.enter();
         json_size(capsule, 16 * 1024 * 1024)?;
@@ -416,7 +414,8 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
             &self.conn,
             rusqlite::TransactionBehavior::Immediate,
         )?;
-        let verified = self.verify_admission(proof, &body, &operation, now_ms)?;
+        let _clock_scope = self.operation_write_scope()?;
+        let verified = self.verify_admission(proof, &body, &operation)?;
         if let Some(result) = self.prior_admission(&verified)? {
             tx.commit()?;
             return Ok(Admitted {
@@ -462,8 +461,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
             let used: i64 = self.conn.query_row(
                 "SELECT COALESCE(SUM(length(CAST(capsule AS BLOB))),0) FROM isolated_proposals WHERE subject=?1",
                 [verified.principal()],
-                |r| r.get(0),
-            )?;
+                |r| r.get(0))?;
             if used as usize + body.len() > 64 * 1024 * 1024 {
                 return Err(err("E_BACKPRESSURE", "proposal storage quota exceeded"));
             }

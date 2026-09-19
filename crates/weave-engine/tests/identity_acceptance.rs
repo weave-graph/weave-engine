@@ -1,3 +1,5 @@
+#[path = "support/clock.rs"]
+mod test_clock;
 use serde_json::json;
 use weave_contract::*;
 use weave_engine::*;
@@ -48,7 +50,7 @@ fn policy() -> IdentityPolicy {
     }
 }
 fn setup() -> (Engine, IdentityCandidate) {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     e.install_identity_policy(&policy()).unwrap();
     let a = write(&mut e, "physical", "independent-A", "physical", &[]);
     let b = write(&mut e, "operations", "independent-B", "operations", &[]);
@@ -335,7 +337,7 @@ fn raw_plans_and_capsules_cannot_poison_reserved_identity_storage() {
     let capsule = e
         .export_capsule(&accepted.reference, &host("alice"))
         .unwrap();
-    let mut receiver = Engine::memory().unwrap();
+    let mut receiver = test_clock::memory().unwrap();
     assert_eq!(
         receiver
             .receive_capsule(&capsule, &host("alice"))
@@ -472,7 +474,7 @@ fn hidden_partition_members_do_not_change_visible_payload_layout_or_coverage() {
 
 #[test]
 fn repeated_resolution_and_union_preserve_distinct_same_space_manifestations() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     e.install_identity_policy(&policy()).unwrap();
     let a = write(&mut e, "physical", "a", "physical", &[]);
     let graph: GraphData = serde_json::from_value(json!({"nodes":[
@@ -764,7 +766,7 @@ fn revoked_identity_policy_invalidates_cached_views_transitions_and_dispatch_wit
         )
         .unwrap();
         e.set_adapter_state(id, "running").unwrap();
-        assert!(e.poll_adapter(id, 0).unwrap().is_some());
+        assert!(test_clock::at(0, || e.poll_adapter(id)).unwrap().is_some());
     }
     e.revoke_identity_policy(&c.policy).unwrap();
     assert_eq!(e.head("copy", "main").unwrap(), head);
@@ -783,7 +785,10 @@ fn revoked_identity_policy_invalidates_cached_views_transitions_and_dispatch_wit
         "E_UNAVAILABLE"
     );
     for id in ["copy-adapter", "mapping-adapter"] {
-        assert_eq!(e.poll_adapter(id, 101).unwrap_err().code, "E_UNAVAILABLE");
+        assert_eq!(
+            test_clock::at(101, || e.poll_adapter(id)).unwrap_err().code,
+            "E_UNAVAILABLE"
+        );
     }
     let refreshed = e.refresh_view("accepted", None, &host("bob")).unwrap();
     assert!(refreshed.result.graph.nodes.is_empty());
@@ -891,7 +896,7 @@ fn revoked_identity_policy_blocks_signed_cached_response_retry() {
         request,
     };
     assert_eq!(
-        e.admit_query(&proof, &query, 200)
+        test_clock::at(200, || e.admit_query(&proof, &query))
             .unwrap()
             .result
             .graph
@@ -899,10 +904,16 @@ fn revoked_identity_policy_blocks_signed_cached_response_retry() {
             .len(),
         2
     );
-    assert!(e.admit_query(&proof, &query, 201).unwrap().duplicate);
+    assert!(
+        test_clock::at(201, || e.admit_query(&proof, &query))
+            .unwrap()
+            .duplicate
+    );
     e.revoke_identity_policy(&c.policy).unwrap();
     assert_eq!(
-        e.admit_query(&proof, &query, 202).unwrap_err().code,
+        test_clock::at(202, || e.admit_query(&proof, &query))
+            .unwrap_err()
+            .code,
         "E_UNAVAILABLE"
     );
 }
@@ -1000,7 +1011,7 @@ fn root_handler_receipt_retry_rechecks_event_and_unrelated_query_authority() {
         )
         .unwrap();
         e.set_adapter_state(id, "running").unwrap();
-        let delivery = e.poll_adapter(id, 0).unwrap().unwrap();
+        let delivery = test_clock::at(0, || e.poll_adapter(id)).unwrap().unwrap();
         let program = Program {
             version: VERSION.into(),
             source_revisions: vec![],

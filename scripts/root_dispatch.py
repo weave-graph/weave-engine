@@ -24,10 +24,16 @@ def main():
     with tempfile.TemporaryDirectory(prefix='weave-dispatch-') as tmp:
         root = Path(tmp)
         serial = 0
+        fixture_clocks = {}
         def call(db, request, exit_code=0, error=None):
             nonlocal serial
             serial += 1
             path = root/f'request-{serial}.json'
+            # The recovery executable installs a host clock at construction. Time is
+            # test-host configuration, not an authority argument on runtime methods.
+            request = dict(request)
+            fixture_clocks[str(db)] = request.pop('now_ms', fixture_clocks.get(str(db), 0))
+            request['fixture_clock_ms'] = fixture_clocks[str(db)]
             path.write_text(json.dumps(request))
             r = subprocess.run([str(probe),str(db),str(path)], text=True,capture_output=True)
             assert r.returncode == exit_code, (request,r.returncode,r.stdout,r.stderr)

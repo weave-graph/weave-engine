@@ -1,5 +1,7 @@
 # Scoped dispatch and effect recovery
 
+Current authorization uses the [constructor-installed operation clock](OPERATION_CLOCK.md); explicit native authority-time arguments were removed. Fact-time and scheduling data remain separate.
+
 The Rust host API in `src/dispatch.rs` installs immutable versioned adapter manifests. Installation pins artifact/configuration identity, principal, graph/branch subscriptions, output grants, effect destinations, lease/retry limits and projection replay mode. It never loads executable code. A changed artifact/configuration requires a new adapter identity and checkpoint; automated state migrations and sandboxed execution remain open.
 
 An adapter moves from installed to running, paused, draining or removed. Polling emits one authorized occurrence at a time with an opaque random lease and a stable replica source/event ID. Full snapshots must be visible to the installed principal before an envelope is delivered; private event counts and global offsets are not exposed. A private durable checkpoint skips unavailable scopes. This conservative whole-snapshot policy is not selective event aliasing or a remote capability protocol.

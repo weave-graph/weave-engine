@@ -1,7 +1,8 @@
 //! Test host driver. Crash boundaries are explicit invocation options, never runtime environment variables.
 use serde_json::{json, Value};
+use std::sync::Arc;
 use std::{env, fs, io::Read};
-use weave_engine::{AdapterManifest, Engine, HostContext};
+use weave_engine::{AdapterManifest, Engine, HostContext, ManualClock};
 fn field<'a>(v: &'a Value, k: &str) -> Result<&'a str, Box<dyn std::error::Error>> {
     v[k].as_str().ok_or_else(|| format!("missing {k}").into())
 }
@@ -18,7 +19,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("input budget".into());
     }
     let v: Value = serde_json::from_slice(&bytes)?;
-    let mut e = Engine::open(&args[1])?;
+    let fixture_time = v["fixture_clock_ms"].as_i64().ok_or("fixture_clock_ms")?;
+    let mut e = Engine::open_with_clock(&args[1], Arc::new(ManualClock::new(fixture_time)))?;
     let result = (|| -> Result<Value, Box<dyn std::error::Error>> {
         Ok(match field(&v, "op")? {
             "install" => {
@@ -28,9 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 e.set_adapter_state(&m.id, "running")?;
                 json!({"installed":true})
             }
-            "poll" => serde_json::to_value(
-                e.poll_adapter(field(&v, "adapter")?, v["now_ms"].as_i64().ok_or("now_ms")?)?,
-            )?,
+            "poll" => serde_json::to_value(e.poll_adapter(field(&v, "adapter")?)?)?,
             "complete" => {
                 let program = serde_json::from_value(v["program"].clone())?;
                 #[cfg(feature = "recovery-testing")]

@@ -73,6 +73,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         }
         json_size(definition, 1024 * 1024)?;
         let tx = self.conn.unchecked_transaction()?;
+        let _clock_scope = self.operation_write_scope()?;
         self.read_budget.request()?;
         let definition_limit = self.read_budget.remaining().min(1024 * 1024) as i64;
         let prior: Option<Option<String>> = self.conn.query_row(
@@ -90,8 +91,10 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
                     "view definition is immutable; register a new ID",
                 ));
             }
+            let result =
+                self.read_view(&definition.id, tick, ViewFreshness::RequireCurrent, host)?;
             tx.commit()?;
-            return self.read_view(&definition.id, tick, ViewFreshness::RequireCurrent, host);
+            return Ok(result);
         }
         let (result, dependencies) = self.compute_view(definition, tick, host)?;
         let change = change_between(None, &result, 1, tick);
@@ -254,6 +257,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         } else {
             None
         };
+        let _clock_scope = self.operation_scope()?;
         let record = self.load_view(id, host)?;
         self.require_current_result_authority(&record.result, host)?;
         let current = self.view_current(&record, tick)?;
@@ -271,7 +275,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         }
         Ok(result)
     }
-    /// Explicit tick/recompute in one snapshot and one durable cache transaction; no pure wall-clock read.
+    /// Explicit fact-time tick/recompute; current authority uses the separate trusted operation clock.
     pub fn refresh_view(
         &mut self,
         id: &str,
@@ -280,6 +284,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
     ) -> Result<ViewSnapshot> {
         let _read_scope = self.read_budget.enter();
         let tx = self.conn.unchecked_transaction()?;
+        let _clock_scope = self.operation_write_scope()?;
         let old = self.load_view(id, host)?;
         validate_tick(&old.definition.clock, tick)?;
         if old.tick.zip(tick).is_some_and(|(old, new)| new < old) {
@@ -371,6 +376,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         } else {
             None
         };
+        let _clock_scope = self.operation_scope()?;
         let record = self.load_view(id, host)?;
         self.require_current_result_authority(&record.result, host)?;
         let current = record.generation as u64;

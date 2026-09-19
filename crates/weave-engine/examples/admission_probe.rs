@@ -1,9 +1,10 @@
 //! Fixed-key test host for signed publication recovery, never a deployment server.
+#[path = "../tests/support/clock.rs"]
+mod test_clock;
 use ed25519_dalek::SigningKey;
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, env, fs, io::Read};
 use weave_contract::SnapshotCommit;
-use weave_engine::Engine;
 use weave_policy::*;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
@@ -25,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         branch_id: "main".into(),
         actions: [Action::Publish].into(),
     };
-    let mut e = Engine::open(&args[1])?;
+    let mut e = test_clock::open(&args[1])?;
     let op = request["op"].as_str().ok_or("missing op")?;
     if op == "install" {
         e.install_admission_policy(&AdmissionContext {
@@ -94,10 +95,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     #[cfg(feature = "recovery-testing")]
     if request["crash_before_commit"].as_bool() == Some(true) {
-        e.admit_publish_test_before_commit(&proof, &commit, 10, || std::process::exit(80))?;
+        test_clock::at(10, || {
+            e.admit_publish_test_before_commit(&proof, &commit, || std::process::exit(80))
+        })?;
         return Err("crash hook not reached".into());
     }
-    match e.admit_publish(&proof, &commit, 10) {
+    match test_clock::at(10, || e.admit_publish(&proof, &commit)) {
         Ok(receipt) => {
             if request["crash_after_commit"].as_bool() == Some(true) {
                 std::process::exit(81);

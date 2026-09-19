@@ -1,3 +1,5 @@
+#[path = "support/clock.rs"]
+mod test_clock;
 use serde_json::json;
 use weave_contract::*;
 use weave_engine::*;
@@ -42,10 +44,14 @@ fn setup(e: &mut Engine) {
 fn ordered_lease_receipt_and_output_are_atomic_across_restart() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("dispatch.db");
-    let mut e = Engine::open(&path).unwrap();
+    let mut e = test_clock::open(&path).unwrap();
     setup(&mut e);
-    let delivery = e.poll_adapter("test-adapter-v1", 0).unwrap().unwrap();
-    assert!(e.poll_adapter("test-adapter-v1", 50).unwrap().is_none());
+    let delivery = test_clock::at(0, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .unwrap();
+    assert!(test_clock::at(50, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .is_none());
     let output = program("output", json!(["alice"]));
     let receipt = e
         .complete_handler("test-adapter-v1", &delivery.id, &delivery.lease, &output)
@@ -53,14 +59,16 @@ fn ordered_lease_receipt_and_output_are_atomic_across_restart() {
     assert!(!receipt.duplicate);
     assert_eq!(e.event_count().unwrap(), 2);
     drop(e);
-    let mut e = Engine::open(path).unwrap();
+    let mut e = test_clock::open(path).unwrap();
     assert!(
         e.complete_handler("test-adapter-v1", &delivery.id, &delivery.lease, &output)
             .unwrap()
             .duplicate
     );
     assert_eq!(e.event_count().unwrap(), 2);
-    assert!(e.poll_adapter("test-adapter-v1", 200).unwrap().is_none());
+    assert!(test_clock::at(200, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .is_none());
     assert_eq!(
         e.complete_handler("test-adapter-v1", &delivery.id, &delivery.lease, &empty())
             .unwrap_err()
@@ -70,10 +78,14 @@ fn ordered_lease_receipt_and_output_are_atomic_across_restart() {
 }
 #[test]
 fn failed_handler_rolls_back_output_and_receipt_and_stale_lease_rejects() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     setup(&mut e);
-    let d = e.poll_adapter("test-adapter-v1", 0).unwrap().unwrap();
-    let renewed = e.poll_adapter("test-adapter-v1", 101).unwrap().unwrap();
+    let d = test_clock::at(0, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .unwrap();
+    let renewed = test_clock::at(101, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .unwrap();
     assert_ne!(d.lease, renewed.lease);
     assert_eq!(
         e.complete_handler("test-adapter-v1", &d.id, &d.lease, &empty())
@@ -100,26 +112,32 @@ fn failed_handler_rolls_back_output_and_receipt_and_stale_lease_rejects() {
 }
 #[test]
 fn private_occurrences_and_branch_scope_never_enter_envelope() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     e.execute(&program("input", json!(["bob"])), &host())
         .unwrap();
     e.install_adapter(&manifest(), &host()).unwrap();
     e.set_adapter_state("test-adapter-v1", "running").unwrap();
-    assert!(e.poll_adapter("test-adapter-v1", 0).unwrap().is_none());
+    assert!(test_clock::at(0, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .is_none());
     let mut p = program("input", json!([]));
     if let Command::Commit { branch_id, .. } = &mut p.commands[0] {
         *branch_id = "other".into()
     };
     e.execute(&p, &host()).unwrap();
-    assert!(e.poll_adapter("test-adapter-v1", 100).unwrap().is_none());
+    assert!(test_clock::at(100, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .is_none());
 }
 #[test]
 fn unknown_effect_never_automatically_retries_and_projection_replay_denies_effects() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("effects.db");
-    let mut e = Engine::open(&path).unwrap();
+    let mut e = test_clock::open(&path).unwrap();
     setup(&mut e);
-    let d = e.poll_adapter("test-adapter-v1", 0).unwrap().unwrap();
+    let d = test_clock::at(0, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .unwrap();
     let intent = e
         .request_effect(
             "test-adapter-v1",
@@ -134,7 +152,7 @@ fn unknown_effect_never_automatically_retries_and_projection_replay_denies_effec
     let attempted = e.begin_effect_dispatch(&intent.id).unwrap();
     assert_eq!(attempted.state, "unknown");
     drop(e);
-    let e = Engine::open(path).unwrap();
+    let e = test_clock::open(path).unwrap();
     assert_eq!(
         e.begin_effect_dispatch(&intent.id).unwrap_err().code,
         "E_EFFECT_UNKNOWN"
@@ -151,7 +169,9 @@ fn unknown_effect_never_automatically_retries_and_projection_replay_denies_effec
     e.install_adapter(&replay, &host()).unwrap();
     e.set_adapter_state("replay", "running").unwrap();
     let mut e = e;
-    let d = e.poll_adapter("replay", 1000).unwrap().unwrap();
+    let d = test_clock::at(1000, || e.poll_adapter("replay"))
+        .unwrap()
+        .unwrap();
     assert_eq!(
         e.request_effect("replay", &d.id, &d.lease, "mock://sink", "key", json!({}))
             .unwrap_err()
@@ -161,9 +181,11 @@ fn unknown_effect_never_automatically_retries_and_projection_replay_denies_effec
 }
 #[test]
 fn adapter_cannot_declassify_output_or_rebind_manifest() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     setup(&mut e);
-    let d = e.poll_adapter("test-adapter-v1", 0).unwrap().unwrap();
+    let d = test_clock::at(0, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .unwrap();
     assert_eq!(
         e.complete_handler(
             "test-adapter-v1",
@@ -185,20 +207,24 @@ fn adapter_cannot_declassify_output_or_rebind_manifest() {
 
 #[test]
 fn bounded_retries_dead_letter_and_drain_are_explicit() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     setup(&mut e);
     let mut now = 0;
     for _ in 0..3 {
-        let d = e.poll_adapter("test-adapter-v1", now).unwrap().unwrap();
-        e.fail_handler("test-adapter-v1", &d.id, &d.lease, now)
-            .unwrap();
-        assert!(e
-            .poll_adapter("test-adapter-v1", now + 1)
+        let d = test_clock::at(now, || e.poll_adapter("test-adapter-v1"))
             .unwrap()
-            .is_none());
+            .unwrap();
+        test_clock::at(now, || e.fail_handler("test-adapter-v1", &d.id, &d.lease)).unwrap();
+        assert!(
+            test_clock::at(now + 1, || e.poll_adapter("test-adapter-v1"))
+                .unwrap()
+                .is_none()
+        );
         now += 1_000_000;
     }
-    assert!(e.poll_adapter("test-adapter-v1", now).unwrap().is_none());
+    assert!(test_clock::at(now, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .is_none());
     assert_eq!(
         e.set_adapter_state("test-adapter-v1", "removed")
             .unwrap_err()
@@ -206,14 +232,17 @@ fn bounded_retries_dead_letter_and_drain_are_explicit() {
         "E_LIFECYCLE"
     );
     e.replay_handler_dead_letter("test-adapter-v1").unwrap();
-    let d = e.poll_adapter("test-adapter-v1", now).unwrap().unwrap();
+    let d = test_clock::at(now, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .unwrap();
     e.set_adapter_state("test-adapter-v1", "draining").unwrap();
     e.complete_handler("test-adapter-v1", &d.id, &d.lease, &empty())
         .unwrap();
-    assert!(e
-        .poll_adapter("test-adapter-v1", now + 1000)
-        .unwrap()
-        .is_none());
+    assert!(
+        test_clock::at(now + 1000, || e.poll_adapter("test-adapter-v1"))
+            .unwrap()
+            .is_none()
+    );
     e.set_adapter_state("test-adapter-v1", "removed").unwrap();
     assert_eq!(
         e.set_adapter_state("test-adapter-v1", "running")
@@ -225,9 +254,11 @@ fn bounded_retries_dead_letter_and_drain_are_explicit() {
 
 #[test]
 fn explicit_handler_output_requires_structural_and_assertion_restrictions() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     setup(&mut e);
-    let d = e.poll_adapter("test-adapter-v1", 0).unwrap().unwrap();
+    let d = test_clock::at(0, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .unwrap();
     let mut p:Program=serde_json::from_value(json!({"version":VERSION,"commands":[{"op":"commit","graph_id":"output","data":{"profile":"explicit","nodes":[{"id":"n","entity_id":"N","space_id":"s","readers":["alice"]}],"structural_edges":[{"id":"relation","predicate":"p","from":"n","to":"n"}],"assertions":[{"id":"claim","edge_id":"relation","source":"local","readers":["alice"],"valid_time":{"start":0}}]}}]})).unwrap();
     assert_eq!(
         e.complete_handler("test-adapter-v1", &d.id, &d.lease, &p)
@@ -249,9 +280,11 @@ fn explicit_handler_output_requires_structural_and_assertion_restrictions() {
 fn root_cached_handler_receipt_is_bounded_before_loading() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("receipt.db");
-    let mut e = Engine::open(&path).unwrap();
+    let mut e = test_clock::open(&path).unwrap();
     setup(&mut e);
-    let delivery = e.poll_adapter("test-adapter-v1", 0).unwrap().unwrap();
+    let delivery = test_clock::at(0, || e.poll_adapter("test-adapter-v1"))
+        .unwrap()
+        .unwrap();
     e.complete_handler("test-adapter-v1", &delivery.id, &delivery.lease, &empty())
         .unwrap();
     let connection = rusqlite::Connection::open(&path).unwrap();
@@ -276,4 +309,40 @@ fn root_cached_handler_receipt_is_bounded_before_loading() {
             .duplicate
     );
     assert_eq!(e.event_count().unwrap(), 1);
+}
+
+#[test]
+fn installed_clock_fences_expired_handler_and_effect_leases_without_polling() {
+    let clock = std::sync::Arc::new(ManualClock::new(0));
+    let mut e = Engine::memory_with_clock(clock.clone()).unwrap();
+    setup(&mut e);
+    let delivery = e.poll_adapter("test-adapter-v1").unwrap().unwrap();
+    clock.set(100); // half-open lease boundary, even though no renewal/poll has happened
+    let events = e.event_count().unwrap();
+    assert_eq!(
+        e.complete_handler("test-adapter-v1", &delivery.id, &delivery.lease, &empty())
+            .unwrap_err()
+            .code,
+        "E_LEASE"
+    );
+    assert_eq!(
+        e.request_effect(
+            "test-adapter-v1",
+            &delivery.id,
+            &delivery.lease,
+            "mock://sink",
+            "late",
+            json!({})
+        )
+        .unwrap_err()
+        .code,
+        "E_LEASE"
+    );
+    assert_eq!(e.event_count().unwrap(), events);
+    let renewed = e.poll_adapter("test-adapter-v1").unwrap().unwrap();
+    assert_ne!(delivery.lease, renewed.lease);
+    let before = clock.samples();
+    e.complete_handler("test-adapter-v1", &renewed.id, &renewed.lease, &empty())
+        .unwrap();
+    assert_eq!(clock.samples(), before + 1); // complete -> execute shares authority time
 }

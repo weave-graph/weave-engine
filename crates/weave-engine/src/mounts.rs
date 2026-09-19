@@ -165,6 +165,7 @@ CREATE TABLE IF NOT EXISTS mount_receipts(principal TEXT NOT NULL,nonce TEXT NOT
         }
         json_size(spec, 4096)?;
         let tx = self.conn.unchecked_transaction()?;
+        let _clock_scope = self.operation_write_scope()?;
         let query: QueryPlan = serde_json::from_value(
             serde_json::json!({"graph_id":spec.reference.graph_id,"revision":spec.reference.revision}),
         )?;
@@ -230,6 +231,7 @@ CREATE TABLE IF NOT EXISTS mount_receipts(principal TEXT NOT NULL,nonce TEXT NOT
             return Err(err("E_ID", "invalid mount request"));
         }
         let tx = self.conn.unchecked_transaction()?;
+        let _clock_scope = self.operation_write_scope()?;
         let body = digest(&("detach", id, expected_generation))?;
         if let Some(prior) = self.mount_prior(nonce, &body, host)? {
             tx.commit()?;
@@ -259,6 +261,7 @@ CREATE TABLE IF NOT EXISTS mount_receipts(principal TEXT NOT NULL,nonce TEXT NOT
     pub fn query_mount(&self, id: &str, host: &HostContext) -> Result<QueryResult> {
         let _scope = self.read_budget.enter();
         let tx = self.conn.unchecked_transaction()?;
+        let _clock_scope = self.operation_scope()?;
         let (spec, _, active, prior) = self
             .mount_row(id, host)?
             .ok_or_else(|| err("E_UNAVAILABLE", "mount unavailable"))?;

@@ -1,3 +1,5 @@
+#[path = "support/clock.rs"]
+mod test_clock;
 use ed25519_dalek::SigningKey;
 use serde::Serialize;
 use serde_json::json;
@@ -146,27 +148,29 @@ fn signed_read_receipt_is_pinned_durable_and_nonce_bound() {
     let f = Fixture::new();
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("store.db");
-    let mut e = Engine::open(&db).unwrap();
+    let mut e = test_clock::open(&db).unwrap();
     f.install(&e);
     let first = write(&mut e, "g", "main", data());
     let q = query();
     let p = f.proof(&q, Action::Read, "g", scopes(&["g"]), 1);
-    let r = e.admit_query(&p, &q, 200).unwrap();
+    let r = test_clock::at(200, || e.admit_query(&p, &q)).unwrap();
     assert!(!r.duplicate);
     assert_eq!(r.result.input_snapshots[0].revision, first);
     let mut changed = data();
     changed.nodes[0].properties.insert("v".into(), json!(2));
     write(&mut e, "g", "main", changed);
     drop(e);
-    let mut e = Engine::open(&db).unwrap();
-    let replay = e.admit_query(&p, &q, 201).unwrap();
+    let mut e = test_clock::open(&db).unwrap();
+    let replay = test_clock::at(201, || e.admit_query(&p, &q)).unwrap();
     assert!(replay.duplicate);
     assert_eq!(replay.result, r.result);
     let mut changed = q.clone();
     changed.predicate = Some("other".into());
     let p2 = f.proof(&changed, Action::Read, "g", scopes(&["g"]), 1);
     assert_eq!(
-        e.admit_query(&p2, &changed, 202).unwrap_err().code,
+        test_clock::at(202, || e.admit_query(&p2, &changed))
+            .unwrap_err()
+            .code,
         "E_REPLAY"
     );
     assert_eq!(e.event_count().unwrap(), 2);
@@ -174,7 +178,7 @@ fn signed_read_receipt_is_pinned_durable_and_nonce_bound() {
 #[test]
 fn pinned_read_cannot_escape_branch_but_accepted_fork_history_is_valid() {
     let f = Fixture::new();
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     f.install(&e);
     write(&mut e, "g", "main", data());
     let mut secret = data();
@@ -185,8 +189,13 @@ fn pinned_read_cannot_escape_branch_but_accepted_fork_history_is_valid() {
     let mut q = query();
     q.revision = Some(hidden);
     let p = f.proof(&q, Action::Read, "g", scopes(&["g"]), 2);
-    assert_eq!(e.admit_query(&p, &q, 200).unwrap_err().code, "E_SCOPE");
-    let mut other = Engine::memory().unwrap();
+    assert_eq!(
+        test_clock::at(200, || e.admit_query(&p, &q))
+            .unwrap_err()
+            .code,
+        "E_SCOPE"
+    );
+    let mut other = test_clock::memory().unwrap();
     f.install(&other);
     let rev = write(&mut other, "g", "private", data());
     other
@@ -201,12 +210,12 @@ fn pinned_read_cannot_escape_branch_but_accepted_fork_history_is_valid() {
         .unwrap();
     q.revision = Some(rev);
     let p = f.proof(&q, Action::Read, "g", scopes(&["g"]), 2);
-    assert!(other.admit_query(&p, &q, 200).is_ok());
+    assert!(test_clock::at(200, || other.admit_query(&p, &q)).is_ok());
 }
 #[test]
 fn metadata_and_provenance_require_scopes_and_narrow_retry_cannot_recover_broad_receipt() {
     let f = Fixture::new();
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     f.install(&e);
     let evidence = write(&mut e, "evidence", "main", data());
     let mut d = data();
@@ -222,26 +231,38 @@ fn metadata_and_provenance_require_scopes_and_narrow_retry_cannot_recover_broad_
     write(&mut e, "g", "main", d);
     let q = query();
     let narrow = f.proof(&q, Action::Read, "g", scopes(&["g"]), 3);
-    assert_eq!(e.admit_query(&narrow, &q, 200).unwrap_err().code, "E_SCOPE");
+    assert_eq!(
+        test_clock::at(200, || e.admit_query(&narrow, &q))
+            .unwrap_err()
+            .code,
+        "E_SCOPE"
+    );
     let broad = f.proof(&q, Action::Read, "g", scopes(&["g", "evidence"]), 3);
-    let result = e.admit_query(&broad, &q, 200).unwrap();
+    let result = test_clock::at(200, || e.admit_query(&broad, &q)).unwrap();
     assert_eq!(result.result.graph.edges.len(), 1);
     assert!(!result.duplicate);
-    assert_eq!(e.admit_query(&narrow, &q, 201).unwrap_err().code, "E_SCOPE");
+    assert_eq!(
+        test_clock::at(201, || e.admit_query(&narrow, &q))
+            .unwrap_err()
+            .code,
+        "E_SCOPE"
+    );
 }
 #[test]
 fn policy_changes_invalidate_receipts_and_epochs_cannot_be_reactivated() {
     let mut f = Fixture::new();
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     f.install(&e);
     write(&mut e, "g", "main", data());
     let q = query();
     let p = f.proof(&q, Action::Read, "g", scopes(&["g"]), 4);
-    e.admit_query(&p, &q, 200).unwrap();
+    test_clock::at(200, || e.admit_query(&p, &q)).unwrap();
     f.context.policy_epoch = "epoch:2".into();
     f.install(&e);
     assert_eq!(
-        e.admit_query(&p, &q, 201).unwrap_err().code,
+        test_clock::at(201, || e.admit_query(&p, &q))
+            .unwrap_err()
+            .code,
         "E_POLICY_CHANGED"
     );
     f.context.policy_epoch = "epoch:1".into();
@@ -252,12 +273,12 @@ fn policy_changes_invalidate_receipts_and_epochs_cannot_be_reactivated() {
     f.context.policy_epoch = "epoch:3".into();
     f.context.revoked_keys.insert(public_key(&f.user));
     f.install(&e);
-    assert!(e.admit_query(&p, &q, 202).is_err());
+    assert!(test_clock::at(202, || e.admit_query(&p, &q)).is_err());
 }
 #[test]
 fn publication_egress_is_atomic_subject_scoped_and_replay_safe() {
     let f = Fixture::new();
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     f.install(&e);
     let mut c = SnapshotCommit {
         graph_id: "g".into(),
@@ -266,14 +287,23 @@ fn publication_egress_is_atomic_subject_scoped_and_replay_safe() {
         data: data(),
     };
     let p = f.proof(&c, Action::Publish, "g", scopes(&["g"]), 5);
-    assert_eq!(e.admit_publish(&p, &c, 200).unwrap_err().code, "E_EGRESS");
+    assert_eq!(
+        test_clock::at(200, || e.admit_publish(&p, &c))
+            .unwrap_err()
+            .code,
+        "E_EGRESS"
+    );
     assert_eq!(e.event_count().unwrap(), 0);
     assert_eq!(e.head("g", "main").unwrap(), None);
     c.data = private(c.data, &f);
     let p = f.proof(&c, Action::Publish, "g", scopes(&["g"]), 5);
-    let r = e.admit_publish(&p, &c, 200).unwrap();
+    let r = test_clock::at(200, || e.admit_publish(&p, &c)).unwrap();
     assert!(!r.duplicate);
-    assert!(e.admit_publish(&p, &c, 201).unwrap().duplicate);
+    assert!(
+        test_clock::at(201, || e.admit_publish(&p, &c))
+            .unwrap()
+            .duplicate
+    );
     assert_eq!(e.event_count().unwrap(), 1);
     assert!(e
         .query(&query(), &HostContext::new("outsider", []))
@@ -285,7 +315,7 @@ fn publication_egress_is_atomic_subject_scoped_and_replay_safe() {
 #[test]
 fn new_schema_cannot_enter_through_remote_publication() {
     let f = Fixture::new();
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     f.install(&e);
     let schema =
         serde_json::from_value(json!({"id":"schema","revision":"1","nodes":{},"edges":{}}))
@@ -299,17 +329,19 @@ fn new_schema_cannot_enter_through_remote_publication() {
     c.data.schema = Some(schema);
     let p = f.proof(&c, Action::Publish, "typed", scopes(&["typed"]), 6);
     assert_eq!(
-        e.admit_publish(&p, &c, 200).unwrap_err().code,
+        test_clock::at(200, || e.admit_publish(&p, &c))
+            .unwrap_err()
+            .code,
         "E_SCHEMA_AUTHORITY"
     );
     assert_eq!(e.event_count().unwrap(), 0);
     write(&mut e, "g", "main", c.data.clone());
-    assert!(e.admit_publish(&p, &c, 200).is_ok());
+    assert!(test_clock::at(200, || e.admit_publish(&p, &c)).is_ok());
 }
 #[test]
 fn isolated_proposal_cannot_poison_structure_registry_or_heads() {
     let f = Fixture::new();
-    let mut donor = Engine::memory().unwrap();
+    let mut donor = test_clock::memory().unwrap();
     let rev = write(&mut donor, "g", "main", data());
     let capsule = donor
         .export_capsule(
@@ -320,12 +352,16 @@ fn isolated_proposal_cannot_poison_structure_registry_or_heads() {
             &HostContext::new("local", []),
         )
         .unwrap();
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     f.install(&e);
     let p = f.proof(&capsule, Action::Propose, "g", scopes(&["g"]), 7);
-    let r = e.admit_proposal(&p, &capsule, 200).unwrap();
+    let r = test_clock::at(200, || e.admit_proposal(&p, &capsule)).unwrap();
     assert!(!r.duplicate);
-    assert!(e.admit_proposal(&p, &capsule, 201).unwrap().duplicate);
+    assert!(
+        test_clock::at(201, || e.admit_proposal(&p, &capsule))
+            .unwrap()
+            .duplicate
+    );
     assert_eq!(e.head("g", "main").unwrap(), None);
     assert_eq!(e.event_count().unwrap(), 0);
     let mut different = data();
@@ -336,7 +372,7 @@ fn isolated_proposal_cannot_poison_structure_registry_or_heads() {
 #[test]
 fn publication_does_not_smuggle_out_of_scope_provenance() {
     let f = Fixture::new();
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     f.install(&e);
     let evidence = write(&mut e, "evidence", "main", data());
     let mut d = private(data(), &f);
@@ -352,7 +388,12 @@ fn publication_does_not_smuggle_out_of_scope_provenance() {
         data: d,
     };
     let p = f.proof(&c, Action::Publish, "g", scopes(&["g"]), 8);
-    assert_eq!(e.admit_publish(&p, &c, 200).unwrap_err().code, "E_SCOPE");
+    assert_eq!(
+        test_clock::at(200, || e.admit_publish(&p, &c))
+            .unwrap_err()
+            .code,
+        "E_SCOPE"
+    );
     assert_eq!(e.event_count().unwrap(), 1);
     assert_eq!(e.head("g", "main").unwrap(), None);
 }
@@ -361,7 +402,7 @@ fn receipt_capacity_failure_rolls_back_publication_and_nonce() {
     let f = Fixture::new();
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("quota.db");
-    let mut e = Engine::open(&db).unwrap();
+    let mut e = test_clock::open(&db).unwrap();
     f.install(&e);
     // Fill the configured host receipt quota without paying signature work for fixture setup.
     let conn = rusqlite::Connection::open(&db).unwrap();
@@ -374,26 +415,32 @@ fn receipt_capacity_failure_rolls_back_publication_and_nonce() {
     };
     let p = f.proof(&c, Action::Publish, "g", scopes(&["g"]), 9);
     assert_eq!(
-        e.admit_publish(&p, &c, 200).unwrap_err().code,
+        test_clock::at(200, || e.admit_publish(&p, &c))
+            .unwrap_err()
+            .code,
         "E_BACKPRESSURE"
     );
     assert_eq!(e.event_count().unwrap(), 0);
     assert_eq!(e.head("g", "main").unwrap(), None);
     conn.execute("DELETE FROM admission_receipts WHERE epoch='fixture'", [])
         .unwrap();
-    assert!(!e.admit_publish(&p, &c, 201).unwrap().duplicate);
+    assert!(
+        !test_clock::at(201, || e.admit_publish(&p, &c))
+            .unwrap()
+            .duplicate
+    );
     assert_eq!(e.event_count().unwrap(), 1);
 }
 #[test]
 fn unsupported_live_publication_and_expired_read_retry_fail_closed() {
     let f = Fixture::new();
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     f.install(&e);
     write(&mut e, "g", "main", data());
     let q = query();
     let p = f.proof(&q, Action::Read, "g", scopes(&["g"]), 10);
-    e.admit_query(&p, &q, 200).unwrap();
-    assert!(e.admit_query(&p, &q, 1000).is_err());
+    test_clock::at(200, || e.admit_query(&p, &q)).unwrap();
+    let read_proof = p;
     let mut d = private(data(), &f);
     d.attachments.push(serde_json::from_value(json!({"id":"live","host":{"kind":"graph"},"key":"evidence","value":{"kind":"live_graph","graph_id":"evidence","branch_id":"main"},"valid_time":{"start":0},"readers":[public_key(&f.user)]})).unwrap());
     let c = SnapshotCommit {
@@ -404,20 +451,26 @@ fn unsupported_live_publication_and_expired_read_retry_fail_closed() {
     };
     let p = f.proof(&c, Action::Publish, "g", scopes(&["g"]), 11);
     assert_eq!(
-        e.admit_publish(&p, &c, 200).unwrap_err().code,
+        test_clock::at(200, || e.admit_publish(&p, &c))
+            .unwrap_err()
+            .code,
         "E_UNSUPPORTED"
     );
     assert_eq!(e.event_count().unwrap(), 1);
+    // Expiry is checked after the earlier live-publication case; clock never rewinds.
+    assert!(test_clock::at(1000, || e.admit_query(&read_proof, &q)).is_err());
 }
 #[test]
 fn hidden_objects_do_not_influence_scope_checks_or_visible_payload() {
     let f = Fixture::new();
-    let mut baseline = Engine::memory().unwrap();
+    let mut baseline = test_clock::memory().unwrap();
     f.install(&baseline);
     write(&mut baseline, "g", "main", data());
     let q = query();
     let p = f.proof(&q, Action::Read, "g", scopes(&["g"]), 12);
-    let plain = baseline.admit_query(&p, &q, 200).unwrap().result;
+    let plain = test_clock::at(200, || baseline.admit_query(&p, &q))
+        .unwrap()
+        .result;
     let mut d = data();
     let mut hidden = d.nodes[0].clone();
     hidden.id = "hidden".into();
@@ -437,10 +490,12 @@ fn hidden_objects_do_not_influence_scope_checks_or_visible_payload() {
     });
     d.edges.push(edge);
     d.attachments.push(serde_json::from_value(json!({"id":"hidden-attachment","host":{"kind":"graph"},"key":"private","value":{"kind":"live_graph","graph_id":"forbidden","branch_id":"secret"},"valid_time":{"start":0},"readers":["private-principal"]})).unwrap());
-    let mut with_hidden = Engine::memory().unwrap();
+    let mut with_hidden = test_clock::memory().unwrap();
     f.install(&with_hidden);
     write(&mut with_hidden, "g", "main", d);
-    let result = with_hidden.admit_query(&p, &q, 200).unwrap().result;
+    let result = test_clock::at(200, || with_hidden.admit_query(&p, &q))
+        .unwrap()
+        .result;
     // Exact source pins were already observable in the snapshot/origin envelope.
     // Node influence now retains that same pin in copied payloads. Compare facts
     // after validating and normalizing only this own-origin revision.
@@ -468,7 +523,7 @@ fn hidden_objects_do_not_influence_scope_checks_or_visible_payload() {
 #[test]
 fn cached_live_read_retains_original_dependency_closure_after_heads_advance() {
     let f = Fixture::new();
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     f.install(&e);
     let old = write(&mut e, "evidence", "main", data());
     let mut d = data();
@@ -476,7 +531,9 @@ fn cached_live_read_retains_original_dependency_closure_after_heads_advance() {
     write(&mut e, "g", "main", d);
     let q = query();
     let broad = f.proof(&q, Action::Read, "g", scopes(&["g", "evidence"]), 13);
-    let original = e.admit_query(&broad, &q, 200).unwrap().result;
+    let original = test_clock::at(200, || e.admit_query(&broad, &q))
+        .unwrap()
+        .result;
     assert!(original
         .input_snapshots
         .iter()
@@ -487,37 +544,61 @@ fn cached_live_read_retains_original_dependency_closure_after_heads_advance() {
         .insert("new".into(), json!(true));
     write(&mut e, "evidence", "main", replacement);
     let narrow = f.proof(&q, Action::Read, "g", scopes(&["g"]), 13);
-    assert_eq!(e.admit_query(&narrow, &q, 201).unwrap_err().code, "E_SCOPE");
-    assert_eq!(e.admit_query(&broad, &q, 201).unwrap().result, original);
+    assert_eq!(
+        test_clock::at(201, || e.admit_query(&narrow, &q))
+            .unwrap_err()
+            .code,
+        "E_SCOPE"
+    );
+    assert_eq!(
+        test_clock::at(201, || e.admit_query(&broad, &q))
+            .unwrap()
+            .result,
+        original
+    );
 }
 
 #[test]
 fn signed_node_only_scalar_requires_its_private_proof_scope_on_read_and_retry() {
     let f = Fixture::new();
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     f.install(&e);
     let revision = write(&mut e, "evidence", "main", private(data(), &f));
     let graph:GraphData=serde_json::from_value(json!({"nodes":[{"id":"scalar","entity_id":"result","space_id":"analysis","properties":{"value":42},"derived_from":[{"graph_id":"evidence","revision":revision,"assertion_id":"e"}]}]})).unwrap();
     write(&mut e, "g", "main", graph);
     let q = query();
     let narrow = f.proof(&q, Action::Read, "g", scopes(&["g"]), 22);
-    assert_eq!(e.admit_query(&narrow, &q, 200).unwrap_err().code, "E_SCOPE");
+    assert_eq!(
+        test_clock::at(200, || e.admit_query(&narrow, &q))
+            .unwrap_err()
+            .code,
+        "E_SCOPE"
+    );
     let broad = f.proof(&q, Action::Read, "g", scopes(&["g", "evidence"]), 22);
-    let result = e.admit_query(&broad, &q, 200).unwrap();
+    let result = test_clock::at(200, || e.admit_query(&broad, &q)).unwrap();
     assert_eq!(result.result.graph.nodes[0].properties["value"], 42);
     assert!(result
         .result
         .input_snapshots
         .iter()
         .any(|r| r.graph_id == "evidence"));
-    assert_eq!(e.admit_query(&narrow, &q, 201).unwrap_err().code, "E_SCOPE");
-    assert!(e.admit_query(&broad, &q, 201).unwrap().duplicate);
+    assert_eq!(
+        test_clock::at(201, || e.admit_query(&narrow, &q))
+            .unwrap_err()
+            .code,
+        "E_SCOPE"
+    );
+    assert!(
+        test_clock::at(201, || e.admit_query(&broad, &q))
+            .unwrap()
+            .duplicate
+    );
 }
 
 #[test]
 fn signed_node_only_scalar_requires_isolated_node_scope_on_read_and_retry() {
     let f = Fixture::new();
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     f.install(&e);
     let mut isolated = private(data(), &f);
     isolated.edges.clear();
@@ -526,24 +607,38 @@ fn signed_node_only_scalar_requires_isolated_node_scope_on_read_and_retry() {
     write(&mut e, "g", "main", graph);
     let q = query();
     let narrow = f.proof(&q, Action::Read, "g", scopes(&["g"]), 22);
-    assert_eq!(e.admit_query(&narrow, &q, 200).unwrap_err().code, "E_SCOPE");
+    assert_eq!(
+        test_clock::at(200, || e.admit_query(&narrow, &q))
+            .unwrap_err()
+            .code,
+        "E_SCOPE"
+    );
     let broad = f.proof(&q, Action::Read, "g", scopes(&["g", "evidence"]), 22);
-    let result = e.admit_query(&broad, &q, 200).unwrap();
+    let result = test_clock::at(200, || e.admit_query(&broad, &q)).unwrap();
     assert_eq!(result.result.graph.nodes[0].properties["value"], 42);
     assert!(result
         .result
         .input_snapshots
         .iter()
         .any(|r| r.graph_id == "evidence"));
-    assert_eq!(e.admit_query(&narrow, &q, 201).unwrap_err().code, "E_SCOPE");
-    assert!(e.admit_query(&broad, &q, 201).unwrap().duplicate);
+    assert_eq!(
+        test_clock::at(201, || e.admit_query(&narrow, &q))
+            .unwrap_err()
+            .code,
+        "E_SCOPE"
+    );
+    assert!(
+        test_clock::at(201, || e.admit_query(&broad, &q))
+            .unwrap()
+            .duplicate
+    );
 }
 #[test]
 fn typed_carrier_signed_reads_require_visible_descriptor_scope_and_hide_denied_carriers() {
     use weave_contract::{context_axes::ContextSchema, CommandResult, GraphExpression};
     for allowed in [false, true] {
         let f = Fixture::new();
-        let mut e = Engine::memory().unwrap();
+        let mut e = test_clock::memory().unwrap();
         f.install(&e);
         let schema = ContextSchema::from_json(
             br#"{"reference":{"id":"World","revision":"1"},"axes":{"scenario":{"kind":"string"}}}"#,
@@ -585,9 +680,14 @@ fn typed_carrier_signed_reads_require_visible_descriptor_scope_and_hide_denied_c
         let q: QueryPlan = serde_json::from_value(json!({"graph_id":"g"})).unwrap();
         let narrow = f.proof(&q, Action::Read, "g", scopes(&["g"]), 90);
         if allowed {
-            assert_eq!(e.admit_query(&narrow, &q, 200).unwrap_err().code, "E_SCOPE");
+            assert_eq!(
+                test_clock::at(200, || e.admit_query(&narrow, &q))
+                    .unwrap_err()
+                    .code,
+                "E_SCOPE"
+            );
             let broad = f.proof(&q, Action::Read, "g", scopes(&["g", "evidence"]), 91);
-            let response = e.admit_query(&broad, &q, 200).unwrap();
+            let response = test_clock::at(200, || e.admit_query(&broad, &q)).unwrap();
             assert!(response.result.graph.context_typing.is_some());
             assert!(response
                 .result
@@ -596,15 +696,37 @@ fn typed_carrier_signed_reads_require_visible_descriptor_scope_and_hide_denied_c
                 .any(|r| r.graph_id == "evidence"));
             let narrowed_retry = f.proof(&q, Action::Read, "g", scopes(&["g"]), 91);
             assert_eq!(
-                e.admit_query(&narrowed_retry, &q, 201).unwrap_err().code,
+                test_clock::at(201, || e.admit_query(&narrowed_retry, &q))
+                    .unwrap_err()
+                    .code,
                 "E_SCOPE"
             );
         } else {
-            let response = e.admit_query(&narrow, &q, 200).unwrap();
+            let response = test_clock::at(200, || e.admit_query(&narrow, &q)).unwrap();
             assert_eq!(response.result.coverage, weave_contract::Coverage::Partial);
             assert!(response.result.graph.context_typing.is_none());
             assert!(response.result.selected_context.is_none());
             assert_eq!(response.result.input_snapshots.len(), 1);
         }
     }
+}
+
+#[test]
+fn installed_clock_controls_cached_retry_independently_of_fact_time() {
+    let f = Fixture::new();
+    let clock = std::sync::Arc::new(weave_engine::ManualClock::new(200));
+    let mut e = Engine::memory_with_clock(clock.clone()).unwrap();
+    f.install(&e);
+    write(&mut e, "g", "main", data());
+    let mut q = query();
+    q.valid_at = Some(-9000);
+    let proof = f.proof(&q, Action::Read, "g", scopes(&["g"]), 70);
+    let before = clock.samples();
+    e.admit_query(&proof, &q).unwrap();
+    assert_eq!(clock.samples(), before + 1); // nested dependency checks/query share one scope
+    clock.set(999);
+    assert!(e.admit_query(&proof, &q).unwrap().duplicate);
+    clock.set(1000);
+    assert_eq!(e.admit_query(&proof, &q).unwrap_err().code, "E_EXPIRED");
+    assert_eq!(e.event_count().unwrap(), 1);
 }

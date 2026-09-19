@@ -3,7 +3,6 @@ use rusqlite::{params, Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 use weave_contract::*;
 mod admission;
 mod governance;
@@ -20,8 +19,11 @@ pub use identity_acceptance::{
     IdentityCandidate, IdentityDecisionReceipt, IdentityDecisionRequest, IdentityPolicy,
 };
 mod assertions;
+mod operation_clock;
 mod read_budget;
 pub use admission::{Admitted, ProposalReceipt};
+pub use operation_clock::{ManualClock, SystemClock, TrustedClock};
+use std::sync::Arc;
 mod capsule;
 use assertions::{assertion_edge, materialize, validate_explicit};
 mod dispatch;
@@ -84,6 +86,7 @@ impl HostContext {
 pub struct Engine {
     conn: Connection,
     read_budget: read_budget::ReadBudget,
+    operation_clock: operation_clock::OperationClock,
 }
 impl Engine {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -92,8 +95,14 @@ impl Engine {
     pub fn memory() -> Result<Self> {
         Self::from_connection(Connection::open_in_memory()?)
     }
+    pub fn open_with_clock(path: impl AsRef<Path>, clock: Arc<dyn TrustedClock>) -> Result<Self> {
+        Self::from_connection_boundary(Connection::open(path)?, clock, || {})
+    }
+    pub fn memory_with_clock(clock: Arc<dyn TrustedClock>) -> Result<Self> {
+        Self::from_connection_boundary(Connection::open_in_memory()?, clock, || {})
+    }
     fn from_connection(conn: Connection) -> Result<Self> {
-        Self::from_connection_boundary(conn, || {})
+        Self::from_connection_boundary(conn, Arc::new(SystemClock), || {})
     }
     /// Test-only interruption after schema/backfill SQL, before its outer COMMIT.
     #[cfg(feature = "recovery-testing")]
@@ -101,9 +110,17 @@ impl Engine {
         path: impl AsRef<Path>,
         before_commit: impl FnOnce(),
     ) -> Result<Self> {
-        Self::from_connection_boundary(Connection::open(path)?, before_commit)
+        Self::from_connection_boundary(
+            Connection::open(path)?,
+            Arc::new(SystemClock),
+            before_commit,
+        )
     }
-    fn from_connection_boundary(conn: Connection, before_commit: impl FnOnce()) -> Result<Self> {
+    fn from_connection_boundary(
+        conn: Connection,
+        clock: Arc<dyn TrustedClock>,
+        before_commit: impl FnOnce(),
+    ) -> Result<Self> {
         let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
         if !(0..=11).contains(&version) {
             return Err(err(
@@ -115,6 +132,7 @@ impl Engine {
         let engine = Self {
             conn,
             read_budget: read_budget::ReadBudget::default(),
+            operation_clock: operation_clock::OperationClock::new(clock),
         };
         let initialization = rusqlite::Transaction::new_unchecked(
             &engine.conn,
@@ -384,6 +402,7 @@ impl Engine {
         // One program transaction: a later rejection cannot leave earlier graph changes or events.
         self.conn.execute_batch("SAVEPOINT weave_program")?;
         let result = (|| {
+            let _clock_scope = self.operation_write_scope()?;
             let mut out = Vec::new();
             let mut values = BTreeMap::new();
             let mut value_size = 0usize;
@@ -543,11 +562,7 @@ impl Engine {
         let bytes = serde_json::to_vec(&("weave-revision-v0.1", graph, branch, &head, data))?;
         let revision = format!("sha256:{:x}", Sha256::digest(bytes));
         let event_id = format!("commit:{revision}");
-        let time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| err("E_CLOCK", "clock before epoch"))?
-            .as_millis();
-        let time = i64::try_from(time).map_err(|_| err("E_CLOCK", "clock out of range"))?;
+        let time = self.operation_time()?;
         self.conn.execute(
             "INSERT INTO revisions VALUES (?1,?2,?3,?4,?5,?6)",
             params![revision, graph, branch, head, time, json],
@@ -583,8 +598,7 @@ impl Engine {
             .query_row(
                 "SELECT substr(branch_id,1,513),substr(parent,1,513),CASE WHEN length(CAST(data AS BLOB))<=?3 THEN data ELSE NULL END FROM revisions WHERE graph_id=?1 AND revision=?2",
                 params![graph, revision, limit as i64],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
             .optional()?;
         let Some((branch, parent, encoded)) = row else {
             return Ok(None);
@@ -668,6 +682,7 @@ impl Engine {
         } else {
             None
         };
+        let _clock_scope = self.operation_scope()?;
         let revision = match &query.revision {
             Some(rev) => rev.clone(),
             None => self
@@ -858,8 +873,7 @@ impl Engine {
                             partial(
                                 &mut result,
                                 "E_IDENTITY_SCOPE",
-                                "identity results cover only authorized and available membership records",
-                            );
+                                "identity results cover only authorized and available membership records");
                         } else if incomplete_derivation {
                             partial(
                                 &mut result,
@@ -928,6 +942,7 @@ impl Engine {
         } else {
             None
         };
+        let _clock_scope = self.operation_scope()?;
         let l = self.query(left, host)?;
         let r = self.query(right, host)?;
         let result = Self::join_values(l, r, predicate, host)?;
@@ -1150,7 +1165,7 @@ impl Engine {
                             &node.id,
                             &wrapper_gates,
                             predicate,
-                            &selected_context,
+                            &selected_context
                         ))?)
                     );
                     node.derived_from = wrapper_gates.assertions.clone();

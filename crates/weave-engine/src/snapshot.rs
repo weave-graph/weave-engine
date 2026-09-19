@@ -143,7 +143,7 @@ impl Engine {
                 "INSERT INTO snapshot_manifests VALUES (?1,?2,?3)",
                 params![manifest_id, batch, serde_json::to_string(&manifest)?],
             )?;
-            let time = now_millis()?;
+            let time = self.operation_time()?;
             for member in &manifest.members {
                 let data = &commits
                     .iter()
@@ -321,15 +321,6 @@ pub(crate) fn content_digest(
             data
         ))?)
     ))
-}
-pub(crate) fn now_millis() -> Result<i64> {
-    i64::try_from(
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| err("E_CLOCK", "clock before epoch"))?
-            .as_millis(),
-    )
-    .map_err(|_| err("E_CLOCK", "clock out of range"))
 }
 impl Engine {
     pub(crate) fn query_refs(

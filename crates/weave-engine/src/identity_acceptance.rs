@@ -427,6 +427,7 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
         }
         self.conn.execute_batch("SAVEPOINT identity_acceptance")?;
         let result = (|| {
+            let _clock_scope = self.operation_write_scope()?;
             let candidate = self.identity_candidate(&request.candidate_id)?;
             let policy = self.identity_policy(&candidate.policy)?;
             if !policy.approvers.contains(&host.principal) {
@@ -569,6 +570,8 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
         request: &IdentityResolve,
         host: &HostContext,
     ) -> Result<QueryResult> {
+        let _snapshot = self.optional_read_transaction()?;
+        let _clock_scope = self.operation_scope()?;
         let _scope = self.read_budget.enter();
         if !valid_id(&request.mapping_id)
             || !valid_id(&request.revision)

@@ -1,5 +1,7 @@
 # Durable mounts and signed proposal integration: implementation boundary
 
+Current authorization uses the [constructor-installed operation clock](OPERATION_CLOCK.md); explicit native authority-time arguments were removed. Fact-time and scheduling data remain separate.
+
 Status: implemented native slice with sibling and root boundary review; SQLite schema 8. A mount exposes an existing locally stored pinned source through a principal-owned route. It neither advances accepted graph heads nor accepts identity claims. An integration decision promotes an already signed, isolated proposal under explicit host write authority and branch CAS. The APIs remain separate.
 
 ## Mount API

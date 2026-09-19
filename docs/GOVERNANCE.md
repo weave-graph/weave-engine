@@ -1,5 +1,7 @@
 # Native accepted-view governance
 
+Current authority time comes from the [constructor-installed operation clock](OPERATION_CLOCK.md). Explicit native `now` arguments have been removed; fixture callers must migrate to an installed test clock.
+
 This stage implements owner and threshold acceptance over immutable source snapshots. It is a trusted native host API, independent of the language wire protocol. The SQLite schema advances from 8 to 9 transactionally. Raw graph properties, imported capsules, and signed generic graph plans cannot install governance roots, cast approvals, or change accepted heads.
 
 ## Admission and current authority

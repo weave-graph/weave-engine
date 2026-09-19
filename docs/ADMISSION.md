@@ -1,5 +1,7 @@
 # Signed per-operation admission
 
+Current authorization uses the [constructor-installed operation clock](OPERATION_CLOCK.md); explicit native authority-time arguments were removed. Fact-time and scheduling data remain separate.
+
 The native host exposes `admit_query`, `admit_publish`, and `admit_proposal` as a bounded bridge to `weave-policy`. The local CLI and `HostContext` remain trusted administration APIs. There is no network server, signed arbitrary `Program`, remote policy installation, or signed proposal promotion in this profile.
 
 ## Trust and request boundary

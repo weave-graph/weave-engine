@@ -104,6 +104,8 @@ impl Engine {
         request: &ClusterRequest,
         host: &HostContext,
     ) -> Result<QueryResult> {
+        let _snapshot = self.optional_read_transaction()?;
+        let _clock_scope = self.operation_scope()?;
         let _read_scope = self.read_budget.enter();
         let mut value = self.cluster_input(request, host)?;
         // cluster_input checked this bound.
@@ -403,6 +405,7 @@ impl Engine {
         } else {
             None
         };
+        let _clock_scope = self.operation_scope()?;
         let mut left = self.cluster_input(before, host)?;
         let mut right = self.cluster_input(after, host)?;
         let hierarchy = |request: &ClusterRequest, value: &QueryResult| -> Result<Hierarchy> {

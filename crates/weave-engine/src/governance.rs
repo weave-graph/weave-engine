@@ -235,7 +235,10 @@ impl Engine {
     }
     fn gov_atomic<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
         self.conn.execute_batch("SAVEPOINT governance")?;
-        match f() {
+        match (|| {
+            let _clock_scope = self.operation_write_scope()?;
+            f()
+        })() {
             Ok(v) => {
                 if let Err(error) = self.conn.execute_batch("RELEASE governance") {
                     self.conn
@@ -295,12 +298,8 @@ impl Engine {
             source: source.map(|s| self.gov_text(Some(s))).transpose()?,
         })
     }
-    fn gov_policy(
-        &self,
-        view: &str,
-        reference: &GovernancePolicyRef,
-        now: i64,
-    ) -> Result<GovernancePolicy> {
+    fn gov_policy(&self, view: &str, reference: &GovernancePolicyRef) -> Result<GovernancePolicy> {
+        let now = self.operation_time()?;
         let body: Option<Option<String>> = self
             .conn
             .query_row(
@@ -383,9 +382,9 @@ impl Engine {
         &self,
         record: &StoredProposal,
         p: &GovernancePolicy,
-        now: i64,
         host: &HostContext,
     ) -> Result<()> {
+        let now = self.operation_time()?;
         let q = &record.proposal;
         if !valid_id(&host.principal)
             || !p.proposers.contains(&host.principal)
@@ -431,8 +430,7 @@ impl Engine {
             )?;
             if exists {
                 let head = self.gov_head(&policy.view_id)?;
-                let stored =
-                    self.gov_policy(&policy.view_id, &head.policy, policy.not_before_ms)?;
+                let stored = self.gov_policy(&policy.view_id, &head.policy)?;
                 if head.decision_id.is_none() && stored == *policy {
                     return Ok(false);
                 }
@@ -462,7 +460,6 @@ impl Engine {
     pub fn propose_governance(
         &self,
         proposal: &GovernanceProposal,
-        now: i64,
         host: &HostContext,
     ) -> Result<GovernanceProposalReceipt> {
         let _scope = self.read_budget.enter();
@@ -479,12 +476,12 @@ impl Engine {
         }
         self.gov_atomic(|| {
             let head = self.gov_head(&proposal.view_id)?;
-            let policy = self.gov_policy(&proposal.view_id, &head.policy, now)?;
+            let policy = self.gov_policy(&proposal.view_id, &head.policy)?;
             let record = StoredProposal {
                 proposal: proposal.clone(),
                 proposer: host.principal.clone(),
             };
-            self.gov_check_proposal(&record, &policy, now, host)?;
+            self.gov_check_proposal(&record, &policy, host)?;
             let hash = digest(&("weave-governance-proposal-v1", &record))?;
             let prior: Option<String> = self
                 .conn
@@ -538,8 +535,8 @@ impl Engine {
         record: &StoredProposal,
         hash: &str,
         p: &GovernancePolicy,
-        now: i64,
     ) -> Result<()> {
+        let now = self.operation_time()?;
         let a = &signed.approval;
         let q = &record.proposal;
         if a.proposal_id != q.id
@@ -562,7 +559,6 @@ impl Engine {
     pub fn record_governance_approval(
         &self,
         signed: &SignedGovernanceApproval,
-        now: i64,
         host: &HostContext,
     ) -> Result<bool> {
         let _scope = self.read_budget.enter();
@@ -573,16 +569,15 @@ impl Engine {
         self.gov_atomic(|| {
             let (record, hash) = self.gov_proposal(&signed.approval.proposal_id)?;
             let head = self.gov_head(&record.proposal.view_id)?;
-            let policy = self.gov_policy(&head.view_id, &head.policy, now)?;
-            self.gov_check_proposal(&record, &policy, now, host)?;
-            self.gov_verify_approval(signed, &record, &hash, &policy, now)?;
+            let policy = self.gov_policy(&head.view_id, &head.policy)?;
+            self.gov_check_proposal(&record, &policy, host)?;
+            self.gov_verify_approval(signed, &record, &hash, &policy)?;
             let encoded = serde_json::to_string(signed)?;
             let approval_hash = digest(signed)?;
             let prior: Option<String> = self.conn.query_row(
                 "SELECT substr(digest,1,65) FROM governance_approval_nonces WHERE member=?1 AND nonce=?2",
                 params![signed.approval.member, signed.approval.nonce],
-                |row| row.get(0),
-            ).optional()?;
+                |row| row.get(0)).optional()?;
             if let Some(prior) = prior {
                 if prior == approval_hash {
                     return Ok(false);
@@ -595,19 +590,16 @@ impl Engine {
             let occupied: bool = self.conn.query_row(
                 "SELECT EXISTS(SELECT 1 FROM governance_approvals WHERE proposal_id=?1 AND member=?2)",
                 params![record.proposal.id, signed.approval.member],
-                |row| row.get(0),
-            )?;
+                |row| row.get(0))?;
             if occupied {
                 return Err(failure("E_GOV_APPROVAL"));
             }
             self.conn.execute(
                 "INSERT INTO governance_approvals VALUES (?1,?2,?3)",
-                params![record.proposal.id, signed.approval.member, encoded],
-            )?;
+                params![record.proposal.id, signed.approval.member, encoded])?;
             self.conn.execute(
                 "INSERT INTO governance_approval_nonces VALUES (?1,?2,?3,?4)",
-                params![signed.approval.member, signed.approval.nonce, approval_hash, signed.approval.view_id],
-            )?;
+                params![signed.approval.member, signed.approval.nonce, approval_hash, signed.approval.view_id])?;
             self.gov_quota(&signed.approval.view_id)?;
             Ok(true)
         })
@@ -616,25 +608,22 @@ impl Engine {
     pub fn accept_governance(
         &self,
         request: &GovernanceDecisionRequest,
-        now: i64,
         host: &HostContext,
     ) -> Result<GovernanceReceipt> {
-        self.accept_governance_observed(request, now, host, || {})
+        self.accept_governance_observed(request, host, || {})
     }
     #[cfg(feature = "recovery-testing")]
     pub fn accept_governance_test_before_commit(
         &self,
         request: &GovernanceDecisionRequest,
-        now: i64,
         host: &HostContext,
         hook: impl FnOnce(),
     ) -> Result<GovernanceReceipt> {
-        self.accept_governance_observed(request, now, host, hook)
+        self.accept_governance_observed(request, host, hook)
     }
     fn accept_governance_observed(
         &self,
         request: &GovernanceDecisionRequest,
-        now: i64,
         host: &HostContext,
         hook: impl FnOnce(),
     ) -> Result<GovernanceReceipt> {
@@ -646,17 +635,17 @@ impl Engine {
             return Err(failure("E_GOV_PROPOSAL"));
         }
         self.gov_atomic(|| {
+        let now = self.operation_time()?;
             let (record, proposal_hash) = self.gov_proposal(&request.proposal_id)?;
             let proposal = &record.proposal;
             let head = self.gov_head(&proposal.view_id)?;
-            let policy = self.gov_policy(&proposal.view_id, &head.policy, now)?;
-            self.gov_check_proposal(&record, &policy, now, host)?;
+            let policy = self.gov_policy(&proposal.view_id, &head.policy)?;
+            self.gov_check_proposal(&record, &policy, host)?;
             let request_hash = digest(&(request, &proposal_hash))?;
             let prior: Option<(String, Option<String>)> = self.conn.query_row(
                 LOAD_RECEIPT,
                 params![host.principal, request.nonce],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            ).optional()?;
+                |row| Ok((row.get(0)?, row.get(1)?))).optional()?;
             // Response-loss retry must meet current policy, time and source authority.
             let mut statement = self.conn.prepare(LOAD_APPROVALS)?;
             let rows = statement.query_map([&proposal.id], |row| row.get::<_, Option<String>>(0))?;
@@ -667,7 +656,7 @@ impl Engine {
                     verify_signature(&signed)?;
                     continue;
                 }
-                self.gov_verify_approval(&signed, &record, &proposal_hash, &policy, now)?;
+                self.gov_verify_approval(&signed, &record, &proposal_hash, &policy)?;
                 if !members.insert(signed.approval.member) || members.len() > 32 {
                     return Err(failure("E_GOV_APPROVAL"));
                 }
@@ -688,34 +677,29 @@ impl Engine {
             }
             let count: i64 = self.conn.query_row(
                 "SELECT count(*) FROM governance_receipts WHERE actor=?1",
-                [&host.principal], |row| row.get(0),
-            )?;
+                [&host.principal], |row| row.get(0))?;
             if count >= 10000 {
                 return Err(failure("E_BUDGET"));
             }
             // Occurrence identity must not be a public dictionary-testable commitment
             // to a private policy roster. The transaction/receipt makes this nonce durable.
             let decision: String = self.conn.query_row(
-                "SELECT 'decision:' || lower(hex(randomblob(24)))", [], |row| row.get(0),
-            )?;
+                "SELECT 'decision:' || lower(hex(randomblob(24)))", [], |row| row.get(0))?;
             let event_id = digest(&("weave-governance-event-v1", &decision))?;
             let (next_policy, source, event_type) = match &proposal.action {
                 GovernanceAction::Publish { source, .. } => (
-                    policy.reference.clone(), Some(source.clone()), "view.accepted",
-                ),
+                    policy.reference.clone(), Some(source.clone()), "view.accepted"),
                 GovernanceAction::ReplacePolicy { policy: next } => {
                     let exists: bool = self.conn.query_row(
                         "SELECT EXISTS(SELECT 1 FROM governance_policies WHERE view_id=?1 AND id=?2 AND revision=?3)",
                         params![next.view_id, next.reference.id, next.reference.revision],
-                        |row| row.get(0),
-                    )?;
+                        |row| row.get(0))?;
                     if exists {
                         return Err(failure("E_GOV_POLICY"));
                     }
                     self.conn.execute(
                         "INSERT INTO governance_policies VALUES (?1,?2,?3,?4)",
-                        params![next.view_id, next.reference.id, next.reference.revision, serde_json::to_string(next)?],
-                    )?;
+                        params![next.view_id, next.reference.id, next.reference.revision, serde_json::to_string(next)?])?;
                     (next.reference.clone(), head.source.clone(), "policy.changed")
                 }
             };
@@ -727,24 +711,20 @@ impl Engine {
             self.conn.execute(
                 "INSERT INTO governance_decisions VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
                 params![decision, proposal.view_id, proposal.id, proposal.policy.id,
-                    proposal.policy.revision, proposal.expected_head, now, serde_json::to_string(&receipt)?],
-            )?;
+                    proposal.policy.revision, proposal.expected_head, now, serde_json::to_string(&receipt)?])?;
             let changed = self.conn.execute(
                 ADVANCE_HEAD,
                 params![next_policy.id, next_policy.revision, decision,
-                    source.as_ref().map(serde_json::to_string).transpose()?, proposal.view_id, proposal.expected_head],
-            )?;
+                    source.as_ref().map(serde_json::to_string).transpose()?, proposal.view_id, proposal.expected_head])?;
             if changed != 1 {
                 return Err(failure("E_CAS"));
             }
             self.conn.execute(
                 "INSERT INTO governance_receipts VALUES (?1,?2,?3,?4,?5)",
-                params![host.principal, request.nonce, request_hash, serde_json::to_string(&receipt)?, proposal.view_id],
-            )?;
+                params![host.principal, request.nonce, request_hash, serde_json::to_string(&receipt)?, proposal.view_id])?;
             self.conn.execute(
                 "INSERT INTO governance_events(id,view_id,decision_id,event_type,recorded_at_ms) VALUES (?1,?2,?3,?4,?5)",
-                params![event_id, proposal.view_id, decision, event_type, now],
-            )?;
+                params![event_id, proposal.view_id, decision, event_type, now])?;
             self.gov_quota(&proposal.view_id)?;
             hook();
             Ok(receipt)
@@ -756,7 +736,6 @@ impl Engine {
     pub fn inspect_governance_head(
         &self,
         view: &str,
-        now: i64,
         host: &HostContext,
     ) -> Result<GovernanceHead> {
         let _scope = self.read_budget.enter();
@@ -768,8 +747,9 @@ impl Engine {
         } else {
             None
         };
+        let _clock_scope = self.operation_scope()?;
         let head = self.gov_head(view)?;
-        let policy = self.gov_policy(view, &head.policy, now)?;
+        let policy = self.gov_policy(view, &head.policy)?;
         if !policy.readers.is_empty()
             && !policy.readers.contains(&host.principal)
             && !policy.proposers.contains(&host.principal)
@@ -796,15 +776,13 @@ impl Engine {
         &self,
         view: &str,
         event: &str,
-        now: i64,
         host: &HostContext,
     ) -> Result<Option<GovernanceEvent>> {
-        let head = self.inspect_governance_head(view, now, host)?;
-        let policy = self.gov_policy(view, &head.policy, now)?;
+        let head = self.inspect_governance_head(view, host)?;
+        let policy = self.gov_policy(view, &head.policy)?;
         let row: Option<(String,String,String,i64)> = self.conn.query_row(
             "SELECT substr(e.decision_id,1,513),substr(e.event_type,1,65),substr(d.proposal_id,1,513),e.recorded_at_ms FROM governance_events e JOIN governance_decisions d ON d.id=e.decision_id AND d.view_id=e.view_id WHERE e.id=?1 AND e.view_id=?2",
-            params![event,view], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)),
-        ).optional()?;
+            params![event,view], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional()?;
         let Some((decision_id, event_type, proposal_id, recorded_at_ms)) = row else {
             return Ok(None);
         };
@@ -845,8 +823,7 @@ impl Engine {
                     self.read_budget.request()?;
                     let prior:Option<String>=self.conn.query_row(
                         "SELECT substr(proposal_id,1,513) FROM governance_decisions WHERE id=?1 AND view_id=?2",
-                        params![parent,view],|r|r.get(0),
-                    ).optional()?;
+                        params![parent,view],|r|r.get(0)).optional()?;
                     let prior = prior.ok_or_else(|| failure("E_INTEGRITY"))?;
                     record = self.gov_proposal(&prior)?.0;
                     if record.proposal.view_id != view {

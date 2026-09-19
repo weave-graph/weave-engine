@@ -146,6 +146,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         } else {
             None
         };
+        let _clock_scope = self.operation_write_scope()?;
         let (_, current, _) = self.dispatch_manifest(id)?;
         if !["running", "paused", "draining", "removed"].contains(&state) || current == "removed" {
             return Err(err("E_LIFECYCLE", "invalid lifecycle transition"));
@@ -154,8 +155,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             let pending: i64 = self.conn.query_row(
                 "SELECT (SELECT COUNT(*) FROM dispatch_pending WHERE adapter=?1)+(SELECT COUNT(*) FROM governance_delivery_pending WHERE adapter=?1)",
                 [id],
-                |r| r.get(0),
-            )?;
+                |r| r.get(0))?;
             if pending > 0 {
                 return Err(err(
                     "E_LIFECYCLE",
@@ -212,11 +212,15 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         Ok(Some((graph, branch, revision, sequence)))
     }
     /// At most one in-flight event per adapter. Global offsets and skipped private events are not exposed.
-    pub fn poll_adapter(&mut self, id: &str, now_ms: i64) -> Result<Option<DispatchEnvelope>> {
-        if now_ms < 0 {
-            return Err(err("E_CLOCK", "negative dispatcher clock"));
-        }
+    /// Old explicit-time native calls must be migrated rather than silently ignored.
+    /// ```compile_fail
+    /// let mut engine = weave_engine::Engine::memory().unwrap();
+    /// let _ = engine.poll_adapter("adapter", 123);
+    /// ```
+    pub fn poll_adapter(&mut self, id: &str) -> Result<Option<DispatchEnvelope>> {
         let tx = self.conn.unchecked_transaction()?;
+        let _clock_scope = self.operation_write_scope()?;
+        let now_ms = self.operation_time()?;
         let (manifest, state, mut checkpoint) = self.dispatch_manifest(id)?;
         if state != "running" && state != "draining" {
             return Err(err("E_PAUSED", "adapter is not running"));
@@ -356,6 +360,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         let hash = format!("{:x}", Sha256::digest(serde_json::to_vec(program)?));
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
         let result = (|| {
+            let _clock_scope = self.operation_write_scope()?;
             let (manifest, state, _) = self.dispatch_manifest(adapter)?;
             if state != "running" && state != "draining" {
                 return Err(err("E_PAUSED", "adapter is not running"));
@@ -370,8 +375,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             let limit = self.read_budget.remaining().min(MATERIALIZED_LIMIT + 4096);
             let prior: Option<(String, Option<String>)> = self.conn.query_row(
                 "SELECT substr(request_hash,1,65),CASE WHEN length(CAST(results AS BLOB))<=?3 THEN results ELSE NULL END FROM handler_receipts WHERE adapter=?1 AND event_id=?2",
-                params![adapter,event,limit as i64], |r| Ok((r.get(0)?,r.get(1)?)),
-            ).optional()?;
+                params![adapter,event,limit as i64], |r| Ok((r.get(0)?,r.get(1)?))).optional()?;
             if let Some((prior, results)) = prior {
                 if prior != hash {
                     return Err(err(
@@ -462,14 +466,16 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         }
     }
     fn check_lease(&self, adapter: &str, event: &str, lease: &str) -> Result<()> {
-        let matches:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM dispatch_pending WHERE adapter=?1 AND event_id=?2 AND lease=?3 AND status='leased')",params![adapter,event,lease],|r|r.get(0))?;
+        let matches:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM dispatch_pending WHERE adapter=?1 AND event_id=?2 AND lease=?3 AND status='leased' AND expires>?4)",params![adapter,event,lease,self.operation_time()?],|r|r.get(0))?;
         if !matches {
             return Err(err("E_LEASE", "delivery lease is not current"));
         }
         Ok(())
     }
-    pub fn fail_handler(&self, adapter: &str, event: &str, lease: &str, now_ms: i64) -> Result<()> {
+    pub fn fail_handler(&self, adapter: &str, event: &str, lease: &str) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
+        let _clock_scope = self.operation_write_scope()?;
+        let now_ms = self.operation_time()?;
         self.check_lease(adapter, event, lease)?;
         let (manifest, _, _) = self.dispatch_manifest(adapter)?;
         let attempts: u32 = self.conn.query_row(
@@ -514,6 +520,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         payload: serde_json::Value,
     ) -> Result<EffectIntent> {
         let tx = self.conn.unchecked_transaction()?;
+        let _clock_scope = self.operation_write_scope()?;
         let (manifest, state, _) = self.dispatch_manifest(adapter)?;
         if state != "running"
             || manifest.projection_replay
@@ -583,6 +590,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
     /// Persist unknown BEFORE the caller attempts I/O. Unknown never automatically retries.
     pub fn begin_effect_dispatch(&self, id: &str) -> Result<EffectIntent> {
         let tx = self.conn.unchecked_transaction()?;
+        let _clock_scope = self.operation_write_scope()?;
         let intent = self
             .effect_intent(id)?
             .ok_or_else(|| err("E_EFFECT", "intent unavailable"))?;
@@ -595,6 +603,9 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                 "E_EFFECT_AUTHORITY",
                 "adapter effect authority inactive",
             ));
+        }
+        if self.scoped_event(&manifest, &intent.event_id)?.is_none() {
+            return Err(err("E_UNAVAILABLE", "effect source is unavailable"));
         }
         if intent.state != "pending" {
             return Err(err(

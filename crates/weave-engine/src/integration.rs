@@ -30,27 +30,24 @@ impl Engine {
         &mut self,
         request: &IntegrationRequest,
         proof: &AdmissionProof,
-        now_ms: i64,
         host: &HostContext,
     ) -> Result<IntegrationReceipt> {
-        self.integrate_boundary(request, proof, now_ms, host, || {})
+        self.integrate_boundary(request, proof, host, || {})
     }
     #[cfg(feature = "recovery-testing")]
     pub fn integrate_proposal_test_before_commit(
         &mut self,
         request: &IntegrationRequest,
         proof: &AdmissionProof,
-        now_ms: i64,
         host: &HostContext,
         before_commit: impl FnOnce(),
     ) -> Result<IntegrationReceipt> {
-        self.integrate_boundary(request, proof, now_ms, host, before_commit)
+        self.integrate_boundary(request, proof, host, before_commit)
     }
     fn integrate_boundary(
         &mut self,
         request: &IntegrationRequest,
         proof: &AdmissionProof,
-        now_ms: i64,
         host: &HostContext,
         before_commit: impl FnOnce(),
     ) -> Result<IntegrationReceipt> {
@@ -69,6 +66,7 @@ impl Engine {
         }
         self.conn.execute_batch("SAVEPOINT proposal_integration")?;
         let result = (|| {
+            let _clock_scope = self.operation_write_scope()?;
             self.read_budget.request()?;
             let limit = self.read_budget.remaining().min(16 * 1024 * 1024) as i64;
             let row:Option<(String,String,Option<String>)>=self.conn.query_row("SELECT substr(subject,1,513),substr(body_digest,1,129),CASE WHEN length(CAST(capsule AS BLOB))<=?2 THEN capsule END FROM isolated_proposals WHERE id=?1",params![request.proposal_id,limit],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
@@ -92,7 +90,7 @@ impl Engine {
                 graph_id: root.graph_id.clone(),
                 branch_id: root.branch_id.clone(),
             };
-            let verified = self.verify_admission(proof, body.as_bytes(), &operation, now_ms)?;
+            let verified = self.verify_admission(proof, body.as_bytes(), &operation)?;
             if verified.principal() != subject {
                 return Err(err("E_FORBIDDEN", "proposal subject differs"));
             }

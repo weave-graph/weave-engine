@@ -86,7 +86,10 @@ impl Engine {
     }
     fn governance_delivery_atomic<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
         self.conn.execute_batch(BEGIN_DELIVERY)?;
-        match f() {
+        match (|| {
+            let _clock_scope = self.operation_write_scope()?;
+            f()
+        })() {
             Ok(value) => {
                 if let Err(error) = self.conn.execute_batch(COMMIT_DELIVERY) {
                     self.conn.execute_batch(ROLLBACK_DELIVERY)?;
@@ -172,13 +175,12 @@ impl Engine {
         &self,
         adapter: &str,
         view: &str,
-        now: i64,
         host: &HostContext,
     ) -> Result<bool> {
         let _scope = self.read_budget.enter();
         self.governance_delivery_atomic(|| {
             self.governance_adapter(adapter, host)?;
-            self.inspect_governance_head(view, now, host)?;
+            self.inspect_governance_head(view, host)?;
             let prior: Option<String> = self
                 .conn
                 .query_row(LOAD_SUBSCRIPTION_STATE, params![adapter, view], |r| {
@@ -228,25 +230,21 @@ impl Engine {
         &self,
         adapter: &str,
         view: &str,
-        now: i64,
         host: &HostContext,
     ) -> Result<Option<GovernanceDelivery>> {
         let _scope = self.read_budget.enter();
-        if now < 0 {
-            return Err(err("E_CLOCK", "negative delivery clock"));
-        }
         self.governance_delivery_atomic(|| {
+            let now = self.operation_time()?;
             let (manifest, state) = self.governance_adapter(adapter, host)?;
             if state != "running" && state != "draining" {
                 return Err(err("E_PAUSED", "adapter is not running"));
             }
             let sub = self.governance_subscription(adapter, view)?;
-            self.inspect_governance_head(view, now, host)?;
+            self.inspect_governance_head(view, host)?;
             let pending = self.governance_pending(adapter, view)?;
             let (event, sequence, ordinal, attempts) = if let Some(pending) = pending {
                 // Recheck original source before considering delivery timing or exposing its identity.
-                let Some(event) =
-                    self.governance_delivery_event(view, &pending.event, now, host)?
+                let Some(event) = self.governance_delivery_event(view, &pending.event, host)?
                 else {
                     return Err(unavailable());
                 };
@@ -277,7 +275,7 @@ impl Engine {
                 let mut visible = 0u32;
                 for row in rows {
                     let (id, sequence) = row?;
-                    if let Some(event) = self.governance_delivery_event(view, &id, now, host)? {
+                    if let Some(event) = self.governance_delivery_event(view, &id, host)? {
                         visible += 1;
                         if selected.is_none() {
                             selected = Some((event, sequence));
@@ -328,10 +326,9 @@ impl Engine {
         view: &str,
         event: &str,
         lease: &str,
-        now: i64,
         host: &HostContext,
     ) -> Result<GovernanceAcknowledgment> {
-        self.acknowledge_governance_observed(adapter, view, event, lease, now, host, || {})
+        self.acknowledge_governance_observed(adapter, view, event, lease, host, || {})
     }
     #[cfg(feature = "recovery-testing")]
     #[allow(clippy::too_many_arguments)]
@@ -341,11 +338,10 @@ impl Engine {
         view: &str,
         event: &str,
         lease: &str,
-        now: i64,
         host: &HostContext,
         hook: impl FnOnce(),
     ) -> Result<GovernanceAcknowledgment> {
-        self.acknowledge_governance_observed(adapter, view, event, lease, now, host, hook)
+        self.acknowledge_governance_observed(adapter, view, event, lease, host, hook)
     }
     #[allow(clippy::too_many_arguments)]
     fn acknowledge_governance_observed(
@@ -354,25 +350,21 @@ impl Engine {
         view: &str,
         event: &str,
         lease: &str,
-        now: i64,
         host: &HostContext,
         hook: impl FnOnce(),
     ) -> Result<GovernanceAcknowledgment> {
         let _scope = self.read_budget.enter();
-        if now < 0
-            || !valid_id(event)
-            || lease.len() != 48
-            || !lease.bytes().all(|b| b.is_ascii_hexdigit())
-        {
+        if !valid_id(event) || lease.len() != 48 || !lease.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(unavailable());
         }
         self.governance_delivery_atomic(|| {
+            let now = self.operation_time()?;
             let (_, state) = self.governance_adapter(adapter, host)?;
             if state != "running" && state != "draining" {
                 return Err(err("E_PAUSED", "adapter is not running"));
             }
             let sub = self.governance_subscription(adapter, view)?;
-            self.governance_delivery_event(view, event, now, host)?
+            self.governance_delivery_event(view, event, host)?
                 .ok_or_else(unavailable)?;
             let prior: Option<(String, i64, i64)> = self
                 .conn
@@ -423,13 +415,9 @@ impl Engine {
         &self,
         adapter: &str,
         view: &str,
-        now: i64,
         host: &HostContext,
     ) -> Result<()> {
         let _scope = self.read_budget.enter();
-        if now < 0 {
-            return Err(err("E_CLOCK", "negative delivery clock"));
-        }
         self.governance_delivery_atomic(|| {
             let (_, state) = self.governance_adapter(adapter, host)?;
             if state != "running" {
@@ -439,7 +427,7 @@ impl Engine {
             let pending = self
                 .governance_pending(adapter, view)?
                 .ok_or_else(unavailable)?;
-            self.governance_delivery_event(view, &pending.event, now, host)?
+            self.governance_delivery_event(view, &pending.event, host)?
                 .ok_or_else(unavailable)?;
             if !pending.dead {
                 return Err(err("E_LIFECYCLE", "delivery is not dead lettered"));

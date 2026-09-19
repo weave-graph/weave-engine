@@ -1,5 +1,7 @@
 # Authorized typed governance delivery
 
+Current authority time comes from the [constructor-installed operation clock](OPERATION_CLOCK.md). Explicit native `now` arguments have been removed; fixture callers must migrate to an installed test clock.
+
 Native governance events now participate in the existing adapter identity and lifecycle boundary. This is a typed acknowledgment stream over the separate governance outbox. It does not fabricate graph commits, execute graph-producing handlers, or run external effects. Accepted graph-value influence and remote subscriber admission remain separate requirements.
 
 A trusted host installs the existing immutable `AdapterManifest`, starts the adapter, and calls `subscribe_governance(adapter, view, now, host)`. The principal must exactly match the manifest. This profile adds a governance subscription to an existing adapter; the manifest's existing graph subscription is not repurposed as a fake governance graph. At most 32 retained governance subscriptions per adapter are allowed. A canceled subscription cannot be silently reactivated under the same identity.

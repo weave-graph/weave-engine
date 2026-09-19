@@ -1,3 +1,5 @@
+#[path = "support/clock.rs"]
+mod test_clock;
 use ed25519_dalek::SigningKey;
 use serde_json::json;
 use weave_contract::{Command, GraphData, GraphRef, Program, VERSION};
@@ -97,13 +99,14 @@ fn request(id: &str, nonce: &str) -> GovernanceDecisionRequest {
     }
 }
 fn quorum(e: &Engine, q: &GovernanceProposal) -> GovernanceProposalReceipt {
-    let r = e.propose_governance(q, 20, &host()).unwrap();
+    let r = test_clock::at(20, || e.propose_governance(q, &host())).unwrap();
     for (i, key) in keys()[..2].iter().enumerate() {
-        e.record_governance_approval(
-            &signed(q, &r.digest, key, &format!("{}-{i}", q.id)),
-            20,
-            &host(),
-        )
+        test_clock::at(20, || {
+            e.record_governance_approval(
+                &signed(q, &r.digest, key, &format!("{}-{i}", q.id)),
+                &host(),
+            )
+        })
         .unwrap();
     }
     r
@@ -112,45 +115,41 @@ fn quorum(e: &Engine, q: &GovernanceProposal) -> GovernanceProposalReceipt {
 fn isolated_proposals_threshold_distinct_signers_cas_and_durable_exact_retry() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("governance.db");
-    let mut e = Engine::open(&path).unwrap();
+    let mut e = test_clock::open(&path).unwrap();
     let source = seed(&mut e, 2);
     let a = proposal("a", source.clone(), None);
     let b = proposal("b", source, None);
-    let receipt = e.propose_governance(&a, 20, &host()).unwrap();
-    assert!(e
-        .inspect_governance_head("team", 20, &host())
-        .unwrap()
-        .decision_id
-        .is_none());
+    let receipt = test_clock::at(20, || e.propose_governance(&a, &host())).unwrap();
+    assert!(
+        test_clock::at(20, || e.inspect_governance_head("team", &host()))
+            .unwrap()
+            .decision_id
+            .is_none()
+    );
     assert_eq!(e.governance_event_count().unwrap(), 0);
     let approval = signed(&a, &receipt.digest, &keys()[0], "one");
-    assert!(e
-        .record_governance_approval(&approval, 20, &host())
-        .unwrap());
-    assert!(!e
-        .record_governance_approval(&approval, 20, &host())
-        .unwrap());
+    assert!(test_clock::at(20, || e.record_governance_approval(&approval, &host())).unwrap());
+    assert!(!test_clock::at(20, || e.record_governance_approval(&approval, &host())).unwrap());
     assert_eq!(
-        e.accept_governance(&request("a", "accept"), 20, &host())
+        test_clock::at(20, || e.accept_governance(&request("a", "accept"), &host()))
             .unwrap_err()
             .code,
         "E_GOV_QUORUM"
     );
-    assert!(e
-        .record_governance_approval(
-            &signed(&a, &receipt.digest, &keys()[0], "second-nonce"),
-            20,
-            &host()
-        )
-        .is_err());
-    e.record_governance_approval(&signed(&a, &receipt.digest, &keys()[1], "two"), 20, &host())
-        .unwrap();
+    assert!(test_clock::at(20, || e.record_governance_approval(
+        &signed(&a, &receipt.digest, &keys()[0], "second-nonce"),
+        &host()
+    ))
+    .is_err());
+    test_clock::at(20, || {
+        e.record_governance_approval(&signed(&a, &receipt.digest, &keys()[1], "two"), &host())
+    })
+    .unwrap();
     quorum(&e, &b);
-    let accepted = e
-        .accept_governance(&request("a", "accept"), 20, &host())
-        .unwrap();
+    let accepted =
+        test_clock::at(20, || e.accept_governance(&request("a", "accept"), &host())).unwrap();
     assert_eq!(
-        e.accept_governance(&request("b", "other"), 20, &host())
+        test_clock::at(20, || e.accept_governance(&request("b", "other"), &host()))
             .unwrap_err()
             .code,
         "E_CAS"
@@ -158,15 +157,14 @@ fn isolated_proposals_threshold_distinct_signers_cas_and_durable_exact_retry() {
     assert_eq!(e.governance_event_count().unwrap(), 1);
     assert_eq!(e.event_count().unwrap(), 1); // Graph source event remains independent.
     drop(e);
-    let e = Engine::open(&path).unwrap();
-    let retry = e
-        .accept_governance(&request("a", "accept"), 21, &host())
-        .unwrap();
+    let e = test_clock::open(&path).unwrap();
+    let retry =
+        test_clock::at(21, || e.accept_governance(&request("a", "accept"), &host())).unwrap();
     assert!(retry.duplicate);
     assert_eq!(retry.decision_id, accepted.decision_id);
     assert_eq!(e.governance_event_count().unwrap(), 1);
     assert_eq!(
-        e.accept_governance(&request("b", "accept"), 21, &host())
+        test_clock::at(21, || e.accept_governance(&request("b", "accept"), &host()))
             .unwrap_err()
             .code,
         "E_GOV_REPLAY"
@@ -174,42 +172,47 @@ fn isolated_proposals_threshold_distinct_signers_cas_and_durable_exact_retry() {
 }
 #[test]
 fn signatures_bind_proposal_policy_head_and_expiry_and_owner_profile_works() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     let source = seed(&mut e, 1);
     let q = proposal("owner", source, None);
-    let r = e.propose_governance(&q, 20, &host()).unwrap();
+    let r = test_clock::at(20, || e.propose_governance(&q, &host())).unwrap();
     let good = signed(&q, &r.digest, &keys()[0], "owner-vote");
     let mut forged = good.clone();
     forged.approval.expected_head = Some("different".into());
-    assert!(e.record_governance_approval(&forged, 20, &host()).is_err());
+    assert!(test_clock::at(20, || e.record_governance_approval(&forged, &host())).is_err());
     let mut forged = good.clone();
     forged.signature.replace_range(..2, "00");
     assert_eq!(
-        e.record_governance_approval(&forged, 20, &host())
+        test_clock::at(20, || e.record_governance_approval(&forged, &host()))
             .unwrap_err()
             .code,
         "E_GOV_SIGNATURE"
     );
-    assert!(e
-        .record_governance_approval(&signed(&q, &r.digest, &keys()[2], "outsider"), 20, &host())
-        .is_err());
-    e.record_governance_approval(&good, 20, &host()).unwrap();
-    e.accept_governance(&request("owner", "accepted"), 20, &host())
-        .unwrap();
-    assert!(e
-        .accept_governance(&request("owner", "accepted"), 8001, &host())
-        .is_err());
+    assert!(test_clock::at(20, || e.record_governance_approval(
+        &signed(&q, &r.digest, &keys()[2], "outsider"),
+        &host()
+    ))
+    .is_err());
+    test_clock::at(20, || e.record_governance_approval(&good, &host())).unwrap();
+    test_clock::at(20, || {
+        e.accept_governance(&request("owner", "accepted"), &host())
+    })
+    .unwrap();
+    assert!(test_clock::at(8001, || e
+        .accept_governance(&request("owner", "accepted"), &host()))
+    .is_err());
     assert!(e.install_governance_root(&policy(1)).is_err());
 }
 #[test]
 fn new_membership_cannot_authorize_itself_and_old_epoch_retries_are_rejected() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     let source = seed(&mut e, 2);
     let q = proposal("first", source, None);
     quorum(&e, &q);
-    let first = e
-        .accept_governance(&request("first", "first"), 20, &host())
-        .unwrap();
+    let first = test_clock::at(20, || {
+        e.accept_governance(&request("first", "first"), &host())
+    })
+    .unwrap();
     let mut next = policy(1);
     next.reference.revision = "2".into();
     next.members = vec![weave_policy::public_key(&keys()[2])];
@@ -223,51 +226,52 @@ fn new_membership_cannot_authorize_itself_and_old_epoch_retries_are_rejected() {
             policy: next.clone(),
         },
     };
-    let r = e.propose_governance(&change, 20, &host()).unwrap();
-    assert!(e
-        .record_governance_approval(
-            &signed(&change, &r.digest, &keys()[2], "self-install"),
-            20,
-            &host()
-        )
-        .is_err());
+    let r = test_clock::at(20, || e.propose_governance(&change, &host())).unwrap();
+    assert!(test_clock::at(20, || e.record_governance_approval(
+        &signed(&change, &r.digest, &keys()[2], "self-install"),
+        &host()
+    ))
+    .is_err());
     quorum(&e, &change);
-    let changed = e
-        .accept_governance(&request("policy-change", "change"), 20, &host())
-        .unwrap();
+    let changed = test_clock::at(20, || {
+        e.accept_governance(&request("policy-change", "change"), &host())
+    })
+    .unwrap();
     assert_eq!(changed.policy, next.reference);
     assert_eq!(
-        e.inspect_governance_head("team", 20, &host())
+        test_clock::at(20, || e.inspect_governance_head("team", &host()))
             .unwrap()
             .policy,
         next.reference
     );
-    assert!(e
-        .accept_governance(&request("first", "first"), 21, &host())
-        .is_err());
+    assert!(test_clock::at(21, || e
+        .accept_governance(&request("first", "first"), &host()))
+    .is_err());
     assert!(e.install_governance_root(&next).is_err());
     assert_eq!(e.governance_event_count().unwrap(), 2);
 }
 #[test]
 fn current_source_privacy_and_branch_scope_are_checked_at_proposal_and_inspection() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     let source = seed(&mut e, 1);
     let q = proposal("visible", source.clone(), None);
     quorum(&e, &q);
-    e.accept_governance(&request("visible", "accept"), 20, &host())
-        .unwrap();
-    assert!(e
-        .inspect_governance_head("team", 20, &HostContext::new("outsider", []))
-        .is_err());
-    assert!(e
-        .inspect_governance_head("team", 20, &HostContext::new("reader", []))
-        .is_ok());
+    test_clock::at(20, || {
+        e.accept_governance(&request("visible", "accept"), &host())
+    })
+    .unwrap();
+    assert!(test_clock::at(20, || e
+        .inspect_governance_head("team", &HostContext::new("outsider", [])))
+    .is_err());
+    assert!(test_clock::at(20, || e
+        .inspect_governance_head("team", &HostContext::new("reader", [])))
+    .is_ok());
     let mut invalid = proposal("private-branch", source, None);
     if let GovernanceAction::Publish { branch_id, .. } = &mut invalid.action {
         *branch_id = "private".into();
     }
     assert_eq!(
-        e.propose_governance(&invalid, 20, &host())
+        test_clock::at(20, || e.propose_governance(&invalid, &host()))
             .unwrap_err()
             .code,
         "E_GOV_SOURCE"
@@ -276,7 +280,7 @@ fn current_source_privacy_and_branch_scope_are_checked_at_proposal_and_inspectio
 
 #[test]
 fn owner_and_expired_extra_vote_profiles() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     let mut owner = policy(1);
     owner.members.truncate(1);
     e.install_governance_root(&owner).unwrap();
@@ -289,46 +293,49 @@ fn owner_and_expired_extra_vote_profiles() {
         revision: e.head("source", "main").unwrap().unwrap(),
     };
     let q = proposal("owner", source, None);
-    let receipt = e.propose_governance(&q, 20, &host()).unwrap();
-    e.record_governance_approval(
-        &signed(&q, &receipt.digest, &keys()[0], "owner-vote"),
-        20,
-        &host(),
-    )
+    let receipt = test_clock::at(20, || e.propose_governance(&q, &host())).unwrap();
+    test_clock::at(20, || {
+        e.record_governance_approval(
+            &signed(&q, &receipt.digest, &keys()[0], "owner-vote"),
+            &host(),
+        )
+    })
     .unwrap();
-    e.accept_governance(&request("owner", "owner-accept"), 20, &host())
-        .unwrap();
+    test_clock::at(20, || {
+        e.accept_governance(&request("owner", "owner-accept"), &host())
+    })
+    .unwrap();
 
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     let source = seed(&mut e, 1);
     let q = proposal("extra", source, None);
-    let receipt = e.propose_governance(&q, 20, &host()).unwrap();
+    let receipt = test_clock::at(20, || e.propose_governance(&q, &host())).unwrap();
     let mut expired = signed(&q, &receipt.digest, &keys()[0], "expired").approval;
     expired.expires_at_ms = 30;
-    e.record_governance_approval(
-        &sign_governance_approval(expired, &keys()[0]).unwrap(),
-        20,
-        &host(),
-    )
+    test_clock::at(20, || {
+        e.record_governance_approval(
+            &sign_governance_approval(expired, &keys()[0]).unwrap(),
+            &host(),
+        )
+    })
     .unwrap();
-    e.record_governance_approval(
-        &signed(&q, &receipt.digest, &keys()[1], "valid"),
-        20,
-        &host(),
-    )
+    test_clock::at(20, || {
+        e.record_governance_approval(&signed(&q, &receipt.digest, &keys()[1], "valid"), &host())
+    })
     .unwrap();
     assert_eq!(
-        e.record_governance_approval(
+        test_clock::at(40, || e.record_governance_approval(
             &signed(&q, &receipt.digest, &keys()[0], "renew"),
-            40,
             &host()
-        )
+        ))
         .unwrap_err()
         .code,
         "E_GOV_APPROVAL"
     );
-    e.accept_governance(&request("extra", "extra-accept"), 40, &host())
-        .unwrap();
+    test_clock::at(40, || {
+        e.accept_governance(&request("extra", "extra-accept"), &host())
+    })
+    .unwrap();
 }
 
 #[test]
@@ -336,7 +343,7 @@ fn two_connections_competing_quorums_have_one_atomic_winner() {
     use std::sync::{Arc, Barrier};
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("race.db");
-    let mut e = Engine::open(&path).unwrap();
+    let mut e = test_clock::open(&path).unwrap();
     let source = seed(&mut e, 2);
     for id in ["a", "b"] {
         quorum(&e, &proposal(id, source.clone(), None));
@@ -349,10 +356,10 @@ fn two_connections_competing_quorums_have_one_atomic_winner() {
             let path = path.clone();
             let barrier = barrier.clone();
             std::thread::spawn(move || {
-                let e = Engine::open(&path).unwrap();
+                let e = test_clock::open(&path).unwrap();
                 barrier.wait();
                 for _ in 0..20 {
-                    match e.accept_governance(&request(id, id), 20, &host()) {
+                    match test_clock::at(20, || e.accept_governance(&request(id, id), &host())) {
                         Ok(r) => return Ok(r),
                         Err(error)
                             if error.code == "E_STORAGE" && error.message.contains("locked") =>
@@ -396,7 +403,7 @@ fn two_connections_competing_quorums_have_one_atomic_winner() {
 
 #[test]
 fn copied_node_proofs_remain_a_current_source_gate_for_collectors_and_readers() {
-    let mut engine = Engine::memory().unwrap();
+    let mut engine = test_clock::memory().unwrap();
     let mut p = policy(1);
     p.proposers.push("other".into());
     p.readers.clear();
@@ -422,33 +429,31 @@ fn copied_node_proofs_remain_a_current_source_gate_for_collectors_and_readers() 
         },
         None,
     );
-    let r = engine.propose_governance(&q, 20, &host()).unwrap();
-    engine
-        .record_governance_approval(
-            &signed(&q, &r.digest, &keys()[0], "private-vote"),
-            20,
-            &host(),
-        )
-        .unwrap();
-    engine
-        .accept_governance(&request("private", "accept"), 20, &host())
-        .unwrap();
+    let r = test_clock::at(20, || engine.propose_governance(&q, &host())).unwrap();
+    test_clock::at(20, || {
+        engine
+            .record_governance_approval(&signed(&q, &r.digest, &keys()[0], "private-vote"), &host())
+    })
+    .unwrap();
+    test_clock::at(20, || {
+        engine.accept_governance(&request("private", "accept"), &host())
+    })
+    .unwrap();
     let other = HostContext::new("other", []);
     assert_eq!(
-        engine
-            .inspect_governance_head("team", 21, &other)
+        test_clock::at(21, || engine.inspect_governance_head("team", &other))
             .unwrap_err()
             .code,
         "E_GOV_UNAVAILABLE"
     );
     assert_eq!(
-        engine
-            .accept_governance(&request("private", "other"), 21, &other)
-            .unwrap_err()
-            .code,
+        test_clock::at(21, || engine
+            .accept_governance(&request("private", "other"), &other))
+        .unwrap_err()
+        .code,
         "E_GOV_UNAVAILABLE"
     );
-    assert!(engine.inspect_governance_head("team", 21, &host()).is_ok());
+    assert!(test_clock::at(21, || engine.inspect_governance_head("team", &host())).is_ok());
     assert_eq!(engine.governance_event_count().unwrap(), 1);
 }
 
@@ -456,16 +461,18 @@ fn copied_node_proofs_remain_a_current_source_gate_for_collectors_and_readers() 
 fn root_decision_occurrences_are_opaque_and_receipt_retries_keep_the_identity() {
     let mut outcomes = Vec::new();
     for _ in 0..2 {
-        let mut e = Engine::memory().unwrap();
+        let mut e = test_clock::memory().unwrap();
         let source = seed(&mut e, 2);
         let q = proposal("same-body", source, None);
         let proposed = quorum(&e, &q);
-        let accepted = e
-            .accept_governance(&request("same-body", "same-nonce"), 20, &host())
-            .unwrap();
-        let repeated = e
-            .accept_governance(&request("same-body", "same-nonce"), 20, &host())
-            .unwrap();
+        let accepted = test_clock::at(20, || {
+            e.accept_governance(&request("same-body", "same-nonce"), &host())
+        })
+        .unwrap();
+        let repeated = test_clock::at(20, || {
+            e.accept_governance(&request("same-body", "same-nonce"), &host())
+        })
+        .unwrap();
         assert!(repeated.duplicate);
         assert_eq!(accepted.decision_id, repeated.decision_id);
         assert_eq!(accepted.event_id, repeated.event_id);

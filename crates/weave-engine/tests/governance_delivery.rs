@@ -1,3 +1,5 @@
+#[path = "support/clock.rs"]
+mod test_clock;
 use ed25519_dalek::SigningKey;
 use serde_json::json;
 use weave_contract::{Command, GraphData, GraphRef, Program, VERSION};
@@ -97,13 +99,14 @@ fn request(id: &str, nonce: &str) -> GovernanceDecisionRequest {
     }
 }
 fn quorum(e: &Engine, q: &GovernanceProposal) -> GovernanceProposalReceipt {
-    let r = e.propose_governance(q, 20, &host()).unwrap();
+    let r = test_clock::at(20, || e.propose_governance(q, &host())).unwrap();
     for (i, key) in keys()[..2].iter().enumerate() {
-        e.record_governance_approval(
-            &signed(q, &r.digest, key, &format!("{}-{i}", q.id)),
-            20,
-            &host(),
-        )
+        test_clock::at(20, || {
+            e.record_governance_approval(
+                &signed(q, &r.digest, key, &format!("{}-{i}", q.id)),
+                &host(),
+            )
+        })
         .unwrap();
     }
     r
@@ -132,110 +135,117 @@ fn install(e: &Engine, id: &str, principal: &str) -> HostContext {
     let h = HostContext::new(principal, []);
     e.install_adapter(&adapter(id, principal), &h).unwrap();
     e.set_adapter_state(id, "running").unwrap();
-    e.subscribe_governance(id, "team", 20, &h).unwrap();
+    test_clock::at(20, || e.subscribe_governance(id, "team", &h)).unwrap();
     h
 }
 fn accepted(e: &Engine, id: &str, source: GraphRef, head: Option<String>) -> GovernanceReceipt {
     quorum(e, &proposal(id, source, head));
-    e.accept_governance(&request(id, id), 20, &host()).unwrap()
+    test_clock::at(20, || e.accept_governance(&request(id, id), &host())).unwrap()
 }
 #[test]
 fn delivery_restart_pause_lease_rotation_and_ack_retry() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("delivery.db");
-    let mut e = Engine::open(&path).unwrap();
+    let mut e = test_clock::open(&path).unwrap();
     let source = seed(&mut e, 2);
     accepted(&e, "a", source, None);
     let reader = install(&e, "reader", "reader");
-    let first = e
-        .poll_governance("reader", "team", 20, &reader)
+    let first = test_clock::at(20, || e.poll_governance("reader", "team", &reader))
         .unwrap()
         .unwrap();
     assert_eq!(first.ordinal, 1);
     assert_eq!(first.event.event_type, "view.accepted");
     e.set_adapter_state("reader", "paused").unwrap();
     assert_eq!(
-        e.acknowledge_governance("reader", "team", &first.event.id, &first.lease, 21, &reader)
-            .unwrap_err()
-            .code,
+        test_clock::at(21, || e.acknowledge_governance(
+            "reader",
+            "team",
+            &first.event.id,
+            &first.lease,
+            &reader
+        ))
+        .unwrap_err()
+        .code,
         "E_PAUSED"
     );
     e.set_adapter_state("reader", "running").unwrap();
-    let renewed = e
-        .poll_governance("reader", "team", 22, &reader)
+    let renewed = test_clock::at(22, || e.poll_governance("reader", "team", &reader))
         .unwrap()
         .unwrap();
     assert_eq!(renewed.ordinal, first.ordinal);
     assert_ne!(renewed.lease, first.lease);
     assert_eq!(
-        e.acknowledge_governance("reader", "team", &first.event.id, &first.lease, 22, &reader)
-            .unwrap_err()
-            .code,
+        test_clock::at(22, || e.acknowledge_governance(
+            "reader",
+            "team",
+            &first.event.id,
+            &first.lease,
+            &reader
+        ))
+        .unwrap_err()
+        .code,
         "E_LEASE"
     );
     assert!(
-        !e.acknowledge_governance(
+        !test_clock::at(22, || e.acknowledge_governance(
             "reader",
             "team",
             &renewed.event.id,
             &renewed.lease,
-            22,
             &reader
-        )
+        ))
         .unwrap()
         .duplicate
     );
     drop(e);
-    let e = Engine::open(&path).unwrap();
+    let e = test_clock::open(&path).unwrap();
     assert!(
-        e.acknowledge_governance(
+        test_clock::at(23, || e.acknowledge_governance(
             "reader",
             "team",
             &renewed.event.id,
             &renewed.lease,
-            23,
             &reader
-        )
+        ))
         .unwrap()
         .duplicate
     );
-    assert!(e
-        .poll_governance("reader", "team", 23, &reader)
-        .unwrap()
-        .is_none());
+    assert!(
+        test_clock::at(23, || e.poll_governance("reader", "team", &reader))
+            .unwrap()
+            .is_none()
+    );
     assert_eq!(e.event_count().unwrap(), 1);
     assert_eq!(e.governance_event_count().unwrap(), 1);
     e.cancel_governance_subscription("reader", "team", &reader)
         .unwrap();
     e.set_adapter_state("reader", "removed").unwrap();
-    assert!(e
-        .acknowledge_governance(
-            "reader",
-            "team",
-            &renewed.event.id,
-            &renewed.lease,
-            24,
-            &reader
-        )
-        .is_err());
+    assert!(test_clock::at(24, || e.acknowledge_governance(
+        "reader",
+        "team",
+        &renewed.event.id,
+        &renewed.lease,
+        &reader
+    ))
+    .is_err());
 }
 #[test]
 fn current_reader_revocation_blocks_pending_and_acknowledged_payloads() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     let source = seed(&mut e, 2);
     let first = accepted(&e, "a", source, None);
     let reader = install(&e, "pending", "reader");
     install(&e, "acked", "reader");
-    let pending = e
-        .poll_governance("pending", "team", 20, &reader)
+    let pending = test_clock::at(20, || e.poll_governance("pending", "team", &reader))
         .unwrap()
         .unwrap();
-    let acked = e
-        .poll_governance("acked", "team", 20, &reader)
+    let acked = test_clock::at(20, || e.poll_governance("acked", "team", &reader))
         .unwrap()
         .unwrap();
-    e.acknowledge_governance("acked", "team", &acked.event.id, &acked.lease, 20, &reader)
-        .unwrap();
+    test_clock::at(20, || {
+        e.acknowledge_governance("acked", "team", &acked.event.id, &acked.lease, &reader)
+    })
+    .unwrap();
     let mut next = policy(2);
     next.reference.revision = "2".into();
     next.readers = vec!["collector".into()];
@@ -248,14 +258,22 @@ fn current_reader_revocation_blocks_pending_and_acknowledged_payloads() {
         action: GovernanceAction::ReplacePolicy { policy: next },
     };
     quorum(&e, &q);
-    e.accept_governance(&request("remove-reader", "remove-reader"), 21, &host())
-        .unwrap();
-    assert!(e.poll_governance("pending", "team", 22, &reader).is_err());
+    test_clock::at(21, || {
+        e.accept_governance(&request("remove-reader", "remove-reader"), &host())
+    })
+    .unwrap();
+    assert!(test_clock::at(22, || e.poll_governance("pending", "team", &reader)).is_err());
     for (id, delivery) in [("pending", pending), ("acked", acked)] {
         assert_eq!(
-            e.acknowledge_governance(id, "team", &delivery.event.id, &delivery.lease, 22, &reader)
-                .unwrap_err()
-                .code,
+            test_clock::at(22, || e.acknowledge_governance(
+                id,
+                "team",
+                &delivery.event.id,
+                &delivery.lease,
+                &reader
+            ))
+            .unwrap_err()
+            .code,
             "E_GOV_UNAVAILABLE"
         );
     }
@@ -266,7 +284,7 @@ fn current_reader_revocation_blocks_pending_and_acknowledged_payloads() {
 }
 #[test]
 fn hidden_historical_source_and_policy_occurrences_leave_no_delivery_gaps() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     let initial = seed(&mut e, 2);
     let commit = |e: &mut Engine, prior: &str, private: bool| {
         e.execute(&serde_json::from_value(json!({"version":VERSION,"commands":[{"op":"commit","graph_id":"source","branch_id":"main","expected_head":prior,"data":{"nodes":[{"id":"n","entity_id":"E","space_id":"s","readers":if private {vec!["collector"]} else {vec![]}}]}}]})).unwrap(),&host()).unwrap();
@@ -290,19 +308,20 @@ fn hidden_historical_source_and_policy_occurrences_leave_no_delivery_gaps() {
         },
     };
     quorum(&e, &q);
-    let transition = e
-        .accept_governance(&request("policy", "policy"), 20, &host())
-        .unwrap();
+    let transition = test_clock::at(20, || {
+        e.accept_governance(&request("policy", "policy"), &host())
+    })
+    .unwrap();
     let public = commit(&mut e, &private.revision, false);
     let mut q = proposal("public", public, Some(transition.decision_id));
     q.policy = next.reference;
     quorum(&e, &q);
-    let visible = e
-        .accept_governance(&request("public", "public"), 20, &host())
-        .unwrap();
+    let visible = test_clock::at(20, || {
+        e.accept_governance(&request("public", "public"), &host())
+    })
+    .unwrap();
     let reader = install(&e, "reader", "reader");
-    let delivery = e
-        .poll_governance("reader", "team", 21, &reader)
+    let delivery = test_clock::at(21, || e.poll_governance("reader", "team", &reader))
         .unwrap()
         .unwrap();
     assert_eq!(delivery.event.id, visible.event_id);
@@ -311,82 +330,134 @@ fn hidden_historical_source_and_policy_occurrences_leave_no_delivery_gaps() {
 }
 #[test]
 fn expiration_dead_letter_drain_cancel_and_removal_reject_stale_lease() {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     let source = seed(&mut e, 2);
     accepted(&e, "a", source, None);
     let reader = install(&e, "reader", "reader");
-    let first = e
-        .poll_governance("reader", "team", 20, &reader)
+    let first = test_clock::at(20, || e.poll_governance("reader", "team", &reader))
         .unwrap()
         .unwrap();
     assert!(e.set_adapter_state("reader", "removed").is_err());
     assert_eq!(
-        e.acknowledge_governance(
+        test_clock::at(120, || e.acknowledge_governance(
             "reader",
             "team",
             &first.event.id,
             &first.lease,
-            120,
             &reader
-        )
+        ))
         .unwrap_err()
         .code,
         "E_LEASE"
     );
-    let second = e
-        .poll_governance("reader", "team", 120, &reader)
+    let second = test_clock::at(120, || e.poll_governance("reader", "team", &reader))
         .unwrap()
         .unwrap();
     assert_ne!(second.lease, first.lease);
-    assert!(e
-        .poll_governance("reader", "team", 220, &reader)
-        .unwrap()
-        .is_none());
-    assert_eq!(
-        e.replay_governance_dead_letter("reader", "team", -1, &reader)
-            .unwrap_err()
-            .code,
-        "E_CLOCK"
+    assert!(
+        test_clock::at(220, || e.poll_governance("reader", "team", &reader))
+            .unwrap()
+            .is_none()
     );
-    e.replay_governance_dead_letter("reader", "team", 221, &reader)
-        .unwrap();
-    let replay = e
-        .poll_governance("reader", "team", 221, &reader)
+    assert_eq!(
+        test_clock::at(-1, || e
+            .replay_governance_dead_letter("reader", "team", &reader))
+        .unwrap_err()
+        .code,
+        "E_CLOCK_UNAVAILABLE"
+    );
+    test_clock::at(221, || {
+        e.replay_governance_dead_letter("reader", "team", &reader)
+    })
+    .unwrap();
+    let replay = test_clock::at(221, || e.poll_governance("reader", "team", &reader))
         .unwrap()
         .unwrap();
     e.set_adapter_state("reader", "draining").unwrap();
-    e.acknowledge_governance(
-        "reader",
-        "team",
-        &replay.event.id,
-        &replay.lease,
-        222,
-        &reader,
-    )
+    test_clock::at(222, || {
+        e.acknowledge_governance("reader", "team", &replay.event.id, &replay.lease, &reader)
+    })
     .unwrap();
-    assert!(e
-        .poll_governance("reader", "team", 222, &reader)
-        .unwrap()
-        .is_none());
+    assert!(
+        test_clock::at(222, || e.poll_governance("reader", "team", &reader))
+            .unwrap()
+            .is_none()
+    );
     e.set_adapter_state("reader", "paused").unwrap();
     e.set_adapter_state("reader", "running").unwrap();
     assert_eq!(
-        e.acknowledge_governance(
+        test_clock::at(223, || e.acknowledge_governance(
             "reader",
             "team",
             &replay.event.id,
             &replay.lease,
-            223,
             &reader
-        )
+        ))
         .unwrap_err()
         .code,
         "E_LEASE"
     );
     e.cancel_governance_subscription("reader", "team", &reader)
         .unwrap();
-    assert!(e
-        .subscribe_governance("reader", "team", 224, &reader)
-        .is_err());
+    assert!(test_clock::at(224, || e.subscribe_governance("reader", "team", &reader)).is_err());
     e.set_adapter_state("reader", "removed").unwrap();
+}
+
+#[test]
+fn current_policy_expiry_blocks_inspection_pending_and_cached_ack_without_head_change() {
+    let clock = std::sync::Arc::new(ManualClock::new(20));
+    let mut e = Engine::memory_with_clock(clock.clone()).unwrap();
+    let source = seed(&mut e, 2);
+    let decision = accepted(&e, "a", source, None);
+    let reader = install(&e, "reader", "reader");
+    let other = install(&e, "pending-reader", "reader");
+    let before = clock.samples();
+    let delivery = e
+        .poll_governance("reader", "team", &reader)
+        .unwrap()
+        .unwrap();
+    assert_eq!(clock.samples(), before + 1); // event inspection/source checks share one clock
+    e.acknowledge_governance(
+        "reader",
+        "team",
+        &delivery.event.id,
+        &delivery.lease,
+        &reader,
+    )
+    .unwrap();
+    e.poll_governance("pending-reader", "team", &other)
+        .unwrap()
+        .unwrap();
+    clock.set(9999);
+    assert_eq!(
+        e.inspect_governance_head("team", &reader)
+            .unwrap()
+            .decision_id,
+        Some(decision.decision_id)
+    );
+    clock.set(10000);
+    assert_eq!(
+        e.inspect_governance_head("team", &reader).unwrap_err().code,
+        "E_GOV_POLICY"
+    );
+    assert_eq!(
+        e.poll_governance("pending-reader", "team", &other)
+            .unwrap_err()
+            .code,
+        "E_GOV_POLICY"
+    );
+    assert_eq!(
+        e.acknowledge_governance(
+            "reader",
+            "team",
+            &delivery.event.id,
+            &delivery.lease,
+            &reader
+        )
+        .unwrap_err()
+        .code,
+        "E_GOV_POLICY"
+    );
+    assert_eq!(e.event_count().unwrap(), 1);
+    assert_eq!(e.governance_event_count().unwrap(), 1);
 }

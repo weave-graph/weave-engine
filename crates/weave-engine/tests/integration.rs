@@ -1,3 +1,5 @@
+#[path = "support/clock.rs"]
+mod test_clock;
 use ed25519_dalek::SigningKey;
 use serde_json::json;
 use weave_contract::{GraphRef, QueryPlan, VERSION};
@@ -88,7 +90,7 @@ impl Peer {
     }
 }
 fn source(readers: serde_json::Value) -> (Engine, Capsule) {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     e.execute(&serde_json::from_value(json!({"version":VERSION,"commands":[{"op":"commit","graph_id":"source","data":{"nodes":[{"id":"a","entity_id":"a","space_id":"s","readers":readers},{"id":"b","entity_id":"b","space_id":"s","readers":readers}],"edges":[{"id":"link","from":"a","to":"b","predicate":"connected","valid_time":{"start":0},"readers":readers}]}}]})).unwrap(),&host()).unwrap();
     let root = GraphRef {
         graph_id: "source".into(),
@@ -115,9 +117,9 @@ fn two_engine_signed_receipt_stays_isolated_until_explicit_restart_safe_integrat
     let proof = peer.proof(&capsule);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("receiver.db");
-    let mut receiver = Engine::open(&path).unwrap();
+    let mut receiver = test_clock::open(&path).unwrap();
     receiver.install_admission_policy(&peer.context).unwrap();
-    let proposed = receiver.admit_proposal(&proof, &capsule, 200).unwrap();
+    let proposed = test_clock::at(200, || receiver.admit_proposal(&proof, &capsule)).unwrap();
     let request = decision(proposed.result.id);
     assert!(receiver.head("source", "offline").unwrap().is_none());
     assert_eq!(receiver.event_count().unwrap(), 0);
@@ -129,15 +131,19 @@ fn two_engine_signed_receipt_stays_isolated_until_explicit_restart_safe_integrat
         )
         .is_err());
     assert_eq!(
-        receiver
-            .integrate_proposal(&request, &proof, 201, &HostContext::new("reviewer", []))
-            .unwrap_err()
-            .code,
+        test_clock::at(201, || receiver.integrate_proposal(
+            &request,
+            &proof,
+            &HostContext::new("reviewer", [])
+        ))
+        .unwrap_err()
+        .code,
         "E_FORBIDDEN"
     );
-    let accepted = receiver
-        .integrate_proposal(&request, &proof, 202, &host())
-        .unwrap();
+    let accepted = test_clock::at(202, || {
+        receiver.integrate_proposal(&request, &proof, &host())
+    })
+    .unwrap();
     assert!(accepted.event_id.is_some());
     assert!(!accepted.duplicate);
     assert_eq!(
@@ -151,20 +157,24 @@ fn two_engine_signed_receipt_stays_isolated_until_explicit_restart_safe_integrat
     assert_eq!(receiver.event_count().unwrap(), 1);
     assert!(receiver.head("source", "main").unwrap().is_none());
     drop(receiver);
-    let mut receiver = Engine::open(&path).unwrap();
-    let replay = receiver
-        .integrate_proposal(&request, &proof, 203, &host())
-        .unwrap();
+    let mut receiver = test_clock::open(&path).unwrap();
+    let replay = test_clock::at(203, || {
+        receiver.integrate_proposal(&request, &proof, &host())
+    })
+    .unwrap();
     assert!(replay.duplicate);
     assert_eq!(replay.event_id, accepted.event_id);
     assert_eq!(receiver.event_count().unwrap(), 1);
     let mut changed = request.clone();
     changed.branch_id = "other".into();
     assert_eq!(
-        receiver
-            .integrate_proposal(&changed, &proof, 204, &host())
-            .unwrap_err()
-            .code,
+        test_clock::at(204, || receiver.integrate_proposal(
+            &changed,
+            &proof,
+            &host()
+        ))
+        .unwrap_err()
+        .code,
         "E_REPLAY"
     );
     assert_eq!(
@@ -177,9 +187,12 @@ fn two_engine_signed_receipt_stays_isolated_until_explicit_restart_safe_integrat
         .revoked_keys
         .insert(weave_policy::public_key(&peer.user));
     receiver.install_admission_policy(&revoked).unwrap();
-    assert!(receiver
-        .integrate_proposal(&request, &proof, 205, &host())
-        .is_err());
+    assert!(test_clock::at(205, || receiver.integrate_proposal(
+        &request,
+        &proof,
+        &host()
+    ))
+    .is_err());
     assert_eq!(receiver.event_count().unwrap(), 1);
 }
 #[test]
@@ -187,16 +200,19 @@ fn stale_branch_cas_and_private_data_do_not_promote_isolated_proposals() {
     let (_, capsule) = source(json!([]));
     let peer = Peer::new();
     let proof = peer.proof(&capsule);
-    let mut receiver = Engine::memory().unwrap();
+    let mut receiver = test_clock::memory().unwrap();
     receiver.install_admission_policy(&peer.context).unwrap();
-    let proposed = receiver.admit_proposal(&proof, &capsule, 200).unwrap();
+    let proposed = test_clock::at(200, || receiver.admit_proposal(&proof, &capsule)).unwrap();
     let mut request = decision(proposed.result.id);
     request.expected_head = Some("absent".into());
     assert_eq!(
-        receiver
-            .integrate_proposal(&request, &proof, 201, &host())
-            .unwrap_err()
-            .code,
+        test_clock::at(201, || receiver.integrate_proposal(
+            &request,
+            &proof,
+            &host()
+        ))
+        .unwrap_err()
+        .code,
         "E_CONFLICT"
     );
     assert_eq!(receiver.event_count().unwrap(), 0);
@@ -210,22 +226,19 @@ fn stale_branch_cas_and_private_data_do_not_promote_isolated_proposals() {
     // The signed sender has proposal scope; that alone cannot let a local reviewer read private content.
     let (_, private) = source(json!(["reviewer"]));
     let private_proof = peer.proof(&private);
-    let mut receiver = Engine::memory().unwrap();
+    let mut receiver = test_clock::memory().unwrap();
     receiver.install_admission_policy(&peer.context).unwrap();
-    let proposed = receiver
-        .admit_proposal(&private_proof, &private, 200)
-        .unwrap();
+    let proposed =
+        test_clock::at(202, || receiver.admit_proposal(&private_proof, &private)).unwrap();
     let request = decision(proposed.result.id);
     assert_eq!(
-        receiver
-            .integrate_proposal(
-                &request,
-                &private_proof,
-                201,
-                &HostContext::new("other-reviewer", ["source".into()])
-            )
-            .unwrap_err()
-            .code,
+        test_clock::at(203, || receiver.integrate_proposal(
+            &request,
+            &private_proof,
+            &HostContext::new("other-reviewer", ["source".into()])
+        ))
+        .unwrap_err()
+        .code,
         "E_UNAVAILABLE"
     );
     assert_eq!(receiver.event_count().unwrap(), 0);
@@ -243,16 +256,19 @@ fn structural_identity_conflicts_rollback_import_without_overwriting_local_branc
     let (_, capsule) = source(json!([]));
     let peer = Peer::new();
     let proof = peer.proof(&capsule);
-    let mut receiver = Engine::memory().unwrap();
+    let mut receiver = test_clock::memory().unwrap();
     receiver.install_admission_policy(&peer.context).unwrap();
-    let proposed = receiver.admit_proposal(&proof, &capsule, 200).unwrap();
+    let proposed = test_clock::at(200, || receiver.admit_proposal(&proof, &capsule)).unwrap();
     receiver.execute(&serde_json::from_value(json!({"version":VERSION,"commands":[{"op":"commit","graph_id":"source","data":{"nodes":[{"id":"a","entity_id":"a","space_id":"s"},{"id":"b","entity_id":"b","space_id":"s"}],"edges":[{"id":"link","from":"a","to":"b","predicate":"different","valid_time":{"start":0}}]}}]})).unwrap(),&host()).unwrap();
     let before = receiver.head("source", "main").unwrap();
     assert_eq!(
-        receiver
-            .integrate_proposal(&decision(proposed.result.id), &proof, 201, &host())
-            .unwrap_err()
-            .code,
+        test_clock::at(201, || receiver.integrate_proposal(
+            &decision(proposed.result.id),
+            &proof,
+            &host()
+        ))
+        .unwrap_err()
+        .code,
         "E_EDGE_IDENTITY"
     );
     assert_eq!(receiver.head("source", "main").unwrap(), before);
@@ -265,7 +281,7 @@ fn export_and_accept_use_verified_storage_before_releasing_or_publishing_content
     let (_, capsule) = source(json!([]));
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("corrupt.db");
-    let mut receiver = Engine::open(&path).unwrap();
+    let mut receiver = test_clock::open(&path).unwrap();
     receiver.receive_capsule(&capsule, &host()).unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute(

@@ -1,6 +1,5 @@
 //! Local snapshot transport foundation. Hash integrity is not peer authenticity.
 use super::*;
-use crate::snapshot::now_millis;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -88,6 +87,8 @@ impl Engine {
     /// Export exact authorized snapshots. Logical snapshots include their whole manifest.
     /// Hidden manifest members cannot be disclosed through hashes or membership lists.
     pub fn export_capsule(&self, root: &GraphRef, host: &HostContext) -> Result<Capsule> {
+        let _snapshot = self.optional_read_transaction()?;
+        let _clock_scope = self.operation_scope()?;
         let _read_scope = self.read_budget.enter();
         let mut pending = std::collections::VecDeque::from([(root.clone(), 0usize)]);
         let mut seen = HashSet::new();
@@ -261,7 +262,10 @@ impl Engine {
     /// Hashes authenticate byte consistency only, not a peer or an assertion's truth.
     pub fn receive_capsule(&mut self, capsule: &Capsule, host: &HostContext) -> Result<usize> {
         self.conn.execute_batch("SAVEPOINT capsule_receive")?;
-        let result = self.receive_capsule_inner(capsule, host);
+        let result = (|| {
+            let _clock_scope = self.operation_write_scope()?;
+            self.receive_capsule_inner(capsule, host)
+        })();
         match result {
             Ok(value) => {
                 self.conn.execute_batch("RELEASE capsule_receive")?;
@@ -452,7 +456,7 @@ impl Engine {
                 params![id, manifest.batch_id, serde_json::to_string(manifest)?],
             )?;
         }
-        let recorded_at = now_millis()?;
+        let recorded_at = self.operation_time()?;
         let mut inserted = 0;
         for record in &capsule.revisions {
             self.validate_structures(&record.graph_id, &record.data)?;
@@ -502,7 +506,10 @@ impl Engine {
         host: &HostContext,
     ) -> Result<()> {
         self.conn.execute_batch("SAVEPOINT capsule_accept")?;
-        let result = self.accept_revision_inner(reference, branch, expected, host);
+        let result = (|| {
+            let _clock_scope = self.operation_write_scope()?;
+            self.accept_revision_inner(reference, branch, expected, host)
+        })();
         match result {
             Ok(()) => {
                 self.conn.execute_batch("RELEASE capsule_accept")?;

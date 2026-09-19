@@ -1,3 +1,5 @@
+#[path = "../tests/support/clock.rs"]
+mod test_clock;
 use ed25519_dalek::SigningKey;
 use serde_json::json;
 use weave_contract::{GraphRef, QueryPlan, VERSION};
@@ -88,7 +90,7 @@ impl Peer {
     }
 }
 fn source(readers: serde_json::Value) -> (Engine, Capsule) {
-    let mut e = Engine::memory().unwrap();
+    let mut e = test_clock::memory().unwrap();
     e.execute(&serde_json::from_value(json!({"version":VERSION,"commands":[{"op":"commit","graph_id":"source","data":{"nodes":[{"id":"a","entity_id":"a","space_id":"s","readers":readers},{"id":"b","entity_id":"b","space_id":"s","readers":readers}],"edges":[{"id":"link","from":"a","to":"b","predicate":"connected","valid_time":{"start":0},"readers":readers}]}}]})).unwrap(),&host()).unwrap();
     let root = GraphRef {
         graph_id: "source".into(),
@@ -117,35 +119,37 @@ fn main() {
     let (_, capsule) = source(json!([]));
     let peer = Peer::new();
     let proof = peer.proof(&capsule);
-    let mut receiver = Engine::open(&args[1]).unwrap();
+    let mut receiver = test_clock::open(&args[1]).unwrap();
     if operation == "prepare" {
         receiver.install_admission_policy(&peer.context).unwrap();
     }
-    let proposed = receiver.admit_proposal(&proof, &capsule, 200).unwrap();
+    let proposed = test_clock::at(200, || receiver.admit_proposal(&proof, &capsule)).unwrap();
     let request = decision(proposed.result.id);
     let output = match operation.as_str() {
         "prepare" => json!({"isolated":true,"events":receiver.event_count().unwrap()}),
         "before" => {
-            receiver
-                .integrate_proposal_test_before_commit(&request, &proof, 201, &host(), || {
+            test_clock::at(201, || {
+                receiver.integrate_proposal_test_before_commit(&request, &proof, &host(), || {
                     std::process::exit(86)
                 })
-                .unwrap();
+            })
+            .unwrap();
             unreachable!()
         }
         "after" => {
-            receiver
-                .integrate_proposal(&request, &proof, 201, &host())
-                .unwrap();
+            test_clock::at(201, || {
+                receiver.integrate_proposal(&request, &proof, &host())
+            })
+            .unwrap();
             std::process::exit(87)
         }
         "retry" => {
-            json!({"receipt":receiver.integrate_proposal(&request,&proof,202,&host()).unwrap(),"events":receiver.event_count().unwrap(),"edges":receiver.query(&query(),&host()).unwrap().graph.edges.len()})
+            json!({"receipt":test_clock::at(202, || receiver.integrate_proposal(&request,&proof,&host())).unwrap(),"events":receiver.event_count().unwrap(),"edges":receiver.query(&query(),&host()).unwrap().graph.edges.len()})
         }
         "changed" => {
             let mut changed = request.clone();
             changed.branch_id = "other".into();
-            json!({"error":receiver.integrate_proposal(&changed,&proof,202,&host()).unwrap_err().code})
+            json!({"error":test_clock::at(202, || receiver.integrate_proposal(&changed,&proof,&host())).unwrap_err().code})
         }
         "revoke" => {
             let mut revoked = peer.context.clone();
@@ -154,7 +158,7 @@ fn main() {
                 .revoked_keys
                 .insert(weave_policy::public_key(&peer.user));
             receiver.install_admission_policy(&revoked).unwrap();
-            json!({"error":receiver.integrate_proposal(&request,&proof,202,&host()).unwrap_err().code})
+            json!({"error":test_clock::at(202, || receiver.integrate_proposal(&request,&proof,&host())).unwrap_err().code})
         }
         _ => panic!("unknown test operation"),
     };

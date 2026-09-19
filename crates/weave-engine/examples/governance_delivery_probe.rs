@@ -1,3 +1,5 @@
+#[path = "../tests/support/clock.rs"]
+mod test_clock;
 // Fixed local test keys only; no remote authority endpoint.
 use ed25519_dalek::SigningKey;
 use serde_json::json;
@@ -98,13 +100,14 @@ fn request(id: &str, nonce: &str) -> GovernanceDecisionRequest {
     }
 }
 fn quorum(e: &Engine, q: &GovernanceProposal) -> GovernanceProposalReceipt {
-    let r = e.propose_governance(q, 20, &host()).unwrap();
+    let r = test_clock::at(20, || e.propose_governance(q, &host())).unwrap();
     for (i, key) in keys()[..2].iter().enumerate() {
-        e.record_governance_approval(
-            &signed(q, &r.digest, key, &format!("{}-{i}", q.id)),
-            20,
-            &host(),
-        )
+        test_clock::at(20, || {
+            e.record_governance_approval(
+                &signed(q, &r.digest, key, &format!("{}-{i}", q.id)),
+                &host(),
+            )
+        })
         .unwrap();
     }
     r
@@ -133,17 +136,17 @@ fn install(e: &Engine, id: &str, principal: &str) -> HostContext {
     let h = HostContext::new(principal, []);
     e.install_adapter(&adapter(id, principal), &h).unwrap();
     e.set_adapter_state(id, "running").unwrap();
-    e.subscribe_governance(id, "team", 20, &h).unwrap();
+    test_clock::at(20, || e.subscribe_governance(id, "team", &h)).unwrap();
     h
 }
 fn accepted(e: &Engine, id: &str, source: GraphRef, head: Option<String>) -> GovernanceReceipt {
     quorum(e, &proposal(id, source, head));
-    e.accept_governance(&request(id, id), 20, &host()).unwrap()
+    test_clock::at(20, || e.accept_governance(&request(id, id), &host())).unwrap()
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let mut e = Engine::open(&args[1]).unwrap();
+    let mut e = test_clock::open(&args[1]).unwrap();
     let reader = HostContext::new("reader", []);
     match args[2].as_str() {
         "prepare" => {
@@ -153,7 +156,7 @@ fn main() {
             println!(
                 "{}",
                 serde_json::to_string(
-                    &e.poll_governance("reader", "team", 20, &reader)
+                    &test_clock::at(20, || e.poll_governance("reader", "team", &reader))
                         .unwrap()
                         .unwrap()
                 )
@@ -161,36 +164,40 @@ fn main() {
             );
         }
         "before" => {
-            e.acknowledge_governance_test_before_commit(
-                "reader",
-                "team",
-                &args[3],
-                &args[4],
-                21,
-                &reader,
-                || std::process::exit(90),
-            )
+            test_clock::at(21, || {
+                e.acknowledge_governance_test_before_commit(
+                    "reader",
+                    "team",
+                    &args[3],
+                    &args[4],
+                    &reader,
+                    || std::process::exit(90),
+                )
+            })
             .unwrap();
         }
         "after" => {
-            e.acknowledge_governance("reader", "team", &args[3], &args[4], 21, &reader)
-                .unwrap();
+            test_clock::at(21, || {
+                e.acknowledge_governance("reader", "team", &args[3], &args[4], &reader)
+            })
+            .unwrap();
             std::process::exit(91);
         }
         "retry" => println!(
             "{}",
             serde_json::to_string(
-                &e.acknowledge_governance("reader", "team", &args[3], &args[4], 22, &reader)
-                    .unwrap()
+                &test_clock::at(22, || e
+                    .acknowledge_governance("reader", "team", &args[3], &args[4], &reader))
+                .unwrap()
             )
             .unwrap()
         ),
         "changed" => println!(
             "{}",
-            json!({"error":e.acknowledge_governance("reader","team",&args[3],&"f".repeat(48),22,&reader).unwrap_err().code})
+            json!({"error":test_clock::at(22, || e.acknowledge_governance("reader","team",&args[3],&"f".repeat(48),&reader)).unwrap_err().code})
         ),
         "revoke" => {
-            let head = e.inspect_governance_head("team", 20, &host()).unwrap();
+            let head = test_clock::at(20, || e.inspect_governance_head("team", &host())).unwrap();
             let mut next = policy(2);
             next.reference.revision = "2".into();
             next.readers = vec!["collector".into()];
@@ -203,11 +210,13 @@ fn main() {
                 action: GovernanceAction::ReplacePolicy { policy: next },
             };
             quorum(&e, &q);
-            e.accept_governance(&request("revoke", "revoke"), 20, &host())
-                .unwrap();
+            test_clock::at(20, || {
+                e.accept_governance(&request("revoke", "revoke"), &host())
+            })
+            .unwrap();
             println!(
                 "{}",
-                json!({"error":e.acknowledge_governance("reader","team",&args[3],&args[4],22,&reader).unwrap_err().code})
+                json!({"error":test_clock::at(22, || e.acknowledge_governance("reader","team",&args[3],&args[4],&reader)).unwrap_err().code})
             );
         }
         _ => panic!("unknown local test operation"),
