@@ -395,6 +395,21 @@
           "result": "Three C ABI tests and four separate Swift processes prove exact persistence, principal visibility, pinned history and whole-program rollback. Browser, Android and full mobile scenario remain open.",
           "contract_revision": "0.13.0",
           "commit": "4492802"
+        },
+        {
+          "artifact": "docs/measurements/2026-09-19-native-swift-ios.json",
+          "command": "python3 scripts/root_native.py --ios --runtime com.apple.CoreSimulator.SimRuntime.iOS-26-5 --device-type com.apple.CoreSimulator.SimDeviceType.iPhone-17e --simctl <installed simctl>",
+          "host": "local iPhone17e simulator, iOS26.5",
+          "result": "Four separate app processes pass exact Decimal persistence, pinned history, principal visibility and rollback. Physical device, full peer-sync and browser/Android remain open.",
+          "contract_revision": "0.13.0",
+          "commit": "26190cbf0436bec441889190127e99e8a84adfd2"
+        },
+        {
+          "artifact": "docs/measurements/2026-09-19-portable-parity.json",
+          "command": "python3 scripts/root_portable.py",
+          "host": "Apple M4 Max macOS arm64; native Rust executable and Node WebAssembly",
+          "result": "Seven fixed semantic case groups executed natively and in WebAssembly with identical19639-byte results; module imports zero host functions. Persistent browser/runtime and full portability gate remain open.",
+          "commit": "06759aa53fd919da3eddc9cc39c0478bd9010df5"
         }
       ]
     },
@@ -462,7 +477,14 @@
         "crates/weave-cluster/tests/hierarchy.rs",
         "docs/CLUSTER_SERVICE.md",
         "crates/weave-engine/tests/root_clustering.rs",
-        "docs/SYNTHETIC_RELATIONS.md"
+        "docs/SYNTHETIC_RELATIONS.md",
+        {
+          "artifact": "docs/measurements/2026-09-19-cluster-quality.json",
+          "command": "cargo run --locked -p weave-cluster --example measure_quality",
+          "host": "local macOS arm64",
+          "result": "Five pure lineage regressions plus native exact-query preservation across four depths pass. Synthetic bridge exposes coarse over-merging; no incremental/hysteresis/service-lineage completion claim.",
+          "commit": "26f27343c12ba406cc91765ea657623c076fcd41"
+        }
       ]
     },
     {

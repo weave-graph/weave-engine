@@ -15,13 +15,19 @@ jobs:
         with:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - run: cargo fmt --all -- --check
       - run: cargo test --workspace --locked
+      - run: cargo run --locked -p weave-cluster --example measure_quality
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo check -p weave-contract --target wasm32-unknown-unknown --locked
       - run: cargo check -p weave-policy --target wasm32-unknown-unknown --locked
       - run: cargo check -p weave-spaces --target wasm32-unknown-unknown --locked
       - run: cargo check -p weave-cluster --target wasm32-unknown-unknown --locked
+      - name: Execute portable native and WebAssembly semantic parity
+        run: python3 scripts/root_portable.py
       - name: Swift native host restart acceptance
         if: runner.os == 'macOS'
         run: python3 scripts/root_native.py

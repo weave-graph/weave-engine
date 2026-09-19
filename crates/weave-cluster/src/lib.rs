@@ -6,6 +6,8 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use weave_contract::{AssertionRef, ContextSelection, GraphRef};
 
+pub mod lineage;
+
 pub const ALGORITHM: &str = "weave:topology-matching:1";
 const MAX_INPUT: usize = 16 * 1024 * 1024;
 const MAX_NODES: usize = 10_000;
