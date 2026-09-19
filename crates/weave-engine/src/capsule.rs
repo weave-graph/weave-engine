@@ -1,5 +1,6 @@
 //! Local snapshot transport foundation. Hash integrity is not peer authenticity.
 use super::*;
+use crate::snapshot::now_millis;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -18,6 +19,8 @@ pub struct Capsule {
     pub root: GraphRef,
     pub revisions: Vec<CapsuleRevision>,
     pub external_dependencies: Vec<GraphRef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub manifests: Vec<SnapshotManifest>,
 }
 impl CapsuleRevision {
     fn digest(&self) -> Result<String> {
@@ -40,6 +43,16 @@ impl CapsuleRevision {
                 revision: r.revision.clone(),
             }));
         }
+        dependencies.extend(
+            self.data
+                .attachments
+                .iter()
+                .filter_map(|a| a.origin.as_ref())
+                .map(|r| GraphRef {
+                    graph_id: r.graph_id.clone(),
+                    revision: r.revision.clone(),
+                }),
+        );
         if let Some(parent) = &self.parent {
             dependencies.push(GraphRef {
                 graph_id: self.graph_id.clone(),
@@ -70,16 +83,19 @@ impl Engine {
         })
         .transpose()
     }
-    /// Export an exact authorized root with bounded ancestry and metadata dependencies.
-    /// A hidden dependency is declared external, never exported as a filtered fake revision.
+    /// Export exact authorized snapshots. Logical snapshots include their whole manifest.
+    /// Hidden manifest members cannot be disclosed through hashes or membership lists.
     pub fn export_capsule(&self, root: &GraphRef, host: &HostContext) -> Result<Capsule> {
         let mut pending = std::collections::VecDeque::from([(root.clone(), 0usize)]);
         let mut seen = HashSet::new();
+        let mut included = HashSet::new();
         let mut revisions = Vec::new();
+        let mut manifests = BTreeMap::new();
         let mut export_bytes = 0usize;
         let mut external_dependencies = Vec::new();
-        while let Some((reference, depth)) = pending.pop_front() {
-            if !seen.insert((reference.graph_id.clone(), reference.revision.clone())) {
+        'pending: while let Some((reference, depth)) = pending.pop_front() {
+            let key = (reference.graph_id.clone(), reference.revision.clone());
+            if included.contains(&key) || !seen.insert(key) {
                 continue;
             }
             if seen.len() > 1000 || depth > 32 {
@@ -93,40 +109,123 @@ impl Engine {
                 external_dependencies.push(reference);
                 continue;
             };
-            if record.revision.starts_with("logical:")
-                || record
+            let mut group = vec![record];
+            let mut manifest = None;
+            if reference.revision.starts_with("logical:") {
+                let id: Option<String> = self
+                    .conn
+                    .query_row(
+                        "SELECT manifest_id FROM revision_integrity WHERE revision=?1",
+                        [&reference.revision],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                let id =
+                    id.ok_or_else(|| err("E_INTEGRITY", "logical snapshot manifest unavailable"))?;
+                let source = self
+                    .snapshot_manifest(&id)?
+                    .ok_or_else(|| err("E_INTEGRITY", "logical snapshot manifest unavailable"))?;
+                group.clear();
+                // Authorize one record at a time before any size-dependent response.
+                // Then charge the group incrementally before retaining its records.
+                for member in &source.members {
+                    let member_ref = GraphRef {
+                        graph_id: member.graph_id.clone(),
+                        revision: member.revision.clone(),
+                    };
+                    let row = self
+                        .revision_record(&member_ref)?
+                        .ok_or_else(|| err("E_INTEGRITY", "logical snapshot member unavailable"))?;
+                    let (visible, incomplete) = self.authorized(row.data.clone(), host)?;
+                    if visible != row.data || incomplete {
+                        if &reference == root {
+                            return Err(err("E_UNAVAILABLE", "capsule root unavailable"));
+                        }
+                        external_dependencies.push(reference);
+                        continue 'pending;
+                    }
+                }
+                let mut group_bytes = export_bytes
+                    + json_size(
+                        &source,
+                        (16usize * 1024 * 1024).saturating_sub(export_bytes),
+                    )?;
+                for member in &source.members {
+                    let member_ref = GraphRef {
+                        graph_id: member.graph_id.clone(),
+                        revision: member.revision.clone(),
+                    };
+                    let row = self
+                        .revision_record(&member_ref)?
+                        .ok_or_else(|| err("E_INTEGRITY", "logical snapshot member unavailable"))?;
+                    group_bytes +=
+                        json_size(&row, (16usize * 1024 * 1024).saturating_sub(group_bytes))?;
+                    group.push(row);
+                }
+                if verify_manifest(&source, &group)? != id {
+                    return Err(err("E_INTEGRITY", "stored manifest digest mismatch"));
+                }
+                manifest = Some((id, source));
+            }
+            let mut available = true;
+            let mut live = false;
+            for row in &group {
+                if !row.revision.starts_with("logical:") && row.digest()? != row.revision {
+                    return Err(err("E_INTEGRITY", "stored revision digest mismatch"));
+                }
+                live |= row
                     .data
                     .attachments
                     .iter()
-                    .any(|a| matches!(a.value, MetadataValue::LiveGraph { .. }))
-            {
+                    .any(|a| matches!(a.value, MetadataValue::LiveGraph { .. }));
+                let (visible, incomplete) = self.authorized(row.data.clone(), host)?;
+                available &= visible == row.data && !incomplete;
+            }
+            if !available || live {
                 if &reference == root {
-                    return Err(err("E_CAPSULE_VERSION","logical manifests and live handles require the next capsule transport format"));
+                    return Err(if !available {
+                        err("E_UNAVAILABLE", "capsule root unavailable")
+                    } else {
+                        err(
+                            "E_CAPSULE_VERSION",
+                            "live handles require a pinned export context",
+                        )
+                    });
                 }
                 external_dependencies.push(reference);
                 continue;
             }
-            let (visible, incomplete) = self.authorized(record.data.clone(), host)?;
-            if visible != record.data || incomplete {
-                if &reference == root {
-                    return Err(err("E_UNAVAILABLE", "capsule root unavailable"));
-                }
-                external_dependencies.push(reference);
-                continue;
+            let fresh = group
+                .iter()
+                .filter(|r| !included.contains(&(r.graph_id.clone(), r.revision.clone())))
+                .count();
+            if included.len() + fresh > 1000 {
+                return Err(err("E_BUDGET", "capsule exceeds 1000 snapshots"));
             }
-            pending.extend(record.dependencies().into_iter().map(|r| (r, depth + 1)));
-            export_bytes += json_size(
-                &record,
-                (16usize * 1024 * 1024).saturating_sub(export_bytes),
-            )?;
-            revisions.push(record);
+            if let Some((id, value)) = manifest {
+                if let std::collections::btree_map::Entry::Vacant(entry) = manifests.entry(id) {
+                    export_bytes +=
+                        json_size(&value, (16usize * 1024 * 1024).saturating_sub(export_bytes))?;
+                    entry.insert(value);
+                }
+            }
+            for row in group {
+                if !included.insert((row.graph_id.clone(), row.revision.clone())) {
+                    continue;
+                }
+                pending.extend(row.dependencies().into_iter().map(|r| (r, depth + 1)));
+                export_bytes +=
+                    json_size(&row, (16usize * 1024 * 1024).saturating_sub(export_bytes))?;
+                revisions.push(row);
+            }
         }
+        external_dependencies
+            .retain(|r| !included.contains(&(r.graph_id.clone(), r.revision.clone())));
         for record in &revisions {
             for attachment in record.data.attachments.iter().filter(|a| a.required) {
                 if let MetadataValue::Graph { reference } = &attachment.value {
-                    if !revisions.iter().any(|r| {
-                        r.graph_id == reference.graph_id && r.revision == reference.revision
-                    }) {
+                    if !included.contains(&(reference.graph_id.clone(), reference.revision.clone()))
+                    {
                         return Err(err(
                             "E_DEPENDENCY_UNAVAILABLE",
                             "required metadata cannot be included in this capsule",
@@ -136,24 +235,59 @@ impl Engine {
             }
         }
         let capsule = Capsule {
-            format: "weave-capsule-0.1".into(),
+            format: if manifests.is_empty() {
+                "weave-capsule-0.1"
+            } else {
+                "weave-capsule-0.2"
+            }
+            .into(),
             root: root.clone(),
             revisions,
             external_dependencies,
+            manifests: manifests.into_values().collect(),
         };
-        if json_size(&capsule, 16 * 1024 * 1024).is_err() {
-            return Err(err("E_BUDGET", "capsule exceeds 16 MiB"));
-        }
+        json_size(&capsule, 16 * 1024 * 1024)?;
         Ok(capsule)
     }
-    /// Store verified immutable revisions without changing accepted branch heads or events.
-    /// Host graph write grants authorize storage here; they are not received from capsule JSON.
+    /// Verify and quarantine snapshots. Receipt never advances accepted heads or emits events.
+    /// Hashes authenticate byte consistency only, not a peer or an assertion's truth.
     pub fn receive_capsule(&mut self, capsule: &Capsule, host: &HostContext) -> Result<usize> {
-        if capsule.format != "weave-capsule-0.1" {
+        if !["weave-capsule-0.1", "weave-capsule-0.2"].contains(&capsule.format.as_str()) {
             return Err(err("E_VERSION", "unsupported capsule format"));
         }
-        if capsule.revisions.len() > 1000 || json_size(capsule, 16 * 1024 * 1024).is_err() {
+        if capsule.format == "weave-capsule-0.1" && !capsule.manifests.is_empty() {
+            return Err(err("E_VERSION", "logical manifests require capsule 0.2"));
+        }
+        if capsule.revisions.len() > 1000
+            || capsule.manifests.len() > 1000
+            || json_size(capsule, 16 * 1024 * 1024).is_err()
+        {
             return Err(err("E_BUDGET", "capsule budget exceeded"));
+        }
+        let mut manifest_ids = BTreeMap::new();
+        let mut logical = BTreeMap::new();
+        for manifest in &capsule.manifests {
+            let id = verify_manifest(manifest, &capsule.revisions)?;
+            if manifest_ids
+                .insert(manifest.batch_id.clone(), id.clone())
+                .is_some()
+            {
+                return Err(err("E_INTEGRITY", "duplicate capsule batch identity"));
+            }
+            for member in &manifest.members {
+                if logical
+                    .insert(
+                        member.revision.clone(),
+                        (member.content_digest.clone(), id.clone()),
+                    )
+                    .is_some()
+                {
+                    return Err(err(
+                        "E_INTEGRITY",
+                        "logical revision occurs in multiple manifests",
+                    ));
+                }
+            }
         }
         let mut included = HashSet::new();
         for record in &capsule.revisions {
@@ -164,11 +298,40 @@ impl Engine {
                 ));
             }
             validate_graph(&record.data)?;
-            self.validate_structures(&record.graph_id, &record.data)?;
             if !valid_id(&record.graph_id)
                 || !valid_id(&record.branch_id)
-                || record.digest()? != record.revision
+                || !valid_id(&record.revision)
+                || record
+                    .parent
+                    .as_ref()
+                    .is_some_and(|p| !valid_id(p) || p == &record.revision)
             {
+                return Err(err("E_INTEGRITY", "capsule identifiers invalid"));
+            }
+            if record
+                .data
+                .attachments
+                .iter()
+                .any(|a| matches!(a.value, MetadataValue::LiveGraph { .. }))
+            {
+                return Err(err(
+                    "E_CAPSULE_VERSION",
+                    "live handles require a pinned export context",
+                ));
+            }
+            let digest = record.digest()?;
+            if record.revision.starts_with("logical:") {
+                if capsule.format != "weave-capsule-0.2"
+                    || logical
+                        .get(&record.revision)
+                        .is_none_or(|(expected, _)| expected != &digest)
+                {
+                    return Err(err(
+                        "E_INTEGRITY",
+                        "logical revision lacks matching manifest proof",
+                    ));
+                }
+            } else if digest != record.revision {
                 return Err(err("E_INTEGRITY", "capsule revision digest mismatch"));
             }
             if !included.insert((record.graph_id.clone(), record.revision.clone())) {
@@ -178,11 +341,20 @@ impl Engine {
         if !included.contains(&(capsule.root.graph_id.clone(), capsule.root.revision.clone())) {
             return Err(err("E_INTEGRITY", "capsule root absent"));
         }
-        let external: HashSet<_> = capsule
-            .external_dependencies
-            .iter()
-            .map(|r| (r.graph_id.clone(), r.revision.clone()))
-            .collect();
+        let mut external = HashSet::new();
+        for reference in &capsule.external_dependencies {
+            let key = (reference.graph_id.clone(), reference.revision.clone());
+            if !valid_id(&reference.graph_id)
+                || !valid_id(&reference.revision)
+                || included.contains(&key)
+                || !external.insert(key)
+            {
+                return Err(err(
+                    "E_INTEGRITY",
+                    "invalid or duplicate external dependency",
+                ));
+            }
+        }
         for record in &capsule.revisions {
             for dependency in record.dependencies() {
                 let key = (dependency.graph_id, dependency.revision);
@@ -191,16 +363,82 @@ impl Engine {
                 }
             }
         }
+        // Metadata cycles are meaningful; revision ancestry must stay acyclic.
+        let parents: BTreeMap<_, _> = capsule
+            .revisions
+            .iter()
+            .map(|r| {
+                (
+                    (r.graph_id.as_str(), r.revision.as_str()),
+                    r.parent.as_deref(),
+                )
+            })
+            .collect();
+        for record in &capsule.revisions {
+            let mut visited = HashSet::new();
+            let mut cursor = Some(record.revision.clone());
+            while let Some(revision) = cursor {
+                if !visited.insert(revision.clone()) {
+                    return Err(err("E_INTEGRITY", "revision ancestry cycle"));
+                }
+                if visited.len() > 1000 {
+                    return Err(err(
+                        "E_BUDGET",
+                        "capsule ancestry validation exceeds 1000 revisions",
+                    ));
+                }
+                cursor = if let Some(parent) =
+                    parents.get(&(record.graph_id.as_str(), revision.as_str()))
+                {
+                    parent.map(String::from)
+                } else {
+                    self.conn
+                        .query_row(
+                            "SELECT parent FROM revisions WHERE graph_id=?1 AND revision=?2",
+                            params![record.graph_id, revision],
+                            |r| r.get::<_, Option<String>>(0),
+                        )
+                        .optional()?
+                        .flatten()
+                };
+            }
+        }
         let tx = self.conn.unchecked_transaction()?;
+        for manifest in &capsule.manifests {
+            let id = &manifest_ids[&manifest.batch_id];
+            let existing: Option<String> = tx
+                .query_row(
+                    "SELECT id FROM snapshot_manifests WHERE batch_id=?1",
+                    [&manifest.batch_id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if existing.as_ref().is_some_and(|old| old != id) {
+                return Err(err(
+                    "E_EQUIVOCATION",
+                    "batch identity already binds another manifest",
+                ));
+            }
+            tx.execute(
+                "INSERT OR IGNORE INTO snapshot_manifests VALUES (?1,?2,?3)",
+                params![id, manifest.batch_id, serde_json::to_string(manifest)?],
+            )?;
+        }
+        let recorded_at = now_millis()?;
         let mut inserted = 0;
-        let recorded_at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| err("E_CLOCK", "clock before epoch"))?
-            .as_millis();
-        let recorded_at =
-            i64::try_from(recorded_at).map_err(|_| err("E_CLOCK", "clock out of range"))?;
         for record in &capsule.revisions {
             self.validate_structures(&record.graph_id, &record.data)?;
+            if let Some(existing) = self.revision_record(&GraphRef {
+                graph_id: record.graph_id.clone(),
+                revision: record.revision.clone(),
+            })? {
+                if existing != *record {
+                    return Err(err(
+                        "E_EQUIVOCATION",
+                        "revision identity already binds another snapshot",
+                    ));
+                }
+            }
             self.record_structures(&record.graph_id, &record.data)?;
             inserted += tx.execute(
                 "INSERT OR IGNORE INTO revisions VALUES (?1,?2,?3,?4,?5,?6)",
@@ -213,6 +451,16 @@ impl Engine {
                     serde_json::to_string(&record.data)?
                 ],
             )?;
+            if let Some((digest, manifest)) = logical.get(&record.revision) {
+                let previous:Option<(String,String)>=tx.query_row("SELECT content_digest,manifest_id FROM revision_integrity WHERE revision=?1",[&record.revision],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
+                if previous.is_some_and(|p| p != (digest.clone(), manifest.clone())) {
+                    return Err(err("E_EQUIVOCATION", "logical revision proof changed"));
+                }
+                tx.execute(
+                    "INSERT OR IGNORE INTO revision_integrity VALUES (?1,?2,?3)",
+                    params![record.revision, digest, manifest],
+                )?;
+            }
         }
         tx.commit()?;
         Ok(inserted)
@@ -250,6 +498,7 @@ impl Engine {
         if visible != record.data || incomplete {
             return Err(err("E_UNAVAILABLE", "revision unavailable"));
         }
+        self.validate_required_metadata(&record.data, host)?;
         if head.as_ref() == Some(&reference.revision) {
             tx.commit()?;
             return Ok(());
@@ -278,4 +527,42 @@ impl Engine {
     ) -> Result<()> {
         self.accept_revision(reference, branch, None, host)
     }
+}
+
+/// Verify canonical whole-manifest membership and each record's content binding.
+fn verify_manifest(manifest: &SnapshotManifest, records: &[CapsuleRevision]) -> Result<String> {
+    if manifest.batch_id.is_empty()
+        || manifest.batch_id.len() > 64
+        || !manifest
+            .batch_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        || manifest.members.is_empty()
+        || manifest.members.len() > 100
+    {
+        return Err(err("E_INTEGRITY", "invalid snapshot manifest"));
+    }
+    let mut previous: Option<&str> = None;
+    for member in &manifest.members {
+        if previous.is_some_and(|p| p >= member.graph_id.as_str())
+            || member.revision != format!("logical:{}:{}", manifest.batch_id, member.graph_id)
+        {
+            return Err(err("E_INTEGRITY", "manifest membership is not canonical"));
+        }
+        previous = Some(&member.graph_id);
+        let record = records
+            .iter()
+            .find(|r| r.graph_id == member.graph_id && r.revision == member.revision)
+            .ok_or_else(|| err("E_INTEGRITY", "whole manifest membership is required"))?;
+        if record.branch_id != member.branch_id
+            || record.parent != member.parent
+            || record.digest()? != member.content_digest
+        {
+            return Err(err("E_INTEGRITY", "manifest member content mismatch"));
+        }
+    }
+    Ok(format!(
+        "manifest:{:x}",
+        Sha256::digest(serde_json::to_vec(&("weave-manifest-v0.4", manifest))?)
+    ))
 }
