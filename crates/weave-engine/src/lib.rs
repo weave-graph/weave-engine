@@ -6,6 +6,11 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use weave_contract::*;
 mod admission;
+mod identity_acceptance;
+pub use identity_acceptance::{
+    IdentityCandidate, IdentityDecisionReceipt, IdentityDecisionRequest, IdentityPolicy,
+    IdentityPolicyRef, IdentityResolve,
+};
 mod assertions;
 mod read_budget;
 pub use admission::{Admitted, ProposalReceipt};
@@ -89,7 +94,7 @@ impl Engine {
     }
     fn from_connection_boundary(conn: Connection, before_commit: impl FnOnce()) -> Result<Self> {
         let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
-        if !(0..=6).contains(&version) {
+        if !(0..=7).contains(&version) {
             return Err(err(
                 "E_STORAGE_VERSION",
                 "database schema version is unsupported",
@@ -142,6 +147,8 @@ impl Engine {
         engine.initialize_dispatch()?;
         engine.initialize_views()?;
         engine.initialize_admission()?;
+        engine.initialize_identity()?;
+        engine.conn.pragma_update(None, "user_version", 7)?;
         before_commit();
         initialization.commit()?;
         Ok(engine)
@@ -423,6 +430,18 @@ impl Engine {
         data: &GraphData,
         host: &HostContext,
     ) -> Result<(String, Option<String>)> {
+        identity_acceptance::require_external_graph(graph)?;
+        identity_acceptance::require_external_schema(data)?;
+        self.commit_storage_inner(graph, branch, expected, data, host)
+    }
+    fn commit_storage_inner(
+        &self,
+        graph: &str,
+        branch: &str,
+        expected: Option<&str>,
+        data: &GraphData,
+        host: &HostContext,
+    ) -> Result<(String, Option<String>)> {
         if !host.writable_graphs.contains(graph) {
             return Err(err(
                 "E_FORBIDDEN",
@@ -582,6 +601,9 @@ impl Engine {
                 .head(&query.graph_id, &query.branch_id)?
                 .ok_or_else(|| err("E_UNAVAILABLE", "graph unavailable"))?,
         };
+        if !self.identity_reference_allowed(&query.graph_id, &revision, host)? {
+            return Err(err("E_UNAVAILABLE", "graph unavailable"));
+        }
         let data = self
             .load(&query.graph_id, &revision)?
             .ok_or_else(|| err("E_UNAVAILABLE", "graph unavailable"))?;
@@ -628,7 +650,13 @@ impl Engine {
             metadata_graphs: Vec::new(),
         };
 
-        if incomplete_derivation {
+        if identity_acceptance::reserved(&query.graph_id) {
+            partial(
+                &mut result,
+                "E_IDENTITY_SCOPE",
+                "identity results cover only authorized and available membership records",
+            );
+        } else if incomplete_derivation {
             partial(
                 &mut result,
                 "E_DERIVATION_UNAVAILABLE",
@@ -722,7 +750,15 @@ impl Engine {
                     partial(&mut result, "E_BUDGET", "metadata traversal budget reached");
                     continue;
                 }
-                match self.load(&reference.graph_id, &reference.revision)? {
+                match if self.identity_reference_allowed(
+                    &reference.graph_id,
+                    &reference.revision,
+                    host,
+                )? {
+                    self.load(&reference.graph_id, &reference.revision)?
+                } else {
+                    None
+                } {
                     None => partial(
                         &mut result,
                         "E_DEPENDENCY_UNAVAILABLE",
@@ -1421,6 +1457,9 @@ impl Engine {
             if !visiting.insert(key.clone()) {
                 return Ok(false);
             }
+            if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
+                return Ok(false);
+            }
             let Some(source) = self.load(&reference.graph_id, &reference.revision)? else {
                 return Ok(false);
             };
@@ -1467,6 +1506,9 @@ impl Engine {
                 reference.assertion_id.clone(),
             );
             if !visiting.insert(key.clone()) {
+                return Ok(false);
+            }
+            if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
                 return Ok(false);
             }
             let Some(source) = self.load(&reference.graph_id, &reference.revision)? else {

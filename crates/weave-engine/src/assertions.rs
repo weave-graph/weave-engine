@@ -262,6 +262,9 @@ impl Engine {
         host: &HostContext,
     ) -> Result<Option<StructuralEdge>> {
         let _read_scope = self.read_budget.enter();
+        if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
+            return Ok(None);
+        }
         let Some(data) = self.load(&reference.graph_id, &reference.revision)? else {
             return Ok(None);
         };
@@ -278,6 +281,9 @@ impl Engine {
         host: &HostContext,
     ) -> Result<Option<Assertion>> {
         let _read_scope = self.read_budget.enter();
+        if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
+            return Ok(None);
+        }
         let Some(data) = self.load(&reference.graph_id, &reference.revision)? else {
             return Ok(None);
         };

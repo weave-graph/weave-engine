@@ -1,0 +1,542 @@
+use serde_json::json;
+use weave_contract::*;
+use weave_engine::*;
+fn host(actor: &str) -> HostContext {
+    HostContext::new(
+        actor,
+        [
+            "physical".into(),
+            "operations".into(),
+            "private".into(),
+            "copy".into(),
+        ],
+    )
+}
+fn write(e: &mut Engine, id: &str, entity: &str, space: &str, readers: &[&str]) -> NodeRef {
+    let graph:GraphData=serde_json::from_value(json!({"nodes":[{"id":"node","entity_id":entity,"space_id":space,"readers":readers,"properties":{"local":space}}]})).unwrap();
+    e.execute(
+        &Program {
+            version: VERSION.into(),
+            source_revisions: vec![],
+            commands: vec![Command::Commit {
+                graph_id: id.into(),
+                branch_id: "main".into(),
+                expected_head: None,
+                data: graph,
+            }],
+        },
+        &host("alice"),
+    )
+    .unwrap();
+    NodeRef {
+        graph_id: id.into(),
+        revision: e.head(id, "main").unwrap().unwrap(),
+        node_id: "node".into(),
+    }
+}
+fn policy() -> IdentityPolicy {
+    IdentityPolicy {
+        reference: IdentityPolicyRef {
+            id: "review".into(),
+            revision: "1".into(),
+        },
+        proposers: vec!["alice".into()],
+        approvers: vec!["reviewer".into()],
+        readers: vec![],
+        allowed_spaces: vec!["physical".into(), "operations".into(), "private".into()],
+        max_members: 16,
+    }
+}
+fn setup() -> (Engine, IdentityCandidate) {
+    let mut e = Engine::memory().unwrap();
+    e.install_identity_policy(&policy()).unwrap();
+    let a = write(&mut e, "physical", "independent-A", "physical", &[]);
+    let b = write(&mut e, "operations", "independent-B", "operations", &[]);
+    let c = write(
+        &mut e,
+        "private",
+        "pairwise-C",
+        "private",
+        &["alice", "reviewer"],
+    );
+    let candidate = IdentityCandidate {
+        id: "candidate".into(),
+        mapping_id: "equipment".into(),
+        policy: policy().reference,
+        groups: vec![vec![a, b, c]],
+        evidence: vec![],
+        valid_time: Interval {
+            start: 0,
+            end: Some(10),
+        },
+        context: None,
+    };
+    (e, candidate)
+}
+fn request(
+    candidate: &IdentityCandidate,
+    head: Option<String>,
+    nonce: &str,
+) -> IdentityDecisionRequest {
+    IdentityDecisionRequest {
+        candidate_id: candidate.id.clone(),
+        expected_head: head,
+        nonce: nonce.into(),
+    }
+}
+fn selection(candidate: &IdentityCandidate, revision: &str, target: &str) -> IdentityResolve {
+    IdentityResolve {
+        mapping_id: candidate.mapping_id.clone(),
+        revision: revision.into(),
+        policy: candidate.policy.clone(),
+        source: candidate.groups[0][0].clone(),
+        target_space: target.into(),
+        valid_at: 5,
+        context: ContextSelection::Default,
+    }
+}
+#[test]
+fn candidate_receipt_does_not_accept_and_decisions_require_installed_authority_and_cas() {
+    let (mut e, c) = setup();
+    assert!(e.submit_identity_candidate(&c, &host("alice")).unwrap());
+    assert!(!e.submit_identity_candidate(&c, &host("alice")).unwrap());
+    assert!(e.identity_head(&c.mapping_id).unwrap().is_none());
+    assert_eq!(e.event_count().unwrap(), 3);
+    assert_eq!(
+        e.accept_identity_candidate(&request(&c, None, "n"), &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_FORBIDDEN"
+    );
+    let accepted = e
+        .accept_identity_candidate(&request(&c, None, "n"), &host("reviewer"))
+        .unwrap();
+    assert!(accepted.changed);
+    assert!(!accepted.duplicate);
+    assert!(accepted.event_id.is_some());
+    assert_eq!(e.event_count().unwrap(), 4);
+    let replay = e
+        .accept_identity_candidate(&request(&c, None, "n"), &host("reviewer"))
+        .unwrap();
+    assert!(replay.duplicate);
+    assert_eq!(replay.reference, accepted.reference);
+    assert_eq!(
+        e.accept_identity_candidate(
+            &request(&c, Some(accepted.reference.revision.clone()), "n"),
+            &host("reviewer")
+        )
+        .unwrap_err()
+        .code,
+        "E_REPLAY"
+    );
+    assert_eq!(
+        e.accept_identity_candidate(&request(&c, None, "stale"), &host("reviewer"))
+            .unwrap_err()
+            .code,
+        "E_CONFLICT"
+    );
+    let unchanged = e
+        .accept_identity_candidate(
+            &request(&c, Some(accepted.reference.revision), "same"),
+            &host("reviewer"),
+        )
+        .unwrap();
+    assert!(!unchanged.changed);
+    assert!(unchanged.event_id.is_none());
+    assert_eq!(e.event_count().unwrap(), 4);
+}
+#[test]
+fn independent_identities_resolve_only_authorized_members_and_split_preserves_history() {
+    let (mut e, c) = setup();
+    e.submit_identity_candidate(&c, &host("alice")).unwrap();
+    let accepted = e
+        .accept_identity_candidate(&request(&c, None, "first"), &host("reviewer"))
+        .unwrap();
+    let linked = e
+        .resolve_identity(
+            &selection(&c, &accepted.reference.revision, "operations"),
+            &host("bob"),
+        )
+        .unwrap();
+    assert_eq!(linked.graph.edges.len(), 1);
+    assert!(linked
+        .graph
+        .nodes
+        .iter()
+        .any(|n| n.entity_id == "independent-A"));
+    assert!(linked
+        .graph
+        .nodes
+        .iter()
+        .any(|n| n.entity_id == "independent-B"));
+    assert_eq!(linked.provenance.len(), 2);
+    assert!(linked
+        .graph
+        .nodes
+        .iter()
+        .all(|n| !n.properties.contains_key("local")));
+    let hidden = e
+        .resolve_identity(
+            &selection(&c, &accepted.reference.revision, "private"),
+            &host("bob"),
+        )
+        .unwrap();
+    assert!(hidden.graph.nodes.is_empty());
+    assert!(hidden.graph.edges.is_empty());
+    assert!(hidden.provenance.is_empty());
+    assert!(!serde_json::to_string(&hidden)
+        .unwrap()
+        .contains("pairwise-C"));
+    assert!(!hidden
+        .input_snapshots
+        .iter()
+        .any(|r| r.graph_id == "private"));
+    let visible = e
+        .resolve_identity(
+            &selection(&c, &accepted.reference.revision, "private"),
+            &host("alice"),
+        )
+        .unwrap();
+    assert_eq!(visible.graph.edges.len(), 1);
+    let mut at_end = selection(&c, &accepted.reference.revision, "operations");
+    at_end.valid_at = 10;
+    assert!(e
+        .resolve_identity(&at_end, &host("bob"))
+        .unwrap()
+        .graph
+        .edges
+        .is_empty());
+    let mut split = c.clone();
+    split.id = "split".into();
+    split.groups = vec![vec![c.groups[0][0].clone()], c.groups[0][1..].to_vec()];
+    e.submit_identity_candidate(&split, &host("alice")).unwrap();
+    let newer = e
+        .accept_identity_candidate(
+            &request(&split, Some(accepted.reference.revision.clone()), "split"),
+            &host("reviewer"),
+        )
+        .unwrap();
+    assert!(e
+        .resolve_identity(
+            &selection(&c, &newer.reference.revision, "operations"),
+            &host("bob")
+        )
+        .unwrap()
+        .graph
+        .edges
+        .is_empty());
+    assert_eq!(
+        e.resolve_identity(
+            &selection(&c, &accepted.reference.revision, "operations"),
+            &host("bob")
+        )
+        .unwrap()
+        .graph
+        .edges
+        .len(),
+        1
+    );
+}
+#[test]
+fn copied_mapping_values_cannot_shed_private_source_or_current_policy_restrictions() {
+    let (mut e, c) = setup();
+    e.submit_identity_candidate(&c, &host("alice")).unwrap();
+    let accepted = e
+        .accept_identity_candidate(&request(&c, None, "first"), &host("reviewer"))
+        .unwrap();
+    let mut data = e
+        .resolve_identity(
+            &selection(&c, &accepted.reference.revision, "private"),
+            &host("alice"),
+        )
+        .unwrap()
+        .graph;
+    for n in &mut data.nodes {
+        n.readers.clear();
+    }
+    for edge in &mut data.edges {
+        edge.readers.clear();
+    }
+    e.execute(
+        &Program {
+            version: VERSION.into(),
+            source_revisions: vec![],
+            commands: vec![Command::Commit {
+                graph_id: "copy".into(),
+                branch_id: "main".into(),
+                expected_head: None,
+                data,
+            }],
+        },
+        &host("alice"),
+    )
+    .unwrap();
+    let q: QueryPlan = serde_json::from_value(json!({"graph_id":"copy"})).unwrap();
+    assert!(e.query(&q, &host("bob")).unwrap().graph.nodes.is_empty());
+    assert_eq!(e.query(&q, &host("alice")).unwrap().graph.edges.len(), 1);
+    e.revoke_identity_policy(&c.policy).unwrap();
+    assert_eq!(
+        e.resolve_identity(
+            &selection(&c, &accepted.reference.revision, "private"),
+            &host("alice")
+        )
+        .unwrap_err()
+        .code,
+        "E_IDENTITY_UNAVAILABLE"
+    );
+    assert!(e.query(&q, &host("alice")).unwrap().graph.nodes.is_empty());
+    e.install_identity_policy(&policy()).unwrap();
+    assert!(e.query(&q, &host("alice")).unwrap().graph.nodes.is_empty());
+}
+#[test]
+fn raw_plans_and_capsules_cannot_poison_reserved_identity_storage() {
+    let (mut e, c) = setup();
+    let name = "weave:identity:poison";
+    let program = Program {
+        version: VERSION.into(),
+        source_revisions: vec![],
+        commands: vec![Command::Commit {
+            graph_id: name.into(),
+            branch_id: "main".into(),
+            expected_head: None,
+            data: GraphData::default(),
+        }],
+    };
+    assert_eq!(
+        e.execute(&program, &HostContext::new("alice", [name.into()]))
+            .unwrap_err()
+            .code,
+        "E_RESERVED_NAMESPACE"
+    );
+    assert!(e.head(name, "main").unwrap().is_none());
+    let program = Program {
+        version: VERSION.into(),
+        source_revisions: vec![],
+        commands: vec![Command::CommitBatch {
+            batch_id: "poison".into(),
+            commits: vec![SnapshotCommit {
+                graph_id: name.into(),
+                branch_id: "main".into(),
+                expected_head: None,
+                data: GraphData::default(),
+            }],
+        }],
+    };
+    assert_eq!(
+        e.execute(&program, &HostContext::new("alice", [name.into()]))
+            .unwrap_err()
+            .code,
+        "E_RESERVED_NAMESPACE"
+    );
+    e.submit_identity_candidate(&c, &host("alice")).unwrap();
+    let accepted = e
+        .accept_identity_candidate(&request(&c, None, "first"), &host("reviewer"))
+        .unwrap();
+    let capsule = e
+        .export_capsule(&accepted.reference, &host("alice"))
+        .unwrap();
+    let mut receiver = Engine::memory().unwrap();
+    assert_eq!(
+        receiver
+            .receive_capsule(&capsule, &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_RESERVED_NAMESPACE"
+    );
+    assert_eq!(receiver.event_count().unwrap(), 0);
+    assert_eq!(
+        e.fork_branch(
+            &accepted.reference,
+            "other",
+            &HostContext::new("alice", [accepted.reference.graph_id.clone()])
+        )
+        .unwrap_err()
+        .code,
+        "E_RESERVED_NAMESPACE"
+    );
+}
+#[test]
+fn immutable_policy_and_unique_partition_membership_cannot_be_forged() {
+    let (mut e, c) = setup();
+    let mut changed = policy();
+    changed.approvers = vec!["alice".into()];
+    assert_eq!(
+        e.install_identity_policy(&changed).unwrap_err().code,
+        "E_POLICY_REVISION"
+    );
+    let mut fake = c.clone();
+    fake.policy.revision = "uninstalled".into();
+    assert_eq!(
+        e.submit_identity_candidate(&fake, &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_IDENTITY_UNAVAILABLE"
+    );
+    let mut duplicate = c.clone();
+    duplicate.groups.push(vec![c.groups[0][0].clone()]);
+    assert_eq!(
+        e.submit_identity_candidate(&duplicate, &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_IDENTITY_CANDIDATE"
+    );
+    e.submit_identity_candidate(&c, &host("alice")).unwrap();
+    let mut altered = c.clone();
+    altered.valid_time.end = Some(9);
+    assert_eq!(
+        e.submit_identity_candidate(&altered, &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_IDENTITY_CANDIDATE"
+    );
+    assert_eq!(e.event_count().unwrap(), 3);
+}
+
+#[test]
+fn hidden_partition_members_do_not_change_visible_payload_layout_or_coverage() {
+    let (mut e, with_private) = setup();
+    let mut without_private = with_private.clone();
+    without_private.id = "public-only".into();
+    without_private.groups[0].pop();
+    e.submit_identity_candidate(&without_private, &host("alice"))
+        .unwrap();
+    let first = e
+        .accept_identity_candidate(
+            &request(&without_private, None, "public"),
+            &host("reviewer"),
+        )
+        .unwrap();
+    e.submit_identity_candidate(&with_private, &host("alice"))
+        .unwrap();
+    let second = e
+        .accept_identity_candidate(
+            &request(
+                &with_private,
+                Some(first.reference.revision.clone()),
+                "private",
+            ),
+            &host("reviewer"),
+        )
+        .unwrap();
+    fn normalized(value: QueryResult, revision: &str, candidate: &str) -> serde_json::Value {
+        fn walk(v: &mut serde_json::Value, revision: &str, candidate: &str) {
+            match v {
+                serde_json::Value::String(s) if s == revision => *s = "accepted-pin".into(),
+                serde_json::Value::String(s) if s == candidate => *s = "candidate-label".into(),
+                serde_json::Value::Array(values) => {
+                    for v in values {
+                        walk(v, revision, candidate);
+                    }
+                }
+                serde_json::Value::Object(values) => {
+                    for v in values.values_mut() {
+                        walk(v, revision, candidate);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut value = serde_json::to_value(value).unwrap();
+        walk(&mut value, revision, candidate);
+        value
+    }
+    for resolve in [false, true] {
+        let read = |revision: &str| {
+            if resolve {
+                e.resolve_identity(
+                    &selection(&with_private, revision, "operations"),
+                    &host("bob"),
+                )
+                .unwrap()
+            } else {
+                e.query(&serde_json::from_value(json!({"graph_id":first.reference.graph_id,"revision":revision,"valid_at":5})).unwrap(), &host("bob")).unwrap()
+            }
+        };
+        let a = read(&first.reference.revision);
+        let b = read(&second.reference.revision);
+        assert_eq!(a.coverage, Coverage::Partial);
+        assert_eq!(a.coverage, b.coverage);
+        assert_eq!(a.diagnostics, b.diagnostics);
+        assert!(!serde_json::to_string(&b).unwrap().contains("pairwise-C"));
+        assert!(b
+            .graph
+            .edges
+            .iter()
+            .all(|edge| !edge.assertion_properties.contains_key("partition")));
+        assert_eq!(
+            normalized(a, &first.reference.revision, &without_private.id),
+            normalized(b, &second.reference.revision, &with_private.id)
+        );
+    }
+}
+
+#[test]
+fn repeated_resolution_and_union_preserve_distinct_same_space_manifestations() {
+    let mut e = Engine::memory().unwrap();
+    e.install_identity_policy(&policy()).unwrap();
+    let a = write(&mut e, "physical", "a", "physical", &[]);
+    let graph: GraphData = serde_json::from_value(json!({"nodes":[
+        {"id":"b1","entity_id":"shared","space_id":"operations"},
+        {"id":"b2","entity_id":"shared","space_id":"operations"}
+    ]}))
+    .unwrap();
+    e.execute(
+        &Program {
+            version: VERSION.into(),
+            source_revisions: vec![],
+            commands: vec![Command::Commit {
+                graph_id: "operations".into(),
+                branch_id: "main".into(),
+                expected_head: None,
+                data: graph,
+            }],
+        },
+        &host("alice"),
+    )
+    .unwrap();
+    let revision = e.head("operations", "main").unwrap().unwrap();
+    let c = IdentityCandidate {
+        id: "multi".into(),
+        mapping_id: "equipment".into(),
+        policy: policy().reference,
+        groups: vec![vec![
+            a,
+            NodeRef {
+                graph_id: "operations".into(),
+                revision: revision.clone(),
+                node_id: "b1".into(),
+            },
+            NodeRef {
+                graph_id: "operations".into(),
+                revision,
+                node_id: "b2".into(),
+            },
+        ]],
+        evidence: vec![],
+        valid_time: Interval {
+            start: 0,
+            end: Some(10),
+        },
+        context: None,
+    };
+    e.submit_identity_candidate(&c, &host("alice")).unwrap();
+    let accepted = e
+        .accept_identity_candidate(&request(&c, None, "multi"), &host("reviewer"))
+        .unwrap();
+    let query = selection(&c, &accepted.reference.revision, "operations");
+    let r = e.resolve_identity(&query, &host("bob")).unwrap();
+    let repeated = e.resolve_identity(&query, &host("bob")).unwrap();
+    assert_eq!(r, repeated);
+    assert_eq!(r.graph.nodes.len(), 3);
+    assert_eq!(r.graph.edges.len(), 2);
+    let ctx = AlgebraContext {
+        principal: "bob".into(),
+        max_objects: 1000,
+        max_output_bytes: 1024 * 1024,
+    };
+    let merged = algebra::union(r.clone(), r.clone(), &ctx).unwrap();
+    let nested = algebra::union(merged.clone(), repeated, &ctx).unwrap();
+    assert_eq!(merged.graph, nested.graph);
+    assert_eq!(merged.graph.nodes.len(), 3);
+    assert_eq!(merged.graph.edges.len(), 2);
+}
