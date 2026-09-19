@@ -739,3 +739,74 @@ fn repeated_accepted_transitions_have_distinct_events_and_strict_cas() {
     assert_eq!(ids.len(), 6);
     assert!(events[2..].iter().all(|e| e.event_type == "graph.accepted"));
 }
+
+#[test]
+fn direct_query_bounds_metadata_bytes_during_expansion() {
+    let mut engine = Engine::memory().unwrap();
+    let h = HostContext::new("alice", ["g".into(), "m1".into(), "m2".into(), "m3".into()]);
+    let mut root = data();
+    for name in ["m1", "m2", "m3"] {
+        let mut n = node("payload", "payload", "evidence");
+        n.properties
+            .insert("large".into(), ("x".repeat(12 * 1024 * 1024)).into());
+        let rev = revision(
+            &engine
+                .execute(
+                    &program(vec![commit(
+                        name,
+                        None,
+                        GraphData {
+                            nodes: vec![n],
+                            edges: vec![],
+                        },
+                    )]),
+                    &h,
+                )
+                .unwrap(),
+        );
+        root.nodes[0].metadata.push(GraphRef {
+            graph_id: name.into(),
+            revision: rev,
+        });
+    }
+    engine
+        .execute(&program(vec![commit("g", None, root)]), &h)
+        .unwrap();
+    assert_eq!(engine.query(&query("g"), &h).unwrap_err().code, "E_BUDGET");
+}
+#[test]
+fn direct_join_bounds_repeated_provenance_before_output_accumulates() {
+    let mut engine = Engine::memory().unwrap();
+    let left_name = "l".repeat(500);
+    let right_name = "r".repeat(500);
+    let h = HostContext::new("alice", [left_name.clone(), right_name.clone()]);
+    for (name, right) in [(&left_name, false), (&right_name, true)] {
+        let mut d = data();
+        d.nodes.iter_mut().for_each(|n| n.space_id = "s".into());
+        if right {
+            d.nodes[0].entity_id = "middle".into();
+            d.nodes[1].entity_id = "end".into();
+        } else {
+            d.nodes[0].entity_id = "start".into();
+            d.nodes[1].entity_id = "middle".into();
+        }
+        let edge = d.edges[0].clone();
+        d.edges = (0..200)
+            .map(|i| {
+                let mut e = edge.clone();
+                e.id = format!("{i:03}{}", "e".repeat(497));
+                e
+            })
+            .collect();
+        engine
+            .execute(&program(vec![commit(name, None, d)]), &h)
+            .unwrap();
+    }
+    assert_eq!(
+        engine
+            .join(&query(&left_name), &query(&right_name), "path", &h)
+            .unwrap_err()
+            .code,
+        "E_BUDGET"
+    );
+}

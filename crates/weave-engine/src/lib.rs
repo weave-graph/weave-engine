@@ -307,22 +307,21 @@ impl Engine {
                 "some derivation dependencies unavailable",
             );
         }
-        result.provenance = result
-            .graph
-            .edges
-            .iter()
-            .map(|edge| AssertionRef {
+        let mut query_bytes = json_size(&result, MATERIALIZED_LIMIT)?;
+        for edge in &result.graph.edges {
+            let reference = AssertionRef {
                 graph_id: query.graph_id.clone(),
                 revision: revision.clone(),
                 assertion_id: edge.id.clone(),
-            })
-            .collect();
-        result.edge_origins = result
-            .provenance
-            .iter()
-            .map(|r| (r.assertion_id.clone(), vec![r.clone()]))
-            .collect();
-        let mut query_bytes = json_size(&result, MATERIALIZED_LIMIT)?;
+            };
+            query_bytes += json_size(&reference, MATERIALIZED_LIMIT.saturating_sub(query_bytes))?;
+            query_bytes += json_size(
+                &(&edge.id, [&reference]),
+                MATERIALIZED_LIMIT.saturating_sub(query_bytes),
+            )?;
+            result.provenance.push(reference.clone());
+            result.edge_origins.insert(edge.id.clone(), vec![reference]);
+        }
         if query.include_metadata {
             let mut seen = HashSet::from([(query.graph_id.clone(), revision)]);
             let mut pending: std::collections::VecDeque<_> =
@@ -373,6 +372,7 @@ impl Engine {
                 }
             }
         }
+        json_size(&result, MATERIALIZED_LIMIT)?;
         Ok(result)
     }
     /// Identity-key path join. Pure over two pinned, authorized graph views.
@@ -416,6 +416,21 @@ impl Engine {
             .ok_or_else(|| err("E_BUDGET", "join pair budget exceeded"))?;
         if pairs > 1_000_000 {
             return Err(err("E_BUDGET", "join pair budget exceeds 1000000"));
+        }
+        // Bound construction itself, not only the final result retained by execute.
+        let mut join_bytes = 512usize;
+        for size in [
+            json_size(&l.metadata_graphs, MATERIALIZED_LIMIT)?,
+            json_size(&r.metadata_graphs, MATERIALIZED_LIMIT)?,
+            json_size(&l.input_snapshots, MATERIALIZED_LIMIT)?,
+            json_size(&r.input_snapshots, MATERIALIZED_LIMIT)?,
+        ] {
+            join_bytes = join_bytes
+                .checked_add(size)
+                .ok_or_else(|| err("E_BUDGET", "join byte budget exceeded"))?;
+            if join_bytes > MATERIALIZED_LIMIT {
+                return Err(err("E_BUDGET", "join byte budget exceeded"));
+            }
         }
         let ln: BTreeMap<_, _> = l.graph.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
         let rn: BTreeMap<_, _> = r.graph.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
@@ -497,6 +512,19 @@ impl Engine {
                     readers: vec![host.principal.clone()],
                     derived_from: premises.clone(),
                 };
+                if !nodes.contains_key(&source.id) {
+                    join_bytes +=
+                        json_size(&source, MATERIALIZED_LIMIT.saturating_sub(join_bytes))?;
+                }
+                if !nodes.contains_key(&target.id) && target.id != source.id {
+                    join_bytes +=
+                        json_size(&target, MATERIALIZED_LIMIT.saturating_sub(join_bytes))?;
+                }
+                join_bytes += json_size(&edge, MATERIALIZED_LIMIT.saturating_sub(join_bytes))?;
+                join_bytes += json_size(
+                    &(&edge.id, &premises),
+                    MATERIALIZED_LIMIT.saturating_sub(join_bytes),
+                )?;
                 nodes.insert(source.id.clone(), source);
                 nodes.insert(target.id.clone(), target);
                 edge_origins.insert(edge.id.clone(), premises.clone());
@@ -506,6 +534,8 @@ impl Engine {
                 }
                 for reference in premises {
                     if !provenance.contains(&reference) {
+                        join_bytes +=
+                            json_size(&reference, MATERIALIZED_LIMIT.saturating_sub(join_bytes))?;
                         provenance.push(reference);
                     }
                 }
@@ -547,7 +577,7 @@ impl Engine {
                 snapshots.insert(reference.graph_id.clone(), reference.revision.clone());
             }
         }
-        Ok(QueryResult {
+        let result = QueryResult {
             version: VERSION.into(),
             graph: GraphData {
                 nodes: nodes.into_values().collect(),
@@ -560,7 +590,9 @@ impl Engine {
             provenance,
             edge_origins,
             metadata_graphs,
-        })
+        };
+        json_size(&result, MATERIALIZED_LIMIT)?;
+        Ok(result)
     }
     fn expression(
         &self,

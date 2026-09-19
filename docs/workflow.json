@@ -153,7 +153,7 @@
           "host": "local macOS",
           "result": "Reusable graph-value composition and cumulative resource budget tests pass",
           "contract_revision": "0.3.0",
-          "commit": "third checkpoint pending commit",
+          "commit": "7cdf6b4",
           "unresolved_findings": "General recursive rules and effects remain open"
         }
       ]
@@ -273,7 +273,7 @@
           "host": "local macOS",
           "result": "Hash integrity, quarantine/acceptance, offline independence tests pass; full gate incomplete",
           "contract_revision": "capsule0.1 / program0.3",
-          "commit": "third checkpoint pending commit",
+          "commit": "7cdf6b4",
           "unresolved_findings": "Unsigned local APIs; no peer authenticity, mounts, governance or mobile support"
         }
       ]
@@ -300,7 +300,7 @@
           "host": "local macOS",
           "result": "Hash integrity, quarantine/acceptance, offline independence tests pass; full gate incomplete",
           "contract_revision": "capsule0.1 / program0.3",
-          "commit": "third checkpoint pending commit",
+          "commit": "7cdf6b4",
           "unresolved_findings": "Unsigned local APIs; no peer authenticity, mounts, governance or mobile support"
         }
       ]
