@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix='weave-native-') as directory:
         simulator=run(simctl+['create','Weave Acceptance',a.device_type,a.runtime]).strip()
         try:
             run(simctl+['boot',simulator],timeout=30)
-            run(simctl+['bootstatus',simulator,'-b'],timeout=180)
+            run(simctl+['bootstatus',simulator,'-b'],timeout=600)
             run(simctl+['install',simulator,str(app)],timeout=60)
             report['runtime']=a.runtime;report['device_type']=a.device_type
             for stage in ['seed','read','rollback','read']:

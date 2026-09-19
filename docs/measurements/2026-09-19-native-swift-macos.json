@@ -1,0 +1,48 @@
+{
+  "host": "macos-native",
+  "stages": [
+    {
+      "contract": "0.13.0",
+      "seeded": true,
+      "stage": "seed"
+    },
+    {
+      "alice_nodes": 2,
+      "bob_nodes": 1,
+      "contract": "0.13.0",
+      "exact_decimal": "9007199254740993",
+      "pinned_history": true,
+      "restarted_persistence": true,
+      "rollback": false,
+      "stage": "read"
+    },
+    {
+      "alice_nodes": 2,
+      "bob_nodes": 1,
+      "contract": "0.13.0",
+      "exact_decimal": "9007199254740993",
+      "pinned_history": true,
+      "restarted_persistence": true,
+      "rollback": true,
+      "stage": "rollback"
+    },
+    {
+      "alice_nodes": 2,
+      "bob_nodes": 1,
+      "contract": "0.13.0",
+      "exact_decimal": "9007199254740993",
+      "pinned_history": true,
+      "restarted_persistence": true,
+      "rollback": false,
+      "stage": "read"
+    }
+  ],
+  "result": "passed",
+  "limits": [
+    "no network used; networking not disabled",
+    "simulator is not a physical device",
+    "local persistence/privacy/rollback profile, not full sync/governance/mobile app acceptance"
+  ],
+  "source_commit": "4492802",
+  "environment": "Apple M4 Max macOS arm64; Swift 6.4; Rust 1.94.0"
+}
