@@ -38,6 +38,8 @@ pub struct StructuralEdge {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Assertion {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derived_nodes: Vec<NodeRef>,
     pub id: String,
     pub edge_id: String,
     /// Claimed source label, not cryptographic authentication.

@@ -81,6 +81,16 @@ impl Engine {
         let Some(origin) = input.attachment_origins.get(&attachment.id).cloned() else {
             return Ok(missing(input, "metadata attachment origin unavailable"));
         };
+        // Selecting this attachment influences even an empty/unavailable target value.
+        // Keep that path restriction independently of emitted object membership.
+        input.graph.influence = weave_contract::influence::merge(
+            input.graph.influence.as_ref(),
+            Some(&GraphInfluence {
+                assertions: origin.clone(),
+                nodes: vec![],
+            }),
+        )
+        .map_err(|d| err(&d.code, &d.message))?;
         // Retain the current original snapshot for a subsequent back-reference through a cycle.
         if input.snapshots.len() == 1 {
             let (graph_id, revision) = input.snapshots.iter().next().expect("one snapshot");
@@ -132,6 +142,11 @@ impl Engine {
                 ));
             }
         }
+        let influence = weave_contract::influence::merge(
+            input.graph.influence.as_ref(),
+            graph.influence.as_ref(),
+        )
+        .map_err(|d| err(&d.code, &d.message))?;
         let mut typing = context_typing::merge(
             input.graph.context_typing.as_ref(),
             graph.context_typing.as_ref(),
@@ -141,6 +156,7 @@ impl Engine {
             t.selected = None;
         }
         graph.context_typing = typing.clone();
+        graph.influence = influence.clone();
         // A contextual path remains qualified even for an empty target. Default navigation
         // does not implicitly assign the parent scope to independently qualified target claims.
         input.selected_context = path_context
@@ -152,6 +168,7 @@ impl Engine {
                 let Some(common) = intersect(&window, &edge.valid_time) else {
                     input.graph = GraphData {
                         context_typing: typing,
+                        influence,
                         ..GraphData::default()
                     };
                     input.node_origins.clear();
@@ -160,6 +177,11 @@ impl Engine {
                     input.provenance.clear();
                     context_typing::protect_result_generated(&mut input)
                         .map_err(|d| err(&d.code, &d.message))?;
+                    weave_contract::influence::protect_generated_result(
+                        &mut input,
+                        MATERIALIZED_LIMIT,
+                    )
+                    .map_err(|d| err(&d.code, &d.message))?;
                     return Ok(input);
                 };
                 window = common;
@@ -259,6 +281,7 @@ impl Engine {
             )?;
             if edge.derivations.is_empty() {
                 edge.derivations = vec![Derivation {
+                    node_premises: edge.derived_nodes.clone(),
                     operator: "weave:metadata".into(),
                     premises: dependencies.clone(),
                     parameters: BTreeMap::from([(
@@ -287,6 +310,10 @@ impl Engine {
                             graph_id: p.graph_id.clone(),
                             revision: p.revision.clone(),
                         })
+                        .chain(group.node_premises.iter().map(|p| GraphRef {
+                            graph_id: p.graph_id.clone(),
+                            revision: p.revision.clone(),
+                        }))
                         .collect();
                 }
                 dependencies.clear();
@@ -325,6 +352,34 @@ impl Engine {
         }
         context_typing::protect_result_generated(&mut input)
             .map_err(|d| err(&d.code, &d.message))?;
+        weave_contract::influence::protect_generated_result(&mut input, MATERIALIZED_LIMIT)
+            .map_err(|d| err(&d.code, &d.message))?;
+        // Navigation changed each node payload: retain source references as proof gates,
+        // and give the path-qualified wrapper its own identity instead of false source origins.
+        let mut node_ids = BTreeMap::new();
+        for node in &mut input.graph.nodes {
+            let old = node.id.clone();
+            node.id = format!(
+                "metadata-node:{:x}",
+                Sha256::digest(serde_json::to_vec(&node)?)
+            );
+            node_ids.insert(old, node.id.clone());
+        }
+        for edge in &mut input.graph.edges {
+            edge.from = node_ids[&edge.from].clone();
+            edge.to = node_ids[&edge.to].clone();
+        }
+        for attachment in &mut input.graph.attachments {
+            if let MetadataHost::Node { id } = &mut attachment.host {
+                *id = node_ids[id].clone();
+            }
+        }
+        input.node_origins = input
+            .graph
+            .nodes
+            .iter()
+            .map(|n| (n.id.clone(), vec![]))
+            .collect();
         json_size(&input, MATERIALIZED_LIMIT)?;
         Ok(input)
     }
@@ -334,7 +389,9 @@ fn missing(mut input: QueryResult, message: &str) -> QueryResult {
     if let Some(t) = &mut typing {
         t.selected = None;
     }
+    let influence = input.graph.influence.take();
     input.graph = GraphData {
+        influence,
         context_typing: typing,
         ..GraphData::default()
     };

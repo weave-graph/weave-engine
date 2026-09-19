@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix="weave-migration-") as directory:
         assert c.execute("SELECT COUNT(*) FROM events").fetchone()[0]==1
     assert run("open")==before
     with sqlite3.connect(db) as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0]==10
+        assert c.execute("PRAGMA user_version").fetchone()[0]==11
         assert c.execute("SELECT COUNT(*) FROM edge_structures").fetchone()[0]==1
         assert c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='admission_epochs'").fetchone()[0]==1
     assert run("open")==before

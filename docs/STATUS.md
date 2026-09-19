@@ -4,7 +4,7 @@ Public MIT implementation in progress; recovered original papers are reconciled.
 
 ## Implemented
 
-- Versions 0.1–0.14: immutable SQLite snapshots/CAS, half-open time, principal-filtered pinned queries, interval-aware identity-space joins and reusable pure graph values.
+- Versions 0.1–0.15: immutable SQLite snapshots/CAS, half-open time, principal-filtered pinned queries, interval-aware identity-space joins and reusable pure graph values.
 - Version 0.4 adds immutable embedded schemas, typed joins, named host/time-qualified metadata, atomic logical snapshot manifests with constructible metadata cycles, required dependency checks, live handle pinning, and no-op suppression. See [contract](contract/v0.4/README.md).
 - Signed per-operation native Query/Publish/Propose admission with durable nonce receipts, accepted-branch scope checks, isolated proposal quarantine and subject-scoped egress; [security boundary](ADMISSION.md). No remote arbitrary-program authority or transport server is implied.
 - Trusted host read/write boundaries, transitive derivation restrictions, generic partial coverage, bounded materialization and whole-program rollback.
@@ -50,3 +50,5 @@ Native governance now implements owner/threshold policies, isolated signed appro
 
 The native governance outbox now has [typed authorized delivery](GOVERNANCE_DELIVERY.md) attached to existing adapter lifecycle: current-policy/source checks on pending and cached occurrences, local ordinals, leases, dead-letter replay and atomic acknowledgments. Four native tests and six process-death checks pass. E05/E11 remain open for graph-producing governance handlers, accepted-value proof carriers, remote subscribers and broader governance.
 The language pair at c916082 adds explicit per-execution live handles/pins, named live metadata and full-snapshot CAS replacement over the unchanged 0.14 contract. Root passed 83 language tests and actual live-reference acceptance. Combined native governance/lineage verification passed 257 workspace tests, strict lint, governance six/migration three/signed-integration six process-death checks. Follow-up dispatcher receipt regressions verify current event and unrelated-query authorization plus bounded stored-result loading. Public CI includes source live-reference and governance process-death acceptance. Full implementation remains open.
+
+Protocol 0.15 adds a generic persistent whole-value assertion/node influence carrier, global node gates on claims and per-alternative node premises. Empty values, generated scalar copies, rules, joins, explanations, metadata paths and native services preserve their restrictions; current-authority checks remain mandatory on caches and capsules. See [influence implementation and tests](INFLUENCE.md). This advances proof composability but does not expose governed accepted graph views or close the full governance/permission gates.

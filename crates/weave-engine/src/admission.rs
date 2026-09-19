@@ -625,6 +625,12 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
                 &mut HashSet::new(),
                 &mut 1000,
                 0,
+            )? && self.graph_influence_visible(
+                &data,
+                &HostContext::new(principal, []),
+                &mut HashSet::new(),
+                &mut 1000,
+                0,
             )? {
                 data
             } else {

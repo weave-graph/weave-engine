@@ -280,6 +280,7 @@ impl Engine {
                     Sha256::digest(serde_json::to_vec(&(from, to, predicate, &evidence))?)
                 );
                 let edge = Edge {
+                    derived_nodes: node_proofs.clone(),
                     id,
                     from: from.into(),
                     to: to.into(),
@@ -302,6 +303,7 @@ impl Engine {
                         vec![]
                     } else {
                         vec![Derivation {
+                            node_premises: node_proofs.clone(),
                             operator: "weave:cluster-navigation:v1".into(),
                             premises: claim_proofs.clone(),
                             parameters: BTreeMap::from([
@@ -361,6 +363,7 @@ impl Engine {
             .collect();
         value.provenance = claim_proofs;
         output.context_typing = value.graph.context_typing.clone();
+        output.influence = value.graph.influence.clone();
         value.graph = output;
         value.attachment_origins.clear();
         value.metadata_graphs.clear();
@@ -369,6 +372,8 @@ impl Engine {
         value.coverage = Coverage::Partial;
         value.diagnostics = vec![Diagnostic { code: "I_CLUSTER_SCOPED".into(), message: "Navigation covers authorized available evidence; exact queries must inspect source evidence".into() }];
         context_typing::protect_result_generated(&mut value)
+            .map_err(|d| err(&d.code, &d.message))?;
+        weave_contract::influence::protect_generated_result(&mut value, MATERIALIZED_LIMIT)
             .map_err(|d| err(&d.code, &d.message))?;
         require_repersistable(&value.graph)?;
         validate_graph(&value.graph)?;
@@ -497,8 +502,10 @@ impl Engine {
         // deliberately different source objects and must not be unioned as objects.
         for value in [&mut left, &mut right] {
             let typing = value.graph.context_typing.take();
+            let influence = value.graph.influence.take();
             value.graph = GraphData {
                 context_typing: typing,
+                influence,
                 ..GraphData::default()
             };
             value.node_origins.clear();
@@ -518,6 +525,8 @@ impl Engine {
             message: "Lineage compares currently authorized evidence at both pins; overlaps are navigation, not accepted identity".into(),
         }];
         context_typing::protect_result_generated(&mut result)
+            .map_err(|d| err(&d.code, &d.message))?;
+        weave_contract::influence::protect_generated_result(&mut result, MATERIALIZED_LIMIT)
             .map_err(|d| err(&d.code, &d.message))?;
         require_repersistable(&result.graph)?;
         validate_graph(&result.graph)?;

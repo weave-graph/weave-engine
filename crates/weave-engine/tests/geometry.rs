@@ -337,3 +337,87 @@ fn node_only_support_projection_retains_private_evidence_gate_after_persistence(
         .unwrap()
         .contains("pb"));
 }
+
+#[test]
+fn whole_value_node_gates_survive_generated_scalar_and_assertion_repersistence() {
+    let mut e = Engine::memory().unwrap();
+    e.execute(&program(vec![Command::Commit { graph_id:"C".into(),branch_id:"main".into(),expected_head:None,
+        data:serde_json::from_value(json!({"nodes":[{"id":"gate","entity_id":"gate","space_id":"s","readers":["alice"]}]})).unwrap(),
+    }]),&host()).unwrap();
+    let gate = NodeRef {
+        graph_id: "C".into(),
+        revision: e.head("C", "main").unwrap().unwrap(),
+        node_id: "gate".into(),
+    };
+    let mut source = data();
+    source.influence = Some(GraphInfluence {
+        assertions: vec![],
+        nodes: vec![gate.clone()],
+    });
+    e.execute(&program(vec![commit(source)]), &host()).unwrap();
+    for expression in [
+        distance(6),
+        GraphExpression::Explain {
+            input: Box::new(distance(6)),
+        },
+    ] {
+        let generated = value(&mut e, expression, &host()).unwrap();
+        assert!(generated
+            .graph
+            .nodes
+            .iter()
+            .all(|n| n.derived_nodes.contains(&gate)));
+        assert!(generated
+            .graph
+            .edges
+            .iter()
+            .all(|e| e.derived_nodes.contains(&gate)));
+        assert!(generated
+            .graph
+            .edges
+            .iter()
+            .flat_map(|e| &e.derivations)
+            .all(|g| g.node_premises.contains(&gate)));
+        for nodes_only in [true, false] {
+            let mut saved = generated.graph.clone();
+            saved.influence = None;
+            saved.context_typing = None;
+            saved.schema = None;
+            for n in &mut saved.nodes {
+                n.readers.clear();
+                n.type_id = None;
+                if !nodes_only {
+                    n.derived_from.clear();
+                    n.derived_nodes.clear();
+                }
+            }
+            for edge in &mut saved.edges {
+                edge.readers.clear();
+                edge.type_id = None;
+            }
+            if nodes_only {
+                saved.edges.clear();
+            }
+            e.execute(
+                &program(vec![Command::Commit {
+                    graph_id: "copy".into(),
+                    branch_id: "main".into(),
+                    expected_head: e.head("copy", "main").unwrap(),
+                    data: saved,
+                }]),
+                &host(),
+            )
+            .unwrap();
+            let q: QueryPlan = serde_json::from_value(json!({"graph_id":"copy"})).unwrap();
+            let authorized = e.query(&q, &host()).unwrap();
+            assert!(!authorized.graph.nodes.is_empty());
+            let denied = e.query(&q, &HostContext::new("bob", [])).unwrap();
+            if nodes_only {
+                assert!(denied.graph.nodes.is_empty());
+            } else {
+                assert!(denied.graph.edges.is_empty());
+            }
+            assert_eq!(denied.coverage, Coverage::Partial);
+        }
+    }
+}

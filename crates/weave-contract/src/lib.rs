@@ -8,7 +8,9 @@ pub mod decimal;
 pub mod quantity;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.14.0";
+pub const VERSION: &str = "0.15.0";
+pub mod influence;
+pub use influence::GraphInfluence;
 pub mod counterpart;
 mod geometry_types;
 pub use geometry_types::*;
@@ -95,6 +97,9 @@ pub struct Node {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Edge {
+    /// Global AND gate, independent of alternative derivation groups.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derived_nodes: Vec<NodeRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assertion_source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -126,6 +131,9 @@ pub struct Edge {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct GraphData {
+    /// Conservative whole-value AND influence, retained even when no objects survive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub influence: Option<GraphInfluence>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_typing: Option<ContextTyping>,
     #[serde(default, skip_serializing_if = "GraphProfile::is_legacy")]

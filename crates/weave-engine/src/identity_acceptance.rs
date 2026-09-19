@@ -718,6 +718,11 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
                     }
                     if let Some(source_data) = self.load(&pin.graph_id, &pin.revision)? {
                         let (source_data, _) = self.authorized(source_data, host)?;
+                        value.graph.influence = weave_contract::influence::merge(
+                            value.graph.influence.as_ref(),
+                            source_data.influence.as_ref(),
+                        )
+                        .map_err(|d| err(&d.code, &d.message))?;
                         if let Some(typing) = source_data.context_typing.as_ref() {
                             if let Some(selected) = &typing.selected {
                                 context::compatible_context(
@@ -757,6 +762,8 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
         value.attachment_origins.clear();
         value.provenance = provenance;
         context_typing::protect_result_generated(&mut value)
+            .map_err(|d| err(&d.code, &d.message))?;
+        weave_contract::influence::protect_generated_result(&mut value, MATERIALIZED_LIMIT)
             .map_err(|d| err(&d.code, &d.message))?;
         validate_graph(&value.graph)?;
         json_size(&value, MATERIALIZED_LIMIT)?;

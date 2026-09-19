@@ -27,6 +27,7 @@ struct Trace {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Proof {
     leaves: Vec<AssertionRef>,
+    nodes: Vec<NodeRef>,
     trace: BTreeMap<String, Trace>,
     external: BTreeMap<String, Derivation>,
     contextual: bool,
@@ -93,7 +94,7 @@ fn tick(steps: &mut usize, limit: usize) -> Result<(), Diagnostic> {
     Ok(())
 }
 fn proof_key(proof: &Proof) -> String {
-    hash(&(&proof.leaves, proof.contextual))
+    hash(&(&proof.leaves, &proof.nodes, proof.contextual))
 }
 fn insert(
     facts: &mut Facts,
@@ -102,6 +103,7 @@ fn insert(
     limits: &RuleBudget,
     remaining: &mut usize,
 ) -> Result<bool, Diagnostic> {
+    crate::influence::validate_refs(&proof.leaves, &proof.nodes)?;
     let key = proof_key(&proof);
     if facts.get(&fact).is_some_and(|p| p.contains_key(&key)) {
         return Ok(false);
@@ -152,34 +154,48 @@ fn intersection(a: Option<i64>, b: Option<i64>) -> Option<i64> {
         (a, b) => a.or(b),
     }
 }
-fn merge(left: &Proof, right: &Proof) -> Proof {
+fn merge(left: &Proof, right: &Proof) -> Result<Proof, Diagnostic> {
+    let gates = crate::influence::merge(
+        Some(&GraphInfluence {
+            assertions: left.leaves.clone(),
+            nodes: left.nodes.clone(),
+        }),
+        Some(&GraphInfluence {
+            assertions: right.leaves.clone(),
+            nodes: right.nodes.clone(),
+        }),
+    )?
+    .expect("two proof groups");
     let mut trace = left.trace.clone();
     trace.extend(right.trace.clone());
     let mut external = left.external.clone();
     external.extend(right.external.clone());
-    Proof {
-        leaves: unique(left.leaves.iter().chain(&right.leaves).cloned()),
+    Ok(Proof {
+        leaves: gates.assertions,
+        nodes: gates.nodes,
         trace,
         external,
         contextual: left.contextual || right.contextual,
-    }
+    })
 }
 fn source_proofs(input: &QueryResult, edge: &Edge) -> Result<Vec<Proof>, Diagnostic> {
-    let groups = if edge.derivations.is_empty() {
-        vec![Derivation{operator:"weave:source".into(),premises:input.edge_origins.get(&edge.id).cloned().filter(|p|!p.is_empty()).ok_or_else(||error("E_ORIGIN_MISSING","Rule evidence lacks pinned assertion origins"))?,parameters:[("attribution".into(),json!({"structural_ref":edge.structural_ref,"source":edge.assertion_source,"context":edge.assertion_context,"assertion_properties":edge.assertion_properties}))].into(),input_snapshots:vec![]}]
-    } else {
-        edge.derivations.clone()
-    };
+    let origins = input
+        .edge_origins
+        .get(&edge.id)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    let mut groups = crate::algebra::edge_alternatives(edge, origins)?;
+    if edge.derivations.is_empty() {
+        for group in &mut groups {
+            group.parameters.insert("attribution".into(), json!({"structural_ref":edge.structural_ref,"source":edge.assertion_source,"context":edge.assertion_context,"assertion_properties":edge.assertion_properties}));
+        }
+    }
     groups
         .into_iter()
         .map(|d| {
-            let origins = input.edge_origins.get(&edge.id).ok_or_else(|| {
-                error(
-                    "E_ORIGIN_MISSING",
-                    "Rule evidence lacks its runtime origin envelope",
-                )
-            })?;
-            if d.premises.is_empty() || d.premises.iter().any(|p| !origins.contains(p)) {
+            if (d.premises.is_empty() && d.node_premises.is_empty())
+                || d.premises.iter().any(|p| !origins.contains(p))
+            {
                 return Err(error(
                     "E_RULE_PROVENANCE",
                     "Rule support must contain nonempty authorized leaf premises",
@@ -199,8 +215,11 @@ fn source_proofs(input: &QueryResult, edge: &Edge) -> Result<Vec<Proof>, Diagnos
                 )
                 .map_err(|_| error("E_RULE_PROVENANCE", "Invalid external rule premises"))?;
                 for p in prior {
-                    if p.premises.is_empty()
+                    if (p.premises.is_empty() && p.node_premises.is_empty())
                         || p.premises.iter().any(|leaf| !d.premises.contains(leaf))
+                        || p.node_premises
+                            .iter()
+                            .any(|node| !d.node_premises.contains(node))
                     {
                         return Err(error(
                             "E_RULE_PROVENANCE",
@@ -214,6 +233,7 @@ fn source_proofs(input: &QueryResult, edge: &Edge) -> Result<Vec<Proof>, Diagnos
             }
             Ok(Proof {
                 leaves: unique(d.premises),
+                nodes: unique(d.node_premises),
                 trace,
                 external,
                 contextual: crate::context::ensure_consumable(
@@ -291,6 +311,7 @@ pub fn reason(
         ));
     }
     crate::context_typing::validate_result(&input)?;
+    crate::influence::validate_graph(&input.graph)?;
     bytes(&input, ctx.max_output_bytes)?;
     bytes(set, ctx.max_output_bytes)?;
     if let Some(d) = validate_schema_graph(&input.graph).into_iter().next() {
@@ -326,13 +347,21 @@ pub fn reason(
             }
         }
     }
-    let context_premises = input
+    let (context_assertions, context_nodes) = input
         .graph
         .context_typing
         .as_ref()
         .map(crate::context_typing::gates)
         .transpose()?
-        .map_or_else(Vec::new, |g| g.0);
+        .unwrap_or_default();
+    let whole = crate::influence::merge(
+        input.graph.influence.as_ref(),
+        Some(&GraphInfluence {
+            assertions: context_assertions,
+            nodes: context_nodes,
+        }),
+    )?
+    .expect("context influence exists");
     let mut facts = Facts::new();
     let mut fact_bytes = ctx.max_output_bytes;
     for edge in &input.graph.edges {
@@ -354,16 +383,22 @@ pub fn reason(
             end: edge.valid_time.end,
         };
         for mut proof in source_proofs(&input, edge)? {
-            if proof.leaves.len().saturating_add(context_premises.len()) > 1000 {
-                return Err(error("E_RULE_BUDGET", "Context proof bound exceeded"));
-            }
-            proof.leaves.extend(context_premises.iter().cloned());
-            proof.leaves = unique(proof.leaves);
+            let gates = crate::influence::merge(
+                Some(&GraphInfluence {
+                    assertions: proof.leaves,
+                    nodes: proof.nodes,
+                }),
+                Some(&whole),
+            )?
+            .expect("proof gates exist");
+            proof.leaves = gates.assertions;
+            proof.nodes = gates.nodes;
             insert(&mut facts, fact.clone(), proof, limits, &mut fact_bytes)?;
         }
     }
     let empty = Proof {
         leaves: vec![],
+        nodes: vec![],
         trace: BTreeMap::new(),
         external: BTreeMap::new(),
         contextual: false,
@@ -407,7 +442,7 @@ pub fn reason(
                                 bindings: bindings.clone(),
                                 start,
                                 end,
-                                proof: merge(&state.proof, proof),
+                                proof: merge(&state.proof, proof)?,
                                 body,
                             };
                             if next.len() >= ctx.max_objects {
@@ -540,11 +575,21 @@ pub fn reason(
         }
         let mut derivations = Vec::new();
         for proof in proofs {
-            let snapshots = unique(proof.leaves.iter().map(|p| GraphRef {
-                graph_id: p.graph_id.clone(),
-                revision: p.revision.clone(),
-            }));
+            let snapshots = unique(
+                proof
+                    .leaves
+                    .iter()
+                    .map(|p| GraphRef {
+                        graph_id: p.graph_id.clone(),
+                        revision: p.revision.clone(),
+                    })
+                    .chain(proof.nodes.iter().map(|p| GraphRef {
+                        graph_id: p.graph_id.clone(),
+                        revision: p.revision.clone(),
+                    })),
+            );
             derivations.push(Derivation {
+                node_premises: proof.nodes,
                 operator: "weave:finite-rules-v1".into(),
                 premises: proof.leaves,
                 parameters: [
@@ -571,6 +616,7 @@ pub fn reason(
         }
         let origins = unique(derivations.iter().flat_map(|d| d.premises.clone()));
         let edge = Edge {
+            derived_nodes: vec![],
             id: id.clone(),
             type_id,
             structural_ref: None,
@@ -914,6 +960,7 @@ mod tests {
     fn malformed_prior_support_cannot_create_authority() {
         let mut input = fixture();
         input.graph.edges[0].derivations = vec![Derivation {
+            node_premises: vec![],
             operator: "weave:finite-rules-v1".into(),
             premises: vec![],
             parameters: BTreeMap::new(),

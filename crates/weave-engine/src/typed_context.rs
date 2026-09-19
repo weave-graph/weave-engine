@@ -75,6 +75,7 @@ impl Engine {
         let data = visible(data, &host.principal);
         if data.profile != GraphProfile::Explicit
             || !self.context_typing_visible(&data, host, visiting, budget, depth + 1)?
+            || !self.graph_influence_visible(&data, host, visiting, budget, depth + 1)?
         {
             return Ok(None);
         }

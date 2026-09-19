@@ -184,6 +184,7 @@ fn size(value: &(impl Serialize + ?Sized), limit: usize) -> Result<usize, Diagno
 /// policy grants occur. Every alternative remains its own AND group in the graph.
 pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult, Diagnostic> {
     crate::context_typing::validate_result(input)?;
+    crate::influence::validate_graph(&input.graph)?;
     if ctx.principal.is_empty() {
         return Err(failure(
             "E_EXPLAIN_CONTEXT",
@@ -207,18 +208,22 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     let mut add_node = |id: String,
                         kind: &str,
                         scope: &crate::ContextSelection,
-                        dependencies: &[AssertionRef]|
+                        dependencies: &[AssertionRef],
+                        node_dependencies: &[NodeRef]|
      -> Result<(), Diagnostic> {
         if let std::collections::btree_map::Entry::Vacant(entry) = nodes.entry(id.clone()) {
-            if dependencies.len().saturating_add(node_influences.len()) > 1000 {
+            let local_nodes = crate::identity::node_dependencies(
+                node_influences.iter().chain(node_dependencies),
+            )?;
+            if dependencies.len().saturating_add(local_nodes.len()) > 1000 {
                 return Err(failure(
                     "E_EXPLAIN_LIMIT",
                     "Node influence count exceeds output limit",
                 ));
             }
-            size(&(kind, scope, dependencies, &node_influences), remaining)?;
+            size(&(kind, scope, dependencies, &local_nodes), remaining)?;
             let n = Node {
-                derived_nodes: node_influences.clone(),
+                derived_nodes: local_nodes,
                 derived_from: ordered(dependencies)?,
                 context_scope: Some(scope.clone()),
                 id: id.clone(),
@@ -289,31 +294,31 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                 "Explanation input contradicts its selected context",
             ));
         }
-        let groups = if edge.derivations.is_empty() {
-            vec![Derivation {
-                operator: "weave:source".into(),
-                premises: input
-                    .edge_origins
-                    .get(&edge.id)
-                    .cloned()
-                    .filter(|v| !v.is_empty())
-                    .ok_or_else(|| {
-                        failure(
-                            "E_ORIGIN_MISSING",
-                            "Explanation premise lacks pinned provenance",
-                        )
-                    })?,
-                parameters: [("attribution".into(), json!({"structural_ref":edge.structural_ref,"source":edge.assertion_source,"context":edge.assertion_context,"assertion_properties":edge.assertion_properties}))].into(),
-                input_snapshots: vec![],
-            }]
-        } else {
-            edge.derivations.clone()
-        };
+        let origins = input
+            .edge_origins
+            .get(&edge.id)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let mut groups = crate::algebra::edge_alternatives(edge, origins)?;
+        if groups
+            .iter()
+            .any(|g| g.premises.is_empty() && g.node_premises.is_empty())
+        {
+            return Err(failure(
+                "E_ORIGIN_MISSING",
+                "Explanation premise lacks pinned provenance",
+            ));
+        }
+        if edge.derivations.is_empty() {
+            for group in &mut groups {
+                group.parameters.insert("attribution".into(), json!({"structural_ref":edge.structural_ref,"source":edge.assertion_source,"context":edge.assertion_context,"assertion_properties":edge.assertion_properties}));
+            }
+        }
         let conclusion = format!(
             "conclusion:{}",
             digest(
                 "conclusion",
-                &(&edge.id, &edge.structural_ref, &scope),
+                &(&edge.id, &edge.structural_ref, &scope, &groups),
                 ctx.max_output_bytes
             )?
         );
@@ -328,6 +333,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             "conclusion",
             &scope,
             &conclusion_dependencies,
+            &crate::identity::node_dependencies(groups.iter().flat_map(|g| &g.node_premises))?,
         )?;
         for group in groups {
             let group_id = format!(
@@ -338,7 +344,13 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                     ctx.max_output_bytes
                 )?
             );
-            add_node(group_id.clone(), "derivation", &scope, &group.premises)?;
+            add_node(
+                group_id.clone(),
+                "derivation",
+                &scope,
+                &group.premises,
+                &group.node_premises,
+            )?;
             add_record(
                 (
                     conclusion.clone(),
@@ -350,6 +362,35 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                 ),
                 &group,
             )?;
+            for premise in &group.node_premises {
+                let id = format!(
+                    "node-premise:{}",
+                    digest(
+                        "node-premise",
+                        &(premise, &scope, &group_id),
+                        ctx.max_output_bytes
+                    )?
+                );
+                add_node(
+                    id.clone(),
+                    "node_premise",
+                    &scope,
+                    &group.premises,
+                    &group.node_premises,
+                )?;
+                add_record(
+                    (
+                        group_id.clone(),
+                        id,
+                        "joint_node_premise",
+                        serde_json::to_string(premise).map_err(|_| {
+                            failure("E_IDENTITY_ENCODING", "Cannot encode node premise")
+                        })?,
+                        scope.clone(),
+                    ),
+                    &group,
+                )?;
+            }
             for premise in &group.premises {
                 let id = format!(
                     "premise:{}",
@@ -359,7 +400,13 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                         ctx.max_output_bytes
                     )?
                 );
-                add_node(id.clone(), "premise", &scope, &group.premises)?;
+                add_node(
+                    id.clone(),
+                    "premise",
+                    &scope,
+                    &group.premises,
+                    &group.node_premises,
+                )?;
                 add_record(
                     (
                         group_id.clone(),
@@ -393,9 +440,14 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                     graph_id: p.graph_id.clone(),
                     revision: p.revision.clone(),
                 })
+                .chain(group.node_premises.iter().map(|p| GraphRef {
+                    graph_id: p.graph_id.clone(),
+                    revision: p.revision.clone(),
+                }))
                 .collect::<Vec<_>>(),
         )?;
         let record = Edge {
+            derived_nodes: vec![],
             id: id.clone(),
             structural_ref: None,
             assertion_properties: BTreeMap::new(),
@@ -415,6 +467,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             readers: vec![ctx.principal.clone()],
             derived_from: premises.clone(),
             derivations: vec![Derivation {
+                node_premises: group.node_premises.clone(),
                 operator: "weave:explain".into(),
                 premises: premises.clone(),
                 parameters: [("explained".into(), json!(group))].into(),
@@ -490,6 +543,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
         source_revisions: input.source_revisions.clone(),
         version: VERSION.into(),
         graph: GraphData {
+            influence: input.graph.influence.clone(),
             context_typing: input.graph.context_typing.clone(),
             schema: Some(schema),
             nodes: nodes.into_values().collect(),
@@ -507,6 +561,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
         metadata_graphs: vec![],
     };
     crate::context_typing::protect_result_generated_bounded(&mut result, ctx.max_output_bytes)?;
+    crate::influence::protect_generated_result(&mut result, ctx.max_output_bytes)?;
     crate::context_typing::validate_result(&result)?;
     size(&result, ctx.max_output_bytes)?;
     Ok(result)

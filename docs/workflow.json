@@ -129,7 +129,8 @@
           "kind": "native_identity_acceptance",
           "path": "crates/weave-engine/tests/identity_acceptance.rs",
           "result": "Pinned replacement partitions, installed policy authority, atomic CAS/receipt/events, current policy and NodeRef source gates, hidden membership payload/coverage parity and historical splits. Remote acceptance and broader governance remain open."
-        }
+        },
+        "docs/INFLUENCE.md"
       ]
     },
     {
@@ -198,7 +199,8 @@
           "host": "local macOS",
           "commit": "02253ee44277e49dbc8d1bf5c707d028caf1b410",
           "unresolved_findings": "Explicit compatibility/broadcast mappings and accepted-view governance remain open; whole-value witness AND gating can conservatively deny mixed results."
-        }
+        },
+        "docs/INFLUENCE.md"
       ]
     },
     {
@@ -249,7 +251,9 @@
           "host": "local macOS",
           "commit": "02253ee44277e49dbc8d1bf5c707d028caf1b410",
           "unresolved_findings": "Explicit compatibility/broadcast mappings and accepted-view governance remain open; whole-value witness AND gating can conservatively deny mixed results."
-        }
+        },
+        "docs/INFLUENCE.md",
+        "crates/weave-engine/tests/root_influence.rs"
       ]
     },
     {
@@ -333,7 +337,8 @@
         "crates/weave-engine/tests/views.rs",
         "docs/contract/v0.7/README.md",
         "crates/weave-contract/src/rules.rs",
-        "crates/weave-engine/tests/rules.rs"
+        "crates/weave-engine/tests/rules.rs",
+        "docs/INFLUENCE.md"
       ]
     },
     {
@@ -401,7 +406,8 @@
         "docs/MOUNTS_AND_INTEGRATION.md",
         "crates/weave-engine/tests/mounts.rs",
         "crates/weave-engine/tests/integration.rs",
-        "scripts/check_integration_recovery.py"
+        "scripts/check_integration_recovery.py",
+        "docs/INFLUENCE.md"
       ]
     },
     {
@@ -463,7 +469,8 @@
         "scripts/check_governance_recovery.py",
         "docs/GOVERNANCE_DELIVERY.md",
         "crates/weave-engine/tests/governance_delivery.rs",
-        "scripts/check_governance_delivery_recovery.py"
+        "scripts/check_governance_delivery_recovery.py",
+        "docs/INFLUENCE.md"
       ]
     },
     {

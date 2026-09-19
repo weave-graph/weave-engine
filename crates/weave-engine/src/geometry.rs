@@ -279,16 +279,8 @@ fn geometry_result(
         )
         .map_err(|d| err(&d.code, &d.message))?
     } else {
-        let parents = if first.edge.derivations.is_empty() {
-            vec![Derivation {
-                operator: "weave:source".into(),
-                premises: first.origins.clone(),
-                parameters: BTreeMap::new(),
-                input_snapshots: vec![],
-            }]
-        } else {
-            first.edge.derivations.clone()
-        };
+        let parents = algebra::edge_alternatives(&first.edge, &first.origins)
+            .map_err(|d| err(&d.code, &d.message))?;
         let mut out = Vec::new();
         let mut size = 0;
         for parent in parents {
@@ -304,7 +296,17 @@ fn geometry_result(
                     snapshots.push(r);
                 }
             }
+            for p in &parent.node_premises {
+                let pin = GraphRef {
+                    graph_id: p.graph_id.clone(),
+                    revision: p.revision.clone(),
+                };
+                if !snapshots.contains(&pin) {
+                    snapshots.push(pin);
+                }
+            }
             let group = Derivation {
+                node_premises: parent.node_premises.clone(),
                 operator: operator.into(),
                 premises: parent.premises,
                 parameters: fields,
@@ -321,6 +323,16 @@ fn geometry_result(
             origins.push(p.clone());
         }
     }
+    let node_gates = derivations
+        .iter()
+        .flat_map(|d| d.node_premises.iter().cloned())
+        .collect::<Vec<_>>();
+    let mut node_gates = GraphInfluence {
+        assertions: origins.clone(),
+        nodes: node_gates,
+    };
+    weave_contract::influence::canonicalize(&mut node_gates);
+    weave_contract::influence::validate(&node_gates).map_err(|d| err(&d.code, &d.message))?;
     let encoded = serde_json::to_value(&payload)?;
     let identity = format!(
         "geometry:{:x}",
@@ -353,7 +365,7 @@ fn geometry_result(
         }
     };
     let node = Node {
-        derived_nodes: vec![],
+        derived_nodes: node_gates.nodes,
         derived_from: origins.clone(),
         context_scope: Some(context.clone().unwrap_or_default()),
         id: "result".into(),
@@ -369,6 +381,7 @@ fn geometry_result(
         readers: vec![host.principal.clone()],
     };
     let edge = Edge {
+        derived_nodes: vec![],
         structural_ref: None,
         assertion_source: None,
         assertion_context: context
@@ -397,6 +410,13 @@ fn geometry_result(
         None => Ok(first.value.graph.context_typing.clone()),
     }
     .map_err(|d| err(&d.code, &d.message))?;
+    let influence = weave_contract::influence::merge(
+        first.value.graph.influence.as_ref(),
+        second
+            .as_ref()
+            .and_then(|other| other.value.graph.influence.as_ref()),
+    )
+    .map_err(|d| err(&d.code, &d.message))?;
     let mut value = first.value;
     if let Some(other) = second {
         value.source_revisions =
@@ -422,6 +442,7 @@ fn geometry_result(
     value.version = VERSION.into();
     value.selected_context = context;
     value.graph = GraphData {
+        influence,
         context_typing: typing,
         schema: Some(result_schema()),
         nodes: vec![node],
@@ -435,6 +456,8 @@ fn geometry_result(
     value.attachment_origins.clear();
     value.metadata_graphs.clear();
     context_typing::protect_result_generated(&mut value).map_err(|d| err(&d.code, &d.message))?;
+    weave_contract::influence::protect_generated_result(&mut value, MATERIALIZED_LIMIT)
+        .map_err(|d| err(&d.code, &d.message))?;
     validate_graph(&value.graph)?;
     json_size(&value, MATERIALIZED_LIMIT)?;
     Ok(value)

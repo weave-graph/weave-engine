@@ -1,0 +1,446 @@
+//! Restriction-only influence references. Serialized references never grant authority.
+use crate::{AssertionRef, Diagnostic, GraphData, NodeRef};
+use serde::{Deserialize, Serialize};
+
+pub const MAX_REFERENCES: usize = 1000;
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GraphInfluence {
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "bounded_refs"
+    )]
+    pub assertions: Vec<AssertionRef>,
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "bounded_refs"
+    )]
+    pub nodes: Vec<NodeRef>,
+}
+fn bounded_refs<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    struct Visitor<T>(std::marker::PhantomData<T>);
+    impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for Visitor<T> {
+        type Value = Vec<T>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "at most {MAX_REFERENCES} influence references")
+        }
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(
+            self,
+            mut values: A,
+        ) -> Result<Vec<T>, A::Error> {
+            if values.size_hint().is_some_and(|n| n > MAX_REFERENCES) {
+                return Err(serde::de::Error::custom("influence reference limit"));
+            }
+            let mut result = Vec::new();
+            while let Some(value) = values.next_element()? {
+                if result.len() == MAX_REFERENCES {
+                    return Err(serde::de::Error::custom("influence reference limit"));
+                }
+                result.push(value);
+            }
+            Ok(result)
+        }
+    }
+    deserializer.deserialize_seq(Visitor(std::marker::PhantomData))
+}
+fn error(code: &str) -> Diagnostic {
+    Diagnostic {
+        code: code.into(),
+        message: "invalid or excessive graph influence".into(),
+    }
+}
+fn id(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 512
+}
+pub fn assertion_key(reference: &AssertionRef) -> (&str, &str, &str) {
+    (
+        &reference.graph_id,
+        &reference.revision,
+        &reference.assertion_id,
+    )
+}
+pub fn node_key(reference: &NodeRef) -> (&str, &str, &str) {
+    (&reference.graph_id, &reference.revision, &reference.node_id)
+}
+pub fn validate_refs(assertions: &[AssertionRef], nodes: &[NodeRef]) -> Result<(), Diagnostic> {
+    if assertions.len().saturating_add(nodes.len()) > MAX_REFERENCES {
+        return Err(error("E_BUDGET"));
+    }
+    if assertions
+        .iter()
+        .any(|r| !id(&r.graph_id) || !id(&r.revision) || !id(&r.assertion_id))
+        || nodes
+            .iter()
+            .any(|r| !id(&r.graph_id) || !id(&r.revision) || !id(&r.node_id))
+    {
+        return Err(error("E_INFLUENCE"));
+    }
+    Ok(())
+}
+pub fn validate(influence: &GraphInfluence) -> Result<(), Diagnostic> {
+    validate_refs(&influence.assertions, &influence.nodes)
+}
+pub fn canonicalize(influence: &mut GraphInfluence) {
+    influence
+        .assertions
+        .sort_by(|a, b| assertion_key(a).cmp(&assertion_key(b)));
+    influence.assertions.dedup();
+    influence
+        .nodes
+        .sort_by(|a, b| node_key(a).cmp(&node_key(b)));
+    influence.nodes.dedup();
+}
+pub fn merge(
+    left: Option<&GraphInfluence>,
+    right: Option<&GraphInfluence>,
+) -> Result<Option<GraphInfluence>, Diagnostic> {
+    for influence in left.into_iter().chain(right) {
+        validate(influence)?;
+    }
+    if left.is_none() && right.is_none() {
+        return Ok(None);
+    }
+    let mut assertion_keys = std::collections::BTreeSet::new();
+    let mut node_keys = std::collections::BTreeSet::new();
+    let mut output = GraphInfluence::default();
+    for influence in left.into_iter().chain(right) {
+        for reference in &influence.assertions {
+            if assertion_keys.insert(assertion_key(reference)) {
+                if assertion_keys.len() + node_keys.len() > MAX_REFERENCES {
+                    return Err(error("E_BUDGET"));
+                }
+                output.assertions.push(reference.clone());
+            }
+        }
+        for reference in &influence.nodes {
+            if node_keys.insert(node_key(reference)) {
+                if assertion_keys.len() + node_keys.len() > MAX_REFERENCES {
+                    return Err(error("E_BUDGET"));
+                }
+                output.nodes.push(reference.clone());
+            }
+        }
+    }
+    canonicalize(&mut output);
+    Ok(Some(output))
+}
+pub fn validate_graph(data: &GraphData) -> Result<(), Diagnostic> {
+    if let Some(influence) = &data.influence {
+        validate(influence)?;
+    }
+    for edge in &data.edges {
+        validate_refs(&edge.derived_from, &edge.derived_nodes)?;
+        if edge.derivations.len() > 128 {
+            return Err(error("E_BUDGET"));
+        }
+        for group in &edge.derivations {
+            validate_refs(&group.premises, &group.node_premises)?;
+        }
+    }
+    for assertion in &data.assertions {
+        validate_refs(&assertion.derived_from, &assertion.derived_nodes)?;
+        if assertion.derivations.len() > 128 {
+            return Err(error("E_BUDGET"));
+        }
+        for group in &assertion.derivations {
+            validate_refs(&group.premises, &group.node_premises)?;
+        }
+    }
+    Ok(())
+}
+
+/// New influence-only dependency snapshots; callers add legacy metadata/source paths too.
+pub fn snapshots(data: &GraphData) -> Vec<crate::GraphRef> {
+    let mut refs = std::collections::BTreeSet::new();
+    if let Some(influence) = &data.influence {
+        for r in &influence.assertions {
+            refs.insert((&r.graph_id, &r.revision));
+        }
+        for r in &influence.nodes {
+            refs.insert((&r.graph_id, &r.revision));
+        }
+    }
+    for nodes in data
+        .edges
+        .iter()
+        .map(|e| &e.derived_nodes)
+        .chain(data.assertions.iter().map(|a| &a.derived_nodes))
+    {
+        for r in nodes {
+            refs.insert((&r.graph_id, &r.revision));
+        }
+    }
+    for group in data
+        .edges
+        .iter()
+        .flat_map(|e| &e.derivations)
+        .chain(data.assertions.iter().flat_map(|a| &a.derivations))
+    {
+        for r in &group.node_premises {
+            refs.insert((&r.graph_id, &r.revision));
+        }
+    }
+    refs.into_iter()
+        .map(|(graph_id, revision)| crate::GraphRef {
+            graph_id: graph_id.clone(),
+            revision: revision.clone(),
+        })
+        .collect()
+}
+struct Bytes(usize);
+impl std::io::Write for Bytes {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        if bytes.len() > self.0 {
+            return Err(std::io::Error::other("influence output limit"));
+        }
+        self.0 -= bytes.len();
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+fn charge(bytes: &mut Bytes, value: &impl Serialize) -> Result<(), Diagnostic> {
+    serde_json::to_writer(bytes, value).map_err(|_| error("E_BUDGET"))
+}
+/// Only for freshly generated records. Original pinned records must retain their payload;
+/// operators retaining originals carry the whole-value envelope without using this helper.
+pub fn protect_generated_result(
+    result: &mut crate::QueryResult,
+    limit: usize,
+) -> Result<(), Diagnostic> {
+    if result.graph.profile != crate::GraphProfile::Legacy
+        || !result.graph.assertions.is_empty()
+        || !result.graph.structural_edges.is_empty()
+    {
+        return Err(error("E_INFLUENCE_PROFILE"));
+    }
+    let Some(influence) = &result.graph.influence else {
+        return Ok(());
+    };
+    validate(influence)?;
+    let mut budget = Bytes(limit.min(32 * 1024 * 1024));
+    charge(&mut budget, result)?;
+    // Charge every repeated proof insertion before mutating the output.
+    for node in &result.graph.nodes {
+        if node
+            .derived_from
+            .len()
+            .saturating_add(node.derived_nodes.len())
+            .saturating_add(influence.assertions.len())
+            .saturating_add(influence.nodes.len())
+            > MAX_REFERENCES
+        {
+            return Err(error("E_BUDGET"));
+        }
+        charge(&mut budget, influence)?;
+    }
+    for edge in &result.graph.edges {
+        if edge
+            .derived_from
+            .len()
+            .saturating_add(edge.derived_nodes.len())
+            .saturating_add(influence.assertions.len())
+            .saturating_add(influence.nodes.len())
+            > MAX_REFERENCES
+        {
+            return Err(error("E_BUDGET"));
+        }
+        charge(&mut budget, influence)?;
+        for group in &edge.derivations {
+            if group
+                .premises
+                .len()
+                .saturating_add(group.node_premises.len())
+                .saturating_add(influence.assertions.len())
+                .saturating_add(influence.nodes.len())
+                > MAX_REFERENCES
+            {
+                return Err(error("E_BUDGET"));
+            }
+            charge(&mut budget, influence)?;
+            // Snapshot indexes repeat both existing and added proof pins. Charge their
+            // actual serialized fields before constructing those repeated records.
+            for (graph, revision) in group
+                .premises
+                .iter()
+                .map(|p| (&p.graph_id, &p.revision))
+                .chain(
+                    group
+                        .node_premises
+                        .iter()
+                        .map(|p| (&p.graph_id, &p.revision)),
+                )
+                .chain(
+                    influence
+                        .assertions
+                        .iter()
+                        .map(|p| (&p.graph_id, &p.revision)),
+                )
+                .chain(influence.nodes.iter().map(|p| (&p.graph_id, &p.revision)))
+            {
+                #[derive(Serialize)]
+                struct Pin<'a> {
+                    graph_id: &'a str,
+                    revision: &'a str,
+                }
+                charge(
+                    &mut budget,
+                    &Pin {
+                        graph_id: graph,
+                        revision,
+                    },
+                )?;
+            }
+        }
+    }
+    for node in &mut result.graph.nodes {
+        node.derived_from
+            .extend(influence.assertions.iter().cloned());
+        node.derived_from
+            .sort_by(|a, b| assertion_key(a).cmp(&assertion_key(b)));
+        node.derived_from.dedup();
+        node.derived_nodes.extend(influence.nodes.iter().cloned());
+        node.derived_nodes
+            .sort_by(|a, b| node_key(a).cmp(&node_key(b)));
+        node.derived_nodes.dedup();
+    }
+    for edge in &mut result.graph.edges {
+        edge.derived_from
+            .extend(influence.assertions.iter().cloned());
+        edge.derived_from
+            .sort_by(|a, b| assertion_key(a).cmp(&assertion_key(b)));
+        edge.derived_from.dedup();
+        edge.derived_nodes.extend(influence.nodes.iter().cloned());
+        edge.derived_nodes
+            .sort_by(|a, b| node_key(a).cmp(&node_key(b)));
+        edge.derived_nodes.dedup();
+        for group in &mut edge.derivations {
+            group.premises.extend(influence.assertions.iter().cloned());
+            group
+                .premises
+                .sort_by(|a, b| assertion_key(a).cmp(&assertion_key(b)));
+            group.premises.dedup();
+            group.node_premises.extend(influence.nodes.iter().cloned());
+            group
+                .node_premises
+                .sort_by(|a, b| node_key(a).cmp(&node_key(b)));
+            group.node_premises.dedup();
+            let pins = group
+                .premises
+                .iter()
+                .map(|p| crate::GraphRef {
+                    graph_id: p.graph_id.clone(),
+                    revision: p.revision.clone(),
+                })
+                .chain(group.node_premises.iter().map(|p| crate::GraphRef {
+                    graph_id: p.graph_id.clone(),
+                    revision: p.revision.clone(),
+                }));
+            group.input_snapshots.extend(pins);
+            group
+                .input_snapshots
+                .sort_by(|a, b| (&a.graph_id, &a.revision).cmp(&(&b.graph_id, &b.revision)));
+            group.input_snapshots.dedup();
+        }
+    }
+    // Descriptive indexes and snapshots are part of the budget as well.
+    for edge in &result.graph.edges {
+        charge(&mut budget, &edge.derived_from)?;
+    }
+    charge(&mut budget, &influence.assertions)?;
+    let pins = snapshots(&result.graph);
+    charge(&mut budget, &pins)?;
+    for edge in &result.graph.edges {
+        let refs = result.edge_origins.entry(edge.id.clone()).or_default();
+        refs.extend(edge.derived_from.iter().cloned());
+        refs.sort_by(|a, b| assertion_key(a).cmp(&assertion_key(b)));
+        refs.dedup();
+    }
+    result
+        .provenance
+        .extend(influence.assertions.iter().cloned());
+    result
+        .provenance
+        .sort_by(|a, b| assertion_key(a).cmp(&assertion_key(b)));
+    result.provenance.dedup();
+    result.input_snapshots.extend(pins);
+    result
+        .input_snapshots
+        .sort_by(|a, b| (&a.graph_id, &a.revision).cmp(&(&b.graph_id, &b.revision)));
+    result.input_snapshots.dedup();
+    validate_graph(&result.graph)?;
+    charge(&mut Bytes(limit.min(32 * 1024 * 1024)), result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn node(id: usize) -> NodeRef {
+        NodeRef {
+            graph_id: "source".into(),
+            revision: "r".into(),
+            node_id: id.to_string(),
+        }
+    }
+    #[test]
+    fn omitted_defaults_preserve_legacy_bytes_and_new_records_roundtrip() {
+        assert_eq!(
+            serde_json::to_string(&GraphData::default()).unwrap(),
+            r#"{"nodes":[],"edges":[]}"#
+        );
+        let value = serde_json::json!({"nodes":[],"edges":[{"id":"e","predicate":"p","from":"a","to":"b","valid_time":{"start":0,"end":null}}]});
+        let data: GraphData = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            serde_json::to_string(&data).unwrap(),
+            r#"{"nodes":[],"edges":[{"id":"e","predicate":"p","from":"a","to":"b","valid_time":{"start":0,"end":null},"polarity":"positive","properties":{},"metadata":[],"readers":[],"derived_from":[]}]}"#
+        );
+        let typed:GraphData=serde_json::from_value(serde_json::json!({"influence":{"nodes":[node(1)]},"edges":[{"id":"e","predicate":"p","from":"a","to":"b","valid_time":{"start":0,"end":null},"derived_nodes":[node(2)],"derivations":[{"operator":"test","premises":[],"node_premises":[node(3)]}]}]})).unwrap();
+        validate_graph(&typed).unwrap();
+        assert_eq!(
+            serde_json::from_str::<GraphData>(&serde_json::to_string(&typed).unwrap()).unwrap(),
+            typed
+        );
+    }
+    #[test]
+    fn canonical_merge_retains_empty_value_gates_without_duplicate_amplification() {
+        let full = GraphInfluence {
+            assertions: vec![],
+            nodes: (0..MAX_REFERENCES).map(node).collect(),
+        };
+        let merged = merge(Some(&full), Some(&full)).unwrap().unwrap();
+        assert_eq!(merged.nodes.len(), MAX_REFERENCES);
+        let mut fresh = full.clone();
+        fresh.nodes[0] = node(MAX_REFERENCES);
+        assert_eq!(
+            merge(Some(&full), Some(&fresh)).unwrap_err().code,
+            "E_BUDGET"
+        );
+        assert_eq!(merge(Some(&full), None).unwrap().unwrap(), merged);
+    }
+    #[test]
+    fn cardinality_and_identifier_bounds_fail_before_use() {
+        let value = serde_json::json!({"nodes":(0..=MAX_REFERENCES).map(node).collect::<Vec<_>>()});
+        assert!(serde_json::from_value::<GraphInfluence>(value).is_err());
+        let mut invalid = node(1);
+        invalid.revision.clear();
+        assert_eq!(
+            validate(&GraphInfluence {
+                assertions: vec![],
+                nodes: vec![invalid]
+            })
+            .unwrap_err()
+            .code,
+            "E_INFLUENCE"
+        );
+        assert!(
+            serde_json::from_value::<GraphInfluence>(serde_json::json!({"allow":true})).is_err()
+        );
+    }
+}

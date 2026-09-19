@@ -21,6 +21,8 @@ pub struct EntitySpace {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Derivation {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub node_premises: Vec<NodeRef>,
     pub operator: String,
     pub premises: Vec<AssertionRef>,
     #[serde(default)]

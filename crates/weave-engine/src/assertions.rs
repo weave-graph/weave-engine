@@ -12,6 +12,7 @@ pub(crate) fn assertion_edge(
         }
     }
     Edge {
+        derived_nodes: assertion.derived_nodes.clone(),
         assertion_source: Some(assertion.source.clone()),
         assertion_context: assertion.context.clone(),
         structural_ref: reference,
@@ -74,6 +75,7 @@ pub(crate) fn materialize(
     }
     let structures: BTreeMap<_, _> = data.structural_edges.iter().map(|e| (&e.id, e)).collect();
     let mut out = GraphData {
+        influence: data.influence.clone(),
         context_typing: data.context_typing.clone(),
         nodes: data.nodes.clone(),
         schema: data.schema.clone(),
@@ -104,6 +106,7 @@ pub(crate) fn materialize(
                 premises.push(source.clone());
             }
             edge.derivations = vec![Derivation {
+                node_premises: vec![],
                 operator: "weave:assertion".into(),
                 premises,
                 parameters: BTreeMap::new(),
@@ -298,10 +301,11 @@ impl Engine {
 
 fn validate_assertion_provenance(assertion: &Assertion) -> Result<()> {
     if assertion.derivations.len() > 128
-        || assertion
-            .derivations
-            .iter()
-            .any(|g| !valid_id(&g.operator) || g.premises.is_empty() || g.premises.len() > 1000)
+        || assertion.derivations.iter().any(|g| {
+            !valid_id(&g.operator)
+                || (g.premises.is_empty() && g.node_premises.is_empty())
+                || g.premises.len().saturating_add(g.node_premises.len()) > 1000
+        })
     {
         return Err(err("E_DERIVATION", "invalid explicit derivation groups"));
     }

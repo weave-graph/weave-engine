@@ -1,0 +1,25 @@
+# Contract 0.15.0: persistent graph influence and node proof alternatives
+
+This additive profile retains restriction-only influences independently of graph membership. References do not grant authority, certify truth or authorize release. They are checked against current trusted-host authority whenever a stored value or proof is consumed.
+
+New optional fields, omitted when empty, are:
+
+- `GraphData.influence: {assertions: AssertionRef[], nodes: NodeRef[]}`: a conservative AND gate on the entire value, including an empty graph. Both arrays default to empty; the carrier itself defaults to absent.
+- `Edge.derived_nodes` and explicit `Assertion.derived_nodes`: node-source AND gates outside the alternative groups, required for every alternative.
+- `Derivation.node_premises`: node-source AND gates within that alternative. `premises` retains assertion-source AND gates. Multiple groups remain OR alternatives. A node-only group is permitted; an empty proof group is not.
+
+NodeRef remains `{graph_id,revision,node_id}`. AssertionRef remains `{graph_id,revision,assertion_id}`. The whole-value carrier and each record/group accept at most 1,000 combined assertion and node references, each identifier bounded to 512 UTF-8 bytes. At most 128 alternatives are retained. Recursive authorization has existing depth/work/read budgets and terminates conservatively on missing dependencies and cycles.
+
+Query, direct structural/assertion lookup, metadata navigation, signed admission/retry, capsule closure, stored views/change streams and handler receipt replay apply the same gates. Whole-value denial returns an empty carrier-free graph with generic partial coverage. It does not return hidden references, carrier counts or selected context. Denied OR alternatives are removed before returning a visible conclusion; the explicit global node gate cannot be bypassed by another alternative.
+
+Union, difference, projection, filtering and context selection retain the whole-value carrier, even when no members survive. Empty metadata results retain both the input carrier and any selected attachment-path proof. Support, explanations, rule conclusions, joins, geometry and native cluster/identity results retain their input influences. Newly generated nodes and assertions also carry explicit proof gates, so copying their output without reader lists or the outer carrier does not remove those restrictions. Assertions retain per-alternative node premises; generated scalar/summary nodes conservatively require all influencing nodes/assertions, so an otherwise readable alternative can be withheld. No automatic proof release or declassification is implemented.
+
+Original records keep their pinned identity when copied unchanged. A changed derived wrapper is not attributed as the original node via `node_origins`: exact source NodeRefs remain proof gates instead. Metadata path-qualified node wrappers use deterministic `metadata-node:` local IDs and empty source-origin envelopes; their original NodeRefs remain dependency gates. A node-host selector or projection over such a result uses its returned local ID, not an inferred alias from arbitrary proof references. Direct target queries retain original local IDs.
+
+Join endpoint wrappers retain the relationship evidence that establishes membership in the path, even if only endpoint nodes are later saved. Explanation graphs distinguish assertion premises from node premises and retain separate alternatives. Rule proof keys include node support sets, preserving node-only alternatives during repeated finite saturation.
+
+All older command profiles remain accepted for their earlier input shapes. Before executing any write, programs older than 0.15 reject graph carriers and nonempty new dependency fields in Commit or CommitBatch. The native store marker advances to 11, including databases requiring no DDL changes, so an older engine rejects the store before reading new authorization-bearing records. Omitted defaults preserve earlier canonical graph encodings and content digests. Query results identify the current runtime result version; clients persisting them must use that version.
+
+Construction remains bounded before repeated allocations and the actual final generated output is serialized through a bounded counter. The common generated-result protection helper rejects explicit-profile input; current generators produce authorized Legacy graph values, while explicit source assertions receive the same dependency checks during persistence/materialization.
+
+This profile does not expose governed accepted views as reusable graphs. That next stage needs real decision assertion records and a trusted operation-time boundary for current policy expiry; historical decision timestamps and author-supplied valid time cannot provide current authorization. Transport, selective proofs, browser persistence, true incremental views, broader governance/context compatibility and the remaining paper requirements remain open.

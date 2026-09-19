@@ -88,6 +88,7 @@ fn checked(mut result: QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
 }
 pub(crate) fn preflight(result: &QueryResult, ctx: &AlgebraContext) -> Result<(), Diagnostic> {
     crate::context_typing::validate_result(result)?;
+    crate::influence::validate_graph(&result.graph)?;
     if result.graph.profile != GraphProfile::Legacy
         || !result.graph.structural_edges.is_empty()
         || !result.graph.assertions.is_empty()
@@ -142,6 +143,12 @@ fn envelope(left: &QueryResult, right: Option<&QueryResult>) -> Result<QueryResu
         right.map_or(&[], |r| r.source_revisions.as_slice()),
     )?;
     out.graph = GraphData::default();
+    out.graph.influence = match right {
+        Some(r) => {
+            crate::influence::merge(left.graph.influence.as_ref(), r.graph.influence.as_ref())?
+        }
+        None => left.graph.influence.clone(),
+    };
     out.graph.context_typing = match right {
         Some(r) => crate::context_typing::merge(
             left.graph.context_typing.as_ref(),
@@ -331,7 +338,8 @@ fn edge_key(input: &QueryResult, edge: &Edge) -> Result<String, Diagnostic> {
                     &edge.assertion_source,
                     &edge.assertion_context,
                     &edge.structural_ref,
-                    &edge.metadata
+                    &edge.metadata,
+                    &edge.derived_nodes
                 )
             ))
         ));
@@ -361,7 +369,8 @@ fn edge_key(input: &QueryResult, edge: &Edge) -> Result<String, Diagnostic> {
                 &edge.assertion_source,
                 &edge.assertion_context,
                 &edge.structural_ref,
-                &edge.derivations
+                &edge.derivations,
+                &edge.derived_nodes
             ))
         ))
     }
@@ -705,13 +714,13 @@ pub fn support(
             .get(&edge.id)
             .cloned()
             .unwrap_or_default();
-        if edge.derivations.is_empty() && origins.is_empty() {
+        if edge.derivations.is_empty() && origins.is_empty() && edge.derived_nodes.is_empty() {
             return Err(err(
                 "E_ORIGIN_MISSING",
                 "Support premise lacks runtime provenance",
             ));
         }
-        let groups = edge_alternatives(edge, &origins);
+        let groups = edge_alternatives(edge, &origins)?;
         match edge.polarity {
             Polarity::Positive => positive.extend(groups),
             Polarity::Negative => negative.extend(groups),
@@ -743,13 +752,16 @@ pub fn support(
             return Err(err("E_ALGEBRA_LIMIT", "Support alternatives exceed budget"));
         }
         let premises = unique(parents.iter().flat_map(|d| d.premises.iter().cloned()));
+        let node_premises = unique(parents.iter().flat_map(|d| d.node_premises.iter().cloned()));
+        crate::influence::validate_refs(&premises, &node_premises)?;
         let mut parameters = parameters.clone();
         parameters.insert("inputs".into(), json!(parents));
         let d = Derivation {
+            node_premises: node_premises.clone(),
             operator: "weave:support".into(),
             premises: premises.clone(),
             parameters: parameters.clone(),
-            input_snapshots: premise_snapshots(premises.iter()),
+            input_snapshots: proof_snapshots(&premises, &node_premises),
         };
         budget.add(&d)?;
         derivations.push(d);
@@ -786,7 +798,22 @@ pub fn support(
                 .nodes
                 .iter()
                 .flat_map(|n| n.derived_nodes.iter())
-                .chain(input.node_origins.values().flatten()),
+                .chain(input.node_origins.values().flatten())
+                .chain(
+                    input
+                        .graph
+                        .edges
+                        .iter()
+                        .flat_map(|e| e.derived_nodes.iter()),
+                )
+                .chain(
+                    input
+                        .graph
+                        .edges
+                        .iter()
+                        .flat_map(|e| e.derivations.iter())
+                        .flat_map(|g| g.node_premises.iter()),
+                ),
         )?,
         derived_from: unique(
             input
@@ -909,13 +936,11 @@ pub fn support(
     });
     out.graph.nodes.push(node);
     // This is a derived value identity, not a claim that a persisted source node exists.
-    out.node_origins.insert(
-        id.clone(),
-        unique(input.node_origins.values().flatten().cloned()),
-    );
+    out.node_origins.insert(id.clone(), Vec::new());
     if !derivations.is_empty() {
         let origins = unique(derivations.iter().flat_map(|d| d.premises.clone()));
         let edge = Edge {
+            derived_nodes: vec![],
             structural_ref: None,
             assertion_source: None,
             assertion_context: input
@@ -945,27 +970,55 @@ pub fn support(
         out.graph.edges.push(edge);
     }
     crate::context_typing::protect_result_generated_bounded(&mut out, ctx.max_output_bytes)?;
+    crate::influence::protect_generated_result(&mut out, ctx.max_output_bytes)?;
     checked(out, ctx)
 }
 
-fn premise_snapshots<'a>(premises: impl Iterator<Item = &'a AssertionRef>) -> Vec<GraphRef> {
-    unique(premises.map(|p| GraphRef {
-        graph_id: p.graph_id.clone(),
-        revision: p.revision.clone(),
-    }))
-}
-
-fn edge_alternatives(edge: &Edge, origins: &[AssertionRef]) -> Vec<Derivation> {
-    if edge.derivations.is_empty() {
+pub fn edge_alternatives(
+    edge: &Edge,
+    origins: &[AssertionRef],
+) -> Result<Vec<Derivation>, Diagnostic> {
+    let mut groups = if edge.derivations.is_empty() {
         vec![Derivation {
+            node_premises: vec![],
             operator: "weave:source".into(),
             premises: origins.to_vec(),
             parameters: BTreeMap::new(),
-            input_snapshots: premise_snapshots(origins.iter()),
+            input_snapshots: vec![],
         }]
     } else {
         edge.derivations.clone()
+    };
+    for group in &mut groups {
+        let merged = crate::influence::merge(
+            Some(&GraphInfluence {
+                assertions: group.premises.clone(),
+                nodes: group.node_premises.clone(),
+            }),
+            Some(&GraphInfluence {
+                assertions: vec![],
+                nodes: edge.derived_nodes.clone(),
+            }),
+        )?
+        .expect("provided influence");
+        group.node_premises = merged.nodes;
+        group.input_snapshots = proof_snapshots(&group.premises, &group.node_premises);
     }
+    Ok(groups)
+}
+fn proof_snapshots(assertions: &[AssertionRef], nodes: &[NodeRef]) -> Vec<GraphRef> {
+    unique(
+        assertions
+            .iter()
+            .map(|p| GraphRef {
+                graph_id: p.graph_id.clone(),
+                revision: p.revision.clone(),
+            })
+            .chain(nodes.iter().map(|p| GraphRef {
+                graph_id: p.graph_id.clone(),
+                revision: p.revision.clone(),
+            })),
+    )
 }
 
 /// Compose OR-of-AND derivations for a two-premise operator. Preserve the parent
@@ -981,8 +1034,8 @@ pub fn combine_derivations(
     _snapshots: &[GraphRef],
     ctx: &AlgebraContext,
 ) -> Result<Vec<Derivation>, Diagnostic> {
-    let left = edge_alternatives(left, left_origins);
-    let right = edge_alternatives(right, right_origins);
+    let left = edge_alternatives(left, left_origins)?;
+    let right = edge_alternatives(right, right_origins)?;
     if left.len().saturating_mul(right.len()) > ctx.max_objects.min(128) {
         return Err(err(
             "E_ALGEBRA_LIMIT",
@@ -995,11 +1048,15 @@ pub fn combine_derivations(
         for r in &right {
             let mut params = parameters.clone();
             params.insert("inputs".into(), json!([l, r]));
+            let premises = unique(l.premises.iter().chain(&r.premises).cloned());
+            let node_premises = unique(l.node_premises.iter().chain(&r.node_premises).cloned());
+            crate::influence::validate_refs(&premises, &node_premises)?;
             let d = Derivation {
+                input_snapshots: proof_snapshots(&premises, &node_premises),
+                node_premises,
                 operator: operator.into(),
-                premises: unique(l.premises.iter().chain(&r.premises).cloned()),
+                premises,
                 parameters: params,
-                input_snapshots: premise_snapshots(l.premises.iter().chain(&r.premises)),
             };
             budget.add(&d)?;
             output.push(d);
@@ -1165,6 +1222,7 @@ mod tests {
         let mut a = fixture("a", "positive", 0, 10);
         let b = fixture("b", "positive", 0, 10);
         a.graph.edges[0].derivations = vec![Derivation {
+            node_premises: vec![],
             operator: "rule:r".into(),
             premises: a.edge_origins["e"].clone(),
             parameters: [("threshold".into(), json!(3))].into(),

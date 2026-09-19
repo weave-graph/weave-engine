@@ -1039,3 +1039,153 @@ fn root_handler_receipt_retry_rechecks_event_and_unrelated_query_authority() {
     }
     assert_eq!(e.event_count().unwrap(), count);
 }
+
+#[test]
+fn join_endpoint_only_wrappers_recheck_relationship_policy_after_persistence() {
+    let (mut e, c) = setup();
+    e.submit_identity_candidate(&c, &host("alice")).unwrap();
+    let accepted = e
+        .accept_identity_candidate(&request(&c, None, "join-policy"), &host("reviewer"))
+        .unwrap();
+    let resolve = selection(&c, &accepted.reference.revision, "operations");
+    let view = e.resolve_identity(&resolve, &host("alice")).unwrap();
+    let left: GraphData = serde_json::from_value(json!({"nodes":[
+        {"id":"outer","entity_id":"left","space_id":"s"},
+        {"id":"middle","entity_id":"middle","space_id":"s"}],
+        "edges":[{"id":"relation","from":"outer","to":"middle","predicate":"link","valid_time":{"start":0,"end":10},"derived_from":view.provenance}]
+    })).unwrap();
+    let right: GraphData = serde_json::from_value(json!({"nodes":[
+        {"id":"middle","entity_id":"middle","space_id":"s"},
+        {"id":"outer","entity_id":"right","space_id":"s"}],
+        "edges":[{"id":"link","from":"middle","to":"outer","predicate":"link","valid_time":{"start":0,"end":10}}]
+    })).unwrap();
+    e.execute(
+        &Program {
+            version: VERSION.into(),
+            source_revisions: vec![],
+            commands: vec![
+                Command::Commit {
+                    graph_id: "copy".into(),
+                    branch_id: "main".into(),
+                    expected_head: None,
+                    data: left,
+                },
+                Command::Commit {
+                    graph_id: "operations".into(),
+                    branch_id: "main".into(),
+                    expected_head: e.head("operations", "main").unwrap(),
+                    data: right,
+                },
+            ],
+        },
+        &host("alice"),
+    )
+    .unwrap();
+    let expression: GraphExpression = serde_json::from_value(json!({"kind":"join","left":{"kind":"query","query":{"graph_id":"copy"}},"right":{"kind":"query","query":{"graph_id":"operations"}},"output_predicate":"path","match_on":"entity_space_to_from"})).unwrap();
+    let results = e
+        .execute(
+            &Program {
+                version: VERSION.into(),
+                source_revisions: vec![],
+                commands: vec![Command::Evaluate { value: expression }],
+            },
+            &host("alice"),
+        )
+        .unwrap();
+    let CommandResult::Queried { result } = &results[0] else {
+        panic!()
+    };
+    assert_eq!(result.graph.edges.len(), 1);
+    assert!(result.node_origins.values().all(Vec::is_empty));
+    let mut saved = result.graph.clone();
+    saved.edges.clear();
+    saved.attachments.clear();
+    saved.schema = None;
+    saved.context_typing = None;
+    saved.influence = None;
+    for node in &mut saved.nodes {
+        node.readers.clear();
+        node.type_id = None;
+        assert!(!node.derived_from.is_empty());
+    }
+    e.execute(
+        &Program {
+            version: VERSION.into(),
+            source_revisions: vec![],
+            commands: vec![Command::Commit {
+                graph_id: "operations".into(),
+                branch_id: "main".into(),
+                expected_head: e.head("operations", "main").unwrap(),
+                data: saved,
+            }],
+        },
+        &host("alice"),
+    )
+    .unwrap();
+    let q: QueryPlan = serde_json::from_value(json!({"graph_id":"operations"})).unwrap();
+    assert_eq!(e.query(&q, &host("alice")).unwrap().graph.nodes.len(), 2);
+    e.revoke_identity_policy(&c.policy).unwrap();
+    let denied = e.query(&q, &host("alice")).unwrap();
+    assert!(denied.graph.nodes.is_empty());
+    assert_eq!(denied.coverage, Coverage::Partial);
+}
+
+#[test]
+fn empty_value_influence_revocation_invalidates_cached_view_without_head_movement() {
+    let (mut e, c) = setup();
+    e.submit_identity_candidate(&c, &host("alice")).unwrap();
+    let accepted = e
+        .accept_identity_candidate(&request(&c, None, "empty-cache"), &host("reviewer"))
+        .unwrap();
+    let q: QueryPlan = serde_json::from_value(
+        json!({"graph_id":accepted.reference.graph_id,"revision":accepted.reference.revision}),
+    )
+    .unwrap();
+    let source = e.query(&q, &host("alice")).unwrap();
+    let gate = source.node_origins.values().next().unwrap()[0].clone();
+    e.execute(
+        &Program {
+            version: VERSION.into(),
+            source_revisions: vec![],
+            commands: vec![Command::Commit {
+                graph_id: "copy".into(),
+                branch_id: "main".into(),
+                expected_head: None,
+                data: GraphData {
+                    influence: Some(GraphInfluence {
+                        assertions: vec![],
+                        nodes: vec![gate],
+                    }),
+                    ..GraphData::default()
+                },
+            }],
+        },
+        &host("alice"),
+    )
+    .unwrap();
+    let definition = ViewDefinition {
+        id: "empty-influenced".into(),
+        expression: GraphExpression::Query {
+            query: serde_json::from_value(json!({"graph_id":"copy"})).unwrap(),
+        },
+        clock: ViewClock::Fixed,
+    };
+    e.register_view(&definition, None, &host("alice")).unwrap();
+    let head = e.head("copy", "main").unwrap();
+    e.revoke_identity_policy(&c.policy).unwrap();
+    assert_eq!(e.head("copy", "main").unwrap(), head);
+    for freshness in [ViewFreshness::AllowStale, ViewFreshness::RequireCurrent] {
+        assert_eq!(
+            e.read_view("empty-influenced", None, freshness, &host("alice"))
+                .unwrap_err()
+                .code,
+            "E_UNAVAILABLE"
+        );
+    }
+    assert_eq!(
+        e.view_changes("empty-influenced", 0, &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_UNAVAILABLE"
+    );
+}

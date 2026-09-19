@@ -1,4 +1,6 @@
-# General graph-value influence — design proposal, no version reserved
+# General graph-value influence — design history and next governance boundary
+
+The general carrier portion is implemented in [protocol 0.15](contract/v0.15/README.md); the decision-record/accepted-view portion below remains a proposal. This document retains the original design rationale.
 
 The typed-context carrier solves a particular empty-value dependency problem. Governance needs the same persistence property without misrepresenting acceptance as a context type. Propose a separate optional `GraphData.influence: GraphInfluence { assertions: Vec<AssertionRef>, nodes: Vec<NodeRef> }` in a future explicit wire version. Both lists are conservative AND gates, exact pinned references, canonical/deduplicated, with a combined maximum of 1000 and existing incremental byte budgets. An empty carrier is omitted. This proposal does not install authority from its reference strings.
 
@@ -33,4 +35,4 @@ Original immutable source records must not be relabeled as new source evidence m
 
 Governance decision references will require real immutable graph assertions created only by the acceptance transaction, a reserved namespace protected on commit/import/acceptance, and current-policy checks in graph, assertion, node, capsule, cache, view, and dispatcher resolution. SQL decision identifiers alone must never be presented as graph assertions. Historical signatures prove admission at the decision point; current policy controls disclosure now. A caller-provided carrier cannot install a decision or select a stale policy as authority.
 
-This is a design proposal, not an implemented protocol. Runtime governance remains native inspection only until this complete gate matrix is implemented and independently reviewed.
+The generic influence protocol is implemented and must pass independent review before publication. Governance graph exposure remains a separate proposal. It additionally requires a host-trusted operation clock captured once per operation, including current expiry checks on ordinary graph/proof reads; historical admission time and serialized valid_time never substitute for current authorization.
