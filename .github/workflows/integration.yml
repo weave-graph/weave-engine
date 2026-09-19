@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: weave-graph/weave-language
-          ref: c9160823b643ab5be0b66b0a6baea43a790a9670
+          ref: 34d85c71906b4463dae2d75eadbfe1f7dc528084
           path: weave-language
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify actual compiler and persistent runtime
@@ -32,6 +32,7 @@ jobs:
           python3 weave-language/scripts/check_contexts.py --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
           python3 weave-language/scripts/check_typed_contexts.py --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
           python3 weave-language/scripts/check_live_handles.py --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
+          python3 weave-language/scripts/check_schema_functions.py --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
           python3 weave-language/scripts/check_counterparts.py --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
           python3 weave-language/scripts/check_quantities.py --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
           python3 weave-language/scripts/check_geometry.py --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
@@ -46,3 +47,4 @@ jobs:
           python3 weave-engine/scripts/root_identity.py
           python3 weave-engine/scripts/check_integration_recovery.py
           python3 weave-engine/scripts/check_governance_recovery.py
+          python3 weave-engine/scripts/check_governance_delivery_recovery.py
