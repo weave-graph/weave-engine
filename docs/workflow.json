@@ -191,7 +191,11 @@
           "host": "local macOS",
           "commit": "0cee0e1",
           "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
-        }
+        },
+        "docs/ADMISSION.md",
+        "crates/weave-engine/src/admission.rs",
+        "crates/weave-engine/tests/admission.rs",
+        "crates/weave-policy/tests/admission.rs"
       ]
     },
     {

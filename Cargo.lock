@@ -671,12 +671,14 @@ dependencies = [
 name = "weave-engine"
 version = "0.6.0"
 dependencies = [
+ "ed25519-dalek",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "weave-contract",
+ "weave-policy",
 ]
 
 [[package]]

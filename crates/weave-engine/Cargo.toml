@@ -6,6 +6,7 @@ license = "MIT"
 description = "Local-first Weave graph runtime foundation"
 
 [dependencies]
+weave-policy = { path = "../weave-policy", version = "0.1.0" }
 weave-contract = { path = "../weave-contract", version = "0.6.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -13,6 +14,7 @@ rusqlite = { version = "0.38", features = ["bundled"] }
 sha2 = "0.10"
 
 [dev-dependencies]
+ed25519-dalek = { version = "3.0.0-pre.6", default-features = false, features = ["alloc", "zeroize"] }
 tempfile = "3"
 
 [features]

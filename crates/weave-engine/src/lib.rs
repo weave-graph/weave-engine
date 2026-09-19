@@ -5,7 +5,9 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use weave_contract::*;
+mod admission;
 mod assertions;
+pub use admission::{Admitted, ProposalReceipt};
 mod capsule;
 use assertions::{assertion_edge, materialize, validate_explicit};
 mod dispatch;
@@ -110,6 +112,7 @@ impl Engine {
         }
         engine.initialize_dispatch()?;
         engine.initialize_views()?;
+        engine.initialize_admission()?;
         Ok(engine)
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
