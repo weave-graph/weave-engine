@@ -759,6 +759,14 @@ impl Engine {
         host: &HostContext,
     ) -> Result<GovernanceHead> {
         let _scope = self.read_budget.enter();
+        if !valid_id(&host.principal) || !valid_id(view) {
+            return Err(failure("E_GOV_UNAVAILABLE"));
+        }
+        let read_transaction = if self.conn.is_autocommit() {
+            Some(self.conn.unchecked_transaction()?)
+        } else {
+            None
+        };
         let head = self.gov_head(view)?;
         let policy = self.gov_policy(view, &head.policy, now)?;
         if !policy.readers.is_empty()
@@ -769,6 +777,9 @@ impl Engine {
         }
         if let Some(source) = &head.source {
             self.gov_existing_source(source, &policy, host)?;
+        }
+        if let Some(transaction) = read_transaction {
+            transaction.commit()?;
         }
         Ok(head)
     }
