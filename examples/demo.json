@@ -1,0 +1,13 @@
+{
+  "version":"0.1.0",
+  "commands":[
+    {"op":"commit","graph_id":"demo","data":{
+      "nodes":[
+        {"id":"device/physical","entity_id":"device","space_id":"physical"},
+        {"id":"device/operational","entity_id":"device","space_id":"operational"}
+      ],
+      "edges":[{"id":"counterpart","predicate":"same_entity","from":"device/physical","to":"device/operational","valid_time":{"start":0,"end":null},"metadata":[{"graph_id":"evidence","revision":"unavailable-demo-revision"}]}]
+    }},
+    {"op":"query","query":{"graph_id":"demo","include_metadata":true}}
+  ]
+}

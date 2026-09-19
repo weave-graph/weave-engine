@@ -1,0 +1,377 @@
+{
+  "schema_version": "0.1.0",
+  "project": "weave-engine",
+  "status": "implementation_in_progress",
+  "source_status": "conversation_partial_original_papers_pending",
+  "completion_gate": "E15",
+  "states": [
+    "proposed",
+    "ready",
+    "in_progress",
+    "review",
+    "passed",
+    "blocked"
+  ],
+  "external_dependencies": [
+    {
+      "id": "language-contract",
+      "project": "weave-language",
+      "required_by": [
+        "E01",
+        "E03",
+        "E12",
+        "E15"
+      ]
+    },
+    {
+      "id": "original-white-papers",
+      "owner": "orchestrator",
+      "required_by": [
+        "E00"
+      ]
+    },
+    {
+      "id": "github-publication",
+      "owner": "orchestrator",
+      "required_by": [
+        "E00",
+        "E15"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "E00",
+      "title": "Source recovery and public MIT baseline",
+      "owner": "orchestrator",
+      "state": "blocked",
+      "depends_on": [],
+      "requirements": [
+        "R39"
+      ],
+      "evidence": [],
+      "blocker": "Original white papers not yet accessible; publication orchestrator owned"
+    },
+    {
+      "id": "E01",
+      "title": "Shared contract and golden fixtures",
+      "owner": "engine",
+      "state": "in_progress",
+      "depends_on": [
+        "E00"
+      ],
+      "requirements": [
+        "R01",
+        "R34"
+      ],
+      "evidence": [
+        {
+          "artifact": "docs/STATUS.md",
+          "command": "cargo test --workspace --locked",
+          "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
+          "contract_revision": "0.1.0",
+          "host": "local macOS",
+          "commit": "foundation checkpoint pending commit",
+          "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
+        }
+      ]
+    },
+    {
+      "id": "E02",
+      "title": "Durable temporal graph and metadata",
+      "owner": "engine",
+      "state": "in_progress",
+      "depends_on": [
+        "E01"
+      ],
+      "requirements": [
+        "R01",
+        "R02",
+        "R03",
+        "R04"
+      ],
+      "evidence": [
+        {
+          "artifact": "docs/STATUS.md",
+          "command": "cargo test --workspace --locked",
+          "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
+          "contract_revision": "0.1.0",
+          "host": "local macOS",
+          "commit": "foundation checkpoint pending commit",
+          "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
+        }
+      ]
+    },
+    {
+      "id": "E03",
+      "title": "Plans joins and provenance",
+      "owner": "engine",
+      "state": "in_progress",
+      "depends_on": [
+        "E02"
+      ],
+      "requirements": [
+        "R02",
+        "R05",
+        "R06",
+        "R07",
+        "R08",
+        "R09",
+        "R34"
+      ],
+      "evidence": [
+        {
+          "artifact": "docs/STATUS.md",
+          "command": "cargo test --workspace --locked",
+          "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
+          "contract_revision": "0.1.0",
+          "host": "local macOS",
+          "commit": "foundation checkpoint pending commit",
+          "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
+        }
+      ]
+    },
+    {
+      "id": "E04",
+      "title": "Authorization and restriction propagation",
+      "owner": "engine",
+      "state": "in_progress",
+      "depends_on": [
+        "E02"
+      ],
+      "requirements": [
+        "R03",
+        "R22",
+        "R23",
+        "R24"
+      ],
+      "evidence": [
+        {
+          "artifact": "docs/STATUS.md",
+          "command": "cargo test --workspace --locked",
+          "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
+          "contract_revision": "0.1.0",
+          "host": "local macOS",
+          "commit": "foundation checkpoint pending commit",
+          "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
+        }
+      ]
+    },
+    {
+      "id": "E05",
+      "title": "Atomic event outbox and delivery",
+      "owner": "engine",
+      "state": "in_progress",
+      "depends_on": [
+        "E02"
+      ],
+      "requirements": [
+        "R10",
+        "R11",
+        "R12",
+        "R38"
+      ],
+      "evidence": [
+        {
+          "artifact": "docs/STATUS.md",
+          "command": "cargo test --workspace --locked",
+          "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
+          "contract_revision": "0.1.0",
+          "host": "local macOS",
+          "commit": "foundation checkpoint pending commit",
+          "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
+        }
+      ]
+    },
+    {
+      "id": "E06",
+      "title": "Adapter lifecycle and effect broker",
+      "owner": "engine",
+      "state": "in_progress",
+      "depends_on": [
+        "E04",
+        "E05"
+      ],
+      "requirements": [
+        "R10",
+        "R13",
+        "R14"
+      ],
+      "evidence": [
+        {
+          "artifact": "docs/STATUS.md",
+          "command": "cargo test --workspace --locked",
+          "result": "12 tests passed at foundation checkpoint; full gate remains incomplete",
+          "contract_revision": "0.1.0",
+          "host": "local macOS",
+          "commit": "foundation checkpoint pending commit",
+          "unresolved_findings": "See STATUS and IMPLEMENTATION_PLAN"
+        }
+      ]
+    },
+    {
+      "id": "E07",
+      "title": "Incremental living views",
+      "owner": "engine",
+      "state": "proposed",
+      "depends_on": [
+        "E03",
+        "E04",
+        "E05"
+      ],
+      "requirements": [
+        "R15",
+        "R23"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "E08",
+      "title": "Capsules and attach detach",
+      "owner": "engine",
+      "state": "proposed",
+      "depends_on": [
+        "E02",
+        "E04"
+      ],
+      "requirements": [
+        "R09",
+        "R16",
+        "R17"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "E09",
+      "title": "Offline branches and peer sync",
+      "owner": "engine",
+      "state": "proposed",
+      "depends_on": [
+        "E08",
+        "E06"
+      ],
+      "requirements": [
+        "R18",
+        "R20",
+        "R21",
+        "R24"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "E10",
+      "title": "Browser and mobile parity",
+      "owner": "engine",
+      "state": "proposed",
+      "depends_on": [
+        "E03",
+        "E09"
+      ],
+      "requirements": [
+        "R19",
+        "R35"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "E11",
+      "title": "Optional governance and acceptance",
+      "owner": "engine",
+      "state": "proposed",
+      "depends_on": [
+        "E04",
+        "E09"
+      ],
+      "requirements": [
+        "R21",
+        "R25",
+        "R26"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "E12",
+      "title": "Spaces geometry and embeddings",
+      "owner": "engine",
+      "state": "proposed",
+      "depends_on": [
+        "E03",
+        "E04"
+      ],
+      "requirements": [
+        "R05",
+        "R31",
+        "R32",
+        "R33"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "E13",
+      "title": "Clustering and semantic zoom",
+      "owner": "engine",
+      "state": "proposed",
+      "depends_on": [
+        "E07",
+        "E12"
+      ],
+      "requirements": [
+        "R23",
+        "R27",
+        "R28",
+        "R29",
+        "R30",
+        "R33"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "E14",
+      "title": "Recovery fuzzing and measurements",
+      "owner": "engine",
+      "state": "proposed",
+      "depends_on": [
+        "E06",
+        "E10",
+        "E11",
+        "E13"
+      ],
+      "requirements": [
+        "R36",
+        "R37",
+        "R38"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "E15",
+      "title": "Integrated acceptance and public release",
+      "owner": "orchestrator",
+      "state": "proposed",
+      "depends_on": [
+        "E14"
+      ],
+      "requirements": [
+        "R39",
+        "R40"
+      ],
+      "evidence": []
+    }
+  ],
+  "evidence_fields": [
+    "commit",
+    "contract_revision",
+    "command",
+    "host",
+    "result",
+    "artifact",
+    "unresolved_findings"
+  ],
+  "provisional_execution": {
+    "reason": "Implement explicit recovered requirements while original paper recovery is blocked",
+    "does_not_waive": [
+      "E00",
+      "E15"
+    ]
+  }
+}

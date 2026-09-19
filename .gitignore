@@ -1,0 +1,6 @@
+/target/
+.DS_Store
+/docs/source/conversation.md
+*.db
+*.db-shm
+*.db-wal
