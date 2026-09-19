@@ -406,12 +406,10 @@ pub fn project(
     let mut out = input;
     let mut ns: BTreeSet<_> = node_ids.iter().cloned().collect();
     let es: BTreeSet<_> = edge_ids.iter().cloned().collect();
-    if ns
-        .iter()
-        .any(|id| !out.graph.nodes.iter().any(|n| &n.id == id))
-        || es
-            .iter()
-            .any(|id| !out.graph.edges.iter().any(|e| &e.id == id))
+    let available_nodes: BTreeSet<_> = out.graph.nodes.iter().map(|node| &node.id).collect();
+    let available_edges: BTreeSet<_> = out.graph.edges.iter().map(|edge| &edge.id).collect();
+    if ns.iter().any(|id| !available_nodes.contains(id))
+        || es.iter().any(|id| !available_edges.contains(id))
     {
         return Err(err(
             "E_PROJECT_MEMBER",
@@ -687,6 +685,21 @@ pub fn support(
     }
     let id = format!("support:{}", key(&(&parameters, &input.input_snapshots)));
     let node = Node {
+        derived_from: unique(
+            input
+                .provenance
+                .iter()
+                .chain(input.edge_origins.values().flatten())
+                .chain(input.attachment_origins.values().flatten())
+                .chain(
+                    input
+                        .graph
+                        .nodes
+                        .iter()
+                        .flat_map(|node| node.derived_from.iter()),
+                )
+                .cloned(),
+        ),
         context_scope: Some(input.selected_context.clone().unwrap_or_default()),
         id: id.clone(),
         type_id: Some("Support".into()),
@@ -1153,6 +1166,33 @@ mod tests {
                 .unwrap()
                 .len(),
             1
+        );
+    }
+    #[test]
+    fn derived_scalar_nodes_keep_conservative_dependencies_and_union_rejects_tampering() {
+        let input = fixture("G", "positive", 0, 10);
+        let from = EntitySpace {
+            entity_id: "A".into(),
+            space_id: "s".into(),
+        };
+        let to = EntitySpace {
+            entity_id: "B".into(),
+            space_id: "s".into(),
+        };
+        let unknown = support(input.clone(), "absent", &from, &to, 5, &ctx()).unwrap();
+        assert!(unknown.graph.edges.is_empty());
+        assert_eq!(unknown.graph.nodes[0].derived_from, input.edge_origins["e"]);
+        let explanation = crate::identity::explain(&input, &ctx()).unwrap();
+        assert!(explanation
+            .graph
+            .nodes
+            .iter()
+            .all(|n| !n.derived_from.is_empty()));
+        let mut altered = input.clone();
+        altered.graph.nodes[0].derived_from = input.edge_origins["e"].clone();
+        assert_eq!(
+            union(input, altered, &ctx()).unwrap_err().code,
+            "E_ORIGIN_CONFLICT"
         );
     }
 }

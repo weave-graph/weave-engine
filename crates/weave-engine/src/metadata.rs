@@ -190,7 +190,13 @@ impl Engine {
         input.provenance.clear();
         input.node_origins.clear();
         let mut bytes = json_size(&input, MATERIALIZED_LIMIT)?;
-        for node in &input.graph.nodes {
+        for node in &mut input.graph.nodes {
+            for dependency in &origin {
+                if !node.derived_from.contains(dependency) {
+                    bytes += json_size(dependency, MATERIALIZED_LIMIT.saturating_sub(bytes))?;
+                    node.derived_from.push(dependency.clone());
+                }
+            }
             let origins = vec![NodeRef {
                 graph_id: reference.graph_id.clone(),
                 revision: reference.revision.clone(),

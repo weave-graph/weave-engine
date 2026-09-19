@@ -179,33 +179,38 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     let mut nodes: BTreeMap<String, Node> = BTreeMap::new();
     let mut edges = Vec::new();
     let mut edge_origins = BTreeMap::new();
-    let mut add_node =
-        |id: String, kind: &str, scope: &crate::ContextSelection| -> Result<(), Diagnostic> {
-            if let std::collections::btree_map::Entry::Vacant(entry) = nodes.entry(id.clone()) {
-                let n = Node {
-                    context_scope: Some(scope.clone()),
-                    id: id.clone(),
-                    entity_id: id,
-                    space_id: "weave:explanation".into(),
-                    type_id: Some("Part".into()),
-                    properties: [("kind".into(), json!(kind))].into(),
-                    metadata: vec![],
-                    readers: vec![ctx.principal.clone()],
-                };
-                remaining = remaining.checked_sub(size(&n, remaining)?).ok_or_else(|| {
-                    failure("E_EXPLAIN_LIMIT", "Explanation byte budget exceeded")
-                })?;
-                objects += 1;
-                if objects > ctx.max_objects {
-                    return Err(failure(
-                        "E_EXPLAIN_LIMIT",
-                        "Explanation object budget exceeded",
-                    ));
-                }
-                entry.insert(n);
+    let mut add_node = |id: String,
+                        kind: &str,
+                        scope: &crate::ContextSelection,
+                        dependencies: &[AssertionRef]|
+     -> Result<(), Diagnostic> {
+        if let std::collections::btree_map::Entry::Vacant(entry) = nodes.entry(id.clone()) {
+            size(&(kind, scope, dependencies), remaining)?;
+            let n = Node {
+                derived_from: ordered(dependencies)?,
+                context_scope: Some(scope.clone()),
+                id: id.clone(),
+                entity_id: id,
+                space_id: "weave:explanation".into(),
+                type_id: Some("Part".into()),
+                properties: [("kind".into(), json!(kind))].into(),
+                metadata: vec![],
+                readers: vec![ctx.principal.clone()],
+            };
+            remaining = remaining
+                .checked_sub(size(&n, remaining)?)
+                .ok_or_else(|| failure("E_EXPLAIN_LIMIT", "Explanation byte budget exceeded"))?;
+            objects += 1;
+            if objects > ctx.max_objects {
+                return Err(failure(
+                    "E_EXPLAIN_LIMIT",
+                    "Explanation object budget exceeded",
+                ));
             }
-            Ok(())
-        };
+            entry.insert(n);
+        }
+        Ok(())
+    };
     // Collect bounded node/edge records separately so every emitted edge is gated
     // by exactly the alternative it explains, not a flattened union of alternatives.
     let mut records = Vec::new();
@@ -280,7 +285,18 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                 ctx.max_output_bytes
             )?
         );
-        add_node(conclusion.clone(), "conclusion", &scope)?;
+        let conclusion_dependencies = ordered(
+            &groups
+                .iter()
+                .flat_map(|group| group.premises.iter().cloned())
+                .collect::<Vec<_>>(),
+        )?;
+        add_node(
+            conclusion.clone(),
+            "conclusion",
+            &scope,
+            &conclusion_dependencies,
+        )?;
         for group in groups {
             let group_id = format!(
                 "derivation:{}",
@@ -290,7 +306,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                     ctx.max_output_bytes
                 )?
             );
-            add_node(group_id.clone(), "derivation", &scope)?;
+            add_node(group_id.clone(), "derivation", &scope, &group.premises)?;
             add_record(
                 (
                     conclusion.clone(),
@@ -305,9 +321,13 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             for premise in &group.premises {
                 let id = format!(
                     "premise:{}",
-                    digest("premise", &(premise, &scope), ctx.max_output_bytes)?
+                    digest(
+                        "premise",
+                        &(premise, &scope, &group_id),
+                        ctx.max_output_bytes
+                    )?
                 );
-                add_node(id.clone(), "premise", &scope)?;
+                add_node(id.clone(), "premise", &scope, &group.premises)?;
                 add_record(
                     (
                         group_id.clone(),

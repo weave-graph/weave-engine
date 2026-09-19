@@ -87,8 +87,11 @@ pub fn select(
         })
         .map(|node| node.id.clone())
         .collect();
+    let selected_edges: std::collections::BTreeSet<_> = ids.iter().collect();
+    let selected_nodes: std::collections::BTreeSet<_> = node_ids.iter().collect();
     if input.graph.edges.iter().any(|edge| {
-        ids.contains(&edge.id) && (!node_ids.contains(&edge.from) || !node_ids.contains(&edge.to))
+        selected_edges.contains(&edge.id)
+            && (!selected_nodes.contains(&edge.from) || !selected_nodes.contains(&edge.to))
     }) {
         return Err(error(
             "E_CONTEXT_SCOPE",

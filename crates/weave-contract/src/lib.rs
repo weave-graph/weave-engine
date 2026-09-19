@@ -1,7 +1,9 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.8.0";
+pub const VERSION: &str = "0.9.0";
+mod geometry_types;
+pub use geometry_types::*;
 pub mod context;
 mod context_types;
 pub use context_types::*;
@@ -61,6 +63,9 @@ pub enum Polarity {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Node {
+    /// Conservative AND gate for derived node values, independent of readers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derived_from: Vec<AssertionRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_scope: Option<ContextSelection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -181,6 +186,13 @@ pub enum Command {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphExpression {
+    Geometry {
+        operation: GeometryOperation,
+        valid_at: i64,
+    },
+    Explain {
+        input: Box<GraphExpression>,
+    },
     Context {
         input: Box<GraphExpression>,
         selection: ContextSelection,

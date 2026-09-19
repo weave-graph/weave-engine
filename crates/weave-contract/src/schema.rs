@@ -47,6 +47,8 @@ pub struct PropertySchema {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScalarType {
+    /// Finite IEEE754 binary64; this is not exact decimal arithmetic.
+    Float,
     String,
     Integer,
     Boolean,
@@ -80,6 +82,7 @@ fn properties(
                         ScalarType::String => value.is_string(),
                         ScalarType::Integer => value.as_i64().is_some(),
                         ScalarType::Boolean => value.is_boolean(),
+                        ScalarType::Float => value.as_f64().is_some_and(f64::is_finite),
                     }
                 };
                 if !valid {
@@ -495,5 +498,44 @@ mod tests {
         assert!(validate_schema_graph(&g)
             .iter()
             .any(|e| e.code == "E_ASSERTION_PROFILE"));
+    }
+    #[test]
+    fn float_is_finite_binary64_and_does_not_weaken_integer_fields() {
+        let mut graph = fixture();
+        let node_type = graph.nodes[0].type_id.clone().unwrap();
+        graph
+            .schema
+            .as_mut()
+            .unwrap()
+            .nodes
+            .get_mut(&node_type)
+            .unwrap()
+            .properties
+            .insert(
+                "measure".into(),
+                PropertySchema {
+                    value_type: ScalarType::Float,
+                    required: true,
+                    nullable: false,
+                },
+            );
+        graph.nodes[0]
+            .properties
+            .insert("measure".into(), serde_json::json!(1.25));
+        // Other nodes sharing the type also require the field.
+        for node in &mut graph.nodes {
+            if node.type_id.as_ref() == Some(&node_type) {
+                node.properties
+                    .insert("measure".into(), serde_json::json!(1.25));
+            }
+        }
+        assert!(validate_schema_graph(&graph).is_empty());
+        graph.nodes[0]
+            .properties
+            .insert("measure".into(), serde_json::json!("NaN"));
+        assert!(validate_schema_graph(&graph)
+            .iter()
+            .any(|d| d.code == "E_SCHEMA_PROPERTY_TYPE"));
+        assert!(serde_json::from_str::<serde_json::Value>("1e400").is_err());
     }
 }

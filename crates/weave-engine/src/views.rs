@@ -325,6 +325,17 @@ fn clock_expression(
     *budget -= 1;
     let mut value = expression.clone();
     match &mut value {
+        GraphExpression::Geometry {
+            operation,
+            valid_at,
+        } => {
+            for input in operation.inputs_mut() {
+                *input = clock_expression(input, clock, tick, depth + 1, budget)?;
+            }
+            if let Some(t) = tick {
+                *valid_at = t;
+            }
+        }
         GraphExpression::Reference { .. } => {
             return Err(err(
                 "E_BINDING",
@@ -364,7 +375,8 @@ fn clock_expression(
         GraphExpression::Metadata { input, .. }
         | GraphExpression::Project { input, .. }
         | GraphExpression::Reason { input, .. }
-        | GraphExpression::Context { input, .. } => {
+        | GraphExpression::Context { input, .. }
+        | GraphExpression::Explain { input } => {
             **input = clock_expression(input, clock, tick, depth + 1, budget)?;
         }
     }
@@ -379,6 +391,11 @@ fn clock_expression(
 }
 fn collect_heads(expression: &GraphExpression, heads: &mut BTreeMap<(String, String), ()>) {
     match expression {
+        GraphExpression::Geometry { operation, .. } => {
+            for input in operation.inputs() {
+                collect_heads(input, heads);
+            }
+        }
         GraphExpression::Query { query } => {
             if query.revision.is_none() {
                 heads.insert((query.graph_id.clone(), query.branch_id.clone()), ());
@@ -398,7 +415,8 @@ fn collect_heads(expression: &GraphExpression, heads: &mut BTreeMap<(String, Str
         | GraphExpression::Metadata { input, .. }
         | GraphExpression::Project { input, .. }
         | GraphExpression::Reason { input, .. }
-        | GraphExpression::Context { input, .. } => collect_heads(input, heads),
+        | GraphExpression::Context { input, .. }
+        | GraphExpression::Explain { input } => collect_heads(input, heads),
         GraphExpression::Reference { .. } => {}
     }
 }

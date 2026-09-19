@@ -475,3 +475,26 @@ fn cached_live_read_retains_original_dependency_closure_after_heads_advance() {
     assert_eq!(e.admit_query(&narrow, &q, 201).unwrap_err().code, "E_SCOPE");
     assert_eq!(e.admit_query(&broad, &q, 201).unwrap().result, original);
 }
+
+#[test]
+fn signed_node_only_scalar_requires_its_private_proof_scope_on_read_and_retry() {
+    let f = Fixture::new();
+    let mut e = Engine::memory().unwrap();
+    f.install(&e);
+    let revision = write(&mut e, "evidence", "main", private(data(), &f));
+    let graph:GraphData=serde_json::from_value(json!({"nodes":[{"id":"scalar","entity_id":"result","space_id":"analysis","properties":{"value":42},"derived_from":[{"graph_id":"evidence","revision":revision,"assertion_id":"e"}]}]})).unwrap();
+    write(&mut e, "g", "main", graph);
+    let q = query();
+    let narrow = f.proof(&q, Action::Read, "g", scopes(&["g"]), 22);
+    assert_eq!(e.admit_query(&narrow, &q, 200).unwrap_err().code, "E_SCOPE");
+    let broad = f.proof(&q, Action::Read, "g", scopes(&["g", "evidence"]), 22);
+    let result = e.admit_query(&broad, &q, 200).unwrap();
+    assert_eq!(result.result.graph.nodes[0].properties["value"], 42);
+    assert!(result
+        .result
+        .input_snapshots
+        .iter()
+        .any(|r| r.graph_id == "evidence"));
+    assert_eq!(e.admit_query(&narrow, &q, 201).unwrap_err().code, "E_SCOPE");
+    assert!(e.admit_query(&broad, &q, 201).unwrap().duplicate);
+}

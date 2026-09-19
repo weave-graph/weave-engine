@@ -171,7 +171,9 @@
         "crates/weave-engine/tests/rules.rs",
         "docs/contract/v0.8/README.md",
         "crates/weave-contract/src/context.rs",
-        "crates/weave-engine/tests/context.rs"
+        "crates/weave-engine/tests/context.rs",
+        "docs/contract/v0.9/README.md",
+        "crates/weave-engine/tests/geometry.rs"
       ]
     },
     {
@@ -391,7 +393,9 @@
       ],
       "evidence": [
         "docs/SPACES.md",
-        "crates/weave-spaces/tests/geometry.rs"
+        "crates/weave-spaces/tests/geometry.rs",
+        "docs/contract/v0.9/README.md",
+        "crates/weave-engine/tests/geometry.rs"
       ]
     },
     {

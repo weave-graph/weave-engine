@@ -4,11 +4,12 @@ Public MIT implementation in progress; recovered original papers are reconciled.
 
 ## Implemented
 
-- Versions 0.1–0.8: immutable SQLite snapshots/CAS, half-open time, principal-filtered pinned queries, interval-aware identity-space joins and reusable pure graph values.
+- Versions 0.1–0.9: immutable SQLite snapshots/CAS, half-open time, principal-filtered pinned queries, interval-aware identity-space joins and reusable pure graph values.
 - Version 0.4 adds immutable embedded schemas, typed joins, named host/time-qualified metadata, atomic logical snapshot manifests with constructible metadata cycles, required dependency checks, live handle pinning, and no-op suppression. See [contract](contract/v0.4/README.md).
 - Signed per-operation native Query/Publish/Propose admission with durable nonce receipts, accepted-branch scope checks, isolated proposal quarantine and subject-scoped egress; [security boundary](ADMISSION.md). No remote arbitrary-program authority or transport server is implied.
 - Trusted host read/write boundaries, transitive derivation restrictions, generic partial coverage, bounded materialization and whole-program rollback.
 - Version 0.6 explicitly separates structural edges from source assertions, preserving source/context/identity through graph values; source manifests and portable computation/explanation identities are included.
+- Version 0.9 adds source Explain and finite Float properties; persisted derived nodes enforce conservative source dependency gates independently of readers.
 - Version 0.8 exact context selection, qualified metadata paths and scoped derived status/explanation nodes prevent implicit default/pinned mixing; [profile](contract/v0.8/README.md).
 - Version 0.7 finite range-restricted graph rules with temporal proof closure, host work budgets, explicit negative evidence and live-view retraction; [profile](contract/v0.7/README.md).
 - Version 0.5 bounded union/diff/project and time-specific four-valued support, with typed composition, pinned node origins and persisted alternative derivation groups.
@@ -16,7 +17,7 @@ Public MIT implementation in progress; recovered original papers are reconciled.
 - Scoped durable adapter dispatch with leases, lifecycle/retry/dead letters, atomic graph writes plus receipt/checkpoint, and explicit unknown external effect intents; [recovery boundary](DISPATCH.md).
 - Unsigned hash-verified capsules, quarantine receive, explicit acceptance and offline branches. Capsule 0.2 carries whole authorized logical manifests, rejects equivocation and cross-receipt ancestry cycles; [transport boundaries](CAPSULES.md). Live handles, signatures and selective manifest proofs remain open.
 
-- Portable typed physical/embedding geometry, explicit frame/unit transforms, restriction-preserving lineage and display-only projection; [geometry boundary](SPACES.md). Pure host-authorized API; graph service integration remains open.
+- Portable typed physical/embedding geometry, explicit frame/unit transforms, restriction-preserving lineage and display-only projection; [geometry boundary](SPACES.md). Version 0.9 exposes authorized assertion-backed graph distance, transforms and display projections with reusable results; [contract](contract/v0.9/README.md).
 - Stored revision/manifest integrity checks, transactional schema initialization and backup/legacy-upgrade acceptance; [recovery evidence](STORAGE_RECOVERY.md).
 
 ## Evidence
