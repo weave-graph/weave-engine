@@ -21,3 +21,4 @@ jobs:
       - run: cargo check -p weave-contract --target wasm32-unknown-unknown --locked
       - run: cargo check -p weave-policy --target wasm32-unknown-unknown --locked
       - run: cargo check -p weave-spaces --target wasm32-unknown-unknown --locked
+      - run: cargo check -p weave-cluster --target wasm32-unknown-unknown --locked
