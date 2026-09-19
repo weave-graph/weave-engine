@@ -639,6 +639,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "weave-cluster"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "weave-contract",
+]
+
+[[package]]
 name = "weave-contract"
 version = "0.11.0"
 dependencies = [
@@ -655,6 +665,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "weave-cluster",
  "weave-contract",
  "weave-policy",
  "weave-spaces",
