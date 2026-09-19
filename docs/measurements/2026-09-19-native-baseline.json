@@ -1,0 +1,58 @@
+{
+  "arch": "aarch64",
+  "authorized_query": {
+    "max_ms": 3.754833,
+    "median_ms": 2.8327500000000003,
+    "min_ms": 2.675208,
+    "p95_ms": 2.953416,
+    "samples": 30
+  },
+  "commit_including_program_construction": {
+    "max_ms": 13.363417,
+    "median_ms": 7.072083,
+    "min_ms": 6.836667,
+    "p95_ms": 10.889792,
+    "samples": 30
+  },
+  "contract": "0.11.0",
+  "events": 34,
+  "limitations": [
+    "no concurrency or network",
+    "no browser or mobile measurement",
+    "latency excludes final JSON serialization for reads and navigation",
+    "no SLO or percentile population claim from this small sample",
+    "RSS measured separately for whole executable, not individual operations"
+  ],
+  "navigation_full_available_hierarchy": {
+    "max_ms": 23.849875,
+    "median_ms": 13.037166,
+    "min_ms": 12.708959,
+    "p95_ms": 23.849875,
+    "samples": 10
+  },
+  "navigation_output": {
+    "edges": 127,
+    "nodes": 128,
+    "serialized_bytes": 5371300
+  },
+  "os": "macos",
+  "profile": "release",
+  "query_serialized_bytes": 554127,
+  "reopen_ms_single_sample": 1.9061670000000002,
+  "storage": "temporary local filesystem SQLite WAL; warm OS caches; one process and principal",
+  "workload": {
+    "cluster_chain_edges": 63,
+    "cluster_nodes": 64,
+    "commit_revisions": 33,
+    "large_nodes": 256,
+    "large_positive_edges": 1024,
+    "warmups_per_operation": 3
+  },
+  "source_commit": "193cc7e608b592213680b556619e92547f491c92",
+  "compiler": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+  "cpu": "Apple M4 Max",
+  "whole_process_max_resident_bytes": 99516416,
+  "whole_process_peak_memory_footprint_bytes": 95846832,
+  "elapsed_wall_seconds": 1.02,
+  "benchmark_source_sha256": "14a39463050e7f85a6585ad3bbe6c3343a937cee39ad4eb7f435d4de401ae6de"
+}
