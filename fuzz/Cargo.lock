@@ -661,6 +661,7 @@ dependencies = [
 name = "weave-engine"
 version = "0.14.0"
 dependencies = [
+ "ed25519-dalek",
  "rusqlite",
  "serde",
  "serde_json",

@@ -84,6 +84,22 @@ impl Hierarchy {
         {
             return Err(Error("E_CLUSTER_SCOPE"));
         }
+        self.lineage_to_in_domain(next, old_domains.iter().next().unwrap())
+    }
+    /// Compare frontiers whose leaves the caller attests belong to one exact graph-ID
+    /// domain. Additional source pins may be descriptor/proof dependencies, not leaf
+    /// namespaces. This pure API cannot establish that attestation; hosts must obtain
+    /// both inputs from that same graph domain and recheck current authority for both.
+    /// Use `lineage_to` when this distinction cannot be established by the caller.
+    pub fn lineage_to_in_domain(&self, next: &Self, domain: &str) -> Result<Lineage> {
+        if !valid_id(domain)
+            || !self.source.sources.iter().any(|r| r.graph_id == domain)
+            || !next.source.sources.iter().any(|r| r.graph_id == domain)
+            || self.source.perspective != next.source.perspective
+            || self.source.context != next.source.context
+        {
+            return Err(Error("E_CLUSTER_SCOPE"));
+        }
         let before = self.owners();
         let after = next.owners();
         let mut bytes = 4096;

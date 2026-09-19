@@ -368,3 +368,144 @@ fn exact_query_domain_keeps_negative_rare_temporal_and_isolated_facts_at_every_z
         }
     }
 }
+
+fn lineage(v: &QueryResult) -> &Value {
+    &v.graph.nodes[0].properties["lineage"]
+}
+#[test]
+fn native_lineage_preserves_both_pins_and_reports_crossing_partitions() {
+    let mut e = Engine::memory().unwrap();
+    let a = commit(
+        &mut e,
+        "source",
+        json!({"nodes":[node("a"),node("b"),node("c"),node("d"),node("gone")],"edges":[edge("ab","a","b"),edge("cd","c","d")]}),
+        None,
+    );
+    let b = commit(
+        &mut e,
+        "source",
+        json!({"nodes":[node("a"),node("b"),node("c"),node("d"),node("new")],"edges":[edge("ac","a","c"),edge("bd","b","d")]}),
+        Some(&a),
+    );
+    let result = e
+        .cluster_lineage(&request(&a, 1), &request(&b, 1), &host("alice"))
+        .unwrap();
+    assert_eq!(lineage(&result)["splits"].as_array().unwrap().len(), 2);
+    assert_eq!(lineage(&result)["merges"].as_array().unwrap().len(), 2);
+    assert_eq!(lineage(&result)["removed_leaves"], json!(["gone"]));
+    assert_eq!(lineage(&result)["added_leaves"], json!(["new"]));
+    assert_eq!(result.input_snapshots.len(), 2);
+    assert_eq!(result.graph.nodes[0].derived_nodes.len(), 10);
+    assert_eq!(result.graph.nodes[0].derived_from.len(), 4);
+    assert_eq!(
+        result,
+        e.cluster_lineage(&request(&a, 1), &request(&b, 1), &host("alice"))
+            .unwrap()
+    );
+    assert_eq!(e.head("source", "main").unwrap(), Some(b));
+    assert!(e.head("saved", "main").unwrap().is_none());
+}
+#[test]
+fn lineage_private_old_or_new_evidence_survives_copy_and_capsule_roundtrip() {
+    for private_before in [true, false] {
+        let mut e = Engine::memory().unwrap();
+        let data = |secret: bool| {
+            let mut private = node("private");
+            private["readers"] = json!(["alice"]);
+            json!({"nodes":if secret {vec![node("public"),private]} else {vec![node("public")]},"edges":[]})
+        };
+        let a = commit(&mut e, "source", data(private_before), None);
+        let b = commit(&mut e, "source", data(!private_before), Some(&a));
+        let mut result = e
+            .cluster_lineage(&request(&a, 1), &request(&b, 1), &host("alice"))
+            .unwrap();
+        result.graph.nodes[0].readers.clear();
+        result.graph.context_typing = None;
+        let saved = commit(
+            &mut e,
+            "saved",
+            serde_json::to_value(result.graph).unwrap(),
+            None,
+        );
+        assert_eq!(read(&e, "alice").graph.nodes.len(), 1);
+        assert!(read(&e, "bob").graph.nodes.is_empty());
+        let capsule = e
+            .export_capsule(
+                &GraphRef {
+                    graph_id: "saved".into(),
+                    revision: saved.clone(),
+                },
+                &host("alice"),
+            )
+            .unwrap();
+        let mut peer = Engine::memory().unwrap();
+        peer.receive_capsule(&capsule, &host("alice")).unwrap();
+        let query: QueryPlan =
+            serde_json::from_value(json!({"graph_id":"saved","revision":saved})).unwrap();
+        assert!(peer
+            .query(&query, &host("bob"))
+            .unwrap()
+            .graph
+            .nodes
+            .is_empty());
+        assert_eq!(
+            peer.query(&query, &host("alice"))
+                .unwrap()
+                .graph
+                .nodes
+                .len(),
+            1
+        );
+        let scoped = e
+            .cluster_lineage(&request(&a, 1), &request(&b, 1), &host("bob"))
+            .unwrap();
+        assert!(!serde_json::to_string(&scoped).unwrap().contains("private"));
+        assert_eq!(lineage(&scoped)["added_leaves"], json!([]));
+        assert_eq!(lineage(&scoped)["removed_leaves"], json!([]));
+    }
+}
+#[test]
+fn lineage_checks_combined_proof_budget_scope_and_temporal_frontiers() {
+    let mut e = Engine::memory().unwrap();
+    let a = commit(
+        &mut e,
+        "source",
+        json!({"nodes":[node("a"),node("b")],"edges":[edge("ab","a","b")]}),
+        None,
+    );
+    let before = request(&a, 1);
+    let mut after = before.clone();
+    after.valid_at = 10;
+    let result = e.cluster_lineage(&before, &after, &host("alice")).unwrap();
+    assert_eq!(lineage(&result)["splits"].as_array().unwrap().len(), 1);
+    after.predicate = "other".into();
+    assert_eq!(
+        e.cluster_lineage(&before, &after, &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_CLUSTER_SCOPE"
+    );
+    after = before.clone();
+    after.source.revision = "missing".into();
+    assert!(e.cluster_lineage(&before, &after, &host("alice")).is_err());
+    let nodes: Vec<_> = (0..500).map(|i| node(&format!("node-{i}"))).collect();
+    let b = commit(
+        &mut e,
+        "source",
+        json!({"nodes":nodes,"edges":[]}),
+        Some(&a),
+    );
+    let c = commit(
+        &mut e,
+        "source",
+        json!({"nodes":nodes,"edges":[edge("one","node-0","node-1")]}),
+        Some(&b),
+    );
+    assert_eq!(
+        e.cluster_lineage(&request(&b, 0), &request(&c, 0), &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_CLUSTER_BUDGET"
+    );
+    assert_eq!(e.head("source", "main").unwrap(), Some(c));
+}

@@ -280,6 +280,25 @@ fn descriptor_current_policy_revocation_blocks_saved_values_and_stale_views_with
         &host("alice"),
     )
     .unwrap();
+    let typed_empty = evaluate(&mut e, typed(query("g"), &c), "alice").unwrap();
+    let source = write(&mut e, "g", typed_empty.graph);
+    let request = ClusterRequest {
+        source,
+        context: ContextSelection::Pinned {
+            reference: c.clone(),
+        },
+        valid_at: 5,
+        predicate: "p".into(),
+        levels: 1,
+    };
+    let mut lineage = e
+        .cluster_lineage(&request, &request, &host("alice"))
+        .unwrap();
+    lineage.graph.context_typing = None;
+    for node in &mut lineage.graph.nodes {
+        node.readers.clear();
+    }
+    write(&mut e, "empty", lineage.graph);
     let head = e.head("C", "main").unwrap();
     e.revoke_identity_policy(&policy.reference).unwrap();
     assert_eq!(e.head("C", "main").unwrap(), head);
@@ -291,6 +310,11 @@ fn descriptor_current_policy_revocation_blocks_saved_values_and_stale_views_with
     assert!(result.graph.context_typing.is_none());
     assert_eq!(result.coverage, Coverage::Partial);
     assert!(e.export_capsule(&copy, &host("alice")).is_err());
+    assert!(evaluate(&mut e, query("empty"), "alice")
+        .unwrap()
+        .graph
+        .nodes
+        .is_empty());
 }
 #[test]
 fn carriers_reject_qualifier_forgery_and_schema_label_conflicts_without_partial_commits() {
@@ -536,4 +560,110 @@ fn native_cluster_and_accepted_identity_outputs_retain_typed_source_influence() 
             .nodes
             .is_empty());
     }
+}
+
+#[test]
+fn root_native_lineage_empty_typed_inputs_protect_reader_cleared_summary() {
+    let (mut e, c) = setup();
+    let value = evaluate(&mut e, typed(query("g"), &c), "alice").unwrap();
+    let source = write(&mut e, "g", value.graph);
+    let request = ClusterRequest {
+        source,
+        context: ContextSelection::Pinned { reference: c },
+        valid_at: 5,
+        predicate: "p".into(),
+        levels: 1,
+    };
+    let mut result = e
+        .cluster_lineage(&request, &request, &host("alice"))
+        .unwrap();
+    assert_eq!(result.graph.nodes.len(), 1);
+    assert!(result.graph.context_typing.is_some());
+    assert!(!result.graph.nodes[0].derived_from.is_empty());
+    assert!(!result.graph.nodes[0].derived_nodes.is_empty());
+    result.graph.context_typing = None;
+    result.graph.nodes[0].readers.clear();
+    write(&mut e, "copy", result.graph);
+    assert!(evaluate(&mut e, query("copy"), "bob")
+        .unwrap()
+        .graph
+        .nodes
+        .is_empty());
+    assert_eq!(
+        evaluate(&mut e, query("copy"), "alice")
+            .unwrap()
+            .graph
+            .nodes
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn root_typed_lineage_records_match_navigation_and_context_gates_reserve_a_pin() {
+    let (mut e, c) = setup();
+    let graph: GraphData = serde_json::from_value(json!({
+        "nodes":[{"id":"a","entity_id":"a","space_id":"s"},{"id":"b","entity_id":"b","space_id":"s"}],
+        "edges":[{"id":"ab","from":"a","to":"b","predicate":"p","assertion_context":c,"valid_time":{"start":0}}]
+    })).unwrap();
+    write(&mut e, "g", graph);
+    let typed_value = evaluate(&mut e, typed(query("g"), &c), "alice").unwrap();
+    let source = write(&mut e, "g", typed_value.graph);
+    let request = ClusterRequest {
+        source,
+        context: ContextSelection::Pinned {
+            reference: c.clone(),
+        },
+        valid_at: 5,
+        predicate: "p".into(),
+        levels: 1,
+    };
+    let navigation = e.cluster_navigation(&request, &host("alice")).unwrap();
+    let cluster = navigation
+        .graph
+        .nodes
+        .iter()
+        .find(|n| n.properties["kind"] == "cluster")
+        .unwrap();
+    let lineage = e
+        .cluster_lineage(&request, &request, &host("alice"))
+        .unwrap();
+    let overlap = &lineage.graph.nodes[0].properties["lineage"]["overlaps"][0];
+    assert_eq!(
+        overlap["before"]["revision"],
+        cluster.properties["record"]["revision"]
+    );
+    assert_eq!(
+        overlap["after"]["revision"],
+        cluster.properties["record"]["revision"]
+    );
+    let many: GraphData = serde_json::from_value(json!({"nodes":(0..998).map(|i|json!({"id":format!("n{i}"),"entity_id":format!("n{i}"),"space_id":"s"})).collect::<Vec<_>>()})).unwrap();
+    write(&mut e, "source", many);
+    let mut typed_value = evaluate(&mut e, typed(query("source"), &c), "alice").unwrap();
+    // This snapshot's whole-value carrier protects public original nodes. Avoid
+    // redundant per-record gates here to isolate the generated output capacity.
+    for node in &mut typed_value.graph.nodes {
+        node.derived_from.clear();
+        node.derived_nodes.clear();
+    }
+    let source = write(&mut e, "source", typed_value.graph);
+    let request = ClusterRequest {
+        source,
+        context: ContextSelection::Pinned { reference: c },
+        valid_at: 5,
+        predicate: "p".into(),
+        levels: 0,
+    };
+    assert_eq!(
+        e.cluster_lineage(&request, &request, &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_CLUSTER_BUDGET"
+    );
+    assert_eq!(
+        e.cluster_navigation(&request, &host("alice"))
+            .unwrap_err()
+            .code,
+        "E_CLUSTER_BUDGET"
+    );
 }

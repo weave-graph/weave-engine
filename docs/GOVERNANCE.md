@@ -16,6 +16,8 @@ One immutable approval is retained per member and proposal. An expired extra vot
 
 ## Atomic decision and retry
 
+Decision IDs are opaque 192-bit random occurrence identities, persisted atomically with the receipt. They are not content hashes of proposals or private policy rosters. Exact retries retain the stored identity; independent authorities deciding identical proposals produce different occurrences. Collector-facing proposal digests remain the signed commitments.
+
 Acceptance revalidates a current quorum and compares the expected head inside the same SQLite savepoint as the immutable decision, policy/head update, durable receipt, and typed governance event. Two connections competing on the same prior head yield one winner. Hosts may retry bounded SQLite busy errors; the retried loser receives a compare-and-swap conflict.
 
 Exact lost-response retry returns the original decision only while current policy, source authority, proposal lifetime, and enough approvals remain valid. A changed body under the same collector nonce fails. A policy-transition request is deliberately rejected on retry after it installs the new policy epoch; its old approval epoch no longer authorizes the operation. Hosts can inspect the current head separately under current authority. Historical admission evidence does not confer current read authority.

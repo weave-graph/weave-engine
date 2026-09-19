@@ -451,3 +451,29 @@ fn copied_node_proofs_remain_a_current_source_gate_for_collectors_and_readers() 
     assert!(engine.inspect_governance_head("team", 21, &host()).is_ok());
     assert_eq!(engine.governance_event_count().unwrap(), 1);
 }
+
+#[test]
+fn root_decision_occurrences_are_opaque_and_receipt_retries_keep_the_identity() {
+    let mut outcomes = Vec::new();
+    for _ in 0..2 {
+        let mut e = Engine::memory().unwrap();
+        let source = seed(&mut e, 2);
+        let q = proposal("same-body", source, None);
+        let proposed = quorum(&e, &q);
+        let accepted = e
+            .accept_governance(&request("same-body", "same-nonce"), 20, &host())
+            .unwrap();
+        let repeated = e
+            .accept_governance(&request("same-body", "same-nonce"), 20, &host())
+            .unwrap();
+        assert!(repeated.duplicate);
+        assert_eq!(accepted.decision_id, repeated.decision_id);
+        assert_eq!(accepted.event_id, repeated.event_id);
+        assert!(accepted.decision_id.starts_with("decision:"));
+        assert_eq!(accepted.decision_id.len(), 9 + 48);
+        outcomes.push((proposed.digest, accepted));
+    }
+    assert_eq!(outcomes[0].0, outcomes[1].0);
+    assert_ne!(outcomes[0].1.decision_id, outcomes[1].1.decision_id);
+    assert_ne!(outcomes[0].1.event_id, outcomes[1].1.event_id);
+}
