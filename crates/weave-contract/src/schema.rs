@@ -49,6 +49,10 @@ pub struct PropertySchema {
 pub enum ScalarType {
     /// Finite IEEE754 binary64; this is not exact decimal arithmetic.
     Float,
+    /// Exact bounded decimal, encoded as a canonical string.
+    Decimal,
+    /// Exact amount with a required nominal unit descriptor.
+    Quantity(crate::quantity::UnitDescriptor),
     String,
     Integer,
     Boolean,
@@ -78,7 +82,10 @@ fn properties(
                 let valid = if value.is_null() {
                     declaration.nullable
                 } else {
-                    match declaration.value_type {
+                    match &declaration.value_type {
+                        ScalarType::Decimal => crate::decimal::Decimal::deserialize(value).is_ok(),
+                        ScalarType::Quantity(unit) => crate::quantity::Quantity::deserialize(value)
+                            .is_ok_and(|quantity| quantity.unit() == unit),
                         ScalarType::String => value.is_string(),
                         ScalarType::Integer => value.as_i64().is_some(),
                         ScalarType::Boolean => value.is_boolean(),
@@ -429,9 +436,11 @@ mod tests {
         assert!(errors.iter().any(|d| d.code == "E_SCHEMA_PROPERTY_TYPE"));
         assert!(errors.iter().any(|d| d.code == "E_SCHEMA_ENDPOINT_TYPE"));
         graph.edges[0].to = "g".into();
-        assert!(validate_schema_graph(&graph)
-            .iter()
-            .any(|d| d.code == "E_SCHEMA_CROSS_SPACE"));
+        assert!(
+            validate_schema_graph(&graph)
+                .iter()
+                .any(|d| d.code == "E_SCHEMA_CROSS_SPACE")
+        );
     }
     #[test]
     fn missing_required_unknown_fields_and_unresolved_schema_fail() {
@@ -465,9 +474,11 @@ mod tests {
         graph.nodes[0]
             .properties
             .insert("count".into(), serde_json::json!(u64::MAX));
-        assert!(validate_schema_graph(&graph)
-            .iter()
-            .any(|d| d.message.contains("count")));
+        assert!(
+            validate_schema_graph(&graph)
+                .iter()
+                .any(|d| d.message.contains("count"))
+        );
     }
     #[test]
     fn explicit_structure_is_not_an_implicit_assertion() {
@@ -491,13 +502,17 @@ mod tests {
         }
         assert!(validate_schema_graph(&g).is_empty());
         g.assertions[1].edge_id = "missing".into();
-        assert!(validate_schema_graph(&g)
-            .iter()
-            .any(|e| e.code == "E_ASSERTION_EDGE"));
+        assert!(
+            validate_schema_graph(&g)
+                .iter()
+                .any(|e| e.code == "E_ASSERTION_EDGE")
+        );
         g.profile = GraphProfile::Legacy;
-        assert!(validate_schema_graph(&g)
-            .iter()
-            .any(|e| e.code == "E_ASSERTION_PROFILE"));
+        assert!(
+            validate_schema_graph(&g)
+                .iter()
+                .any(|e| e.code == "E_ASSERTION_PROFILE")
+        );
     }
     #[test]
     fn float_is_finite_binary64_and_does_not_weaken_integer_fields() {
@@ -533,9 +548,11 @@ mod tests {
         graph.nodes[0]
             .properties
             .insert("measure".into(), serde_json::json!("NaN"));
-        assert!(validate_schema_graph(&graph)
-            .iter()
-            .any(|d| d.code == "E_SCHEMA_PROPERTY_TYPE"));
+        assert!(
+            validate_schema_graph(&graph)
+                .iter()
+                .any(|d| d.code == "E_SCHEMA_PROPERTY_TYPE")
+        );
         assert!(serde_json::from_str::<serde_json::Value>("1e400").is_err());
     }
 }

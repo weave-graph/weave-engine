@@ -1,8 +1,5 @@
-#[path = "../src/decimal.rs"]
-mod decimal;
-#[path = "../src/quantity.rs"]
-mod quantity;
 use crate::decimal::{Decimal, DecimalError::*};
+use weave_contract::{decimal, quantity};
 fn d(text: &str) -> Decimal {
     text.parse().unwrap()
 }
@@ -242,4 +239,59 @@ fn rational_scaling_matches_independent_small_integer_oracle() {
             }
         }
     }
+}
+
+#[test]
+fn numeric_schema_extends_without_changing_existing_descriptor_encoding() {
+    use weave_contract::{PropertySchema, ScalarType};
+    for (kind, name) in [
+        (ScalarType::String, "string"),
+        (ScalarType::Integer, "integer"),
+        (ScalarType::Float, "float"),
+        (ScalarType::Boolean, "boolean"),
+    ] {
+        let shape = PropertySchema {
+            value_type: kind,
+            required: true,
+            nullable: false,
+        };
+        assert_eq!(
+            serde_json::to_string(&shape).unwrap(),
+            format!("{{\"value_type\":\"{name}\",\"required\":true,\"nullable\":false}}")
+        );
+    }
+    let original = r#"{"id":"Old","revision":"1","nodes":{"N":{"properties":{"name":{"value_type":"string","required":true,"nullable":false}},"space_id":null,"allow_extra_properties":false}},"edges":{}}"#;
+    let schema: weave_contract::GraphSchema = serde_json::from_str(original).unwrap();
+    assert_eq!(serde_json::to_string(&schema).unwrap(), original);
+}
+#[test]
+fn numeric_schema_requires_canonical_amounts_and_exact_unit_descriptors() {
+    use serde_json::json;
+    let unit = json!({"dimension_id":"length","unit_id":"metre","revision":"1"});
+    let value = json!({"nodes":[{"id":"n","entity_id":"n","space_id":"s","type_id":"Measure","properties":{"exact":"9007199254740993","length":{"amount":"1.2","unit":unit}}}],"schema":{"id":"Measurements","revision":"1","nodes":{"Measure":{"properties":{"exact":{"value_type":"decimal","required":true},"length":{"value_type":{"quantity":unit},"required":true}}}},"edges":{}}});
+    let graph: weave_contract::GraphData = serde_json::from_value(value.clone()).unwrap();
+    assert!(weave_contract::validate_schema_graph(&graph).is_empty());
+    for amount in [
+        json!(9007199254740993_u64),
+        json!("1.20"),
+        json!("1e0"),
+        json!("1e-19"),
+    ] {
+        let mut invalid = value.clone();
+        invalid["nodes"][0]["properties"]["exact"] = amount;
+        let graph = serde_json::from_value(invalid).unwrap();
+        assert!(
+            weave_contract::validate_schema_graph(&graph)
+                .iter()
+                .any(|d| d.code == "E_SCHEMA_PROPERTY_TYPE")
+        );
+    }
+    let mut invalid = value;
+    invalid["nodes"][0]["properties"]["length"]["unit"]["revision"] = json!("2");
+    let graph = serde_json::from_value(invalid).unwrap();
+    assert!(
+        weave_contract::validate_schema_graph(&graph)
+            .iter()
+            .any(|d| d.code == "E_SCHEMA_PROPERTY_TYPE")
+    );
 }

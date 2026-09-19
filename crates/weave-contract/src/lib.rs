@@ -1,4 +1,6 @@
 //! Versioned, I/O-free boundary between the Weave compiler and runtime.
+pub mod decimal;
+pub mod quantity;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 pub const VERSION: &str = "0.11.0";
