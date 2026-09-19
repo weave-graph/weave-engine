@@ -40,21 +40,12 @@ impl Engine {
             }
             other => other.clone(),
         };
-        let candidates: Vec<_> = input
-            .graph
-            .attachments
-            .iter()
-            .filter(|a| a.host == resolved_host && a.key == key)
-            .take(2)
-            .cloned()
-            .collect();
-        if candidates.len() != 1 {
+        let Some(attachment) = select_attachment(&input, &resolved_host, key).cloned() else {
             return Ok(missing(
                 input,
                 "metadata attachment unavailable or conflicted",
             ));
-        }
-        let attachment = &candidates[0];
+        };
         context::ensure_consumable(input.selected_context.as_ref(), attachment.context.as_ref())
             .map_err(|d| err(&d.code, &d.message))?;
         if let MetadataHost::Edge { id } = &attachment.host {
@@ -384,6 +375,85 @@ impl Engine {
         Ok(input)
     }
 }
+// This compatibility shorthand is deliberately limited to a direct, already-authorized
+// metadata materialization. Proof dependencies are not aliases for source object identity.
+fn select_attachment<'a>(
+    input: &'a QueryResult,
+    host: &MetadataHost,
+    key: &str,
+) -> Option<&'a MetadataAttachment> {
+    let mut exact = input
+        .graph
+        .attachments
+        .iter()
+        .filter(|a| &a.host == host && a.key == key);
+    if let Some(first) = exact.next() {
+        return exact.next().is_none().then_some(first);
+    }
+    let MetadataHost::Node { .. } = host else {
+        return None;
+    };
+    if input.snapshots.len() != 1 {
+        return None;
+    }
+    let (graph_id, revision) = input.snapshots.iter().next()?;
+    let target = GraphRef {
+        graph_id: graph_id.clone(),
+        revision: revision.clone(),
+    };
+    let mut resolved = input
+        .metadata_graphs
+        .iter()
+        .filter(|m| m.reference == target);
+    let original = resolved.next()?;
+    if resolved.next().is_some() {
+        return None;
+    }
+    let mut originals = original
+        .graph
+        .attachments
+        .iter()
+        .filter(|a| &a.host == host && a.key == key);
+    let source = originals.next()?;
+    if originals.next().is_some() {
+        return None;
+    }
+    let proof = AssertionRef {
+        graph_id: target.graph_id,
+        revision: target.revision,
+        assertion_id: source.id.clone(),
+    };
+    // The current envelope must attest this exact pinned original attachment.
+    // Legacy ResolvedGraph records need no remapping envelope; if one is present,
+    // it must agree. Neither authored `origin` nor derived_nodes supplies this role.
+    if original
+        .attachment_origins
+        .get(&source.id)
+        .is_some_and(|origins| !origins.contains(&proof))
+        || !input.attachment_origins.get(&source.id)?.contains(&proof)
+    {
+        return None;
+    }
+    let mut current = input.graph.attachments.iter().filter(|a| a.id == source.id);
+    let attachment = current.next()?;
+    if current.next().is_some()
+        || attachment.key != key
+        || attachment.value != source.value
+        || attachment.context != source.context
+    {
+        return None;
+    }
+    let MetadataHost::Node { id } = &attachment.host else {
+        return None;
+    };
+    if !id.starts_with("metadata-node:") || !input.node_origins.get(id)?.is_empty() {
+        return None;
+    }
+    let mut nodes = input.graph.nodes.iter().filter(|n| &n.id == id);
+    nodes.next()?;
+    nodes.next().is_none().then_some(attachment)
+}
+
 fn missing(mut input: QueryResult, message: &str) -> QueryResult {
     let mut typing = input.graph.context_typing.take();
     if let Some(t) = &mut typing {
@@ -466,4 +536,172 @@ pub(crate) fn carry_node_attachments(
         attachments.insert(copy.id.clone(), copy);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod selector_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn node(id: &str) -> MetadataHost {
+        MetadataHost::Node { id: id.into() }
+    }
+
+    // These envelopes model engine-produced materializations. Raw programs cannot
+    // submit QueryResult provenance; mutations below test conservative internal handling.
+    fn materialized() -> QueryResult {
+        let original: GraphData = serde_json::from_value(json!({
+            "nodes":[{"id":"b","entity_id":"B","space_id":"s"}],
+            "attachments":[{"id":"bc","host":{"kind":"node","id":"b"},
+                "key":"next","value":{"kind":"graph","reference":{"graph_id":"C","revision":"c1"}},
+                "valid_time":{"start":0,"end":10}}]
+        }))
+        .unwrap();
+        let proof = AssertionRef {
+            graph_id: "B".into(),
+            revision: "b1".into(),
+            assertion_id: "bc".into(),
+        };
+        let mut graph = original.clone();
+        graph.nodes[0].id = "metadata-node:wrapper".into();
+        graph.attachments[0].host = node("metadata-node:wrapper");
+        let origins = BTreeMap::from([("bc".into(), vec![proof])]);
+        QueryResult {
+            version: VERSION.into(),
+            selected_context: None,
+            source_revisions: vec![],
+            graph,
+            snapshots: BTreeMap::from([("B".into(), "b1".into())]),
+            input_snapshots: vec![],
+            coverage: Coverage::Complete,
+            diagnostics: vec![],
+            provenance: vec![],
+            edge_origins: BTreeMap::new(),
+            node_origins: BTreeMap::from([("metadata-node:wrapper".into(), vec![])]),
+            attachment_origins: origins.clone(),
+            metadata_graphs: vec![ResolvedGraph {
+                reference: GraphRef {
+                    graph_id: "B".into(),
+                    revision: "b1".into(),
+                },
+                graph: original,
+                attachment_origins: origins,
+            }],
+        }
+    }
+
+    fn assert_unavailable(input: QueryResult) {
+        assert!(select_attachment(&input, &node("b"), "next").is_none());
+        let result = Engine::memory()
+            .unwrap()
+            .metadata_value(input, &node("b"), "next", &HostContext::new("reader", []))
+            .unwrap();
+        assert_eq!(result.coverage, Coverage::Partial);
+        assert!(result.graph.nodes.is_empty());
+        assert_eq!(
+            result.diagnostics.last().unwrap().code,
+            "E_METADATA_UNAVAILABLE"
+        );
+    }
+
+    #[test]
+    fn original_selector_requires_current_provenance_and_consistent_original_remapping() {
+        let input = materialized();
+        assert_eq!(
+            select_attachment(&input, &node("b"), "next").unwrap().id,
+            "bc"
+        );
+        let mut legacy = input.clone();
+        legacy.metadata_graphs[0].attachment_origins.clear();
+        assert!(select_attachment(&legacy, &node("b"), "next").is_some());
+        for envelope in [false, true] {
+            let mut bad = input.clone();
+            let origins = if envelope {
+                &mut bad.attachment_origins
+            } else {
+                &mut bad.metadata_graphs[0].attachment_origins
+            };
+            origins.get_mut("bc").unwrap()[0].revision = "other".into();
+            assert_unavailable(bad);
+        }
+        let mut bad = input.clone();
+        bad.snapshots.insert("B".into(), "other".into());
+        assert_unavailable(bad);
+        let mut bad = input;
+        bad.graph.attachments[0].value = MetadataValue::Graph {
+            reference: GraphRef {
+                graph_id: "Other".into(),
+                revision: "r".into(),
+            },
+        };
+        assert_unavailable(bad);
+    }
+
+    #[test]
+    fn ambiguous_original_current_or_snapshot_candidates_do_not_fall_back() {
+        let input = materialized();
+        let mut bad = input.clone();
+        let mut second = bad.metadata_graphs[0].graph.attachments[0].clone();
+        second.id = "bc2".into();
+        bad.metadata_graphs[0].graph.attachments.push(second);
+        assert_unavailable(bad);
+        let mut bad = input.clone();
+        bad.graph.attachments.push(bad.graph.attachments[0].clone());
+        assert_unavailable(bad);
+        let mut bad = input.clone();
+        bad.metadata_graphs.push(bad.metadata_graphs[0].clone());
+        assert_unavailable(bad);
+        let mut bad = input;
+        bad.snapshots.insert("Other".into(), "r".into());
+        assert_unavailable(bad);
+    }
+
+    #[test]
+    fn dependency_refs_saved_values_and_remapped_attachments_are_not_aliases() {
+        let input = materialized();
+        let source = NodeRef {
+            graph_id: "B".into(),
+            revision: "b1".into(),
+            node_id: "b".into(),
+        };
+        let mut bad = input.clone();
+        bad.graph.nodes[0].derived_nodes.push(source.clone());
+        bad.attachment_origins.clear();
+        assert_unavailable(bad);
+        let mut bad = input.clone();
+        bad.node_origins
+            .insert("metadata-node:wrapper".into(), vec![source]);
+        assert_unavailable(bad);
+        let mut bad = input.clone();
+        bad.snapshots = BTreeMap::from([("Saved".into(), "s1".into())]);
+        assert_unavailable(bad);
+        let mut bad = input.clone();
+        bad.graph.attachments[0].id = "derived-attachment:remapped".into();
+        assert_unavailable(bad);
+        let mut bad = input;
+        bad.graph.nodes.clear();
+        assert_unavailable(bad);
+    }
+
+    #[test]
+    fn exact_hosts_take_precedence_and_ambiguity_never_uses_original_fallback() {
+        let mut input = materialized();
+        assert_eq!(
+            select_attachment(&input, &node("metadata-node:wrapper"), "next")
+                .unwrap()
+                .id,
+            "bc"
+        );
+        let mut exact = input.graph.attachments[0].clone();
+        exact.id = "exact".into();
+        exact.host = node("b");
+        input.graph.attachments.push(exact.clone());
+        assert_eq!(
+            select_attachment(&input, &node("b"), "next").unwrap().id,
+            "exact"
+        );
+        exact.id = "conflicting-exact".into();
+        input.graph.attachments.push(exact);
+        assert_unavailable(input);
+    }
 }
