@@ -1,0 +1,25 @@
+name: Language integration
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compiler-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: weave-engine
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 3d81f2730f30298782eb967515055ed9ffed55c2
+          path: weave-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify actual compiler and persistent runtime
+        run: |
+          python3 weave-engine/scripts/root_integration.py
+          python3 weave-engine/scripts/root_join.py
+          python3 weave-engine/scripts/root_values.py
