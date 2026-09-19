@@ -73,7 +73,7 @@ def main():
                 assert not empty['edges'], empty
                 # Both typed results must be reusable without assigning contradictory
                 # descriptors to the same schema identity/revision.
-                source.write_text(json.dumps({'version': plan['version'], 'commands': [
+                source.write_text(json.dumps({'version': result['version'], 'commands': [
                     {'op': 'commit', 'graph_id': 'FullView', 'data': full},
                     {'op': 'commit', 'graph_id': 'EmptyView', 'data': empty}]}))
                 run(command+['--write', 'FullView', '--write', 'EmptyView', str(source)], args.engine)
