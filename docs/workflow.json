@@ -2,7 +2,7 @@
   "schema_version": "0.1.0",
   "project": "weave-engine",
   "status": "implementation_in_progress",
-  "source_status": "conversation_partial_original_papers_pending",
+  "source_status": "original_white_papers_recovered_and_reconciled",
   "completion_gate": "E15",
   "states": [
     "proposed",
@@ -28,7 +28,8 @@
       "owner": "orchestrator",
       "required_by": [
         "E00"
-      ]
+      ],
+      "status": "resolved"
     },
     {
       "id": "github-publication",
@@ -44,13 +45,17 @@
       "id": "E00",
       "title": "Source recovery and public MIT baseline",
       "owner": "orchestrator",
-      "state": "blocked",
+      "state": "in_progress",
       "depends_on": [],
       "requirements": [
         "R39"
       ],
-      "evidence": [],
-      "blocker": "Original white papers not yet accessible; publication orchestrator owned"
+      "evidence": [
+        {
+          "artifact": "docs/RECONCILIATION.md",
+          "result": "Original papers copied unchanged, hashed and reconciled; publication remains orchestrator owned"
+        }
+      ]
     },
     {
       "id": "E01",

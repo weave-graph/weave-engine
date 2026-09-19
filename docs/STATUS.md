@@ -1,6 +1,6 @@
 # Implementation status and evidence
 
-This is a **foundation checkpoint**, not completion of the full project. Original paper reconciliation, full runtime semantics and public release remain open.
+This is a **foundation checkpoint**, not completion of the full project. Original papers are recovered and reconciled; full runtime semantics and public release remain open.
 
 ## Implemented checkpoint
 
@@ -23,7 +23,7 @@ The orchestrator independently compiled the language example, executed it using 
 
 | Gate | Status | Evidence / remaining scope |
 |---|---|---|
-| E00 | blocked | Papers require recovery/reconciliation; public organization/repositories handled by orchestrator |
+| E00 | in progress | Original papers recovered, hashed and reconciled; publication handled by orchestrator |
 | E01 | in progress | 0.1 compatibility and 0.2 typed contract implemented and consumed by language; broader contract/golden compatibility work pending |
 | E02 | in progress | Atomic immutable SQLite snapshots tested; n-ary model, migrations and general branch lifecycle pending |
 | E03 | in progress | Pinned filtered queries, provenance and two-input identity-space path joins tested; general graph functions and recursive rules pending |
@@ -35,7 +35,7 @@ The orchestrator independently compiled the language example, executed it using 
 | E09 | in progress | Independent local branches and explicit accepted heads tested; signed peer exchange and governance pending |
 | E10–E15 | proposed | See complete requirements and workflow; not satisfied by this checkpoint |
 
-E01–E06 proceed provisionally on known explicit requirements while E00 remains blocked. This override permits implementation work but does not waive source reconciliation or final gate dependencies.
+Source reconciliation is complete against the original papers. Implementation gates remain open according to their acceptance evidence; publication and final gates remain orchestrator-owned.
 
 ## Limits
 

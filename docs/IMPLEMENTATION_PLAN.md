@@ -6,7 +6,7 @@ Status: implementation in progress; executable foundation described in [STATUS.m
 
 The engine is the local-first execution, persistence, event, adapter, replication and policy runtime for Weave. Completion means the full requirements below pass their acceptance gates, including portable execution, clustering and governed reconnection. An early vertical slice is a checkpoint, not project completion.
 
-The available source is a private recovered conversation, which explicitly contains two truncated responses. Its curated public summary is [SOURCES.md](SOURCES.md); the transcript is gitignored. The original 16-page engine white paper and 14-page language paper are still being recovered. Their text must be reconciled at gate E00 before the implementation baseline is frozen. Syntax in the conversation is illustrative. Requirements explicitly stated by the user take priority over assistant proposals. No missing paper content is invented here.
+The complete original language and engine papers are now available in [docs/source](source/README.md), with exact hashes. [RECONCILIATION.md](RECONCILIATION.md) records source requirements, current implementation gaps and gate assignments. Their syntax is illustrative; their requirements and explicit research/optional boundaries are authoritative for this plan.
 
 The user explicitly requests multidimensional manifestations, automatic recursive clustering and zoom, decentralized attachment/detachment, permissions, optional governance, 3D and embedding spaces, mobile/personal offline branching, an event bus with registered adapters, and graph-valued metadata on nodes and edges. Temporal joins and parametrized knowledge graphs originate in the initial request. Bitemporal semantics, capsules, capability machinery, transactional outbox and specific algorithms are proposed mechanisms requiring explicit architecture records, not independently mandated vendor choices.
 
@@ -56,7 +56,7 @@ Adopted contract ownership: the engine repository owns `crates/weave-contract` a
 
 | ID | Source | Requirement and deliverable | Acceptance evidence | Gate |
 |---|---|---|---|---|
-| R01 | U | Nodes, directed edges and n-ary assertions as referenceable objects | Round trip identities, cycles, edge arguments and edge queries | E01,E02 |
+| R01 | U | Nodes and directed edges as referenceable objects; n-ary extension optional | Round trip identities, cycles, edge arguments and edge queries | E01,E02 |
 | R02 | U | Scalar and graph-valued metadata on both nodes and edges | Shared, recursive, missing, denied and offline metadata tests; bounded traversal | E02,E03 |
 | R03 | U | Same entity manifested in multiple spaces, discoverable counterparts | Identity stable across manifestations; state distinct; hidden counterparts not leaked | E02,E04 |
 | R04 | U/P | Temporal assertions, immutable bitemporal revisions | Late arrival/correction queries distinguish valid/system time; historical revision unchanged | E02 |
@@ -99,7 +99,7 @@ Adopted contract ownership: the engine repository owns `crates/weave-contract` a
 
 ## Stages and completion gates
 
-1. **E00 — Source and project baseline.** Recover/reconcile papers, keep provenance, approve contract ownership and architecture ADRs; public MIT scaffold and repository workflows. Missing source attachment is tracked rather than silently substituted.
+1. **E00 — Source and project baseline.** Original papers recovered and reconciled; keep provenance, approve contract ownership and architecture ADRs; public MIT scaffold and repository workflows. Missing source attachment is tracked rather than silently substituted.
 2. **E01 — Contract freeze.** Shared versioned schemas, compatibility policy, golden positive/negative fixtures and a cross-repository contract check. Zero ambiguous time, metadata or identity semantics in baseline.
 3. **E02 — Durable graph core.** Model, atomic native store, revisions, branches and metadata graph resolution. Crash/restart and bitemporal scenarios pass.
 4. **E03 — Query execution.** Language-produced plans, temporal/context joins, conflicts, provenance and coverage. Golden execution corpus and independent expected results pass.
@@ -122,7 +122,7 @@ An offline phone holds a capsule for an installation. A device has operational, 
 
 ## Research and unresolved decisions
 
-- Reconcile full papers and clarify whether traversal success-stimulus learning from the separate AI discussion is an engine requirement or a later consumer. It is not silently included as a replacement for evidence truth.
+- Full papers are reconciled: reward-based traversal learning and n-ary relations are explicitly optional extensions. Required experiments and formal/cryptographic assurance work remain open.
 - Select canonical wire encoding and integer/decimal/time precision. Decide whether schema migrations produce new revisions or independent storage transformations.
 - Define deletion/redaction, retention and content addressing when legal or operational erasure is required; references cannot promise recall of already copied plaintext.
 - Decide capability signing/key rotation and revocation freshness policy without making offline access dependent on constant connectivity.
