@@ -73,16 +73,17 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         }
         json_size(definition, 1024 * 1024)?;
         let tx = self.conn.unchecked_transaction()?;
-        let prior: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT definition FROM live_views WHERE id=?1 AND principal=?2",
-                params![definition.id, host.principal],
-                |r| r.get(0),
-            )
-            .optional()?;
+        self.read_budget.request()?;
+        let definition_limit = self.read_budget.remaining().min(1024 * 1024) as i64;
+        let prior: Option<Option<String>> = self.conn.query_row(
+            "SELECT CASE WHEN length(CAST(definition AS BLOB))<=?3 THEN definition END FROM live_views WHERE id=?1 AND principal=?2",
+            params![definition.id, host.principal, definition_limit], |r| r.get(0)
+        ).optional()?;
         let encoded = serde_json::to_string(definition)?;
         if let Some(prior) = prior {
+            let prior =
+                prior.ok_or_else(|| err("E_BUDGET", "view definition exceeds read budget"))?;
+            self.read_budget.charge(prior.len())?;
             if prior != encoded {
                 return Err(err(
                     "E_VIEW_CONFLICT",
@@ -121,16 +122,62 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         })
     }
     fn load_view(&self, id: &str, host: &HostContext) -> Result<ViewRecord> {
-        type Row = (String, Option<i64>, i64, String, String);
-        let row:Option<Row>=self.conn.query_row("SELECT definition,tick,generation,result,dependencies FROM live_views WHERE id=?1 AND principal=?2",params![id,host.principal],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).optional()?;
+        self.read_budget.request()?;
+        type Row = (
+            Option<String>,
+            Option<i64>,
+            i64,
+            Option<String>,
+            Option<String>,
+        );
+        // Each conditional shares a total-byte guard: oversized persisted values never
+        // cross SQLite's result boundary into a Rust String before the limit check.
+        let row: Option<Row> = self
+            .conn
+            .query_row(
+                "WITH candidate AS (
+                SELECT definition,tick,generation,result,dependencies,
+                    length(CAST(definition AS BLOB)) AS d,
+                    length(CAST(result AS BLOB)) AS r,
+                    length(CAST(dependencies AS BLOB)) AS p
+                FROM live_views WHERE id=?1 AND principal=?2
+             ) SELECT
+                CASE WHEN d<=1048576 AND r<=?4 AND p<=4194304 AND d+r+p<=?3 THEN definition END,
+                tick,generation,
+                CASE WHEN d<=1048576 AND r<=?4 AND p<=4194304 AND d+r+p<=?3 THEN result END,
+                CASE WHEN d<=1048576 AND r<=?4 AND p<=4194304 AND d+r+p<=?3 THEN dependencies END
+             FROM candidate",
+                params![
+                    id,
+                    host.principal,
+                    self.read_budget.remaining() as i64,
+                    MATERIALIZED_LIMIT as i64
+                ],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .optional()?;
         let (definition, tick, generation, result, dependencies) =
             row.ok_or_else(|| err("E_UNAVAILABLE", "view unavailable"))?;
+        let (Some(definition), Some(result), Some(dependencies)) =
+            (definition, result, dependencies)
+        else {
+            return Err(err("E_BUDGET", "stored view exceeds read budget"));
+        };
+        self.read_budget
+            .charge(definition.len() + result.len() + dependencies.len())?;
+        if generation < 1 {
+            return Err(err("E_INTEGRITY", "invalid stored view generation"));
+        }
+        let dependencies: Vec<HeadDependency> = serde_json::from_str(&dependencies)?;
+        if dependencies.len() > 1000 {
+            return Err(err("E_BUDGET", "stored view dependency count exceeded"));
+        }
         Ok(ViewRecord {
             definition: serde_json::from_str(&definition)?,
             tick,
             generation,
             result: serde_json::from_str(&result)?,
-            dependencies: serde_json::from_str(&dependencies)?,
+            dependencies,
         })
     }
     fn compute_view(
