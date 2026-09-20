@@ -38,6 +38,13 @@ pub struct StructuralEdge {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Assertion {
+    /// Conservative whole-snapshot AND gates, independent of record readers.
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "influence::bounded_snapshot_refs"
+    )]
+    pub derived_snapshots: Vec<GraphRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub derived_nodes: Vec<NodeRef>,
     pub id: String,

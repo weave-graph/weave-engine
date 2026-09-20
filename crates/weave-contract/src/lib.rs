@@ -12,7 +12,7 @@ pub mod decimal;
 pub mod quantity;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.16.0";
+pub const VERSION: &str = "0.17.0";
 pub mod influence;
 pub use influence::GraphInfluence;
 pub mod counterpart;
@@ -77,6 +77,13 @@ pub enum Polarity {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Node {
+    /// Conservative whole-snapshot AND gates, independent of record readers.
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "influence::bounded_snapshot_refs"
+    )]
+    pub derived_snapshots: Vec<GraphRef>,
     /// Conservative AND influence from exact source nodes, including isolated nodes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub derived_nodes: Vec<NodeRef>,
@@ -101,6 +108,13 @@ pub struct Node {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Edge {
+    /// Conservative whole-snapshot AND gates, independent of record readers.
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "influence::bounded_snapshot_refs"
+    )]
+    pub derived_snapshots: Vec<GraphRef>,
     /// Global AND gate, independent of alternative derivation groups.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub derived_nodes: Vec<NodeRef>,
@@ -432,6 +446,13 @@ pub enum MetadataValue {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct MetadataAttachment {
+    /// Conservative whole-snapshot AND gates, independent of record readers.
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "influence::bounded_snapshot_refs"
+    )]
+    pub derived_snapshots: Vec<GraphRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<GraphRef>,
     pub id: String,
