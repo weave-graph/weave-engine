@@ -137,6 +137,49 @@ fn harmless_flat_index_order_and_duplicates_preserve_exact_transport_bytes() {
 }
 
 #[test]
+fn fully_authorized_transitive_explanation_pins_preserve_whole_snapshot_export() {
+    let mut e = engine();
+    let original = commit(&mut e, "Proofs", source(json!(["alice"])));
+    let intermediate = commit(
+        &mut e,
+        "Secret",
+        saved(
+            false,
+            vec![assertion(&original, "a")],
+            vec![group(
+                vec![assertion(&original, "a")],
+                vec![],
+                vec![original.clone()],
+            )],
+        ),
+    );
+    // The original is a real transitive dependency, not a direct premise of
+    // this final edge. Its explanatory pin must neither grant authority nor
+    // make an otherwise completely authorized immutable snapshot unexportable.
+    let data = saved(
+        false,
+        vec![assertion(&intermediate, "derived")],
+        vec![group(
+            vec![assertion(&intermediate, "derived")],
+            vec![],
+            vec![original, intermediate],
+        )],
+    );
+    let expected = serde_json::to_vec(&data).unwrap();
+    let root = commit(&mut e, "Saved", data);
+    assert_eq!(query(&e, &root).coverage, Coverage::Complete);
+    let capsule = e.export_capsule(&root, &host()).unwrap();
+    let record = capsule
+        .revisions
+        .iter()
+        .find(|r| r.graph_id == "Saved")
+        .unwrap();
+    assert_eq!(serde_json::to_vec(&record.data).unwrap(), expected);
+    assert!(capsule.revisions.iter().any(|r| r.graph_id == "Proofs"));
+    assert!(capsule.revisions.iter().any(|r| r.graph_id == "Secret"));
+}
+
+#[test]
 fn a_withheld_alternative_is_not_whole_snapshot_authorization() {
     for explicit in [false, true] {
         for node_only in [false, true] {

@@ -183,7 +183,9 @@ impl Engine {
         let mut kept = Vec::new();
         for mut group in std::mem::take(groups) {
             if self.group_visible(&group, host, &HashSet::new(), budget, 0)? {
-                group.input_snapshots.retain(|r| {
+                // Keep explanatory pins reachable through currently authorized proof
+                // ancestry. These pins never become additional authorization gates.
+                let direct = |r: &GraphRef| {
                     group
                         .premises
                         .iter()
@@ -193,7 +195,13 @@ impl Engine {
                             .iter()
                             .any(|p| p.graph_id == r.graph_id && p.revision == r.revision)
                         || group.snapshot_premises.contains(r)
-                });
+                };
+                if group.input_snapshots.iter().any(|r| !direct(r)) {
+                    let pins = self.authorized_proof_pins(&group, host, budget)?;
+                    group
+                        .input_snapshots
+                        .retain(|r| pins.contains(&r.graph_id, &r.revision));
+                }
                 kept.push(group);
             } else {
                 *incomplete = true;
@@ -201,5 +209,167 @@ impl Engine {
         }
         *groups = kept;
         Ok(!groups.is_empty())
+    }
+    fn authorized_proof_pins(
+        &self,
+        group: &Derivation,
+        host: &HostContext,
+        budget: &mut usize,
+    ) -> Result<ProofPins> {
+        let mut walk = ProofPins::default();
+        walk.group(group)?;
+        while let Some((kind, graph, revision, object)) = walk.queue.pop_front() {
+            if group
+                .input_snapshots
+                .iter()
+                .all(|r| walk.contains(&r.graph_id, &r.revision))
+            {
+                break;
+            }
+            let Some(_proof) =
+                self.authorization
+                    .proof(4 + kind, &graph, &revision, &object, &host.principal)
+            else {
+                return Err(err("E_BUDGET", "explanation proof traversal limit"));
+            };
+            let Some(source) = self.load(&graph, &revision)? else {
+                continue;
+            };
+            // The root group and every queued branch have already passed ordinary
+            // semantic authorization in this same operation snapshot. Only actual
+            // flat gates and successful alternatives are followed, never their
+            // authored input_snapshots or unrelated records in the source graph.
+            if let Some(i) = &source.influence {
+                walk.flats(&i.assertions, &i.nodes, &i.snapshots)?;
+                self.proof_pin_groups(&mut walk, &i.derivations, host, budget)?;
+            }
+            if kind == 1 {
+                if let Some(n) = source.nodes.iter().find(|n| n.id == object) {
+                    walk.flats(&n.derived_from, &n.derived_nodes, &n.derived_snapshots)?;
+                    self.proof_pin_groups(&mut walk, &n.derivations, host, budget)?;
+                }
+            } else if let Some(e) = source.edges.iter().find(|e| e.id == object) {
+                walk.flats(
+                    if e.derivations.is_empty() {
+                        &e.derived_from
+                    } else {
+                        &[]
+                    },
+                    &e.derived_nodes,
+                    &e.derived_snapshots,
+                )?;
+                self.proof_pin_groups(&mut walk, &e.derivations, host, budget)?;
+                walk.object(1, &graph, &revision, &e.from)?;
+                walk.object(1, &graph, &revision, &e.to)?;
+            } else if let Some(a) = source.assertions.iter().find(|a| a.id == object) {
+                walk.flats(
+                    if a.derivations.is_empty() {
+                        &a.derived_from
+                    } else {
+                        &[]
+                    },
+                    &a.derived_nodes,
+                    &a.derived_snapshots,
+                )?;
+                self.proof_pin_groups(&mut walk, &a.derivations, host, budget)?;
+                if let Some(e) = source.structural_edges.iter().find(|e| e.id == a.edge_id) {
+                    walk.object(1, &graph, &revision, &e.from)?;
+                    walk.object(1, &graph, &revision, &e.to)?;
+                }
+            } else if let Some(a) = source.attachments.iter().find(|a| a.id == object) {
+                walk.flats(&a.derived_from, &a.derived_nodes, &a.derived_snapshots)?;
+                if let Some(origin) = &a.origin {
+                    walk.object(0, &origin.graph_id, &origin.revision, &origin.assertion_id)?;
+                }
+                self.proof_pin_groups(&mut walk, &a.derivations, host, budget)?;
+                match &a.host {
+                    MetadataHost::Node { id } => walk.object(1, &graph, &revision, id)?,
+                    MetadataHost::Edge { id } | MetadataHost::Assertion { id } => {
+                        walk.object(0, &graph, &revision, id)?
+                    }
+                    MetadataHost::Entity { id } => {
+                        for n in source.nodes.iter().filter(|n| &n.entity_id == id) {
+                            walk.object(1, &graph, &revision, &n.id)?;
+                        }
+                    }
+                    MetadataHost::Graph => {}
+                }
+            }
+        }
+        Ok(walk)
+    }
+    fn proof_pin_groups(
+        &self,
+        walk: &mut ProofPins,
+        groups: &[Derivation],
+        host: &HostContext,
+        budget: &mut usize,
+    ) -> Result<()> {
+        for group in groups {
+            if self.group_visible(group, host, &HashSet::new(), budget, 0)? {
+                walk.group(group)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct ProofPins {
+    pins: BTreeMap<String, HashSet<String>>,
+    seen: HashSet<(u8, String, String, String)>,
+    queue: std::collections::VecDeque<(u8, String, String, String)>,
+    work: usize,
+    bytes: usize,
+}
+impl ProofPins {
+    fn contains(&self, g: &str, r: &str) -> bool {
+        self.pins.get(g).is_some_and(|v| v.contains(r))
+    }
+    fn charge(&mut self, g: &str, r: &str, o: &str) -> Result<()> {
+        self.work += 1;
+        if self.work > 10000 {
+            return Err(err("E_BUDGET", "explanation proof traversal limit"));
+        }
+        self.bytes +=
+            json_size(&(g, r, o), MATERIALIZED_LIMIT.saturating_sub(self.bytes))?.saturating_mul(3);
+        if self.bytes > MATERIALIZED_LIMIT {
+            return Err(err("E_BUDGET", "explanation proof byte limit"));
+        }
+        Ok(())
+    }
+    fn pin(&mut self, g: &str, r: &str) -> Result<()> {
+        self.charge(g, r, "")?;
+        self.pins.entry(g.into()).or_default().insert(r.into());
+        Ok(())
+    }
+    fn object(&mut self, kind: u8, g: &str, r: &str, o: &str) -> Result<()> {
+        self.charge(g, r, o)?;
+        self.pins.entry(g.into()).or_default().insert(r.into());
+        let key = (kind, g.into(), r.into(), o.into());
+        if self.seen.insert(key.clone()) {
+            self.queue.push_back(key);
+        }
+        Ok(())
+    }
+    fn flats(
+        &mut self,
+        assertions: &[AssertionRef],
+        nodes: &[NodeRef],
+        snapshots: &[GraphRef],
+    ) -> Result<()> {
+        for p in assertions {
+            self.object(0, &p.graph_id, &p.revision, &p.assertion_id)?;
+        }
+        for p in nodes {
+            self.object(1, &p.graph_id, &p.revision, &p.node_id)?;
+        }
+        for p in snapshots {
+            self.pin(&p.graph_id, &p.revision)?;
+        }
+        Ok(())
+    }
+    fn group(&mut self, g: &Derivation) -> Result<()> {
+        self.flats(&g.premises, &g.node_premises, &g.snapshot_premises)
     }
 }
