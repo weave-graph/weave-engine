@@ -1,0 +1,37 @@
+name: Browser persistence
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+concurrency:
+  group: browser-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  persistence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.5.0'
+      - name: Install pinned Rust and Emscripten
+        run: |
+          rustup toolchain install nightly-2026-09-19 --profile minimal --component rust-src
+          git clone https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          git -C "$RUNNER_TEMP/emsdk" checkout c59d6e841da55c2c21af32004c4c173cbd1c0f10
+          "$RUNNER_TEMP/emsdk/emsdk" install 6.0.9
+          "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.9
+          echo "WEAVE_EMSDK=$RUNNER_TEMP/emsdk" >> "$GITHUB_ENV"
+      - name: Build the actual SQLite kernel for WebAssembly
+        run: sh scripts/build_browser_image_probe.sh
+      - name: Install pinned browser harness
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-harness" --no-audit --no-fund --save-exact playwright@1.62.1
+          "$RUNNER_TEMP/browser-harness/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$RUNNER_TEMP/browser-harness/node_modules" >> "$GITHUB_ENV"
+      - name: Verify actual worker and persistent browser failure boundaries
+        run: |
+          node scripts/check_browser_image_smoke.cjs
+          node scripts/check_browser_persistence.cjs
