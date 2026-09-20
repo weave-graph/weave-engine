@@ -7,7 +7,7 @@ p=argparse.ArgumentParser()
 for name in ['old-compiler','old-handler','handler','storage']:
  p.add_argument('--'+name,type=Path,required=True)
 p.add_argument('--old-marker',type=int,default=16)
-p.add_argument('--new-marker',type=int,default=17)
+p.add_argument('--new-marker',type=int,default=18)
 p.add_argument('--report',type=Path)
 a=p.parse_args()
 def invoke(binary,*args,code=0):

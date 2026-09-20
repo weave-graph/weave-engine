@@ -108,7 +108,7 @@ with tempfile.TemporaryDirectory(prefix='weave-governed-effects-') as temporary:
  call(db,'cancel',1,intent=intent)
  assert row(sink,'SELECT count(*) FROM actions')==1
  checks.append('non-idempotent lost response remains unknown and is never canceled or redispatched')
- report={'profile':'native governed canonical graph reference sink','protocol':'0.18.0','store':17,'native_processes':processes,'compiler_processes':1 if a.compiler else 0,'producer_origin':'actual source handler-plan' if a.compiler else 'native sealed identity fixture','checks':checks,'scope':'trusted native grants, fixed test identities, separate local SQLite sink; no remote Execute capability or production destination'}
+ report={'profile':'native governed canonical graph reference sink','runtime_protocol':'0.19.0','store':row(db,'PRAGMA user_version'),'native_processes':processes,'compiler_processes':1 if a.compiler else 0,'producer_origin':'actual source handler-plan' if a.compiler else 'native sealed identity fixture','checks':checks,'scope':'trusted native grants, fixed test identities, separate local SQLite sink; no remote Execute capability or production destination'}
  if a.report:
   a.report.parent.mkdir(parents=True,exist_ok=True);a.report.write_text(json.dumps(report,indent=2)+'\n')
  print(json.dumps(report,indent=2))
