@@ -1,0 +1,735 @@
+{
+  "profile": "native-three-peer-existing-apis/1",
+  "status": "passed",
+  "protocol": "0.16.0",
+  "peers": 3,
+  "process_invocations": 88,
+  "transferred_capsule_bytes": 52585,
+  "events": {
+    "P": 8,
+    "W": 9,
+    "T": 2
+  },
+  "checks": [
+    "signed isolated receipt, explicit root/dependency acceptance, private annotation exclusion and working history",
+    "offline atomic rebind, explicit negative-evidence rule, attachment provenance, durable diagnostic receipt and local cluster",
+    "before-COMMIT rollback, after-COMMIT response loss, duplicate suppression and independent-reviewer denial",
+    "trusted-export reconnect, signed proposal duplicates, local CAS conflict, explicit branch integration and coexisting organizations",
+    "team-local genuine owner decision, exact accepted occurrence/explanation, current expiry and multi-user denial",
+    "one fake external action, durable unknown after response-loss kill, no automatic redispatch and explicit reconciliation"
+  ],
+  "trace": [
+    {
+      "peer": "P",
+      "operation": "init",
+      "exit": 0,
+      "seconds": 0.010927,
+      "stdout_bytes": 116,
+      "response_sha256": "44640343ae14c396a10eb33d820240cc5032ff9c1479ebc048cefd40d4bcf57c"
+    },
+    {
+      "peer": "W",
+      "operation": "init",
+      "exit": 0,
+      "seconds": 0.009572,
+      "stdout_bytes": 116,
+      "response_sha256": "d7b9f80e332b0ebab1870109a34272339cb6ae69f3f04c62d8a1977242922696"
+    },
+    {
+      "peer": "T",
+      "operation": "init",
+      "exit": 0,
+      "seconds": 0.009475,
+      "stdout_bytes": 116,
+      "response_sha256": "f09defafb533eefac0817da16e003b34d1ade042ef3f64cb95d06dde0665d6d1"
+    },
+    {
+      "peer": "W",
+      "operation": "execute",
+      "exit": 0,
+      "seconds": 0.006176,
+      "stdout_bytes": 581,
+      "response_sha256": "9371870918bf5ce8765ba9599f66c04549879c4009b627c0adc6f991bf8bf764"
+    },
+    {
+      "peer": "W",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.004353,
+      "stdout_bytes": 41,
+      "response_sha256": "b21f151ebd9333994b486841b857a3fb294e3ba05eddbec3c631d2d9ee2373ae"
+    },
+    {
+      "peer": "W",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.004287,
+      "stdout_bytes": 37,
+      "response_sha256": "b2fc13c5f151dc9be64ea79b53f1526fd661bf08f12e02e015251feda9c418e6"
+    },
+    {
+      "peer": "W",
+      "operation": "export",
+      "exit": 0,
+      "seconds": 0.006042,
+      "stdout_bytes": 2279,
+      "response_sha256": "9a8e57d24e11c8bb3cc53664e970921bbfd1a0bae92ac6f2c4791be7e11edcaf"
+    },
+    {
+      "peer": "P",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004192,
+      "stdout_bytes": 39,
+      "response_sha256": "8e99994cc12f7db740e0f765fa12103032d1325418a0c0527c9479facd46fbb5"
+    },
+    {
+      "peer": "P",
+      "operation": "propose",
+      "exit": 0,
+      "seconds": 0.011917,
+      "stdout_bytes": 3337,
+      "response_sha256": "7b051b9db78141fd92fef53cbd809a373ed3e9b561d7ed9c3801f276f19bdb91"
+    },
+    {
+      "peer": "P",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004473,
+      "stdout_bytes": 39,
+      "response_sha256": "8e99994cc12f7db740e0f765fa12103032d1325418a0c0527c9479facd46fbb5"
+    },
+    {
+      "peer": "P",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.004299,
+      "stdout_bytes": 18,
+      "response_sha256": "c92a794971b761942ca7fe3d964f2b53dbc9297f6d82c39504a2de1494e7aae4"
+    },
+    {
+      "peer": "P",
+      "operation": "propose",
+      "exit": 0,
+      "seconds": 0.008416,
+      "stdout_bytes": 3336,
+      "response_sha256": "f12c21c5312f7a2eed6d4e784099d269bc72c2cf1fb792e9458780be7169ef2d"
+    },
+    {
+      "peer": "P",
+      "operation": "integrate",
+      "exit": 0,
+      "seconds": 0.008069,
+      "stdout_bytes": 385,
+      "response_sha256": "e2ad4addbe5ec7f60017cfe001e3bcf1199ff0086b620fee6a9d7fe0f5cb97cf"
+    },
+    {
+      "peer": "P",
+      "operation": "accept_revision",
+      "exit": 0,
+      "seconds": 0.004845,
+      "stdout_bytes": 18,
+      "response_sha256": "b1b367dc6a7d077581f77f16169a6696bac3d68ffd5c93189ac60fac027e57a3"
+    },
+    {
+      "peer": "P",
+      "operation": "query",
+      "exit": 0,
+      "seconds": 0.005085,
+      "stdout_bytes": 2475,
+      "response_sha256": "5b9a766d226d95df590f0dc42b1f696a81140aff7b53e8dfecd1eaa1240bb4e3"
+    },
+    {
+      "peer": "W",
+      "operation": "query",
+      "exit": 0,
+      "seconds": 0.005242,
+      "stdout_bytes": 2475,
+      "response_sha256": "5b9a766d226d95df590f0dc42b1f696a81140aff7b53e8dfecd1eaa1240bb4e3"
+    },
+    {
+      "peer": "P",
+      "operation": "fork",
+      "exit": 0,
+      "seconds": 0.005134,
+      "stdout_bytes": 16,
+      "response_sha256": "45d64008b8f55ada2b7904fca0f80d9192addfe73e81b0a645d3b2efcc1dbbcf"
+    },
+    {
+      "peer": "P",
+      "operation": "fork",
+      "exit": 0,
+      "seconds": 0.004907,
+      "stdout_bytes": 16,
+      "response_sha256": "45d64008b8f55ada2b7904fca0f80d9192addfe73e81b0a645d3b2efcc1dbbcf"
+    },
+    {
+      "peer": "P",
+      "operation": "install_adapter",
+      "exit": 0,
+      "seconds": 0.004984,
+      "stdout_bytes": 46,
+      "response_sha256": "a3da4e92777a4abb81b70e2163f29e920391c4eed7ca47785de84aa6b2cf6fc8"
+    },
+    {
+      "peer": "P",
+      "operation": "poll",
+      "exit": 0,
+      "seconds": 0.004898,
+      "stdout_bytes": 347,
+      "response_sha256": "86781e957ee19d507818964426fdecf8a22ada6797462c067fafb9c41ad0daa4"
+    },
+    {
+      "peer": "P",
+      "operation": "complete",
+      "exit": 0,
+      "seconds": 0.004785,
+      "stdout_bytes": 33,
+      "response_sha256": "0fff75f186937c0031fdbade151781fdae18de974f69ef85bf2a529e28e0a88d"
+    },
+    {
+      "peer": "P",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.003985,
+      "stdout_bytes": 39,
+      "response_sha256": "49de1d8e46b03ac7b6322e4c32aa070fd0249a50800082281654fc81f66e9959"
+    },
+    {
+      "peer": "P",
+      "operation": "execute",
+      "exit": 0,
+      "seconds": 0.006355,
+      "stdout_bytes": 397,
+      "response_sha256": "11e1ac56324e12e29670343a6566b9a335c35bab0441298bc5f95427f0b450cb"
+    },
+    {
+      "peer": "P",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004367,
+      "stdout_bytes": 39,
+      "response_sha256": "cc581356609ce88b32ce8e0c9a492dd5279c26307dc230b61770a4978c5c32ee"
+    },
+    {
+      "peer": "P",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.004088,
+      "stdout_bytes": 44,
+      "response_sha256": "10eb3bc165945476852580aa0432942045c9f00c1c17c895d11769f509d26f94"
+    },
+    {
+      "peer": "P",
+      "operation": "execute",
+      "exit": 0,
+      "seconds": 0.007942,
+      "stdout_bytes": 7593,
+      "response_sha256": "69109a3dbdac6ce02fb03b560910603e7fc3e0b7df53bc6b72ef3984bfe7de20"
+    },
+    {
+      "peer": "P",
+      "operation": "poll",
+      "exit": 0,
+      "seconds": 0.005503,
+      "stdout_bytes": 315,
+      "response_sha256": "d3b2c6dde42a4e2d5d6cb5617033965aa2f43e714ab2c73b477d93b004ac1d55"
+    },
+    {
+      "peer": "P",
+      "operation": "complete",
+      "exit": 1,
+      "seconds": 0.00498,
+      "stdout_bytes": 0,
+      "response_sha256": "b361817e8e182f9edb9691aad621cdd61ccc8d2ba3d611d59dc01830603ada34"
+    },
+    {
+      "peer": "P",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004006,
+      "stdout_bytes": 39,
+      "response_sha256": "cc581356609ce88b32ce8e0c9a492dd5279c26307dc230b61770a4978c5c32ee"
+    },
+    {
+      "peer": "P",
+      "operation": "complete",
+      "exit": 94,
+      "seconds": 0.005501,
+      "stdout_bytes": 0,
+      "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "peer": "P",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.004336,
+      "stdout_bytes": 18,
+      "response_sha256": "c92a794971b761942ca7fe3d964f2b53dbc9297f6d82c39504a2de1494e7aae4"
+    },
+    {
+      "peer": "P",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004179,
+      "stdout_bytes": 39,
+      "response_sha256": "cc581356609ce88b32ce8e0c9a492dd5279c26307dc230b61770a4978c5c32ee"
+    },
+    {
+      "peer": "P",
+      "operation": "complete",
+      "exit": 92,
+      "seconds": 0.005795,
+      "stdout_bytes": 0,
+      "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "peer": "P",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004413,
+      "stdout_bytes": 39,
+      "response_sha256": "c9dd67ba4b522a974dda688288032f601083a0135e7edc6c657fafa434eb69bf"
+    },
+    {
+      "peer": "P",
+      "operation": "complete",
+      "exit": 0,
+      "seconds": 0.005259,
+      "stdout_bytes": 229,
+      "response_sha256": "1db17fbfbae72a73f39f7529162daf9e359d1aa6331b3ab2abfa1ea319af037d"
+    },
+    {
+      "peer": "P",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004005,
+      "stdout_bytes": 39,
+      "response_sha256": "c9dd67ba4b522a974dda688288032f601083a0135e7edc6c657fafa434eb69bf"
+    },
+    {
+      "peer": "P",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.004057,
+      "stdout_bytes": 87,
+      "response_sha256": "ab845ce20d30f8884e7c9637dd8d7e09175dcdfc6c3be7c90c8af85ee0820b9c"
+    },
+    {
+      "peer": "P",
+      "operation": "query",
+      "exit": 0,
+      "seconds": 0.006703,
+      "stdout_bytes": 5421,
+      "response_sha256": "ba5c350d7096e587f3185cdc6d4b667d543f2182504cbdc5383cc6576827d5fc"
+    },
+    {
+      "peer": "P",
+      "operation": "query",
+      "exit": 0,
+      "seconds": 0.005009,
+      "stdout_bytes": 576,
+      "response_sha256": "3fe7c614d61e253df4e41310976504d2b7bbf21dafde7e8ebbe320cecd9cec45"
+    },
+    {
+      "peer": "P",
+      "operation": "install_adapter",
+      "exit": 0,
+      "seconds": 0.004883,
+      "stdout_bytes": 46,
+      "response_sha256": "a3da4e92777a4abb81b70e2163f29e920391c4eed7ca47785de84aa6b2cf6fc8"
+    },
+    {
+      "peer": "P",
+      "operation": "poll",
+      "exit": 0,
+      "seconds": 0.007595,
+      "stdout_bytes": 395,
+      "response_sha256": "493cff102f9c7902397e096826a0b3c5a3f70736bb6e0aecddd4a5365e35c04a"
+    },
+    {
+      "peer": "P",
+      "operation": "cluster",
+      "exit": 0,
+      "seconds": 0.009121,
+      "stdout_bytes": 16505,
+      "response_sha256": "321c8bb257a7ffbe6bada9a1ea3bfb4ac8976b2ce578997ed8c8af207bf7caf1"
+    },
+    {
+      "peer": "P",
+      "operation": "complete",
+      "exit": 0,
+      "seconds": 0.009485,
+      "stdout_bytes": 230,
+      "response_sha256": "7670b9cb1fd314366338d6ba484462f14b5f3cf0b96d02f727a505bcb70583b3"
+    },
+    {
+      "peer": "P",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.004053,
+      "stdout_bytes": 87,
+      "response_sha256": "e1aba258743e60d7654f185bbaff68c753b3d78a43b7d67031af2fc3fed413b7"
+    },
+    {
+      "peer": "P",
+      "operation": "query",
+      "exit": 0,
+      "seconds": 0.004824,
+      "stdout_bytes": 1302,
+      "response_sha256": "948f621fe4f7853c14e0b692d80ac2245337af66b0295f70cff3da19a291be9f"
+    },
+    {
+      "peer": "W",
+      "operation": "execute",
+      "exit": 0,
+      "seconds": 0.005475,
+      "stdout_bytes": 200,
+      "response_sha256": "a0c93fd7987e201233379e1ee202231d3d718908a8f137629378c20529c74d00"
+    },
+    {
+      "peer": "W",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.004007,
+      "stdout_bytes": 87,
+      "response_sha256": "510904622d46af08f781fd8ba90d6570844d16b048e51d6b059f065d5afd68f6"
+    },
+    {
+      "peer": "P",
+      "operation": "export",
+      "exit": 0,
+      "seconds": 0.007164,
+      "stdout_bytes": 4794,
+      "response_sha256": "7d24e4dc231331205156a82efa7b670d96805b234fb31e3c1dbe20861763700b"
+    },
+    {
+      "peer": "W",
+      "operation": "propose",
+      "exit": 0,
+      "seconds": 0.012667,
+      "stdout_bytes": 3341,
+      "response_sha256": "fd286dd67124da38992c67df16d5f34f150083e201b009376e3485351bb7f83d"
+    },
+    {
+      "peer": "W",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004107,
+      "stdout_bytes": 39,
+      "response_sha256": "49de1d8e46b03ac7b6322e4c32aa070fd0249a50800082281654fc81f66e9959"
+    },
+    {
+      "peer": "W",
+      "operation": "integrate",
+      "exit": 1,
+      "seconds": 0.006298,
+      "stdout_bytes": 0,
+      "response_sha256": "901c7a7bb34d4f0e064b2b49f831059b62117e61ab8fdbb7c77e2fa772518977"
+    },
+    {
+      "peer": "W",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.00403,
+      "stdout_bytes": 39,
+      "response_sha256": "49de1d8e46b03ac7b6322e4c32aa070fd0249a50800082281654fc81f66e9959"
+    },
+    {
+      "peer": "W",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.004143,
+      "stdout_bytes": 87,
+      "response_sha256": "510904622d46af08f781fd8ba90d6570844d16b048e51d6b059f065d5afd68f6"
+    },
+    {
+      "peer": "W",
+      "operation": "integrate",
+      "exit": 0,
+      "seconds": 0.009425,
+      "stdout_bytes": 396,
+      "response_sha256": "fdb78db71cd58c453f8c9b5a045416cc453b8cb94904c6cd0f8c670ff2e459c6"
+    },
+    {
+      "peer": "W",
+      "operation": "integrate",
+      "exit": 0,
+      "seconds": 0.007566,
+      "stdout_bytes": 395,
+      "response_sha256": "a6b3b1340e778d108e4f1e716ae117bb5eaafaa45cfa645131e1ddbb17d41cb6"
+    },
+    {
+      "peer": "W",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.00421,
+      "stdout_bytes": 87,
+      "response_sha256": "510904622d46af08f781fd8ba90d6570844d16b048e51d6b059f065d5afd68f6"
+    },
+    {
+      "peer": "W",
+      "operation": "accept_revision",
+      "exit": 0,
+      "seconds": 0.005137,
+      "stdout_bytes": 18,
+      "response_sha256": "b1b367dc6a7d077581f77f16169a6696bac3d68ffd5c93189ac60fac027e57a3"
+    },
+    {
+      "peer": "P",
+      "operation": "export",
+      "exit": 0,
+      "seconds": 0.038727,
+      "stdout_bytes": 22826,
+      "response_sha256": "bfb3ceb2b6fd8640895566800bf3b70bf6d5ea0eca7003da417b6dd7b0359fe5"
+    },
+    {
+      "peer": "W",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004419,
+      "stdout_bytes": 39,
+      "response_sha256": "cc581356609ce88b32ce8e0c9a492dd5279c26307dc230b61770a4978c5c32ee"
+    },
+    {
+      "peer": "W",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004303,
+      "stdout_bytes": 39,
+      "response_sha256": "cc581356609ce88b32ce8e0c9a492dd5279c26307dc230b61770a4978c5c32ee"
+    },
+    {
+      "peer": "W",
+      "operation": "propose",
+      "exit": 0,
+      "seconds": 0.01847,
+      "stdout_bytes": 3385,
+      "response_sha256": "66c3c3b1e541bda707d86aa467a1bf7a2e768789c1b2d41eedfe2db94e3a22be"
+    },
+    {
+      "peer": "W",
+      "operation": "propose",
+      "exit": 0,
+      "seconds": 0.012588,
+      "stdout_bytes": 3384,
+      "response_sha256": "e0b63a103717a9f1e566e32c9241914b04a51f61ac0c978b5ce514d783f2fd1f"
+    },
+    {
+      "peer": "W",
+      "operation": "integrate",
+      "exit": 0,
+      "seconds": 0.069584,
+      "stdout_bytes": 440,
+      "response_sha256": "67f92fc9ad480f40eddb3de7b195df54a04c4b784d1fb5b34aaf51513d4f8df6"
+    },
+    {
+      "peer": "W",
+      "operation": "accept_revision",
+      "exit": 0,
+      "seconds": 0.006684,
+      "stdout_bytes": 18,
+      "response_sha256": "b1b367dc6a7d077581f77f16169a6696bac3d68ffd5c93189ac60fac027e57a3"
+    },
+    {
+      "peer": "W",
+      "operation": "cluster",
+      "exit": 0,
+      "seconds": 0.006933,
+      "stdout_bytes": 13129,
+      "response_sha256": "e737a2b4e452ce71d83ffce349fc485722ec0aec55850f3086a1bb199e7a845f"
+    },
+    {
+      "peer": "W",
+      "operation": "execute",
+      "exit": 0,
+      "seconds": 0.007119,
+      "stdout_bytes": 200,
+      "response_sha256": "77f10d127d46102b62377ecded6c2bbd366f788236d93344316568085fc6ecec"
+    },
+    {
+      "peer": "W",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.004455,
+      "stdout_bytes": 87,
+      "response_sha256": "e1aba258743e60d7654f185bbaff68c753b3d78a43b7d67031af2fc3fed413b7"
+    },
+    {
+      "peer": "W",
+      "operation": "head",
+      "exit": 0,
+      "seconds": 0.00431,
+      "stdout_bytes": 87,
+      "response_sha256": "3ff968ae358fb894078b34417bd2781769b17e4fa70fe229019d32cd3c30febf"
+    },
+    {
+      "peer": "W",
+      "operation": "query",
+      "exit": 0,
+      "seconds": 0.004788,
+      "stdout_bytes": 1302,
+      "response_sha256": "948f621fe4f7853c14e0b692d80ac2245337af66b0295f70cff3da19a291be9f"
+    },
+    {
+      "peer": "W",
+      "operation": "export",
+      "exit": 0,
+      "seconds": 0.038502,
+      "stdout_bytes": 22826,
+      "response_sha256": "bfb3ceb2b6fd8640895566800bf3b70bf6d5ea0eca7003da417b6dd7b0359fe5"
+    },
+    {
+      "peer": "T",
+      "operation": "propose",
+      "exit": 0,
+      "seconds": 0.018511,
+      "stdout_bytes": 3385,
+      "response_sha256": "8d7d8c2077cdd5e97648f787223e22a67fd1211a37841381e8227444b8e0f3a3"
+    },
+    {
+      "peer": "T",
+      "operation": "integrate",
+      "exit": 0,
+      "seconds": 0.069607,
+      "stdout_bytes": 432,
+      "response_sha256": "0472fa8778f0b405a069112ce22169032da933524f6999ff7e9b44cd31cf15e5"
+    },
+    {
+      "peer": "T",
+      "operation": "govern",
+      "exit": 0,
+      "seconds": 0.121359,
+      "stdout_bytes": 288,
+      "response_sha256": "99840a2ffe77d278ed13936f6832709b2f0b6cf0028e76b259011b708d1293d2"
+    },
+    {
+      "peer": "T",
+      "operation": "accepted",
+      "exit": 0,
+      "seconds": 0.091025,
+      "stdout_bytes": 18545,
+      "response_sha256": "40285a30566dda659480cb103b000c2a4726e7c9114332edb402ecdb22fcfbe6"
+    },
+    {
+      "peer": "T",
+      "operation": "execute",
+      "exit": 0,
+      "seconds": 0.120879,
+      "stdout_bytes": 114168,
+      "response_sha256": "3391f04f900fad15ebe6dec4a8dea2d772332537dde01e3f321a12b4987f7e04"
+    },
+    {
+      "peer": "T",
+      "operation": "accepted",
+      "exit": 1,
+      "seconds": 0.005441,
+      "stdout_bytes": 0,
+      "response_sha256": "6f31684de82f35bd29029a926586edd34ba6a23c064162628c04353d41fc93ce"
+    },
+    {
+      "peer": "T",
+      "operation": "install_adapter",
+      "exit": 0,
+      "seconds": 0.004941,
+      "stdout_bytes": 46,
+      "response_sha256": "a3da4e92777a4abb81b70e2163f29e920391c4eed7ca47785de84aa6b2cf6fc8"
+    },
+    {
+      "peer": "T",
+      "operation": "poll",
+      "exit": 0,
+      "seconds": 0.11892,
+      "stdout_bytes": 471,
+      "response_sha256": "cdde617e4037efd33ee3fd9a8096249a5b21b54793aa00f439fcdd2a7161d731"
+    },
+    {
+      "peer": "T",
+      "operation": "effect_request",
+      "exit": 0,
+      "seconds": 0.061698,
+      "stdout_bytes": 414,
+      "response_sha256": "a021ecc1970ded15cf2a17c5c7e152c6b8d0e1f89cee7762fcf4b06cb8da2c1d"
+    },
+    {
+      "peer": "T",
+      "operation": "effect_send_and_lose_response",
+      "exit": 93,
+      "seconds": 0.069121,
+      "stdout_bytes": 0,
+      "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "peer": "T",
+      "operation": "effect_status",
+      "exit": 0,
+      "seconds": 0.005059,
+      "stdout_bytes": 414,
+      "response_sha256": "f34751b71a09ff67a5ae8f41bf1b3e5b158ae4571fd2cb0a37cf91f5bb9ae5d2"
+    },
+    {
+      "peer": "T",
+      "operation": "effect_begin",
+      "exit": 1,
+      "seconds": 0.061555,
+      "stdout_bytes": 0,
+      "response_sha256": "52194264bf127097f6cf32a90a280f920e675b5336ad565ce8e8a9a57e31f98c"
+    },
+    {
+      "peer": "T",
+      "operation": "effect_reconcile",
+      "exit": 0,
+      "seconds": 0.004738,
+      "stdout_bytes": 20,
+      "response_sha256": "ab8ab50943cf5f836c61059fbb6821d26cf2f8a5f192469a25685e8d566c37e9"
+    },
+    {
+      "peer": "T",
+      "operation": "effect_status",
+      "exit": 0,
+      "seconds": 0.00416,
+      "stdout_bytes": 658,
+      "response_sha256": "102f6377267ad2e701cf2f193cdbc96db5435aafcefea1d6f769568efc2882f7"
+    },
+    {
+      "peer": "T",
+      "operation": "accepted",
+      "exit": 1,
+      "seconds": 0.005271,
+      "stdout_bytes": 0,
+      "response_sha256": "6f31684de82f35bd29029a926586edd34ba6a23c064162628c04353d41fc93ce"
+    },
+    {
+      "peer": "P",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004429,
+      "stdout_bytes": 39,
+      "response_sha256": "a823daa16871584f4e563feee4c4fbcdaf833021927b04a826565d75fe32403c"
+    },
+    {
+      "peer": "W",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004271,
+      "stdout_bytes": 39,
+      "response_sha256": "bd5e62094cb949f58925aa337d5c9669c27ba31b396c6182bbb13fa882c45dc4"
+    },
+    {
+      "peer": "T",
+      "operation": "counts",
+      "exit": 0,
+      "seconds": 0.004207,
+      "stdout_bytes": 39,
+      "response_sha256": "7391e24c80d4d304a6059b7f895a687177b839f3f6439d9ac7420664a8631281"
+    }
+  ],
+  "limits": [
+    "trusted export and trusted host recipes; no authenticated export endpoint or new peer crypto protocol",
+    "same owner across peers; independent reviewer denied; no declassification",
+    "graph.committed/graph.accepted events; no typed MetaGraphRebound or compiled reactor",
+    "whole-capsule transfer; no selective proofs, implicit multi-root acceptance or semantic merge",
+    "separate effect request and handler completion; fake local destination only",
+    "small native fixture; no browser/mobile persistence or production performance claim"
+  ]
+}
