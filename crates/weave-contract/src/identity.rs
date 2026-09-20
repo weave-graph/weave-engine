@@ -62,7 +62,7 @@ fn failure(code: &str, message: &str) -> Diagnostic {
         message: message.into(),
     }
 }
-fn digest(
+pub(crate) fn digest(
     domain: &str,
     value: &(impl Serialize + ?Sized),
     limit: usize,

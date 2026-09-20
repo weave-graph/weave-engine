@@ -3,12 +3,16 @@ pub mod context_axes;
 pub mod context_typing;
 pub use context_typing::{ContextTyping, TypedContextWitness};
 pub mod host_types;
+pub mod view_registration;
 pub use host_types::{ClusterRequest, IdentityPolicyRef, IdentityResolve};
+pub use view_registration::{
+    AcceptedGraphSelection, CompiledViewTemplate, CurrentViewSelection, ViewClock, ViewReadTime,
+};
 pub mod decimal;
 pub mod quantity;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.15.0";
+pub const VERSION: &str = "0.16.0";
 pub mod influence;
 pub use influence::GraphInfluence;
 pub mod counterpart;
@@ -216,6 +220,12 @@ pub struct CounterpartSelection {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphExpression {
+    AcceptedGraph {
+        selection: AcceptedGraphSelection,
+    },
+    CurrentView {
+        selection: CurrentViewSelection,
+    },
     TypedContext {
         input: Box<GraphExpression>,
         reference: GraphRef,
