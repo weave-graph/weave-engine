@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: weave-graph/weave-language
-          ref: bb2dc4d04b2b93282c7f93b11fab83e539ce787a
+          ref: 82a45f6391696b77e25710bde7276b40faf68d6f
           path: weave-language
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify actual compiler and persistent runtime
@@ -62,3 +62,38 @@ jobs:
           python3 weave-engine/scripts/check_governance_delivery_recovery.py
           cargo build --manifest-path weave-engine/Cargo.toml --locked -p weave-engine --features recovery-testing --example view_schedule_probe
           python3 weave-engine/scripts/check_view_schedule_recovery.py --probe "$GITHUB_WORKSPACE/weave-engine/target/debug/examples/view_schedule_probe"
+  compiler-host:
+    name: Compiler SDK and native host (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            runtime: libweave_native.so
+            compiler: libweave_compiler_sdk.so
+          - os: macos-latest
+            runtime: libweave_native.dylib
+            compiler: libweave_compiler_sdk.dylib
+          - os: windows-latest
+            runtime: weave_native.dll
+            compiler: weave_compiler_sdk.dll
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: weave-engine
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 82a45f6391696b77e25710bde7276b40faf68d6f
+          path: weave-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build actual compiler SDK and native embedding library
+        run: |
+          cargo build --manifest-path weave-language/Cargo.toml --locked -p weave-compiler-sdk
+          cargo build --manifest-path weave-engine/Cargo.toml --locked -p weave-native
+      - name: Verify arbitrary source artifacts, installation, ownership and restart
+        run: python3 weave-engine/scripts/check_host_facade.py --library weave-engine/target/debug/${{ matrix.runtime }} --compiler-sdk weave-language/target/debug/${{ matrix.compiler }}
