@@ -724,6 +724,68 @@ fn derivation(
 pub fn window(input: QueryResult, window: &Interval, ctx: &AlgebraContext) -> Result<QueryResult> {
     valid(window)?;
     validate_input(&input, ctx)?;
+    if input
+        .graph
+        .edges
+        .iter()
+        .all(|e| intersection(&e.valid_time, window).as_ref() == Some(&e.valid_time))
+        && input
+            .graph
+            .attachments
+            .iter()
+            .all(|a| intersection(&a.valid_time, window).as_ref() == Some(&a.valid_time))
+    {
+        // Payload equality, never authored operator labels, determines this identity
+        // case. Keep all normal context/proof checks before retaining original IDs.
+        let mut budget = Budget::new(ctx);
+        budget.charge(&input)?;
+        let base = base_gates(&input)?;
+        for edge in &input.graph.edges {
+            edge_context(&input, edge)?;
+            endpoint_gates(&input, edge, &base)?;
+            alternatives(&input, edge, &mut budget)?;
+        }
+        for attachment in &input.graph.attachments {
+            crate::context::ensure_consumable(
+                input.selected_context.as_ref(),
+                attachment.context.as_ref(),
+            )?;
+            if attachment.origin.is_none()
+                && attachment.derived_from.is_empty()
+                && attachment.derived_nodes.is_empty()
+                && attachment.derived_snapshots.is_empty()
+                && attachment.derivations.is_empty()
+                && input
+                    .attachment_origins
+                    .get(&attachment.id)
+                    .is_none_or(Vec::is_empty)
+            {
+                return Err(error(
+                    "E_ORIGIN_MISSING",
+                    "Temporal attachment needs source evidence",
+                ));
+            }
+            for node in &input.graph.nodes {
+                let host = match &attachment.host {
+                    MetadataHost::Node { id } => &node.id == id,
+                    MetadataHost::Entity { id } => &node.entity_id == id,
+                    _ => false,
+                };
+                if host {
+                    node_gates(&input, node)?;
+                }
+            }
+        }
+        let mut out = input;
+        out.version = VERSION.into();
+        out.graph.influence = crate::influence::input_influence(&out.graph)?;
+        out.input_snapshots
+            .extend(crate::influence::snapshots(&out.graph));
+        crate::influence::canonicalize_snapshots(&mut out.input_snapshots);
+        validate_input(&out, ctx)?;
+        Budget::new(ctx).charge(&out)?;
+        return Ok(out);
+    }
     let mut builder = Builder::new(envelope(&input, None, ctx)?, ctx)?;
     // Untimed original nodes are structural, not a claim selected by an edge match.
     for node in &input.graph.nodes {
@@ -967,6 +1029,91 @@ mod tests {
             input.attachment_origins.insert(id, vec![source]);
             input.graph.attachments.push(attachment);
         }
+    }
+    #[test]
+    fn repeated_windows_preserve_full_record_identity_and_empty_carriers() {
+        let mut source = input("L", 0, Some(10), true);
+        attach(&mut source);
+        source.graph.influence=Some(serde_json::from_value(json!({"derivations":[{"operator":"a","premises":[],"snapshot_premises":[{"graph_id":"A","revision":"r"}]},{"operator":"b","premises":[],"snapshot_premises":[{"graph_id":"B","revision":"r"}]}]})).unwrap());
+        let bounds = interval(2, Some(8));
+        let once = window(source, &bounds, &ctx()).unwrap();
+        let twice = window(once.clone(), &bounds, &ctx()).unwrap();
+        assert_eq!(once.graph, twice.graph);
+        assert_eq!(once.node_origins, twice.node_origins);
+        assert_eq!(once.edge_origins, twice.edge_origins);
+        assert_eq!(once.attachment_origins, twice.attachment_origins);
+        let empty = crate::algebra::project(once, &[], &[], &ctx()).unwrap();
+        let first = window(empty, &bounds, &ctx()).unwrap();
+        assert_eq!(
+            window(first.clone(), &bounds, &ctx()).unwrap().graph,
+            first.graph
+        );
+        // Authored labels do not bypass actual interval clipping.
+        let mut forged = input("F", 0, Some(10), true);
+        forged.graph.edges[0].derivations = vec![Derivation {
+            operator: "weave:window/v1".into(),
+            premises: vec![assertion("F", "e")],
+            node_premises: vec![],
+            snapshot_premises: vec![],
+            parameters: BTreeMap::from([("selection".into(), json!({"window":bounds}))]),
+            input_snapshots: vec![],
+        }];
+        let clipped = window(forged, &bounds, &ctx()).unwrap();
+        assert_eq!(clipped.graph.edges[0].valid_time, bounds);
+        assert_ne!(clipped.graph.edges[0].id, "e");
+    }
+    #[test]
+    fn identity_window_retains_originals_and_promoted_gates_with_full_checks() {
+        let mut source = input("L", 0, Some(10), true);
+        attach(&mut source);
+        source.graph.attachments[0].derived_snapshots = vec![GraphRef {
+            graph_id: "attachment-gate".into(),
+            revision: "r".into(),
+        }];
+        let records = source.graph.clone();
+        let broad = interval(-10, None);
+        let result = window(source.clone(), &broad, &ctx()).unwrap();
+        assert_eq!(result.graph.nodes, records.nodes);
+        assert_eq!(result.graph.edges, records.edges);
+        assert_eq!(result.graph.attachments, records.attachments);
+        assert_eq!(
+            result.graph.influence.as_ref().unwrap().snapshots,
+            records.attachments[0].derived_snapshots
+        );
+        assert_eq!(
+            window(result.clone(), &broad, &ctx()).unwrap().graph,
+            result.graph
+        );
+        let mut bad = source.clone();
+        bad.graph.edges[0].assertion_context = Some(GraphRef {
+            graph_id: "context".into(),
+            revision: "r".into(),
+        });
+        assert!(window(bad, &broad, &ctx()).is_err());
+        let mut bad = source.clone();
+        bad.graph.nodes[0].context_scope = Some(ContextSelection::Pinned {
+            reference: GraphRef {
+                graph_id: "context".into(),
+                revision: "r".into(),
+            },
+        });
+        assert!(window(bad, &broad, &ctx()).is_err());
+        let mut bad = source.clone();
+        bad.graph.attachments[0].context = Some(GraphRef {
+            graph_id: "context".into(),
+            revision: "r".into(),
+        });
+        assert!(window(bad, &broad, &ctx()).is_err());
+        let mut budget = ctx();
+        budget.max_objects = 1;
+        assert!(window(source, &broad, &budget).is_err());
+        let mut empty = input("empty", 0, Some(1), true);
+        empty.graph = GraphData::default();
+        let once = window(empty, &broad, &ctx()).unwrap();
+        assert_eq!(
+            window(once.clone(), &broad, &ctx()).unwrap().graph,
+            once.graph
+        );
     }
     #[test]
     fn finite_set_oracle_and_open_boundaries() {

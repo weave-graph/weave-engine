@@ -184,3 +184,42 @@ fn snapshot_only_edge_routes_full_budget_profile_but_legacy_groups_keep_limits()
     assert!(!carrier_profile::requires_v019(&old.graph));
     influence::protect_generated_result(&mut old, ctx().max_output_bytes).unwrap();
 }
+
+#[test]
+fn unchanged_window_retains_empty_union_influence_through_generated_scalar() {
+    let mut public = input();
+    public.node_origins.insert(
+        "n".into(),
+        vec![NodeRef {
+            graph_id: "public".into(),
+            revision: "r".into(),
+            node_id: "n".into(),
+        }],
+    );
+    let mut empty = input();
+    empty.graph = GraphData::default();
+    empty.graph.influence = Some(choice());
+    let combined = algebra::union(public, empty, &ctx()).unwrap();
+    let before = combined.graph.clone();
+    let bounds = Interval {
+        start: -100,
+        end: None,
+    };
+    let selected = temporal::window(combined, &bounds, &ctx()).unwrap();
+    assert_eq!(selected.graph.nodes, before.nodes);
+    assert_eq!(selected.graph.edges, before.edges);
+    assert_choice(&selected.graph.influence.as_ref().unwrap().derivations);
+    let again = temporal::window(selected, &bounds, &ctx()).unwrap();
+    assert_choice(&again.graph.influence.as_ref().unwrap().derivations);
+    let entity = EntitySpace {
+        entity_id: "n".into(),
+        space_id: "s".into(),
+    };
+    let mut scalar = algebra::support(again, "p", &entity, &entity, 5, &ctx()).unwrap();
+    scalar.graph.influence = None;
+    for node in &mut scalar.graph.nodes {
+        node.readers.clear();
+        assert_choice(&node.derivations);
+    }
+    influence::validate_graph(&scalar.graph).unwrap();
+}

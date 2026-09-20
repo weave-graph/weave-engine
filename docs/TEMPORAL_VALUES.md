@@ -7,7 +7,14 @@ transport validation must enforce these fields before exposing results.
 
 `Window` clips assertion occurrences to a nonempty half-open interval. Untimed
 original nodes remain structure. Modified edges and metadata receive new IDs and
-source proofs; original immutable payloads are not rewritten. `Sequence` matches
+source proofs; original immutable payloads are not rewritten. After full input,
+context and provenance validation, a window that changes no edge or attachment
+interval retains all record IDs and payloads. Reapplying the same window is
+therefore idempotent. This identity case keeps whole-value restrictions (including
+an empty Union operand) and promoted declared attachment gates; subsequent generated
+scalars inherit them. Like Filter/Project, it does not rewrite an unchanged public
+original record merely to copy the value envelope onto that record. Newly clipped
+wrappers carry their derived restrictions when detached. `Sequence` matches
 positive occurrences through equal entity/space at the left target and right
 source. It tests original intervals before clipping: `before` is strict,
 `meets` is endpoint equality, `overlaps` is symmetric nonempty intersection and
