@@ -704,8 +704,12 @@ mod tests {
                 .map(|i| alt(1, &format!("different{i}")))
                 .collect(),
         };
+        let mut other = groups(12);
+        for g in &mut other.alternatives {
+            g.operator = format!("other-{}", g.operator);
+        }
         assert_eq!(
-            conjunction(&groups(12), &groups(12), &mut budget())
+            conjunction(&groups(12), &other, &mut budget())
                 .unwrap_err()
                 .code,
             "E_INFLUENCE_BUDGET"

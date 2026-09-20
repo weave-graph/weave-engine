@@ -516,14 +516,7 @@ pub fn protect_generated_result(
         return Ok(());
     };
     validate(influence)?;
-    if !influence.derivations.is_empty()
-        || result.graph.nodes.iter().any(|n| !n.derivations.is_empty())
-        || result
-            .graph
-            .attachments
-            .iter()
-            .any(|a| !a.derivations.is_empty())
-    {
+    if crate::carrier_profile::requires_v019(&result.graph) {
         return protect_alternatives(result, limit);
     }
     let mut budget = Bytes(limit.min(32 * 1024 * 1024));

@@ -151,3 +151,40 @@ fn new_snapshot_profile_caps_raw_aggregate_and_protection_fails_atomically() {
     assert!(influence::protect_generated_result(&mut source, 20).is_err());
     assert_eq!(source, before);
 }
+
+#[test]
+fn snapshot_only_edge_routes_full_budget_profile_but_legacy_groups_keep_limits() {
+    let mut source = input();
+    source.graph.edges[0].derivations.truncate(1);
+    source.graph.edges[0].derivations[0].snapshot_premises = (0..1000)
+        .map(|n| GraphRef {
+            graph_id: format!("S{n}"),
+            revision: "r".into(),
+        })
+        .collect();
+    source.graph.influence = Some(GraphInfluence {
+        nodes: vec![NodeRef {
+            graph_id: "D".into(),
+            revision: "r".into(),
+            node_id: "n".into(),
+        }],
+        ..GraphInfluence::default()
+    });
+    let before = source.clone();
+    assert!(influence::protect_generated_result(&mut source, ctx().max_output_bytes).is_err());
+    assert_eq!(source, before);
+    let mut old = input();
+    for (i, g) in old.graph.edges[0].derivations.iter_mut().enumerate() {
+        g.snapshot_premises.clear();
+        g.node_premises = (0..600)
+            .map(|n| NodeRef {
+                graph_id: format!("old{i}"),
+                revision: "r".into(),
+                node_id: n.to_string(),
+            })
+            .collect();
+    }
+    old.graph.influence = before.graph.influence;
+    assert!(!carrier_profile::requires_v019(&old.graph));
+    influence::protect_generated_result(&mut old, ctx().max_output_bytes).unwrap();
+}
