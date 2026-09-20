@@ -180,6 +180,37 @@ fn fully_authorized_transitive_explanation_pins_preserve_whole_snapshot_export()
 }
 
 #[test]
+fn entity_attachment_explanation_excludes_reader_hidden_manifestation_ancestry() {
+    let mut e = engine();
+    let secret = commit(&mut e, "Secret", source(json!(["bob"])));
+    let data: GraphData = serde_json::from_value(json!({
+        "nodes":[
+            {"id":"public","entity_id":"shared","space_id":"s"},
+            {"id":"hidden","entity_id":"shared","space_id":"s","readers":["bob"],
+                "derived_from":[assertion(&secret,"z")]}
+        ],
+        "attachments":[{"id":"note","host":{"kind":"entity","id":"shared"},"key":"note",
+            "value":{"kind":"literal","value":"public note"},"valid_time":{"start":0}}]
+    }))
+    .unwrap();
+    let visible_host = commit(&mut e, "Proofs", data);
+    let data = saved(
+        false,
+        vec![assertion(&visible_host, "note")],
+        vec![group(
+            vec![assertion(&visible_host, "note")],
+            vec![],
+            vec![visible_host, secret],
+        )],
+    );
+    let root = commit(&mut e, "Saved", data);
+    let result = query(&e, &root);
+    assert_eq!(result.coverage, Coverage::Complete);
+    assert_eq!(result.graph.edges.len(), 1);
+    assert!(!serde_json::to_string(&result).unwrap().contains("Secret"));
+}
+
+#[test]
 fn a_withheld_alternative_is_not_whole_snapshot_authorization() {
     for explicit in [false, true] {
         for node_only in [false, true] {

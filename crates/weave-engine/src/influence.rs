@@ -235,6 +235,9 @@ impl Engine {
             let Some(source) = self.load(&graph, &revision)? else {
                 continue;
             };
+            // Match the primary reader/endpoint filtering used by premise checks;
+            // hidden entity manifestations must never contribute ancestry pins.
+            let source = visible(source, &host.principal);
             // The root group and every queued branch have already passed ordinary
             // semantic authorization in this same operation snapshot. Only actual
             // flat gates and successful alternatives are followed, never their
