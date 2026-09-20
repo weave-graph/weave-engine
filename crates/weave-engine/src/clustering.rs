@@ -205,6 +205,7 @@ impl Engine {
         );
         let mut ids: BTreeSet<_> = value.graph.nodes.iter().map(|n| n.id.clone()).collect();
         let derived = |id: String, properties: BTreeMap<String, serde_json::Value>| Node {
+            derived_snapshots: vec![],
             id: id.clone(),
             entity_id: id,
             space_id: "weave:navigation".into(),
@@ -282,6 +283,7 @@ impl Engine {
                     Sha256::digest(serde_json::to_vec(&(from, to, predicate, &evidence))?)
                 );
                 let edge = Edge {
+                    derived_snapshots: vec![],
                     derived_nodes: node_proofs.clone(),
                     id,
                     from: from.into(),
@@ -365,7 +367,8 @@ impl Engine {
             .collect();
         value.provenance = claim_proofs;
         output.context_typing = value.graph.context_typing.clone();
-        output.influence = value.graph.influence.clone();
+        output.influence = weave_contract::influence::input_influence(&value.graph)
+            .map_err(|d| err(&d.code, &d.message))?;
         value.graph = output;
         value.attachment_origins.clear();
         value.metadata_graphs.clear();
@@ -487,6 +490,7 @@ impl Engine {
             Sha256::digest(serde_json::to_vec(&lineage)?)
         );
         let node = Node {
+            derived_snapshots: vec![],
             id: id.clone(),
             entity_id: id.clone(),
             space_id: "weave:navigation".into(),
@@ -505,7 +509,8 @@ impl Engine {
         // deliberately different source objects and must not be unioned as objects.
         for value in [&mut left, &mut right] {
             let typing = value.graph.context_typing.take();
-            let influence = value.graph.influence.take();
+            let influence = weave_contract::influence::input_influence(&value.graph)
+                .map_err(|d| err(&d.code, &d.message))?;
             value.graph = GraphData {
                 context_typing: typing,
                 influence,

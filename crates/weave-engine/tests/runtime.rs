@@ -6,6 +6,7 @@ fn host() -> HostContext {
 }
 fn node(id: &str, entity: &str, space: &str) -> Node {
     Node {
+        derived_snapshots: vec![],
         derived_nodes: vec![],
         derived_from: vec![],
         context_scope: None,
@@ -32,6 +33,7 @@ fn data() -> GraphData {
             node("operational", "device", "operational"),
         ],
         edges: vec![Edge {
+            derived_snapshots: vec![],
             derived_nodes: vec![],
             assertion_source: None,
             assertion_context: None,

@@ -426,3 +426,32 @@ fn cached_signature_does_not_bypass_current_stored_revision_integrity() {
     );
     assert_eq!(e.event_count().unwrap(), events);
 }
+
+#[test]
+fn empty_snapshot_export_and_cached_retry_require_complete_scope() {
+    let f = Fixture::new();
+    let mut e = Engine::memory_with_clock(f.clock.clone()).unwrap();
+    f.install(&e);
+    let source = write(&mut e, "A", json!({}));
+    let saved = write(&mut e, "g", json!({"influence":{"snapshots":[source]}}));
+    let request = f.request(saved);
+    let narrow = f.proof(&request, &["g"], 81, 100, 1000);
+    assert!(e
+        .admit_capsule_export(&narrow, &request, &f.signer())
+        .is_err());
+    let broad = f.proof(&request, &["A", "g"], 81, 100, 1000);
+    let first = e
+        .admit_capsule_export(&broad, &request, &f.signer())
+        .unwrap();
+    assert_eq!(first.result.capsule.format, "weave-capsule-0.3");
+    assert_eq!(first.result.capsule.revisions.len(), 2);
+    assert!(e
+        .admit_capsule_export(&narrow, &request, &f.signer())
+        .is_err());
+    assert_eq!(
+        e.admit_capsule_export(&broad, &request, &f.signer())
+            .unwrap()
+            .result,
+        first.result
+    );
+}

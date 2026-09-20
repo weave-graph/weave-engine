@@ -1164,6 +1164,7 @@ fn empty_value_influence_revocation_invalidates_cached_view_without_head_movemen
                 expected_head: None,
                 data: GraphData {
                     influence: Some(GraphInfluence {
+                        snapshots: vec![],
                         assertions: vec![],
                         nodes: vec![gate],
                     }),

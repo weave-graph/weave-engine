@@ -59,6 +59,16 @@ impl Engine {
         budget: &mut usize,
         depth: u32,
     ) -> Result<Option<TypedContextWitness>> {
+        let _scope = self.authorization.enter();
+        let Some(_proof) = self.authorization.proof(
+            2,
+            &reference.graph_id,
+            &reference.revision,
+            "definition",
+            &host.principal,
+        ) else {
+            return Ok(None);
+        };
         if depth > 32
             || *budget == 0
             || expected.validate().is_err()

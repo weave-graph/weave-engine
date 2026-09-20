@@ -337,6 +337,7 @@ fn geometry_result(
     }
     let node_gates = node_gates.into_values().cloned().collect();
     let mut node_gates = GraphInfluence {
+        snapshots: vec![],
         assertions: origins.clone(),
         nodes: node_gates,
     };
@@ -374,6 +375,7 @@ fn geometry_result(
         }
     };
     let node = Node {
+        derived_snapshots: vec![],
         derived_nodes: node_gates.nodes,
         derived_from: origins.clone(),
         context_scope: Some(context.clone().unwrap_or_default()),
@@ -390,6 +392,7 @@ fn geometry_result(
         readers: vec![host.principal.clone()],
     };
     let edge = Edge {
+        derived_snapshots: vec![],
         derived_nodes: vec![],
         structural_ref: None,
         assertion_source: None,
@@ -419,13 +422,17 @@ fn geometry_result(
         None => Ok(first.value.graph.context_typing.clone()),
     }
     .map_err(|d| err(&d.code, &d.message))?;
-    let influence = weave_contract::influence::merge(
-        first.value.graph.influence.as_ref(),
-        second
-            .as_ref()
-            .and_then(|other| other.value.graph.influence.as_ref()),
-    )
-    .map_err(|d| err(&d.code, &d.message))?;
+    let first_influence = weave_contract::influence::input_influence(&first.value.graph)
+        .map_err(|d| err(&d.code, &d.message))?;
+    let second_influence = second
+        .as_ref()
+        .map(|other| weave_contract::influence::input_influence(&other.value.graph))
+        .transpose()
+        .map_err(|d| err(&d.code, &d.message))?
+        .flatten();
+    let influence =
+        weave_contract::influence::merge(first_influence.as_ref(), second_influence.as_ref())
+            .map_err(|d| err(&d.code, &d.message))?;
     let mut value = first.value;
     if let Some(other) = second {
         value.source_revisions =

@@ -118,6 +118,7 @@ impl Engine {
         revision: &str,
         host: &HostContext,
     ) -> Result<bool> {
+        let _authorization = self.authorization.enter();
         if !self.identity_reference_allowed(graph, revision, host)? {
             return Ok(false);
         }

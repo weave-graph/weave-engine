@@ -28,6 +28,8 @@ impl Engine {
         key: &str,
         principal: &HostContext,
     ) -> Result<QueryResult> {
+        input.graph.influence = weave_contract::influence::input_influence(&input.graph)
+            .map_err(|d| err(&d.code, &d.message))?;
         let resolved_host = match host {
             MetadataHost::Assertion { id }
                 if input
@@ -77,6 +79,7 @@ impl Engine {
         input.graph.influence = weave_contract::influence::merge(
             input.graph.influence.as_ref(),
             Some(&GraphInfluence {
+                snapshots: vec![],
                 assertions: origin.clone(),
                 nodes: vec![],
             }),
@@ -135,7 +138,9 @@ impl Engine {
         }
         let influence = weave_contract::influence::merge(
             input.graph.influence.as_ref(),
-            graph.influence.as_ref(),
+            weave_contract::influence::input_influence(&graph)
+                .map_err(|d| err(&d.code, &d.message))?
+                .as_ref(),
         )
         .map_err(|d| err(&d.code, &d.message))?;
         let mut typing = context_typing::merge(

@@ -273,7 +273,14 @@ fn validate_response(response: &SignedCapsuleExport, key: &str) -> Result<()> {
     if b.format != RESPONSE
         || b.server_key != key
         || b.root != response.capsule.root
-        || b.contract_version != VERSION
+        || ![VERSION, "0.16.0"].contains(&b.contract_version.as_str())
+        || (b.contract_version == "0.16.0"
+            && (response.capsule.format == "weave-capsule-0.3"
+                || response
+                    .capsule
+                    .revisions
+                    .iter()
+                    .any(|r| influence::requires_v017(&r.data))))
         || b.capsule_format != response.capsule.format
         || b.served_at_ms < 0
     {
@@ -346,11 +353,13 @@ pub(crate) fn visit_dependencies(
     if let Some(i) = &data.influence {
         pins!(&i.assertions);
         pins!(&i.nodes);
+        pins!(&i.snapshots);
     }
     for n in &data.nodes {
         pins!(&n.metadata);
         pins!(&n.derived_from);
         pins!(&n.derived_nodes);
+        pins!(&n.derived_snapshots);
         if let Some(r) = n
             .context_scope
             .as_ref()
@@ -363,6 +372,7 @@ pub(crate) fn visit_dependencies(
         pins!(&e.metadata);
         pins!(&e.derived_from);
         pins!(&e.derived_nodes);
+        pins!(&e.derived_snapshots);
         pins!(e.structural_ref.iter());
         pins!(e.assertion_context.iter());
     }
@@ -374,6 +384,7 @@ pub(crate) fn visit_dependencies(
         pins!(a.context.iter());
         pins!(&a.derived_from);
         pins!(&a.derived_nodes);
+        pins!(&a.derived_snapshots);
     }
     for g in data
         .edges
@@ -386,6 +397,9 @@ pub(crate) fn visit_dependencies(
         pins!(&g.input_snapshots);
     }
     for a in &data.attachments {
+        pins!(&a.derived_from);
+        pins!(&a.derived_nodes);
+        pins!(&a.derived_snapshots);
         pins!(a.context.iter());
         pins!(a.origin.iter());
         match &a.value {
@@ -410,10 +424,23 @@ fn complete_closure(capsule: &Capsule, work: &mut usize) -> Result<Vec<GraphRef>
     if !capsule.external_dependencies.is_empty() {
         return Err(unavailable());
     }
+    if capsule.format != "weave-capsule-0.3"
+        && capsule
+            .revisions
+            .iter()
+            .any(|r| influence::requires_v017(&r.data))
+    {
+        return Err(binding_error());
+    }
     if capsule.revisions.len() > 1000 || capsule.manifests.len() > 1000 {
         return Err(err("E_BUDGET", "export closure exceeds budget"));
     }
-    if !["weave-capsule-0.1", "weave-capsule-0.2"].contains(&capsule.format.as_str())
+    if ![
+        "weave-capsule-0.1",
+        "weave-capsule-0.2",
+        "weave-capsule-0.3",
+    ]
+    .contains(&capsule.format.as_str())
         || (capsule.format == "weave-capsule-0.1" && !capsule.manifests.is_empty())
     {
         return Err(binding_error());
@@ -732,7 +759,7 @@ mod tests {
             policy_epoch: "epoch1".into(),
             root: capsule.root.clone(),
             branch_id: "main".into(),
-            contract_version: VERSION.into(),
+            contract_version: "0.16.0".into(),
             capsule_format: capsule.format.clone(),
             capsule_digest: weave_policy::body_digest(&serde_json::to_vec(&capsule).unwrap()),
             served_at_ms: 20,

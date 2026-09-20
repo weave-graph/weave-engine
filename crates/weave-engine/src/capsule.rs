@@ -275,7 +275,9 @@ impl Engine {
             }
         }
         let capsule = Capsule {
-            format: if manifests.is_empty() {
+            format: if revisions.iter().any(|r| influence::requires_v017(&r.data)) {
+                "weave-capsule-0.3"
+            } else if manifests.is_empty() {
                 "weave-capsule-0.1"
             } else {
                 "weave-capsule-0.2"
@@ -311,8 +313,22 @@ impl Engine {
     }
     fn receive_capsule_inner(&self, capsule: &Capsule, host: &HostContext) -> Result<usize> {
         let _read_scope = self.read_budget.enter();
-        if !["weave-capsule-0.1", "weave-capsule-0.2"].contains(&capsule.format.as_str()) {
+        if ![
+            "weave-capsule-0.1",
+            "weave-capsule-0.2",
+            "weave-capsule-0.3",
+        ]
+        .contains(&capsule.format.as_str())
+        {
             return Err(err("E_VERSION", "unsupported capsule format"));
+        }
+        if capsule.format != "weave-capsule-0.3"
+            && capsule
+                .revisions
+                .iter()
+                .any(|r| influence::requires_v017(&r.data))
+        {
+            return Err(err("E_VERSION", "snapshot influence requires capsule 0.3"));
         }
         if capsule.format == "weave-capsule-0.1" && !capsule.manifests.is_empty() {
             return Err(err("E_VERSION", "logical manifests require capsule 0.2"));
@@ -384,7 +400,7 @@ impl Engine {
             }
             let digest = record.digest()?;
             if record.revision.starts_with("logical:") {
-                if capsule.format != "weave-capsule-0.2"
+                if !["weave-capsule-0.2", "weave-capsule-0.3"].contains(&capsule.format.as_str())
                     || logical
                         .get(&record.revision)
                         .is_none_or(|(expected, _)| expected != &digest)

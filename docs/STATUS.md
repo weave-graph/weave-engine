@@ -8,6 +8,10 @@ The current native runtime includes genuine accepted-governance graph reads, a t
 
 Protocol0.16 adds: exact accepted-occurrence expressions, definition-matched RequireCurrent view expressions, and separate canonical host registration artifacts. Source manifests persist through initial/full/incremental/fallback evaluation. SQLite marker14 protects compiled registration identity. The [0.16 contract](contract/v0.16/README.md) records the native boundary; paired compiler acceptance is now executed in integration CI.
 
+## Candidate 0.17 (not yet published)
+
+Exact snapshot influence and complete movable-attachment influence are implemented for native/pure review; store marker15 and capsule0.3 protect the new semantics. Old0.16 template/cache/receipt bytes are retained, with populated process migration tested. The canonical compiler vendor and joint publication remain pending. See [candidate contract](contract/v0.17/README.md). No paper gate is closed by this stage.
+
 ## Implemented boundaries
 
 - Immutable SQLite snapshots/CAS, atomic logical batches, schema and structural identity, explicit assertion records, half-open fact time, principal-filtered pinned reads, graph-valued named metadata and provenance. Live handles pin explicitly; contextual traversal and metadata wrappers preserve source restrictions.

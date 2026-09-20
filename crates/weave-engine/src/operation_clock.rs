@@ -61,7 +61,11 @@ pub(crate) struct OperationClock {
     source: Arc<dyn TrustedClock>,
     state: Arc<Mutex<State>>,
 }
-pub(crate) struct ClockScope(Arc<Mutex<State>>, Option<super::read_budget::ReadScope>);
+pub(crate) struct ClockScope(
+    Arc<Mutex<State>>,
+    Option<super::read_budget::ReadScope>,
+    Option<super::authorization::Scope>,
+);
 impl OperationClock {
     pub(crate) fn new(source: Arc<dyn TrustedClock>) -> Self {
         Self {
@@ -85,7 +89,7 @@ impl OperationClock {
             state.last_sample = Some(now);
             state.active = Some((now, 1));
         }
-        Ok(ClockScope(self.state.clone(), None))
+        Ok(ClockScope(self.state.clone(), None, None))
     }
     fn current(&self) -> Result<i64> {
         self.state
@@ -124,6 +128,7 @@ impl Engine {
             })?;
         let mut scope = self.operation_clock.enter()?;
         scope.1 = Some(self.read_budget.enter());
+        scope.2 = Some(self.authorization.enter());
         Ok(scope)
     }
     pub(crate) fn operation_write_scope(&self) -> Result<ClockScope> {

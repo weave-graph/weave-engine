@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Actual marker13 ->14 death/restart/refusal; uses preserved binaries, never builds."""
+"""Actual marker13 -> current death/restart/refusal; uses preserved binaries, never builds."""
 import argparse
 import json
 import sqlite3
@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix='weave-compiled-migration-') as tmp:
     upgraded = run(a.engine)
     assert upgraded.returncode == 0, upgraded.stderr
     after = state()
-    assert after[:3] == (14,1,1) and after[3:] == before[3:], (before,after)
+    assert after[:3] == (15,1,1) and after[3:] == before[3:], (before,after)
     refused = run(a.older_engine)
     assert refused.returncode != 0 and 'E_STORAGE_VERSION' in refused.stderr, refused.stderr
     assert run(a.engine).returncode == 0 and state() == after

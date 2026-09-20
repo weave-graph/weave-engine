@@ -567,7 +567,7 @@ fn old_sql_only_decisions_are_not_backfilled_and_next_publication_is_real() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        14
+        15
     );
     assert_eq!(
         db.query_row("SELECT count(*) FROM governance_graphs", [], |r| r
@@ -1048,4 +1048,37 @@ fn accepted_graph_expression_matches_exact_native_occurrence_and_expiry_rolls_ba
         .unwrap_err();
     assert_eq!(error.code, "E_GOV_UNAVAILABLE");
     assert!(e.head("saved", "main").unwrap().is_none());
+}
+
+#[test]
+fn snapshot_gate_retains_current_governance_policy_through_cached_values() {
+    let mut e = test_clock::memory().unwrap();
+    let source = seed(&mut e, 2);
+    accept(&e, source);
+    let accepted = e.query_accepted_view(&choose(None), &host()).unwrap();
+    let gate = &accepted.graph.influence.as_ref().unwrap().assertions[0];
+    let snapshot = GraphRef {
+        graph_id: gate.graph_id.clone(),
+        revision: gate.revision.clone(),
+    };
+    let data: GraphData = serde_json::from_value(json!({
+        "nodes":[{"id":"scalar","entity_id":"scalar","space_id":"result","derived_snapshots":[snapshot]}],
+        "attachments":[{"id":"literal","host":{"kind":"graph"},"key":"count","value":{"kind":"literal","value":1},"valid_time":{"start":0},"derived_snapshots":[snapshot]}]
+    })).unwrap();
+    let saved = save(&mut e, data);
+    let definition = ViewDefinition {
+        id: "snapshot-cache".into(),
+        expression: GraphExpression::Query { query: q(&saved) },
+        clock: ViewClock::Fixed,
+    };
+    e.register_view(&definition, None, &host()).unwrap();
+    assert_eq!(e.query(&q(&saved), &host()).unwrap().graph.nodes.len(), 1);
+    test_clock::at(10000, || {
+        let value = e.query(&q(&saved), &host()).unwrap();
+        assert!(value.graph.nodes.is_empty());
+        assert!(value.graph.attachments.is_empty());
+        assert!(e
+            .read_view("snapshot-cache", None, ViewFreshness::AllowStale, &host())
+            .is_err());
+    });
 }

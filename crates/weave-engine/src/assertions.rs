@@ -12,6 +12,7 @@ pub(crate) fn assertion_edge(
         }
     }
     Edge {
+        derived_snapshots: assertion.derived_snapshots.clone(),
         derived_nodes: assertion.derived_nodes.clone(),
         assertion_source: Some(assertion.source.clone()),
         assertion_context: assertion.context.clone(),
@@ -59,6 +60,7 @@ pub(crate) fn materialize(
                 .derived_from
                 .len()
                 .saturating_add(node.derived_nodes.len())
+                .saturating_add(node.derived_snapshots.len())
                 >= 1000
             {
                 return Err(err(

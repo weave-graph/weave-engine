@@ -4,7 +4,7 @@ use weave_engine::{Engine, HostContext};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 3 {
-        return Err("usage: storage_probe DATABASE seed|open|crash".into());
+        return Err("usage: storage_probe DATABASE seed|open|crash|after_commit".into());
     }
     #[cfg(feature = "recovery-testing")]
     if args[2] == "crash" {
@@ -26,6 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?;
         }
         "open" => {}
+        "after_commit" => std::process::exit(83),
         _ => return Err("unknown operation".into()),
     }
     println!(

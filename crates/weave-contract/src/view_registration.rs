@@ -3,7 +3,7 @@ use crate::*;
 use serde::{Deserialize, Serialize};
 
 pub const VIEW_TEMPLATE_FORMAT: &str = "weave-view-registration/1";
-pub const VIEW_TEMPLATE_PROTOCOL: &str = "0.16.0";
+pub const VIEW_TEMPLATE_PROTOCOL: &str = "0.17.0";
 const LIMIT: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -76,7 +76,9 @@ pub fn is_definition_digest(value: &str) -> bool {
 }
 fn fields(template: &CompiledViewTemplate) -> Result<(), Diagnostic> {
     identity::digest("weave-view-template-bound", template, LIMIT)?;
-    if template.format != VIEW_TEMPLATE_FORMAT || template.protocol != VIEW_TEMPLATE_PROTOCOL {
+    if template.format != VIEW_TEMPLATE_FORMAT
+        || ![VIEW_TEMPLATE_PROTOCOL, "0.16.0"].contains(&template.protocol.as_str())
+    {
         return Err(fail(
             "E_VIEW_TEMPLATE",
             "unsupported registration artifact format or protocol",
