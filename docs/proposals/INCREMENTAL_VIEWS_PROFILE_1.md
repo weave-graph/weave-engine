@@ -1,6 +1,6 @@
 # First exact incremental living-view profile
 
-Status: reviewed implementation profile, based on engine `45e0ea6`. The first kernel/refresh stage is described in [incremental selection](../INCREMENTAL_SELECTION.md); SQLite marker 13 is approved for private auxiliary state. Durable scheduling remains the next distinct checkpoint. No shared protocol change. E07 remains in progress.
+Status: reviewed implementation profile, based on engine `45e0ea6`. The first kernel/refresh stage is described in [incremental selection](../INCREMENTAL_SELECTION.md); SQLite marker 13 is approved for private auxiliary state. The separate bounded durable scheduling checkpoint is documented in [view scheduling](../VIEW_SCHEDULING.md). No shared protocol change. E07 remains in progress.
 
 The engine paper [section 5](../source/Weave_Engine_White_Paper_v0.1.md) requires snapshot-pinned execution, incremental materializations, batched invalidation and processed-input watermarks; stale indexes must not silently become current truth. It identifies differential dataflow as a research foundation, not a mandated implementation. This first profile implements an exact incremental selection operator while retaining the existing [full recomputation](../VIEWS.md) as oracle and fallback. It does not add differential joins, recursive maintenance or a distributed consistency claim.
 

@@ -338,6 +338,12 @@
       "evidence": [
         "docs/VIEWS.md",
         "docs/INCREMENTAL_SELECTION.md",
+        "docs/VIEW_SCHEDULING.md",
+        "crates/weave-engine/src/view_schedule.rs",
+        "crates/weave-engine/tests/view_schedule.rs",
+        "crates/weave-engine/tests/root_view_schedule.rs",
+        "scripts/check_view_schedule_recovery.py",
+        "docs/benchmarks/selection-local.json",
         "crates/weave-engine/src/selection.rs",
         "crates/weave-engine/tests/incremental_views.rs",
         "crates/weave-engine/tests/root_incremental_views.rs",

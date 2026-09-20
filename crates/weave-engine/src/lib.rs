@@ -30,6 +30,8 @@ mod capsule;
 use assertions::{assertion_edge, materialize, validate_explicit};
 mod dispatch;
 mod selection;
+mod view_schedule;
+pub use view_schedule::{ViewScanBudget, ViewScanProgress, ViewWorkOutcome};
 mod views;
 pub use dispatch::{
     AdapterManifest, DispatchEnvelope, EffectIntent, HandlerReceipt, SubscriptionScope,
@@ -181,6 +183,7 @@ impl Engine {
         }
         engine.initialize_dispatch()?;
         engine.initialize_views()?;
+        engine.initialize_view_schedule()?;
         engine.initialize_admission()?;
         engine.initialize_identity()?;
         engine.initialize_mounts()?;

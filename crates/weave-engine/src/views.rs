@@ -158,6 +158,19 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         tx.commit()?;
         Ok(())
     }
+    pub(crate) fn view_schedule_definition(
+        &self,
+        id: &str,
+        host: &HostContext,
+    ) -> Result<(ViewDefinition, Option<i64>)> {
+        self.read_budget.request()?;
+        let row: Option<(Option<String>,Option<i64>)> = self.conn.query_row("SELECT CASE WHEN length(CAST(definition AS BLOB))<=?3 THEN definition END,tick FROM live_views WHERE id=?1 AND principal=?2",params![id,host.principal,self.read_budget.remaining().min(1024*1024) as i64],|r| Ok((r.get(0)?,r.get(1)?))).optional()?;
+        let (definition, tick) = row.ok_or_else(|| err("E_UNAVAILABLE", "view unavailable"))?;
+        let definition =
+            definition.ok_or_else(|| err("E_BUDGET", "view definition exceeds read budget"))?;
+        self.read_budget.charge(definition.len())?;
+        Ok((serde_json::from_str(&definition)?, tick))
+    }
     fn selection_state(
         &self,
         id: &str,
@@ -193,7 +206,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             }
             None => None,
         };
-        let other: i64 = self.conn.query_row("SELECT coalesce(sum(length(CAST(state AS BLOB))),0) FROM view_selection WHERE principal=?1 AND id<>?2", params![host.principal,id], |r| r.get(0))?;
+        let other: i64 = self.conn.query_row("SELECT (SELECT coalesce(sum(length(CAST(state AS BLOB))),0) FROM view_selection WHERE principal=?1 AND id<>?2)+(SELECT coalesce(sum(length(CAST(processed_manifest AS BLOB))),0) FROM view_schedules WHERE principal=?1)", params![host.principal,id], |r| r.get(0))?;
         if usize::try_from(other)
             .unwrap_or(usize::MAX)
             .saturating_add(encoded.as_ref().map_or(0, String::len))
@@ -411,9 +424,22 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             .collect::<Result<Vec<_>>>()?;
         Ok((result, dependencies))
     }
-    fn view_current(&self, record: &ViewRecord, tick: Option<i64>) -> Result<bool> {
+    fn view_current(
+        &self,
+        record: &ViewRecord,
+        tick: Option<i64>,
+        host: &HostContext,
+    ) -> Result<bool> {
         validate_tick(&record.definition.clock, tick)?;
         if record.tick != tick || record.result.coverage == Coverage::Partial {
+            return Ok(false);
+        }
+        let requested: Option<Option<i64>> = self.conn.query_row("SELECT requested_tick FROM view_schedules WHERE id=?1 AND principal=?2 AND pending=1",params![record.definition.id,host.principal],|r|r.get(0)).optional()?;
+        if requested
+            .flatten()
+            .zip(record.tick)
+            .is_some_and(|(requested, processed)| requested > processed)
+        {
             return Ok(false);
         }
         for dependency in &record.dependencies {
@@ -440,7 +466,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         let _clock_scope = self.operation_scope()?;
         let record = self.load_view(id, host)?;
         self.require_current_result_authority(&record.result, host)?;
-        let current = self.view_current(&record, tick)?;
+        let current = self.view_current(&record, tick, host)?;
         if !current && freshness == ViewFreshness::RequireCurrent {
             return Err(err("E_FRESHNESS", "view requires explicit refresh"));
         }
@@ -472,9 +498,17 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         tick: Option<i64>,
         host: &HostContext,
     ) -> Result<(ViewSnapshot, ViewSelectionWork)> {
+        self.refresh_view_work_inner(id, tick, host)
+    }
+    pub(crate) fn refresh_view_work_inner(
+        &self,
+        id: &str,
+        tick: Option<i64>,
+        host: &HostContext,
+    ) -> Result<(ViewSnapshot, ViewSelectionWork)> {
         let mut work = ViewSelectionWork::default();
         let _read_scope = self.read_budget.enter();
-        let tx = self.conn.unchecked_transaction()?;
+        let tx = self.optional_read_transaction()?;
         let _clock_scope = self.operation_write_scope()?;
         let old = self.load_view(id, host)?;
         validate_tick(&old.definition.clock, tick)?;
@@ -496,7 +530,9 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             let change = change_between(Some(&old.result), &result, generation as u64, tick);
             self.record_view_change(id, &host.principal, &change, &dependencies, &old.result)?;
         }
-        tx.commit()?;
+        if let Some(tx) = tx {
+            tx.commit()?;
+        }
         Ok((
             ViewSnapshot {
                 generation: generation as u64,

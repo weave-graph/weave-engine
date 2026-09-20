@@ -1,0 +1,73 @@
+{
+  "limits": "small local fixture; full snapshot verification/comparison and output repinning remain; no speedup or capacity claim",
+  "profile": "debug",
+  "samples": [
+    {
+      "claims_rendered": 256,
+      "fallback_runs": 0,
+      "full_refresh_ms": 28.865708,
+      "incremental_refresh_ms": 38.237166,
+      "iteration": 1,
+      "kernel_records_hashed": 258,
+      "memberships_evaluated": 1,
+      "nodes_repinned": 2,
+      "raw_records_loaded": 258,
+      "result_bytes": 110125
+    },
+    {
+      "claims_rendered": 256,
+      "fallback_runs": 0,
+      "full_refresh_ms": 28.647417,
+      "incremental_refresh_ms": 37.596875000000004,
+      "iteration": 2,
+      "kernel_records_hashed": 258,
+      "memberships_evaluated": 1,
+      "nodes_repinned": 2,
+      "raw_records_loaded": 258,
+      "result_bytes": 110125
+    },
+    {
+      "claims_rendered": 256,
+      "fallback_runs": 0,
+      "full_refresh_ms": 28.954792,
+      "incremental_refresh_ms": 37.67,
+      "iteration": 3,
+      "kernel_records_hashed": 258,
+      "memberships_evaluated": 1,
+      "nodes_repinned": 2,
+      "raw_records_loaded": 258,
+      "result_bytes": 110125
+    },
+    {
+      "claims_rendered": 256,
+      "fallback_runs": 0,
+      "full_refresh_ms": 29.601708000000002,
+      "incremental_refresh_ms": 38.816167,
+      "iteration": 4,
+      "kernel_records_hashed": 258,
+      "memberships_evaluated": 1,
+      "nodes_repinned": 2,
+      "raw_records_loaded": 258,
+      "result_bytes": 110125
+    },
+    {
+      "claims_rendered": 256,
+      "fallback_runs": 0,
+      "full_refresh_ms": 29.552167,
+      "incremental_refresh_ms": 38.417417,
+      "iteration": 5,
+      "kernel_records_hashed": 258,
+      "memberships_evaluated": 1,
+      "nodes_repinned": 2,
+      "raw_records_loaded": 258,
+      "result_bytes": 110125
+    }
+  ],
+  "storage": "in-memory SQLite",
+  "workload": "2 nodes, 256 claims, one claim property correction per iteration; alternating evaluation order",
+  "environment": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "medians_ms": {
+    "full_refresh_ms": 28.954792,
+    "incremental_refresh_ms": 38.237166
+  }
+}
