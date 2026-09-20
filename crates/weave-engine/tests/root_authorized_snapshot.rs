@@ -242,3 +242,31 @@ fn pruning_nonpremise_snapshot_is_not_harmless_index_normalization() {
         );
     }
 }
+
+#[test]
+fn a_missing_joint_premise_blocks_export_and_delivery() {
+    for explicit in [false, true] {
+        let mut e = engine();
+        let proof = commit(&mut e, "Proofs", source(json!([])));
+        let missing = GraphRef {
+            graph_id: "Unreceived".into(),
+            revision: "not-present".into(),
+        };
+        let public = assertion(&proof, "a");
+        let absent = assertion(&missing, "z");
+        let data = saved(
+            explicit,
+            vec![public.clone(), absent.clone()],
+            vec![group(vec![absent, public], vec![], vec![proof, missing])],
+        );
+        let root = commit(&mut e, "Saved", data);
+        let result = query(&e, &root);
+        assert_eq!(result.coverage, Coverage::Partial);
+        assert!(result.graph.edges.is_empty());
+        assert_eq!(
+            e.export_capsule(&root, &host()).unwrap_err().code,
+            "E_UNAVAILABLE"
+        );
+        assert!(delivery(&mut e).is_none());
+    }
+}
