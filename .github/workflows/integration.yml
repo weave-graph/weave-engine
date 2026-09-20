@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: weave-graph/weave-language
-          ref: bb5b142f7ac1f54aa8dcfe7211612cbcf2215410
+          ref: e2ac5d5bc35f14f09937c35d00c72ee322d81ab3
           path: weave-language
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify actual compiler and persistent runtime
