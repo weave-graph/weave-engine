@@ -33,3 +33,7 @@ required-features = ["recovery-testing"]
 [[example]]
 name = "governance_delivery_probe"
 required-features = ["recovery-testing"]
+
+[[example]]
+name = "governed_effect_probe"
+required-features = ["recovery-testing"]

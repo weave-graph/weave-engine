@@ -11,7 +11,7 @@ p.add_argument('--storage',type=Path,default=Path('target/debug/examples/storage
 p.add_argument('--report',type=Path)
 p.add_argument('--old-protocol',default='0.16.0',choices=['0.16.0','0.17.0'])
 p.add_argument('--old-marker',default=14,type=int)
-p.add_argument('--new-marker',default=16,type=int)
+p.add_argument('--new-marker',default=17,type=int)
 a=p.parse_args()
 def run(binary,*args,code=0):
  r=subprocess.run([str(binary.resolve()),*map(str,args)],capture_output=True,text=True,timeout=30)

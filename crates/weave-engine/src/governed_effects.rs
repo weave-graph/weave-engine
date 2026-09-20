@@ -266,6 +266,7 @@ CREATE TABLE IF NOT EXISTS governed_effect_context(intent_id TEXT PRIMARY KEY RE
                 "adapter or execution namespace already reserved",
             ));
         }
+        json_size(&reg, REGISTRATION_LIMIT)?;
         let body = serde_json::to_string(&reg)?;
         let (count,bytes):(i64,i64)=self.conn.query_row("SELECT COUNT(*),COALESCE(SUM(length(CAST(body AS BLOB))),0) FROM governed_effect_bindings WHERE principal=?1",[&host.principal],|r|Ok((r.get(0)?,r.get(1)?)))?;
         if count >= 128 || bytes.saturating_add(body.len() as i64) > 16 * 1024 * 1024 {
@@ -547,7 +548,7 @@ impl Engine {
             return Err(unavailable());
         }
         self.read_budget.request()?;
-        let limit = self.read_budget.remaining().min(PAYLOAD_LIMIT);
+        let limit = self.read_budget.remaining().min(PAYLOAD_LIMIT + 64 * 1024);
         type IntentRow = (
             String,
             String,
@@ -557,7 +558,7 @@ impl Engine {
             String,
             Option<String>,
         );
-        let r:IntentRow=self.conn.query_row("SELECT substr(adapter,1,513),substr(event_id,1,513),substr(destination,1,513),substr(idempotency_key,1,513),CASE WHEN length(CAST(payload AS BLOB))<=?2 THEN payload END,substr(state,1,32),CASE WHEN response IS NULL OR length(CAST(response AS BLOB))<=65536 THEN response ELSE 'oversized' END FROM effect_intents WHERE id=?1",params![id,limit as i64],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?))).optional()?.ok_or_else(unavailable)?;
+        let r:IntentRow=self.conn.query_row("SELECT substr(adapter,1,513),substr(event_id,1,513),substr(destination,1,513),substr(idempotency_key,1,513),CASE WHEN length(CAST(payload AS BLOB))<=1048576 AND COALESCE(length(CAST(response AS BLOB)),0)<=65536 AND length(CAST(payload AS BLOB))+COALESCE(length(CAST(response AS BLOB)),0)<=?2 THEN payload END,substr(state,1,32),CASE WHEN length(CAST(payload AS BLOB))+COALESCE(length(CAST(response AS BLOB)),0)<=?2 AND (response IS NULL OR length(CAST(response AS BLOB))<=65536) THEN response END FROM effect_intents WHERE id=?1",params![id,limit as i64],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?))).optional()?.ok_or_else(unavailable)?;
         let payload =
             r.4.ok_or_else(|| err("E_BUDGET", "effect payload read bound"))?;
         self.read_budget

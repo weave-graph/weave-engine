@@ -2,15 +2,17 @@
 
 ## Current snapshot
 
-The public MIT engine and paired language `be33af6` implement a bounded protocol0.17 profile with SQLite marker15 (engine `5e4e206`). The source/repository baseline E00 is complete; E01–E14 remain in progress. Green CI and the implemented subsets below do not mean completion of either paper. See [workflow gates](workflow.json) and the [reconciled source requirements](RECONCILIATION.md).
+The public MIT engine `edd58fd` and paired language `e18608b` implement a bounded protocol0.18 profile with SQLite marker16. All hosted0.18 Rust/platform, historical migration, compiler integration and fuzz checks passed. The source/repository baseline E00 is complete; E01–E14 remain in progress. Green CI and the implemented subsets below do not mean completion of either paper. See [workflow gates](workflow.json) and the [reconciled source requirements](RECONCILIATION.md).
 
 The current native runtime includes genuine accepted-governance graph reads, a trusted operation clock, exact Query/Filter membership maintenance, and durable coalesced view scheduling. Earlier notes describing accepted graphs as unavailable or scheduling as unpublished apply only to their historical checkpoints.
 
 Protocol0.16 adds: exact accepted-occurrence expressions, definition-matched RequireCurrent view expressions, and separate canonical host registration artifacts. Source manifests persist through initial/full/incremental/fallback evaluation. SQLite marker14 protects compiled registration identity. The [0.16 contract](contract/v0.16/README.md) records the native boundary; paired compiler acceptance is now executed in integration CI.
 
-## Candidate 0.18 (not yet published)
+## Published 0.18 and unpublished store17 work
 
-Sealed pure handler artifacts and native immutable install/prepare/complete are implemented for review, with SQLite marker16. Exact event/preloaded input gates survive empty outputs and generated records. Output CAS, current authority and historical receipt replay are checked atomically; caller-built completion cannot bypass a compiled binding. Genuine historical0.16 and0.17 templates and signed receipts retain their original bytes through migration. Source/runtime joint verification and publication remain pending. See [candidate contract](contract/v0.18/README.md) and [native handler profile](proposals/COMPILED_HANDLERS.md). This stage does not close complete reactor/effect semantics or a paper gate.
+Sealed pure handler artifacts and native immutable install/prepare/complete are published, with SQLite marker16. Exact event/preloaded input gates survive empty outputs and generated records. Output CAS, current authority and historical receipt replay are checked atomically; caller-built completion cannot bypass a compiled binding. Genuine historical0.16 and0.17 templates and signed receipts retain their original bytes through migration. Source/runtime joint verification and publication are complete for this bounded profile. See [contract](contract/v0.18/README.md) and [native handler profile](proposals/COMPILED_HANDLERS.md). This stage does not close complete reactor/effect semantics or a paper gate.
+
+The next unpublished native milestone is the governed canonical graph effect bridge with SQLite marker17; protocol0.18 stays unchanged. Nine focused owner tests, three independent authorization tests, the actual source-handler→governance→reference-sink process trace, and populated16→17 recovery have passed locally. Full combined verification and publication are tracked separately; no remote Execute capability, arbitrary destination, declassification or general exactly-once effect claim is made. See [the native bridge profile](proposals/GOVERNED_EFFECT_BRIDGE.md).
 
 Public0.17 introduced exact snapshot and movable-attachment influence, capsule0.3, and bounded shared mixed-proof traversal. Its native383-check historical full-suite checkpoint, independent populated migration, exact compiler vendoring and hosted CI are evidence for that revision, not a claim about the current0.18 candidate.
 

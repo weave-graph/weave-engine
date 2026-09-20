@@ -1,6 +1,6 @@
-# Governed effect-intent bridge: native interface for review
+# Governed effect-intent bridge: bounded native profile
 
-Base: paired engine `edd58fd` / compiled-handler freeze `9b444ff`. This design is approved for native implementation; the implementation remains pending. Protocol remains0.18: no new Program operation, expression, compiler artifact or remote admission action is proposed. SQLite **store17** is required, because older dispatchers would ignore its binding and current-authorization guards.
+Base: paired engine `edd58fd` / compiled-handler freeze `9b444ff`. The native implementation is an unpublished store17 candidate; current evidence is listed below. Protocol remains0.18: no new Program operation, expression, compiler artifact or remote admission action is proposed. SQLite **store17** is required, because older dispatchers would ignore its binding and current-authorization guards.
 
 ## Requirement and trust boundary
 
@@ -20,7 +20,7 @@ This permits existing compiled handler output—including an empty, partial-comp
 
 The entire fixed request/decision dependency closure is checked, including snapshot/assertion/node/attachment gates and typed-context witnesses. All reachable records must be current-authorized and integrity-valid. Live graph handles and unpinned Object metadata are unsupported in this first profile. Exact pins, not current graph heads or equal replacement content, bind the request. Metadata cycles remain permitted where the existing kernel permits them; mixed proof cycles fail closed through the shared traversal context.
 
-## Proposed native API
+## Native API
 
 All configuration below is trusted host input, not deserializable plan authority. Private stored wire mirrors remain strict and bounded.
 
@@ -109,7 +109,7 @@ Pending intent cancellation is a terminal owner cleanup, allowed after read auth
 
 ## Storage and bounds
 
-Proposed private tables: `governed_effect_bindings(adapter PRIMARY KEY, principal, destination_id, execution_id, body, digest, revoked, UNIQUE(principal,destination_id,execution_id))`, `governed_effect_receipts(adapter,event_id,body,digest, PRIMARY KEY(adapter,event_id))`, and `governed_effect_context(intent_id PRIMARY KEY, adapter, principal, body, digest, attempt_id, reconciliation_digest)`. Reuse the existing effect-intent state machine while adding bridge-only canceled state handling; legacy code cannot see those rows through its guarded public APIs.
+Private tables: `governed_effect_bindings(adapter PRIMARY KEY, principal, destination_id, execution_id, body, digest, revoked, UNIQUE(principal,destination_id,execution_id))`, `governed_effect_receipts(adapter,event_id,body,digest, PRIMARY KEY(adapter,event_id))`, and `governed_effect_context(intent_id PRIMARY KEY, adapter, principal, body, digest, attempt_id, reconciliation_digest)`. Reuse the existing effect-intent state machine while adding bridge-only canceled state handling; legacy code cannot see those rows through its guarded public APIs.
 
 Store17 creates these tables and marker atomically. Old store16 runtimes must refuse before opening a bridge-bearing database. Do not backfill legacy intents/receipts as governed. Populate migration fixtures with actual0.18 compiled registrations/preparations/receipts plus historical0.16/0.17 views/export receipts, preserving their bytes.
 
@@ -140,3 +140,22 @@ Reference acceptance runs separate producer/engine and sink processes with indep
 Engine owns `governed_effects.rs`, narrow private factoring/guards in dispatch/governance delivery and protected publication lookup, migration/bounds, reference sink/probe and recovery script. Canonical0.18 types and compiler artifacts stay untouched. Language independently owns its source-only interval/time gate; no effect DSL dependency is introduced. Parent owns independent adversarial tests, scope review, paired CI and publication.
 
 Still open: signed remote Execute/Subscribe capabilities; general cross-principal egress and declassification; untrusted adapter isolation and CPU/memory enforcement; transactional intent creation across stores; destination-specific production adapters; causal loop budgets/timers; general handler cancellation/upgrade/retention and replay-window expiration; complete paper/mobile scenario. This bounded bridge must not close E05/E06/E11 or language reactive conformance wholesale.
+
+
+## Candidate execution evidence
+
+The owner tests cover explicit superseded/control dispositions, durable execution namespace uniqueness after revoke/remove, stale lease rotation and drain, malformed request refusal, current expiry/supersession, same-principal grants, one captured operation clock, raw bypass guards and observer unwind. Independent tests reconstruct a deliberately trimmed context despite a recomputed checksum, deny missing exact empty inputs, and verify owner/attempt-bound cleanup after proof loss and expiry.
+
+`check_governed_effects.py` starts36 native processes across separate producer/engine and sink SQLite stores. Native-template mode and `--compiler` mode are distinct: the latter invokes the real compiler once for an identity handler and passes its sealed artifact through normal native installation in each scenario. The trace includes before/after enqueue, unknown-fence, sink-action and reconciliation process deaths. A lost response at a non-idempotent destination remains unknown. The idempotent sink is explicitly retried by the trusted test broker with the same retained ticket; the engine never returns a second dispatch ticket. Reports are in `docs/measurements/2026-09-20-governed-effects*.json`.
+
+The parent independently ran the populated historical0.18/store16→17 migration: completed and pending handler preparations survive byte-identically, old receipts replay, a pending preparation completes once, both migration death boundaries recover, and the old binary refuses marker17. Its report records eight checks. These local results do not replace hosted platform checks or prove production sink behavior.
+
+Run without rebuilding in the script:
+
+```sh
+CARGO_BUILD_JOBS=2 nice -n 10 cargo build --locked -p weave-engine --features recovery-testing --example governed_effect_probe
+python3 scripts/check_governed_effects.py
+python3 scripts/check_governed_effects.py --compiler /path/to/exact/paired/weave
+```
+
+Combined validation: the all-feature workspace suite passed418 checks. A subsequent bounded response-read hardening added one corruption/recovery test; all12 focused owner/independent bridge tests passed after that change, followed by strict workspace/all-feature/all-target Clippy and formatting. CLI and all migration/trace examples were rebuilt. Hosted verification of this store17 candidate remains pending parent publication.

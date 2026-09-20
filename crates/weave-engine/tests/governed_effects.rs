@@ -58,11 +58,15 @@ fn publish(e: &Engine, source: GraphRef, id: &str) -> GovernanceReceipt {
             branch_id: "main".into(),
         },
     };
+    decide(e, proposal)
+}
+fn decide(e: &Engine, proposal: GovernanceProposal) -> GovernanceReceipt {
+    let id = proposal.id.clone();
     let receipt = e.propose_governance(&proposal, &host()).unwrap();
     let key = SigningKey::from_bytes(&[7; 32]);
     let approval = sign_governance_approval(
         GovernanceApproval {
-            proposal_id: id.into(),
+            proposal_id: id.clone(),
             proposal_digest: receipt.digest,
             view_id: proposal.view_id,
             policy: proposal.policy,
@@ -78,7 +82,7 @@ fn publish(e: &Engine, source: GraphRef, id: &str) -> GovernanceReceipt {
     e.record_governance_approval(&approval, &host()).unwrap();
     e.accept_governance(
         &GovernanceDecisionRequest {
-            proposal_id: id.into(),
+            proposal_id: id.clone(),
             nonce: format!("decision-{id}"),
         },
         &host(),
@@ -305,7 +309,7 @@ fn supersession_blocks_existing_intent_and_owner_can_cancel_after_revoke() {
         .is_err());
 }
 #[test]
-fn installation_checkpoint_expiry_pause_and_schema_denial() {
+fn installation_checkpoint_expiry_and_pause() {
     let (mut e, clock) = engine();
     let source = request(&mut e);
     publish(&e, source.clone(), "one");
@@ -377,6 +381,199 @@ fn observer_unwinds_rollback_enqueue_dispatch_and_reconcile() {
     e.reconcile_governed_effect(
         &id,
         &t.attempt_id,
+        ReconciledOutcome::Confirmed,
+        &evidence(),
+        &host(),
+    )
+    .unwrap();
+}
+#[test]
+fn policy_control_is_no_effect_and_preserves_current_publication() {
+    let (mut e, _) = engine();
+    let source = request(&mut e);
+    publish(&e, source, "one");
+    install(&e, "bridge", &grant("exec", EffectStart::ReplayHistory));
+    let (_, r) = enqueue(&e, "bridge");
+    let id = intent(&r);
+    let mut next = policy();
+    next.reference.revision = "2".into();
+    let head = e.inspect_governance_head("requests", &host()).unwrap();
+    decide(
+        &e,
+        GovernanceProposal {
+            id: "policy-change".into(),
+            view_id: "requests".into(),
+            policy: head.policy,
+            expected_head: head.decision_id,
+            expires_at_ms: 9000,
+            action: GovernanceAction::ReplacePolicy { policy: next },
+        },
+    );
+    let (d, r) = enqueue(&e, "bridge");
+    assert_eq!(r.disposition, GovernedEffectDisposition::PolicyChange);
+    assert_eq!(
+        e.enqueue_governed_effect("bridge", &d.event.id, &d.lease, &host())
+            .unwrap()
+            .disposition,
+        r.disposition
+    );
+    e.begin_governed_effect(&id, &host()).unwrap();
+}
+#[test]
+fn lease_rotation_drain_and_malformed_request_do_not_acknowledge() {
+    let (mut e, clock) = engine();
+    let source = request(&mut e);
+    publish(&e, source, "one");
+    install(&e, "bridge", &grant("exec", EffectStart::ReplayHistory));
+    let old = e
+        .poll_governance("bridge", "requests", &host())
+        .unwrap()
+        .unwrap();
+    clock.set(111);
+    assert_eq!(
+        e.enqueue_governed_effect("bridge", &old.event.id, &old.lease, &host())
+            .unwrap_err()
+            .code,
+        "E_LEASE"
+    );
+    let fresh = e
+        .poll_governance("bridge", "requests", &host())
+        .unwrap()
+        .unwrap();
+    assert_ne!(fresh.lease, old.lease);
+    e.set_adapter_state("bridge", "draining").unwrap();
+    let receipt = e
+        .enqueue_governed_effect("bridge", &fresh.event.id, &fresh.lease, &host())
+        .unwrap();
+    e.begin_governed_effect(&intent(&receipt), &host()).unwrap();
+    assert!(e
+        .poll_governance("bridge", "requests", &host())
+        .unwrap()
+        .is_none());
+    // A wrong descriptor is genuine governance input, but not an executable request.
+    let (mut e, clock) = engine();
+    let source = write(&mut e, "request", GraphData::default());
+    publish(&e, source, "wrong-schema");
+    install(&e, "bridge", &grant("exec", EffectStart::ReplayHistory));
+    let d = e
+        .poll_governance("bridge", "requests", &host())
+        .unwrap()
+        .unwrap();
+    assert!(e
+        .enqueue_governed_effect("bridge", &d.event.id, &d.lease, &host())
+        .is_err());
+    clock.set(111); // Existing delivery semantics withhold an unexpired lease.
+    assert_eq!(
+        e.poll_governance("bridge", "requests", &host())
+            .unwrap()
+            .unwrap()
+            .event
+            .id,
+        d.event.id
+    );
+    assert!(e
+        .install_governed_effect(
+            &manifest("bridge", &grant("exec", EffectStart::ReplayHistory)),
+            &grant("exec", EffectStart::ReplayHistory),
+            &host()
+        )
+        .is_ok());
+}
+#[test]
+fn grant_never_declassifies_and_operation_clock_is_sampled_once() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    struct Clock(AtomicUsize);
+    impl TrustedClock for Clock {
+        fn unix_millis(&self) -> weave_engine::Result<i64> {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            Ok(10)
+        }
+    }
+    let clock = Arc::new(Clock(AtomicUsize::new(0)));
+    let mut e = Engine::memory_with_clock(clock.clone()).unwrap();
+    e.install_governance_root(&policy()).unwrap();
+    let source = request(&mut e);
+    publish(&e, source, "one");
+    let mut cross = grant("cross", EffectStart::ReplayHistory);
+    cross.destination_principal = "stranger".into();
+    assert!(e
+        .install_governed_effect(&manifest("cross", &cross), &cross, &host())
+        .is_err());
+    clock.0.store(0, Ordering::Relaxed);
+    install(&e, "bridge", &grant("exec", EffectStart::ReplayHistory));
+    assert_eq!(clock.0.load(Ordering::Relaxed), 2); // install and lifecycle transition
+    clock.0.store(0, Ordering::Relaxed);
+    let d = e
+        .poll_governance("bridge", "requests", &host())
+        .unwrap()
+        .unwrap();
+    assert_eq!(clock.0.load(Ordering::Relaxed), 1);
+    clock.0.store(0, Ordering::Relaxed);
+    let r = e
+        .enqueue_governed_effect("bridge", &d.event.id, &d.lease, &host())
+        .unwrap();
+    assert_eq!(clock.0.load(Ordering::Relaxed), 1);
+    clock.0.store(0, Ordering::Relaxed);
+    e.enqueue_governed_effect("bridge", &d.event.id, &d.lease, &host())
+        .unwrap();
+    assert_eq!(clock.0.load(Ordering::Relaxed), 1);
+    clock.0.store(0, Ordering::Relaxed);
+    let ticket = e.begin_governed_effect(&intent(&r), &host()).unwrap();
+    assert_eq!(clock.0.load(Ordering::Relaxed), 1);
+    clock.0.store(0, Ordering::Relaxed);
+    e.reconcile_governed_effect(
+        &ticket.intent_id,
+        &ticket.attempt_id,
+        ReconciledOutcome::Confirmed,
+        &evidence(),
+        &host(),
+    )
+    .unwrap();
+    assert_eq!(clock.0.load(Ordering::Relaxed), 1);
+}
+#[test]
+fn corrupt_oversized_response_fails_bounded_and_repair_recovers() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("effects.db");
+    let mut e = Engine::open_with_clock(&path, Arc::new(ManualClock::new(10))).unwrap();
+    e.install_governance_root(&policy()).unwrap();
+    let source = request(&mut e);
+    publish(&e, source, "one");
+    install(&e, "bridge", &grant("exec", EffectStart::ReplayHistory));
+    let (_, receipt) = enqueue(&e, "bridge");
+    let id = intent(&receipt);
+    let ticket = e.begin_governed_effect(&id, &host()).unwrap();
+    let db = rusqlite::Connection::open(path).unwrap();
+    db.execute(
+        "UPDATE effect_intents SET response=?2 WHERE id=?1",
+        rusqlite::params![id, "x".repeat(65537)],
+    )
+    .unwrap();
+    assert_eq!(
+        e.read_governed_effect(&id, &host()).unwrap_err().code,
+        "E_BUDGET"
+    );
+    assert_eq!(
+        e.reconcile_governed_effect(
+            &id,
+            &ticket.attempt_id,
+            ReconciledOutcome::Confirmed,
+            &evidence(),
+            &host()
+        )
+        .unwrap_err()
+        .code,
+        "E_BUDGET"
+    );
+    db.execute("UPDATE effect_intents SET response=NULL WHERE id=?1", [&id])
+        .unwrap();
+    assert_eq!(
+        e.read_governed_effect(&id, &host()).unwrap().state,
+        "unknown"
+    );
+    e.reconcile_governed_effect(
+        &id,
+        &ticket.attempt_id,
         ReconciledOutcome::Confirmed,
         &evidence(),
         &host(),

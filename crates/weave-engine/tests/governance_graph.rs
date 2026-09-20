@@ -567,7 +567,7 @@ fn old_sql_only_decisions_are_not_backfilled_and_next_publication_is_real() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        16
+        17
     );
     assert_eq!(
         db.query_row("SELECT count(*) FROM governance_graphs", [], |r| r

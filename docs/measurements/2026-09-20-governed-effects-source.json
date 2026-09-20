@@ -1,0 +1,17 @@
+{
+  "profile": "native governed canonical graph reference sink",
+  "protocol": "0.18.0",
+  "store": 17,
+  "native_processes": 36,
+  "compiler_processes": 1,
+  "producer_origin": "actual source handler-plan",
+  "checks": [
+    "enqueue precommit rollback and postcommit exact receipt replay",
+    "unknown fence survives lost dispatch response without a second ticket",
+    "compiled request to accepted occurrence to immutable intent and one idempotent sink action",
+    "sink and reconciliation pre/postcommit death with exact terminal evidence replay",
+    "revocation denies disclosure while exact owner reconciliation remains available",
+    "non-idempotent lost response remains unknown and is never canceled or redispatched"
+  ],
+  "scope": "trusted native grants, fixed test identities, separate local SQLite sink; no remote Execute capability or production destination"
+}
