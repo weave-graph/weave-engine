@@ -51,3 +51,5 @@ jobs:
           python3 weave-engine/scripts/check_integration_recovery.py
           python3 weave-engine/scripts/check_governance_recovery.py
           python3 weave-engine/scripts/check_governance_delivery_recovery.py
+          cargo build --manifest-path weave-engine/Cargo.toml --locked -p weave-engine --features recovery-testing --example view_schedule_probe
+          python3 weave-engine/scripts/check_view_schedule_recovery.py --probe "$GITHUB_WORKSPACE/weave-engine/target/debug/examples/view_schedule_probe"
