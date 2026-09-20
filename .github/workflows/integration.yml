@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: weave-graph/weave-language
-          ref: 2a02953901d30e7b0e0bce8b4abd5126fbaa0ad6
+          ref: bb2dc4d04b2b93282c7f93b11fab83e539ce787a
           path: weave-language
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify actual compiler and persistent runtime
@@ -41,6 +41,7 @@ jobs:
           python3 weave-language/scripts/check_handlers.py --compiler "$GITHUB_WORKSPACE/weave-language/target/debug/weave" --host "$GITHUB_WORKSPACE/weave-engine/target/debug/examples/compiled_handler_fixture"
           python3 weave-language/scripts/check_intervals.py --compiler "$GITHUB_WORKSPACE/weave-language/target/debug/weave" --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
           python3 weave-language/scripts/check_vectors.py --compiler "$GITHUB_WORKSPACE/weave-language/target/debug/weave" --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
+          python3 weave-language/scripts/check_bytes_references.py --compiler "$GITHUB_WORKSPACE/weave-language/target/debug/weave" --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine"
           cargo build --manifest-path weave-engine/Cargo.toml --locked -p weave-engine --features recovery-testing --example governed_effect_probe
           python3 weave-engine/scripts/check_governed_effects.py --compiler "$GITHUB_WORKSPACE/weave-language/target/debug/weave" --probe "$GITHUB_WORKSPACE/weave-engine/target/debug/examples/governed_effect_probe"
           python3 weave-engine/scripts/root_metadata_selectors.py --engine "$GITHUB_WORKSPACE/weave-engine/target/debug/weave-engine" --language "$GITHUB_WORKSPACE/weave-language"
