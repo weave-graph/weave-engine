@@ -484,3 +484,23 @@ fn root_decision_occurrences_are_opaque_and_receipt_retries_keep_the_identity() 
     assert_ne!(outcomes[0].1.decision_id, outcomes[1].1.decision_id);
     assert_ne!(outcomes[0].1.event_id, outcomes[1].1.event_id);
 }
+
+#[cfg(feature = "recovery-testing")]
+#[test]
+fn governance_observer_panic_rolls_back_and_preserves_retry() {
+    let mut e = test_clock::memory().unwrap();
+    let source = seed(&mut e, 2);
+    quorum(&e, &proposal("panic", source, None));
+    let request = request("panic", "panic");
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        e.accept_governance_test_before_commit(&request, &host(), || panic!("observer"))
+    }));
+    assert!(panic.is_err());
+    assert!(e
+        .inspect_governance_head("team", &host())
+        .unwrap()
+        .decision_id
+        .is_none());
+    assert_eq!(e.governance_event_count().unwrap(), 0);
+    assert!(!e.accept_governance(&request, &host()).unwrap().duplicate);
+}

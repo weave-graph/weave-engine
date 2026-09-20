@@ -306,3 +306,26 @@ fn export_and_accept_use_verified_storage_before_releasing_or_publishing_content
     assert_eq!(receiver.event_count().unwrap(), 0);
     assert!(receiver.head("source", "offline").unwrap().is_none());
 }
+
+#[cfg(feature = "recovery-testing")]
+#[test]
+fn integration_observer_panic_rolls_back_and_preserves_retry() {
+    let (_, capsule) = source(json!([]));
+    let peer = Peer::new();
+    let proof = peer.proof(&capsule);
+    let mut e = test_clock::memory().unwrap();
+    e.install_admission_policy(&peer.context).unwrap();
+    let proposed = test_clock::at(200, || e.admit_proposal(&proof, &capsule)).unwrap();
+    let request = decision(proposed.result.id);
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        e.integrate_proposal_test_before_commit(&request, &proof, &host(), || panic!("observer"))
+    }));
+    assert!(panic.is_err());
+    assert!(e.head("source", "offline").unwrap().is_none());
+    assert_eq!(e.event_count().unwrap(), 0);
+    assert!(
+        !e.integrate_proposal(&request, &proof, &host())
+            .unwrap()
+            .duplicate
+    );
+}

@@ -1200,3 +1200,24 @@ fn empty_value_influence_revocation_invalidates_cached_view_without_head_movemen
         "E_UNAVAILABLE"
     );
 }
+
+#[cfg(feature = "recovery-testing")]
+#[test]
+fn identity_observer_panic_rolls_back_and_preserves_retry() {
+    let (mut e, candidate) = setup();
+    e.submit_identity_candidate(&candidate, &host("alice"))
+        .unwrap();
+    let request = request(&candidate, None, "panic");
+    let count = e.event_count().unwrap();
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        e.accept_identity_test_before_commit(&request, &host("reviewer"), || panic!("observer"))
+    }));
+    assert!(panic.is_err());
+    assert!(e.identity_head(&candidate.mapping_id).unwrap().is_none());
+    assert_eq!(e.event_count().unwrap(), count);
+    assert!(
+        !e.accept_identity_candidate(&request, &host("reviewer"))
+            .unwrap()
+            .duplicate
+    );
+}

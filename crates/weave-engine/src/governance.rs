@@ -235,10 +235,15 @@ impl Engine {
     }
     fn gov_atomic<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
         self.conn.execute_batch("SAVEPOINT governance")?;
-        match (|| {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock_scope = self.operation_write_scope()?;
             f()
-        })() {
+        }));
+        match operation_clock::rollback_unwind(
+            outcome,
+            &self.conn,
+            "ROLLBACK TO governance; RELEASE governance",
+        ) {
             Ok(v) => {
                 if let Err(error) = self.conn.execute_batch("RELEASE governance") {
                     self.conn
