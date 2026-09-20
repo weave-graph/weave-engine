@@ -37,3 +37,24 @@ jobs:
       - name: Swift native host restart acceptance
         if: runner.os == 'macOS'
         run: python3 scripts/root_native.py
+  snapshot-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: c209d49d33a8b4369a853673958bd9cec2765a96
+          path: previous
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact prior protocol 0.16 fixtures
+        working-directory: previous
+        run: cargo build --locked -p weave-engine --features recovery-testing --example source_view_fixture --example three_peer_trace
+      - name: Build current migration and replay fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example source_view_fixture --example three_peer_trace --example storage_probe
+      - name: Verify populated upgrade, both crash boundaries and exact old replay
+        working-directory: current
+        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace
