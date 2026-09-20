@@ -14,7 +14,9 @@ fn run(e: &mut Engine, commands: Value) -> Vec<CommandResult> {
         &HostContext::new(
             "principal-7",
             [
-                "proofs".into(),
+                "proof-0".into(),
+                "proof-1".into(),
+                "proof-2".into(),
                 "root".into(),
                 "saved".into(),
                 "before".into(),
@@ -40,14 +42,14 @@ fn read(e: &Engine, pin: &GraphRef, mask: usize) -> weave_engine::Result<QueryRe
     )
 }
 fn premises(e: &mut Engine) -> [Value; 3] {
-    let nodes: Vec<_> = (0..3).map(|bit| json!({
-        "id":format!("permit-{bit}"),"entity_id":format!("permit-{bit}"),"space_id":"s",
-        "readers":(0..8).filter(|mask| mask & (1 << bit) != 0).map(|mask|format!("principal-{mask}")).collect::<Vec<_>>()
-    })).collect();
-    let pin = commit(e, "proofs", json!({"nodes":nodes}));
-    std::array::from_fn(
-        |i| json!({"graph_id":pin.graph_id,"revision":pin.revision,"node_id":format!("permit-{i}")}),
-    )
+    std::array::from_fn(|bit| {
+        let node = json!({
+            "id":format!("permit-{bit}"),"entity_id":format!("permit-{bit}"),"space_id":"s",
+            "readers":(0..8).filter(|mask| mask & (1 << bit) != 0).map(|mask|format!("principal-{mask}")).collect::<Vec<_>>()
+        });
+        let pin = commit(e, &format!("proof-{bit}"), json!({"nodes":[node]}));
+        json!({"graph_id":pin.graph_id,"revision":pin.revision,"node_id":format!("permit-{bit}")})
+    })
 }
 fn branch(premise: &Value) -> Value {
     json!({"operator":"root-independent-proof","premises":[],"node_premises":[premise]})
@@ -84,10 +86,10 @@ fn root_eight_principals_obey_or_then_and_for_all_new_carriers() {
             assert_eq!(visible, expected, "{kind}, principal {mask}");
             if expected {
                 let encoded = serde_json::to_string(&result.unwrap()).unwrap();
-                for (bit, name) in [(1, "permit-0"), (2, "permit-1")] {
+                for (bit, name, graph) in [(1, "permit-0", "proof-0"), (2, "permit-1", "proof-1")] {
                     if mask & bit == 0 {
                         assert!(
-                            !encoded.contains(name),
+                            !encoded.contains(name) && !encoded.contains(graph),
                             "denied branch leaked for {kind}/{mask}: {encoded}"
                         );
                     }
@@ -114,7 +116,15 @@ fn root_eight_principals_obey_or_then_and_for_all_new_carriers() {
                         receiver
                             .receive_capsule(
                                 &old_capsule,
-                                &HostContext::new("principal-7", ["proofs".into(), "root".into()])
+                                &HostContext::new(
+                                    "principal-7",
+                                    [
+                                        "proof-0".into(),
+                                        "proof-1".into(),
+                                        "proof-2".into(),
+                                        "root".into()
+                                    ]
+                                )
                             )
                             .unwrap_err()
                             .code,
