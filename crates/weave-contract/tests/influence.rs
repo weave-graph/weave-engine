@@ -44,10 +44,12 @@ fn node_only_alternatives_remain_distinct_in_rules_support_and_explanation() {
     let out = rules::reason(source.clone(), &rules(), &budget, &ctx()).unwrap();
     let derived = out.graph.edges.iter().find(|e| e.predicate == "q").unwrap();
     assert_eq!(derived.derivations.len(), 2);
-    assert!(derived
-        .derivations
-        .iter()
-        .all(|g| g.premises.is_empty() && g.node_premises.len() == 1));
+    assert!(
+        derived
+            .derivations
+            .iter()
+            .all(|g| g.premises.is_empty() && g.node_premises.len() == 1)
+    );
     assert_ne!(
         derived.derivations[0].node_premises,
         derived.derivations[1].node_premises
@@ -80,16 +82,19 @@ fn node_only_alternatives_remain_distinct_in_rules_support_and_explanation() {
             .count(),
         2
     );
-    assert!(explained
-        .graph
-        .edges
-        .iter()
-        .all(|e| e.derivations[0].node_premises.len() == 1));
+    assert!(
+        explained
+            .graph
+            .edges
+            .iter()
+            .all(|e| e.derivations[0].node_premises.len() == 1)
+    );
 }
 #[test]
 fn generated_protection_checks_profile_and_exact_final_byte_bound() {
     let mut source = input();
     source.graph.influence = Some(GraphInfluence {
+        derivations: vec![],
         snapshots: vec![],
         assertions: vec![],
         nodes: vec![NodeRef {
@@ -100,12 +105,14 @@ fn generated_protection_checks_profile_and_exact_final_byte_bound() {
     });
     let mut protected = source.clone();
     influence::protect_generated_result(&mut protected, 1024 * 1024).unwrap();
-    assert!(protected
-        .graph
-        .edges
-        .iter()
-        .flat_map(|e| &e.derivations)
-        .all(|g| g.input_snapshots.iter().any(|p| p.graph_id == "secret")));
+    assert!(
+        protected
+            .graph
+            .edges
+            .iter()
+            .flat_map(|e| &e.derivations)
+            .all(|g| g.input_snapshots.iter().any(|p| p.graph_id == "secret"))
+    );
     let exact = serde_json::to_vec(&protected).unwrap().len();
     assert!(influence::protect_generated_result(&mut source.clone(), exact - 1).is_err());
     let mut explicit = source;
@@ -172,6 +179,7 @@ fn declared_snapshot_gates_survive_empty_projection_selection_and_union_without_
 fn generated_support_explanation_rules_and_graph_attachment_keep_snapshot_gates() {
     let mut source = input();
     source.graph.influence = Some(GraphInfluence {
+        derivations: vec![],
         snapshots: vec![snapshot("empty-source")],
         ..GraphInfluence::default()
     });
@@ -190,10 +198,12 @@ fn generated_support_explanation_rules_and_graph_attachment_keep_snapshot_gates(
     );
     // Snapshot gates are global AND; the two node-proof OR alternatives remain separate.
     assert_eq!(supported.graph.edges[0].derivations.len(), 2);
-    assert!(supported.graph.edges[0]
-        .derivations
-        .iter()
-        .all(|d| d.premises.is_empty() && d.node_premises.len() == 1));
+    assert!(
+        supported.graph.edges[0]
+            .derivations
+            .iter()
+            .all(|d| d.premises.is_empty() && d.node_premises.len() == 1)
+    );
     let explained = identity::explain(&source, &ctx()).unwrap();
     let pin = explained
         .graph
@@ -248,6 +258,7 @@ fn empty_support_and_explanation_do_not_invent_assertion_provenance() {
     let mut source = input();
     source.graph = GraphData {
         influence: Some(GraphInfluence {
+            derivations: vec![],
             snapshots: vec![snapshot("empty")],
             ..GraphInfluence::default()
         }),
@@ -295,6 +306,7 @@ fn snapshot_fields_are_bounded_strict_and_part_of_combined_record_limits() {
         "E_BUDGET"
     );
     let malformed = GraphInfluence {
+        derivations: vec![],
         snapshots: vec![GraphRef {
             graph_id: "x".into(),
             revision: String::new(),
@@ -306,6 +318,7 @@ fn snapshot_fields_are_bounded_strict_and_part_of_combined_record_limits() {
         "E_INFLUENCE"
     );
     let a = GraphInfluence {
+        derivations: vec![],
         snapshots: (0..1000).map(|i| snapshot(&format!("g{i}"))).collect(),
         ..GraphInfluence::default()
     };
@@ -318,6 +331,7 @@ fn snapshot_fields_are_bounded_strict_and_part_of_combined_record_limits() {
         1000
     );
     let b = GraphInfluence {
+        derivations: vec![],
         snapshots: vec![snapshot("new")],
         ..GraphInfluence::default()
     };
@@ -341,6 +355,7 @@ fn legacy_graph_host_attachment_gates_are_not_silently_dropped() {
         assertion_id: "a".into(),
     };
     value.graph.influence = Some(GraphInfluence {
+        derivations: vec![],
         assertions: vec![assertion.clone()],
         nodes: vec![node.clone()],
         snapshots: vec![snapshot("gate")],
@@ -369,17 +384,20 @@ fn legacy_graph_host_attachment_gates_are_not_silently_dropped() {
 fn diff_attachments_and_bridge_empty_selection_keep_declared_gates() {
     let mut source = input();
     source.graph.influence = Some(GraphInfluence {
+        derivations: vec![],
         snapshots: vec![snapshot("gate")],
         ..GraphInfluence::default()
     });
     let empty = algebra::project(source.clone(), &[], &[], &ctx()).unwrap();
     let changed = algebra::diff(empty, source.clone(), &ctx()).unwrap();
     assert!(!changed.graph.attachments.is_empty());
-    assert!(changed
-        .graph
-        .attachments
-        .iter()
-        .all(|a| a.derived_snapshots == vec![snapshot("gate")]));
+    assert!(
+        changed
+            .graph
+            .attachments
+            .iter()
+            .all(|a| a.derived_snapshots == vec![snapshot("gate")])
+    );
     let bridge = counterpart::select(
         source,
         &CounterpartSelection {
@@ -409,6 +427,7 @@ fn collector_caps_union_before_clone_and_generated_precharge_prevents_mutation()
     );
     let mut generated = input();
     generated.graph.influence = Some(GraphInfluence {
+        derivations: vec![],
         snapshots: vec![snapshot("gate")],
         ..GraphInfluence::default()
     });

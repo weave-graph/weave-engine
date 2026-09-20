@@ -1,7 +1,7 @@
 //! Bounded, pure operators over runtime-authorized graph values.
 use crate::*;
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Write};
@@ -666,6 +666,7 @@ pub fn diff(
     let attachment_influence = crate::influence::merge(
         out.graph.influence.as_ref(),
         Some(&GraphInfluence {
+            derivations: vec![],
             assertions,
             nodes,
             snapshots: vec![],
@@ -681,10 +682,28 @@ pub fn diff(
             .iter()
             .find(|e| e.id == id)
             .expect("union retains members");
+        let attachment_influence = if crate::carrier_profile::requires_v019(&out.graph) {
+            let origins = out
+                .edge_origins
+                .get(&id)
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            crate::influence::merge(
+                Some(&attachment_influence),
+                Some(&GraphInfluence {
+                    derivations: edge_alternatives(edge, origins)?,
+                    ..GraphInfluence::default()
+                }),
+            )?
+            .expect("carrier")
+        } else {
+            attachment_influence.clone()
+        };
         // Precharge repeated carrier copies before allocating the generated record.
         serde_json::to_writer(&mut budget.bytes, &attachment_influence)
             .map_err(|_| err("E_ALGEBRA_LIMIT", "Graph algebra byte budget exceeded"))?;
         let attachment = MetadataAttachment {
+            derivations: attachment_influence.derivations.clone(),
             derived_from: attachment_influence.assertions.clone(),
             derived_nodes: attachment_influence.nodes.clone(),
             derived_snapshots: attachment_influence.snapshots.clone(),
@@ -708,10 +727,51 @@ pub fn diff(
         out.graph.attachments.push(attachment);
     }
     for (id, status) in node_statuses {
+        let attachment_influence = if crate::carrier_profile::requires_v019(&out.graph) {
+            use crate::carrier_algebra as c;
+            let node = out
+                .graph
+                .nodes
+                .iter()
+                .find(|n| n.id == id)
+                .expect("union node");
+            let mut cb = c::Budget::new(c::Limits {
+                bytes: budget.bytes.remaining,
+                ..c::Limits::default()
+            });
+            let local = c::from_parts(
+                &node.derived_from,
+                &node.derived_nodes,
+                &node.derived_snapshots,
+                &node.derivations,
+                &mut cb,
+            )?;
+            let origins = c::from_parts(
+                &[],
+                out.node_origins
+                    .get(&id)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default(),
+                &[],
+                &[],
+                &mut cb,
+            )?;
+            let joint = c::conjunction(&local, &origins, &mut cb)?;
+            let protected = if joint == c::Carrier::default() {
+                GraphInfluence::default()
+            } else {
+                c::into_influence(c::distribute(&joint, &c::Carrier::default(), &mut cb)?)
+            };
+            crate::influence::merge(Some(&attachment_influence), Some(&protected))?
+                .expect("carrier")
+        } else {
+            attachment_influence.clone()
+        };
         // Precharge repeated carrier copies before allocating the generated record.
         serde_json::to_writer(&mut budget.bytes, &attachment_influence)
             .map_err(|_| err("E_ALGEBRA_LIMIT", "Graph algebra byte budget exceeded"))?;
         let attachment = MetadataAttachment {
+            derivations: attachment_influence.derivations.clone(),
             derived_from: attachment_influence.assertions.clone(),
             derived_nodes: attachment_influence.nodes.clone(),
             derived_snapshots: attachment_influence.snapshots.clone(),
@@ -819,15 +879,25 @@ pub fn support(
         }
         let premises = unique(parents.iter().flat_map(|d| d.premises.iter().cloned()));
         let node_premises = unique(parents.iter().flat_map(|d| d.node_premises.iter().cloned()));
-        crate::influence::validate_refs(&premises, &node_premises)?;
+        let snapshot_premises = unique(
+            parents
+                .iter()
+                .flat_map(|d| d.snapshot_premises.iter().cloned()),
+        );
+        crate::influence::validate_record_refs(&premises, &node_premises, &snapshot_premises)?;
         let mut parameters = parameters.clone();
         parameters.insert("inputs".into(), json!(parents));
         let d = Derivation {
+            snapshot_premises: snapshot_premises.clone(),
             node_premises: node_premises.clone(),
             operator: "weave:support".into(),
             premises: premises.clone(),
             parameters: parameters.clone(),
-            input_snapshots: proof_snapshots(&premises, &node_premises),
+            input_snapshots: unique(
+                proof_snapshots(&premises, &node_premises)
+                    .into_iter()
+                    .chain(snapshot_premises.iter().cloned()),
+            ),
         };
         budget.add(&d)?;
         derivations.push(d);
@@ -857,13 +927,16 @@ pub fn support(
         _ => {}
     }
     let declared_snapshots = crate::influence::collect_declared_snapshots(&input.graph)?;
-    let identity = if declared_snapshots.is_empty() {
+    let identity = if crate::carrier_profile::requires_v019(&input.graph) {
+        key(&(&parameters, &input.input_snapshots, &input.graph))
+    } else if declared_snapshots.is_empty() {
         key(&(&parameters, &input.input_snapshots))
     } else {
         key(&(&parameters, &input.input_snapshots, &declared_snapshots))
     };
     let id = format!("support:{identity}");
-    let node = Node {
+    let mut node = Node {
+        derivations: vec![],
         derived_snapshots: vec![],
         derived_nodes: identity::node_dependencies(
             input
@@ -912,19 +985,23 @@ pub fn support(
             ("state".into(), json!(state)),
             (
                 "context_graph_id".into(),
-                json!(input
-                    .selected_context
-                    .as_ref()
-                    .and_then(ContextSelection::reference)
-                    .map(|r| &r.graph_id)),
+                json!(
+                    input
+                        .selected_context
+                        .as_ref()
+                        .and_then(ContextSelection::reference)
+                        .map(|r| &r.graph_id)
+                ),
             ),
             (
                 "context_revision".into(),
-                json!(input
-                    .selected_context
-                    .as_ref()
-                    .and_then(ContextSelection::reference)
-                    .map(|r| &r.revision)),
+                json!(
+                    input
+                        .selected_context
+                        .as_ref()
+                        .and_then(ContextSelection::reference)
+                        .map(|r| &r.revision)
+                ),
             ),
             ("valid_at".into(), json!(valid_at)),
             (
@@ -940,6 +1017,25 @@ pub fn support(
         metadata: vec![],
         readers: vec![ctx.principal.clone()],
     };
+    if crate::carrier_profile::requires_v019(&input.graph) {
+        node.derived_from.clear();
+        node.derived_nodes.clear();
+        node.derivations = derivations.clone();
+        if derivations.is_empty() {
+            // Unknown is still a computed value of the visible finite input domain.
+            for n in &input.graph.nodes {
+                out.graph.influence = crate::influence::merge(
+                    out.graph.influence.as_ref(),
+                    Some(&GraphInfluence {
+                        assertions: n.derived_from.clone(),
+                        nodes: n.derived_nodes.clone(),
+                        snapshots: n.derived_snapshots.clone(),
+                        derivations: n.derivations.clone(),
+                    }),
+                )?;
+            }
+        }
+    }
     budget.add(&node)?;
     out.graph.schema = Some(GraphSchema {
         id: "weave:support:status".into(),
@@ -1054,6 +1150,7 @@ pub fn edge_alternatives(
 ) -> Result<Vec<Derivation>, Diagnostic> {
     let mut groups = if edge.derivations.is_empty() {
         vec![Derivation {
+            snapshot_premises: vec![],
             node_premises: vec![],
             operator: "weave:source".into(),
             premises: origins.to_vec(),
@@ -1066,19 +1163,32 @@ pub fn edge_alternatives(
     for group in &mut groups {
         let merged = crate::influence::merge(
             Some(&GraphInfluence {
-                snapshots: vec![],
+                derivations: vec![],
+                snapshots: group.snapshot_premises.clone(),
                 assertions: group.premises.clone(),
                 nodes: group.node_premises.clone(),
             }),
             Some(&GraphInfluence {
-                snapshots: vec![],
+                derivations: vec![],
+                snapshots: edge.derived_snapshots.clone(),
                 assertions: vec![],
                 nodes: edge.derived_nodes.clone(),
             }),
         )?
         .expect("provided influence");
         group.node_premises = merged.nodes;
-        group.input_snapshots = proof_snapshots(&group.premises, &group.node_premises);
+        group.snapshot_premises = merged.snapshots;
+        if group.snapshot_premises.is_empty() {
+            group.input_snapshots = proof_snapshots(&group.premises, &group.node_premises);
+        } else {
+            group
+                .input_snapshots
+                .extend(proof_snapshots(&group.premises, &group.node_premises));
+            group
+                .input_snapshots
+                .extend(group.snapshot_premises.iter().cloned());
+            group.input_snapshots = unique(group.input_snapshots.clone());
+        }
     }
     Ok(groups)
 }
@@ -1126,9 +1236,20 @@ pub fn combine_derivations(
             params.insert("inputs".into(), json!([l, r]));
             let premises = unique(l.premises.iter().chain(&r.premises).cloned());
             let node_premises = unique(l.node_premises.iter().chain(&r.node_premises).cloned());
-            crate::influence::validate_refs(&premises, &node_premises)?;
+            let snapshot_premises = unique(
+                l.snapshot_premises
+                    .iter()
+                    .chain(&r.snapshot_premises)
+                    .cloned(),
+            );
+            crate::influence::validate_record_refs(&premises, &node_premises, &snapshot_premises)?;
             let d = Derivation {
-                input_snapshots: proof_snapshots(&premises, &node_premises),
+                snapshot_premises: snapshot_premises.clone(),
+                input_snapshots: unique(
+                    proof_snapshots(&premises, &node_premises)
+                        .into_iter()
+                        .chain(snapshot_premises.iter().cloned()),
+                ),
                 node_premises,
                 operator: operator.into(),
                 premises,
@@ -1219,11 +1340,13 @@ mod tests {
         let empty = project(a.clone(), &[], &[], &ctx()).unwrap();
         let delta = diff(a, empty, &ctx()).unwrap();
         assert_eq!(delta.graph.edges[0].polarity, Polarity::Positive);
-        assert!(delta
-            .graph
-            .attachments
-            .iter()
-            .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed")));
+        assert!(
+            delta
+                .graph
+                .attachments
+                .iter()
+                .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed"))
+        );
     }
     #[test]
     fn support_four_states_are_time_specific_and_open_world() {
@@ -1269,10 +1392,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.graph.edges[0].derivations.len(), 2);
-        assert!(r.graph.edges[0]
-            .derivations
-            .iter()
-            .all(|d| d.premises.len() == 2));
+        assert!(
+            r.graph.edges[0]
+                .derivations
+                .iter()
+                .all(|d| d.premises.len() == 2)
+        );
     }
     #[test]
     fn byte_object_and_missing_origin_limits_fail_closed() {
@@ -1298,6 +1423,7 @@ mod tests {
         let mut a = fixture("a", "positive", 0, 10);
         let b = fixture("b", "positive", 0, 10);
         a.graph.edges[0].derivations = vec![Derivation {
+            snapshot_premises: vec![],
             node_premises: vec![],
             operator: "rule:r".into(),
             premises: a.edge_origins["e"].clone(),
@@ -1362,9 +1488,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(d[0].input_snapshots.len(), 2);
-        assert!(!serde_json::to_string(&d)
-            .unwrap()
-            .contains("private-other-path"));
+        assert!(
+            !serde_json::to_string(&d)
+                .unwrap()
+                .contains("private-other-path")
+        );
     }
     #[test]
     fn contextual_support_is_not_silently_treated_as_universal() {
@@ -1421,11 +1549,13 @@ mod tests {
         assert!(unknown.graph.edges.is_empty());
         assert_eq!(unknown.graph.nodes[0].derived_from, input.edge_origins["e"]);
         let explanation = crate::identity::explain(&input, &ctx()).unwrap();
-        assert!(explanation
-            .graph
-            .nodes
-            .iter()
-            .all(|n| !n.derived_from.is_empty()));
+        assert!(
+            explanation
+                .graph
+                .nodes
+                .iter()
+                .all(|n| !n.derived_from.is_empty())
+        );
         let mut altered = input.clone();
         altered.graph.nodes[0].derived_from = input.edge_origins["e"].clone();
         assert_eq!(
@@ -1442,11 +1572,13 @@ mod tests {
         }
         let first = union(input.clone(), input.clone(), &ctx()).unwrap();
         assert_eq!(first.graph.nodes.len(), 2);
-        assert!(first
-            .graph
-            .nodes
-            .iter()
-            .all(|n| n.id.starts_with("derived-node:")));
+        assert!(
+            first
+                .graph
+                .nodes
+                .iter()
+                .all(|n| n.id.starts_with("derived-node:"))
+        );
         assert!(first.node_origins.values().all(Vec::is_empty));
         let nested = union(first.clone(), input.clone(), &ctx()).unwrap();
         assert_eq!(nested.graph, first.graph);
@@ -1499,11 +1631,13 @@ mod tests {
         let empty = project(value.clone(), &["a".into(), "b".into()], &[], &ctx()).unwrap();
         let removed = diff(value.clone(), empty, &ctx()).unwrap();
         assert_eq!(removed.graph.edges.len(), 1);
-        assert!(removed
-            .graph
-            .attachments
-            .iter()
-            .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed")));
+        assert!(
+            removed
+                .graph
+                .attachments
+                .iter()
+                .any(|a| matches!(&a.value,MetadataValue::Literal{value} if value=="removed"))
+        );
         let mut relation = value.clone();
         relation.graph.edges[0].predicate = "weave:cluster:member".into();
         assert_eq!(

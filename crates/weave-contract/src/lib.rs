@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 pub const VERSION: &str = "0.19.0";
 pub mod carrier_profile;
+pub mod carrier_algebra;
+pub mod temporal;
 pub mod influence;
 pub use influence::GraphInfluence;
 pub mod counterpart;

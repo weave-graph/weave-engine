@@ -1,4 +1,5 @@
 //! Restriction-only influence references. Serialized references never grant authority.
+use crate::carrier_algebra as carrier;
 use crate::{AssertionRef, Diagnostic, GraphData, GraphRef, NodeRef};
 use serde::{Deserialize, Serialize};
 
@@ -126,7 +127,12 @@ pub fn validate(influence: &GraphInfluence) -> Result<(), Diagnostic> {
         &influence.assertions,
         &influence.nodes,
         &influence.snapshots,
-    )
+    )?;
+    if !influence.derivations.is_empty() {
+        let mut budget = carrier::Budget::new(carrier::Limits::default());
+        carrier::from_influence(influence, &mut budget)?;
+    }
+    Ok(())
 }
 pub fn canonicalize(influence: &mut GraphInfluence) {
     influence
@@ -152,6 +158,26 @@ pub fn merge(
     }
     if left.is_none() && right.is_none() {
         return Ok(None);
+    }
+    if left
+        .into_iter()
+        .chain(right)
+        .any(|i| !i.derivations.is_empty())
+    {
+        let mut budget = carrier::Budget::new(carrier::Limits::default());
+        let a = left
+            .map(|i| carrier::from_influence(i, &mut budget))
+            .transpose()?
+            .unwrap_or_default();
+        let b = right
+            .map(|i| carrier::from_influence(i, &mut budget))
+            .transpose()?
+            .unwrap_or_default();
+        return Ok(Some(carrier::into_influence(carrier::conjunction(
+            &a,
+            &b,
+            &mut budget,
+        )?)));
     }
     let mut assertion_keys = std::collections::BTreeSet::new();
     let mut node_keys = std::collections::BTreeSet::new();
@@ -190,7 +216,17 @@ pub fn validate_graph(data: &GraphData) -> Result<(), Diagnostic> {
     if let Some(influence) = &data.influence {
         validate(influence)?;
     }
+    let mut carrier_budget = carrier::Budget::new(carrier::Limits::default());
     for node in &data.nodes {
+        if !node.derivations.is_empty() {
+            carrier::from_parts(
+                &node.derived_from,
+                &node.derived_nodes,
+                &node.derived_snapshots,
+                &node.derivations,
+                &mut carrier_budget,
+            )?;
+        }
         validate_record_refs(
             &node.derived_from,
             &node.derived_nodes,
@@ -198,6 +234,15 @@ pub fn validate_graph(data: &GraphData) -> Result<(), Diagnostic> {
         )?;
     }
     for attachment in &data.attachments {
+        if !attachment.derivations.is_empty() {
+            carrier::from_parts(
+                &attachment.derived_from,
+                &attachment.derived_nodes,
+                &attachment.derived_snapshots,
+                &attachment.derivations,
+                &mut carrier_budget,
+            )?;
+        }
         validate_record_refs(
             &attachment.derived_from,
             &attachment.derived_nodes,
@@ -218,6 +263,19 @@ pub fn validate_graph(data: &GraphData) -> Result<(), Diagnostic> {
         }
     }
     for edge in &data.edges {
+        if edge
+            .derivations
+            .iter()
+            .any(|g| !g.snapshot_premises.is_empty())
+        {
+            carrier::from_parts(
+                &[],
+                &edge.derived_nodes,
+                &edge.derived_snapshots,
+                &edge.derivations,
+                &mut carrier_budget,
+            )?;
+        }
         validate_record_refs(
             &edge.derived_from,
             &edge.derived_nodes,
@@ -227,10 +285,27 @@ pub fn validate_graph(data: &GraphData) -> Result<(), Diagnostic> {
             return Err(error("E_BUDGET"));
         }
         for group in &edge.derivations {
-            validate_refs(&group.premises, &group.node_premises)?;
+            validate_record_refs(
+                &group.premises,
+                &group.node_premises,
+                &group.snapshot_premises,
+            )?;
         }
     }
     for assertion in &data.assertions {
+        if assertion
+            .derivations
+            .iter()
+            .any(|g| !g.snapshot_premises.is_empty())
+        {
+            carrier::from_parts(
+                &[],
+                &assertion.derived_nodes,
+                &assertion.derived_snapshots,
+                &assertion.derivations,
+                &mut carrier_budget,
+            )?;
+        }
         validate_record_refs(
             &assertion.derived_from,
             &assertion.derived_nodes,
@@ -240,7 +315,11 @@ pub fn validate_graph(data: &GraphData) -> Result<(), Diagnostic> {
             return Err(error("E_BUDGET"));
         }
         for group in &assertion.derivations {
-            validate_refs(&group.premises, &group.node_premises)?;
+            validate_record_refs(
+                &group.premises,
+                &group.node_premises,
+                &group.snapshot_premises,
+            )?;
         }
     }
     Ok(())
@@ -308,7 +387,31 @@ pub fn input_influence(data: &GraphData) -> Result<Option<GraphInfluence>, Diagn
     {
         return Ok(None);
     }
+    let grouped_refs = data
+        .influence
+        .iter()
+        .flat_map(|i| &i.derivations)
+        .map(|g| {
+            g.premises
+                .len()
+                .saturating_add(g.node_premises.len())
+                .saturating_add(g.snapshot_premises.len())
+        })
+        .sum::<usize>();
+    if grouped_refs
+        .saturating_add(assertions.len())
+        .saturating_add(nodes.len())
+        .saturating_add(snapshots.len())
+        > MAX_REFERENCES
+    {
+        return Err(error("E_BUDGET"));
+    }
     Ok(Some(GraphInfluence {
+        derivations: data
+            .influence
+            .as_ref()
+            .map(|i| i.derivations.clone())
+            .unwrap_or_default(),
         assertions: assertions.into_values().cloned().collect(),
         nodes: nodes.into_values().cloned().collect(),
         snapshots,
@@ -360,7 +463,16 @@ pub fn snapshots(data: &GraphData) -> Vec<crate::GraphRef> {
         .iter()
         .flat_map(|e| &e.derivations)
         .chain(data.assertions.iter().flat_map(|a| &a.derivations))
+        .chain(data.nodes.iter().flat_map(|a| &a.derivations))
+        .chain(data.attachments.iter().flat_map(|a| &a.derivations))
+        .chain(data.influence.iter().flat_map(|a| &a.derivations))
     {
+        for r in &group.premises {
+            refs.insert((&r.graph_id, &r.revision));
+        }
+        for r in &group.snapshot_premises {
+            refs.insert((&r.graph_id, &r.revision));
+        }
         for r in &group.node_premises {
             refs.insert((&r.graph_id, &r.revision));
         }
@@ -404,6 +516,16 @@ pub fn protect_generated_result(
         return Ok(());
     };
     validate(influence)?;
+    if !influence.derivations.is_empty()
+        || result.graph.nodes.iter().any(|n| !n.derivations.is_empty())
+        || result
+            .graph
+            .attachments
+            .iter()
+            .any(|a| !a.derivations.is_empty())
+    {
+        return protect_alternatives(result, limit);
+    }
     let mut budget = Bytes(limit.min(32 * 1024 * 1024));
     charge(&mut budget, result)?;
     // Charge every repeated proof insertion before mutating the output.
@@ -616,6 +738,152 @@ pub fn protect_generated_result(
     charge(&mut Bytes(limit.min(32 * 1024 * 1024)), result)
 }
 
+// The input is freshly generated. Stage every bounded replacement before mutation,
+// including the descriptive indexes; a failed cross-product leaves the caller intact.
+fn protect_alternatives(result: &mut crate::QueryResult, limit: usize) -> Result<(), Diagnostic> {
+    charge(&mut Bytes(limit.min(32 * 1024 * 1024)), result)?;
+    let mut staged = result.clone();
+    protect_alternatives_staged(&mut staged, limit)?;
+    *result = staged;
+    Ok(())
+}
+fn protect_alternatives_staged(
+    result: &mut crate::QueryResult,
+    limit: usize,
+) -> Result<(), Diagnostic> {
+    let mut bytes = Bytes(limit.min(32 * 1024 * 1024));
+    charge(&mut bytes, result)?;
+    let mut budget = carrier::Budget::new(carrier::Limits {
+        bytes: bytes.0,
+        ..carrier::Limits::default()
+    });
+    let envelope = carrier::from_influence(
+        result.graph.influence.as_ref().expect("influence"),
+        &mut budget,
+    )?;
+    let mut nodes = Vec::new();
+    let mut edges = Vec::new();
+    let mut attachments = Vec::new();
+    for n in &result.graph.nodes {
+        let local = carrier::from_parts(
+            &n.derived_from,
+            &n.derived_nodes,
+            &n.derived_snapshots,
+            &n.derivations,
+            &mut budget,
+        )?;
+        nodes.push(carrier::into_influence(carrier::conjunction(
+            &local,
+            &envelope,
+            &mut budget,
+        )?));
+    }
+    for e in &result.graph.edges {
+        let flat = if e.derivations.is_empty() {
+            e.derived_from.as_slice()
+        } else {
+            &[]
+        };
+        let local = carrier::from_parts(
+            flat,
+            &e.derived_nodes,
+            &e.derived_snapshots,
+            &e.derivations,
+            &mut budget,
+        )?;
+        let mut value = carrier::conjunction(&local, &envelope, &mut budget)?;
+        // Edges have no separate flat assertion field when alternatives exist.
+        if !value.alternatives.is_empty()
+            && (!value.flat.assertions.is_empty()
+                || !value.flat.nodes.is_empty()
+                || !value.flat.snapshots.is_empty())
+        {
+            let flat = carrier::Carrier {
+                flat: value.flat.clone(),
+                alternatives: vec![],
+            };
+            let branch = carrier::Carrier {
+                flat: carrier::RefSet::default(),
+                alternatives: value.alternatives,
+            };
+            // Explicitly distribute flat gates into every branch, retaining traces.
+            value = carrier::distribute(&branch, &flat, &mut budget)?;
+            // Retain legacy global node/snapshot gates as well as each branch's
+            // closed proof, so either record representation preserves the restriction.
+            value.flat.nodes = flat.flat.nodes;
+            value.flat.snapshots = flat.flat.snapshots;
+        }
+        edges.push(carrier::into_influence(value));
+    }
+    for a in &result.graph.attachments {
+        let local = carrier::from_parts(
+            &a.derived_from,
+            &a.derived_nodes,
+            &a.derived_snapshots,
+            &a.derivations,
+            &mut budget,
+        )?;
+        attachments.push(carrier::into_influence(carrier::conjunction(
+            &local,
+            &envelope,
+            &mut budget,
+        )?));
+    }
+    for (n, i) in result.graph.nodes.iter_mut().zip(nodes) {
+        n.derived_from = i.assertions;
+        n.derived_nodes = i.nodes;
+        n.derived_snapshots = i.snapshots;
+        n.derivations = i.derivations;
+    }
+    for (e, i) in result.graph.edges.iter_mut().zip(edges) {
+        e.derived_from = carrier::assertion_index(&i);
+        e.derived_nodes = i.nodes;
+        e.derived_snapshots = i.snapshots;
+        e.derivations = i.derivations;
+        result
+            .edge_origins
+            .entry(e.id.clone())
+            .or_default()
+            .extend(e.derived_from.iter().cloned());
+    }
+    for (a, i) in result.graph.attachments.iter_mut().zip(attachments) {
+        let index = carrier::assertion_index(&i);
+        a.derived_from = i.assertions;
+        a.derived_nodes = i.nodes;
+        a.derived_snapshots = i.snapshots;
+        a.derivations = i.derivations;
+        result
+            .attachment_origins
+            .entry(a.id.clone())
+            .or_default()
+            .extend(index);
+    }
+    for refs in result
+        .edge_origins
+        .values_mut()
+        .chain(result.attachment_origins.values_mut())
+    {
+        refs.sort_by(|a, b| assertion_key(a).cmp(&assertion_key(b)));
+        refs.dedup();
+    }
+    result.provenance.extend(
+        result
+            .edge_origins
+            .values()
+            .chain(result.attachment_origins.values())
+            .flatten()
+            .cloned(),
+    );
+    result
+        .provenance
+        .sort_by(|a, b| assertion_key(a).cmp(&assertion_key(b)));
+    result.provenance.dedup();
+    result.input_snapshots.extend(snapshots(&result.graph));
+    canonicalize_snapshots(&mut result.input_snapshots);
+    validate_graph(&result.graph)?;
+    charge(&mut Bytes(limit.min(32 * 1024 * 1024)), result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -648,6 +916,7 @@ mod tests {
     #[test]
     fn canonical_merge_retains_empty_value_gates_without_duplicate_amplification() {
         let full = GraphInfluence {
+            derivations: vec![],
             snapshots: vec![],
             assertions: vec![],
             nodes: (0..MAX_REFERENCES).map(node).collect(),
@@ -670,6 +939,7 @@ mod tests {
         invalid.revision.clear();
         assert_eq!(
             validate(&GraphInfluence {
+                derivations: vec![],
                 snapshots: vec![],
                 assertions: vec![],
                 nodes: vec![invalid]

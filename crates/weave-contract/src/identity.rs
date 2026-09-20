@@ -198,6 +198,9 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
         .map_or(&[][..], |i| i.snapshots.as_slice());
     let mut remaining = ctx.max_output_bytes;
     let mut objects = 0usize;
+    let new_profile = crate::carrier_profile::requires_v019(&input.graph);
+    let mut conditional_nodes: BTreeMap<String, Vec<Derivation>> = BTreeMap::new();
+    let mut snapshot_nodes: BTreeMap<String, GraphRef> = BTreeMap::new();
     let mut nodes: BTreeMap<String, Node> = BTreeMap::new();
     let mut edges = Vec::new();
     let mut edge_origins = BTreeMap::new();
@@ -227,6 +230,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             }
             size(&(kind, scope, dependencies, &local_nodes), remaining)?;
             let n = Node {
+                derivations: vec![],
                 derived_snapshots: vec![],
                 derived_nodes: local_nodes,
                 derived_from: ordered(dependencies)?,
@@ -305,10 +309,9 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             .map(Vec::as_slice)
             .unwrap_or(&[]);
         let mut groups = crate::algebra::edge_alternatives(edge, origins)?;
-        if groups
-            .iter()
-            .any(|g| g.premises.is_empty() && g.node_premises.is_empty())
-        {
+        if groups.iter().any(|g| {
+            g.premises.is_empty() && g.node_premises.is_empty() && g.snapshot_premises.is_empty()
+        }) {
             return Err(failure(
                 "E_ORIGIN_MISSING",
                 "Explanation premise lacks pinned provenance",
@@ -333,6 +336,9 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                 .flat_map(|group| group.premises.iter().cloned())
                 .collect::<Vec<_>>(),
         )?;
+        if new_profile {
+            conditional_nodes.insert(conclusion.clone(), groups.clone());
+        }
         add_node(
             conclusion.clone(),
             "conclusion",
@@ -349,6 +355,9 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                     ctx.max_output_bytes
                 )?
             );
+            if new_profile {
+                conditional_nodes.insert(group_id.clone(), vec![group.clone()]);
+            }
             add_node(
                 group_id.clone(),
                 "derivation",
@@ -376,6 +385,9 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                         ctx.max_output_bytes
                     )?
                 );
+                if new_profile {
+                    conditional_nodes.insert(id.clone(), vec![group.clone()]);
+                }
                 add_node(
                     id.clone(),
                     "node_premise",
@@ -396,6 +408,37 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                     &group,
                 )?;
             }
+            for premise in &group.snapshot_premises {
+                let id = format!(
+                    "snapshot-premise:{}",
+                    digest(
+                        "snapshot-premise",
+                        &(premise, &scope, &group_id),
+                        ctx.max_output_bytes
+                    )?
+                );
+                conditional_nodes.insert(id.clone(), vec![group.clone()]);
+                snapshot_nodes.insert(id.clone(), premise.clone());
+                add_node(
+                    id.clone(),
+                    "snapshot_premise",
+                    &scope,
+                    &group.premises,
+                    &group.node_premises,
+                )?;
+                add_record(
+                    (
+                        group_id.clone(),
+                        id,
+                        "joint_snapshot_premise",
+                        serde_json::to_string(premise).map_err(|_| {
+                            failure("E_IDENTITY_ENCODING", "Cannot encode snapshot premise")
+                        })?,
+                        scope.clone(),
+                    ),
+                    &group,
+                )?;
+            }
             for premise in &group.premises {
                 let id = format!(
                     "premise:{}",
@@ -405,6 +448,9 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                         ctx.max_output_bytes
                     )?
                 );
+                if new_profile {
+                    conditional_nodes.insert(id.clone(), vec![group.clone()]);
+                }
                 add_node(
                     id.clone(),
                     "premise",
@@ -428,6 +474,25 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     }
     #[allow(clippy::drop_non_drop)]
     drop(add_node);
+    for (id, groups) in conditional_nodes {
+        let n = nodes.get_mut(&id).expect("generated part");
+        // The full OR is local to the part; a descriptive union is not an AND gate.
+        n.derived_from.clear();
+        n.derived_nodes = node_influences.clone();
+        remaining = remaining
+            .checked_sub(size(&groups, remaining)?)
+            .ok_or_else(|| failure("E_EXPLAIN_LIMIT", "Explanation byte budget exceeded"))?;
+        n.derivations = groups;
+    }
+    for (id, pin) in &snapshot_nodes {
+        let n = nodes.get_mut(id).expect("snapshot premise");
+        remaining = remaining
+            .checked_sub(size(pin, remaining)?)
+            .ok_or_else(|| failure("E_EXPLAIN_LIMIT", "Explanation byte budget exceeded"))?;
+        n.type_id = Some("Snapshot".into());
+        n.properties.insert("graph_id".into(), json!(pin.graph_id));
+        n.properties.insert("revision".into(), json!(pin.revision));
+    }
     for ((from, to, label, payload, scope), group) in records {
         let id = format!(
             "explanation:{}",
@@ -473,11 +538,17 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             readers: vec![ctx.principal.clone()],
             derived_from: premises.clone(),
             derivations: vec![Derivation {
+                snapshot_premises: group.snapshot_premises.clone(),
                 node_premises: group.node_premises.clone(),
                 operator: "weave:explain".into(),
                 premises: premises.clone(),
                 parameters: [("explained".into(), json!(group))].into(),
-                input_snapshots: snapshots,
+                input_snapshots: ordered(
+                    &snapshots
+                        .into_iter()
+                        .chain(group.snapshot_premises.iter().cloned())
+                        .collect::<Vec<_>>(),
+                )?,
             }],
         };
         remaining = remaining
@@ -505,6 +576,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             )?
         );
         let record = Node {
+            derivations: vec![],
             id: id.clone(),
             entity_id: id,
             space_id: "weave:explanation".into(),
@@ -574,7 +646,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
         )]
         .into(),
     };
-    if !snapshot_gates.is_empty() {
+    if !snapshot_gates.is_empty() || !snapshot_nodes.is_empty() {
         schema.revision = "2".into();
         schema.nodes.insert(
             "Snapshot".into(),
@@ -787,11 +859,13 @@ mod tests {
                 !(text.contains("\"revision\":\"a1\"") && text.contains("\"revision\":\"b1\""))
             );
         }
-        assert!(explanation
-            .graph
-            .nodes
-            .iter()
-            .all(|n| n.readers == ["reader"]));
+        assert!(
+            explanation
+                .graph
+                .nodes
+                .iter()
+                .all(|n| n.readers == ["reader"])
+        );
         assert_eq!(explanation.provenance.len(), 2);
         let combined =
             crate::algebra::union(explanation.clone(), explanation.clone(), &ctx).unwrap();
