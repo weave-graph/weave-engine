@@ -242,11 +242,31 @@ impl Engine {
             // semantic authorization in this same operation snapshot. Only actual
             // flat gates and successful alternatives are followed, never their
             // authored input_snapshots or unrelated records in the source graph.
+            if let Some(typing) = &source.context_typing {
+                let (claims, nodes) =
+                    context_typing::gates(typing).map_err(|d| err(&d.code, &d.message))?;
+                walk.flats(&claims, &nodes, &[])?;
+            }
             if let Some(i) = &source.influence {
                 walk.flats(&i.assertions, &i.nodes, &i.snapshots)?;
                 self.proof_pin_groups(&mut walk, &i.derivations, host, budget)?;
             }
-            if kind == 1 {
+            if kind == 2 {
+                // A snapshot premise consumed the entire already-authorized value.
+                // Traverse its actual records, not arbitrary explanatory pin lists.
+                for node in &source.nodes {
+                    walk.object(1, &graph, &revision, &node.id)?;
+                }
+                for edge in &source.edges {
+                    walk.object(0, &graph, &revision, &edge.id)?;
+                }
+                for assertion in &source.assertions {
+                    walk.object(0, &graph, &revision, &assertion.id)?;
+                }
+                for attachment in &source.attachments {
+                    walk.object(0, &graph, &revision, &attachment.id)?;
+                }
+            } else if kind == 1 {
                 if let Some(n) = source.nodes.iter().find(|n| n.id == object) {
                     walk.flats(&n.derived_from, &n.derived_nodes, &n.derived_snapshots)?;
                     self.proof_pin_groups(&mut walk, &n.derivations, host, budget)?;
@@ -350,11 +370,6 @@ impl ProofPins {
         }
         Ok(())
     }
-    fn pin(&mut self, g: &str, r: &str) -> Result<()> {
-        self.charge(g, r, "")?;
-        self.pins.entry(g.into()).or_default().insert(r.into());
-        Ok(())
-    }
     fn object(&mut self, kind: u8, g: &str, r: &str, o: &str) -> Result<()> {
         self.charge(g, r, o)?;
         self.pins.entry(g.into()).or_default().insert(r.into());
@@ -377,7 +392,7 @@ impl ProofPins {
             self.object(1, &p.graph_id, &p.revision, &p.node_id)?;
         }
         for p in snapshots {
-            self.pin(&p.graph_id, &p.revision)?;
+            self.object(2, &p.graph_id, &p.revision, "")?;
         }
         Ok(())
     }

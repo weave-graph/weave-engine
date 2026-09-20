@@ -249,6 +249,83 @@ fn structural_edge_attachment_preserves_authorized_endpoint_explanation() {
 }
 
 #[test]
+fn snapshot_only_proof_preserves_transitive_explanation_pins() {
+    let mut e = engine();
+    let original = commit(&mut e, "Proofs", source(json!(["alice"])));
+    let intermediate = commit(
+        &mut e,
+        "Secret",
+        saved(
+            false,
+            vec![assertion(&original, "a")],
+            vec![group(
+                vec![assertion(&original, "a")],
+                vec![],
+                vec![original.clone()],
+            )],
+        ),
+    );
+    let data: GraphData = serde_json::from_value(json!({"nodes":[{
+        "id":"summary","entity_id":"summary","space_id":"s","derivations":[{
+            "operator":"whole-snapshot-proof","premises":[],"snapshot_premises":[intermediate],
+            "input_snapshots":[original,intermediate]
+        }]
+    }]}))
+    .unwrap();
+    let expected = serde_json::to_vec(&data).unwrap();
+    let root = commit(&mut e, "Saved", data);
+    assert_eq!(query(&e, &root).coverage, Coverage::Complete);
+    let capsule = e.export_capsule(&root, &host()).unwrap();
+    let record = capsule
+        .revisions
+        .iter()
+        .find(|r| r.graph_id == "Saved")
+        .unwrap();
+    assert_eq!(serde_json::to_vec(&record.data).unwrap(), expected);
+    assert!(capsule.revisions.iter().any(|r| r.graph_id == "Proofs"));
+}
+
+#[test]
+fn source_context_witness_is_real_transitive_proof_ancestry() {
+    let mut e = engine();
+    let schema = weave_contract::context_axes::ContextSchema::from_json(br#"{"reference":{"id":"World","revision":"1"},"axes":{"jurisdiction":{"kind":"enum","members":["EE","FI"]}}}"#).unwrap();
+    let descriptor: GraphData = serde_json::from_value(json!({
+        "profile":"explicit",
+        "nodes":[{"id":"anchor","entity_id":"world","space_id":"contexts","readers":["alice"]}],
+        "structural_edges":[{"id":"describes","predicate":"weave:context:definition","from":"anchor","to":"anchor"}],
+        "assertions":[{"id":"definition","edge_id":"describes","source":"test-author","valid_time":{"start":i64::MIN},"properties":{"weave.context":{"schema":schema,"values":{"jurisdiction":"EE"}}}}]
+    })).unwrap();
+    let context = commit(&mut e, "Proofs", descriptor);
+    let data: GraphData = serde_json::from_value(json!({
+        "nodes":[{"id":"n","entity_id":"n","space_id":"s"}],
+        "context_typing":{"selected":null,"witnesses":[{
+            "context":context,"schema":schema,"definition":assertion(&context,"definition"),
+            "anchor_nodes":[{"graph_id":context.graph_id,"revision":context.revision,"node_id":"anchor"}]
+        }]}
+    })).unwrap();
+    let intermediate = commit(&mut e, "Secret", data);
+    let data: GraphData = serde_json::from_value(json!({"nodes":[{
+        "id":"summary","entity_id":"summary","space_id":"s","derivations":[group(
+            vec![],vec![json!({"graph_id":intermediate.graph_id,"revision":intermediate.revision,"node_id":"n"})],vec![context,intermediate]
+        )]
+    }]})).unwrap();
+    let expected = serde_json::to_vec(&data).unwrap();
+    let root = commit(&mut e, "Saved", data);
+    assert_eq!(query(&e, &root).coverage, Coverage::Complete);
+    let capsule = e.export_capsule(&root, &host()).unwrap();
+    let record = capsule
+        .revisions
+        .iter()
+        .find(|r| r.graph_id == "Saved")
+        .unwrap();
+    assert_eq!(serde_json::to_vec(&record.data).unwrap(), expected);
+    assert!(capsule.revisions.iter().any(|r| r.graph_id == "Proofs"));
+    assert!(e
+        .export_capsule(&root, &HostContext::new("bob", []))
+        .is_err());
+}
+
+#[test]
 fn a_withheld_alternative_is_not_whole_snapshot_authorization() {
     for explicit in [false, true] {
         for node_only in [false, true] {
