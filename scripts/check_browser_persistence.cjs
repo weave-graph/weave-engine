@@ -137,7 +137,14 @@ async function main() {
         if(afterDeath.marker===17)assert.deepEqual(afterDeath,oldImage);
         else assert.equal(BigInt(afterDeath.generation),BigInt(oldImage.generation)+1n);
         assert.equal((await open(page,store,false)).ok,true);
-        assert.deepEqual(value(await step(page,0)),oldValue);
+        const migratedValue=value(await step(page,0));
+        // A fresh query identifies the current protocol. Compare every other
+        // byte without parsing/stringifying, which would round exact i64 values.
+        const oldPrefix='[{"kind":"queried","result":{"version":"0.18.0",';
+        const newPrefix='[{"kind":"queried","result":{"version":"0.19.0",';
+        assert.ok(oldValue.result_json.startsWith(oldPrefix));
+        assert.ok(migratedValue.result_json.startsWith(newPrefix));
+        assert.deepEqual(migratedValue,{...oldValue,result_json:newPrefix+oldValue.result_json.slice(oldPrefix.length)});
         const upgraded=await persistedImage(page,store);assert.equal(upgraded.marker,18);
         selectArtifact(oldArtifact);await page.reload();
         assert.equal((await open(page,store,false)).code,'E_STORAGE_VERSION');
