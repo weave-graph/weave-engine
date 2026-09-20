@@ -177,3 +177,45 @@ fn prior_view_protocols_preserve_sealed_source_and_definition_bytes() {
         );
     }
 }
+#[test]
+fn sealed_nested_reason_sources_are_derived_and_cannot_be_spoofed() {
+    let mut value = draft();
+    let set: RuleSet =
+        serde_json::from_value(json!({"id":"rules:local","revision":"1","rules":[]})).unwrap();
+    value.recipe.bindings.push(HandlerBinding {
+        name: "unused".into(),
+        value: GraphExpression::Filter {
+            input: Box::new(GraphExpression::Reason {
+                input: Box::new(reference()),
+                rules: set.clone(),
+            }),
+            predicate: None,
+            valid_at: None,
+        },
+    });
+    let sealed = seal_handler_template(value.clone()).unwrap();
+    let source = SourceRevision {
+        name: set.id,
+        revision: set.revision,
+        digest: identity::source_fingerprint(
+            &serde_json::from_value::<RuleSet>(
+                json!({"id":"rules:local","revision":"1","rules":[]}),
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+    };
+    assert!(sealed.source_revisions.contains(&source));
+    let mut omitted = sealed.clone();
+    omitted.source_revisions.retain(|s| s.name != source.name);
+    omitted.definition_digest = handler_definition_digest(&omitted).unwrap();
+    assert!(validate_handler_template(&omitted).is_err());
+    value.source_revisions.push(SourceRevision {
+        digest: format!("sha256:{}", "0".repeat(64)),
+        ..source
+    });
+    assert_eq!(
+        seal_handler_template(value).unwrap_err().code,
+        "E_SOURCE_REVISION"
+    );
+}

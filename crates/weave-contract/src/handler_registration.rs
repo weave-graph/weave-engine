@@ -96,6 +96,10 @@ fn id(value: &str) -> bool {
 }
 
 pub fn validate_handler_recipe(recipe: &HandlerRecipe) -> Result<(), Diagnostic> {
+    recipe_sources(recipe).map(|_| ())
+}
+fn recipe_sources(recipe: &HandlerRecipe) -> Result<Vec<SourceRevision>, Diagnostic> {
+    let mut sources = Vec::new();
     identity::digest("weave-handler-recipe-bound", recipe, MAX_HANDLER_BYTES)?;
     if recipe.bindings.len() > 256 {
         return Err(fail("E_BUDGET", "handler binding count exceeded"));
@@ -132,9 +136,17 @@ pub fn validate_handler_recipe(recipe: &HandlerRecipe) -> Result<(), Diagnostic>
                 | GraphExpression::Support { input, .. }
                 | GraphExpression::Context { input, .. }
                 | GraphExpression::Metadata { input, .. }
-                | GraphExpression::Reason { input, .. }
                 | GraphExpression::Explain { input }
                 | GraphExpression::Counterparts { input, .. } => pending.push((input, depth + 1)),
+                GraphExpression::Reason { input, rules } => {
+                    let source = SourceRevision {
+                        name: rules.id.clone(),
+                        revision: rules.revision.clone(),
+                        digest: identity::source_fingerprint(rules)?,
+                    };
+                    sources = algebra::merge_source_revisions(&sources, &[source])?;
+                    pending.push((input, depth + 1));
+                }
                 GraphExpression::Union { left, right }
                 | GraphExpression::Join { left, right, .. }
                 | GraphExpression::Diff {
@@ -171,7 +183,7 @@ pub fn validate_handler_recipe(recipe: &HandlerRecipe) -> Result<(), Diagnostic>
             "handler output must name an available graph binding",
         ));
     }
-    Ok(())
+    Ok(sources)
 }
 fn fields(template: &CompiledHandlerTemplate) -> Result<(), Diagnostic> {
     identity::digest("weave-handler-template-bound", template, MAX_HANDLER_BYTES)?;
@@ -279,6 +291,9 @@ pub fn seal_handler_template(
     fields(&template)?;
     let own = handler_source_revision(&template)?;
     template.event_types.sort();
+    let rule_sources = recipe_sources(&template.recipe)?;
+    template.source_revisions =
+        algebra::merge_source_revisions(&template.source_revisions, &rule_sources)?;
     template.source_revisions =
         algebra::merge_source_revisions(&template.source_revisions, &[own])?;
     template.definition_digest = handler_definition_digest(&template)?;
