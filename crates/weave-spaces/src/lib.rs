@@ -147,6 +147,11 @@ pub struct Space {
     pub geometry: Geometry,
 }
 impl Space {
+    /// Validate this geometry descriptor without reading data or asserting authority.
+    /// Callers remain responsible for input allocation and transport byte bounds.
+    pub fn validate(&self) -> Result<()> {
+        self.dimensions().map(|_| ())
+    }
     fn dimensions(&self) -> Result<usize> {
         if self.id.is_empty() || self.revision.is_empty() {
             return Err(Error("E_SPACE"));
@@ -183,7 +188,9 @@ pub struct Coordinates {
     pub values: Vec<f64>,
 }
 impl Coordinates {
-    fn validate(&self) -> Result<()> {
+    /// Validate dimensions, finite components and role compatibility only.
+    /// This does not authenticate the coordinates or construct trusted evidence.
+    pub fn validate(&self) -> Result<()> {
         if self.values.len() != self.space.dimensions()?
             || self.values.iter().any(|v| !v.is_finite())
         {
