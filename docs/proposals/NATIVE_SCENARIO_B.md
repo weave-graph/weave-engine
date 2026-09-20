@@ -208,3 +208,109 @@ maintenance, production adapter isolation, cross-principal release, retention/re
 signed P/W/T transfer, governance/effects and browser/mobile durability remain
 explicitly outside B. Temporal .19 operators may be used by a second supplied recipe,
 but B does not depend on inventing a new temporal or replica-observation API.
+
+## Concrete helper checkpoint for review
+
+The following is the proposed first implementation boundary, still docs-only.
+Names are native Rust APIs, not Program DTOs or ordinary JSON operations.
+
+```rust
+// Native Engine types; no compiler crate dependency.
+struct RetainedClusterCompletion {
+    runtime_source: String,
+    adapter_manifest_digest: String,
+    event: GraphRef,
+    recipe: Program,
+    result: QueryResult,
+    completion: Program,
+}
+enum HandlerSlotState {
+    Pending,
+    Completed { request_hash: String }, // no historical result payload
+}
+impl Engine {
+    fn runtime_source_identity(&self) -> Result<String>;
+    fn inspect_handler_slot_for(
+        &self, adapter: &str, event: &str, authority: &HostContext,
+    ) -> Result<HandlerSlotState>;
+    fn complete_retained_cluster_for(
+        &mut self, adapter: &str, event: &str, lease: &str,
+        retained: &RetainedClusterCompletion, authority: &HostContext,
+    ) -> Result<HandlerReceipt>;
+}
+```
+
+`runtime_source_identity` reads the existing singleton `engine_identity.source`,
+which also appears in genuine dispatch envelopes; it cannot be supplied by a
+request. No new UUID column or migration is needed. The completion helper compares
+it to the retained binding inside the operation transaction and compares the actual
+scoped event graph/branch/revision to both the captured envelope and Cluster source.
+The retained body will include the branch alongside the GraphRef above (the sketch
+uses the existing event ID argument to avoid inventing a second occurrence ID).
+
+At trusted host open, the application registry binds a configured host store ID to
+one Engine storage locator and its actual runtime source identity. Journal header
+and every record contain both identities. A journal mismatch fails before loads
+are returned; completion repeats the runtime comparison. Opening a distinct store
+cannot adopt the journal merely by passing its filename or copying the configured
+ID in operational JSON. Copying a DB to a second registered host store gets a new
+host-store binding and fails record identity even if the DB copied its old runtime
+UUID. Explicit restore into the original registered store is a separate trusted
+recovery operation, not a request verb. This is not protection against a malicious
+embedding application cloning its entire registry/store/journal, nor rollback
+resistance. Tests cover two independently created stores and a copied DB opened
+under a different registered host-store ID.
+
+`inspect_handler_slot_for` uses an operation read snapshot and durable owner,
+adapter-kind, event and current-authority checks. It reveals only Pending or a
+bounded existing request hash to the owner. Before preparing any missing journal
+record, call it: Completed means `E_HOST_JOURNAL_MISSING`, with no recipe evaluation,
+new record, output or acknowledgment. If a record exists, load it and use normal
+current-authority completion, regardless of whether the optional observed-receipt
+journal entry exists. A checkpoint beyond the event without its expected receipt
+is inconsistent state and fails closed, not Pending. The test host serializes all
+journal operations for this store; a second concurrent trusted journal writer is
+rejected by the host lock. It is not claimed to constrain arbitrary privileged
+Engine callers outside that host.
+
+The sole accepted recipe shape is one source-authored `Bind { name, value: Cluster }`
+(or exactly one equivalent Evaluate), with no references, additional bindings,
+writes, native view/governance reads or live metadata. Its Cluster source equals
+the exact warning occurrence. Context, relation, levels and valid_at are retained
+verbatim; the host-installed recipe policy restricts their allowed profile. The
+helper checks that shape and manifest ownership again on replay. This does not
+make Cluster eligible for a compiled pure handler.
+
+The sole completion is one Commit to the manifest's one configured output graph
+and branch with the recorded expected head. Source revisions equal the conflict-
+checked union of recipe and computed result sources. The expected GraphData is
+exactly the captured result graph with only each supported record's readers set
+to `[manifest.principal]`; no IDs, proof groups, metadata, intervals, values,
+contexts or gates may change. The graph must retain the captured whole-value
+influence. It includes the event snapshot gate when needed for empty input/output.
+The helper compares this expected graph to the Commit before invoking the existing
+completion helper. It does not trust artifact attribution attachments to establish
+this binding. Graph computation was performed by the installed trusted host using
+Engine; this narrow helper validates binding/current authority, not a certificate
+that arbitrary caller-authored data was produced by a compiler.
+
+All equality is canonical **typed Rust** serialization after strict bounded
+parsing, duplicate rejection and native validation. Use separate domains for host
+registration, retained body and observed receipt digests. Objects/maps follow the
+existing canonical identity helper; integers remain i64/u64, with no binary64 or JS
+Number conversion. Test changed key order as equivalent and
+9007199254740992 versus 9007199254740993 as different. Preserve original SDK bytes
+in a separate immutable BLOB with their own raw-byte SHA256; canonical identity
+never replaces that original response. Journal quota counts BLOB plus typed body
+before insertion. Existing handler request hashes remain unchanged.
+
+Within BEGIN IMMEDIATE, ownership/kind/store/event checks, bounded retained-body
+validation, reconstructed exact closure/current guards and result authorization
+all precede the existing handler receipt fast path. Use one operation clock,
+read budget and proof traversal context. The closure starts from the genuine event
+source and every semantic record gate/metadata dependency actually retained, and
+loads pinned records to verify existence/integrity/current authority. Never accept
+a trimmed journal closure Vec or an empty QueryResult as a substitute. Only then
+call existing `complete_handler_in_transaction`; rollback all new output/receipt/
+checkpoint state on validation, budget, CAS or commit failure. Historical receipt
+return uses identical current checks, but does not re-execute/rebase the cluster.
