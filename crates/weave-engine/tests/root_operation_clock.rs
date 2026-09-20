@@ -143,3 +143,70 @@ fn failed_clock_is_checked_before_first_identity_candidate_write() {
         .submit_identity_candidate(&candidate, &host())
         .unwrap());
 }
+
+#[test]
+fn effect_fence_checks_clock_before_transition_and_reuses_one_sample() {
+    let clock = Arc::new(ManualClock::new(0));
+    let mut engine = Engine::memory_with_clock(clock.clone()).unwrap();
+    engine.execute(&program("input", false), &host()).unwrap();
+    engine
+        .install_adapter(
+            &AdapterManifest {
+                id: "effects".into(),
+                version: "1".into(),
+                artifact_digest: format!("sha256:{}", "b".repeat(64)),
+                config_revision: "1".into(),
+                principal: "alice".into(),
+                subscriptions: vec![SubscriptionScope {
+                    graph_id: "input".into(),
+                    branch_id: "main".into(),
+                }],
+                output_graphs: vec![],
+                effect_destinations: vec!["mock://sink".into()],
+                max_attempts: 3,
+                lease_ms: 100,
+                max_pending_events: 10,
+                projection_replay: false,
+            },
+            &host(),
+        )
+        .unwrap();
+    engine.set_adapter_state("effects", "running").unwrap();
+    let delivery = engine.poll_adapter("effects").unwrap().unwrap();
+    clock.set(10);
+    let intent = engine
+        .request_effect(
+            "effects",
+            &delivery.id,
+            &delivery.lease,
+            "mock://sink",
+            "key",
+            json!({"message":"fixture"}),
+        )
+        .unwrap();
+    clock.set(-1);
+    assert_eq!(
+        engine.begin_effect_dispatch(&intent.id).unwrap_err().code,
+        "E_CLOCK_UNAVAILABLE"
+    );
+    assert_eq!(
+        engine.effect_intent(&intent.id).unwrap().unwrap().state,
+        "pending"
+    );
+    clock.set(20);
+    let before = clock.samples();
+    assert_eq!(
+        engine.begin_effect_dispatch(&intent.id).unwrap().state,
+        "unknown"
+    );
+    assert_eq!(clock.samples(), before + 1);
+    clock.set(30);
+    assert_eq!(
+        engine.begin_effect_dispatch(&intent.id).unwrap_err().code,
+        "E_EFFECT_UNKNOWN"
+    );
+    assert_eq!(
+        engine.effect_intent(&intent.id).unwrap().unwrap().state,
+        "unknown"
+    );
+}
