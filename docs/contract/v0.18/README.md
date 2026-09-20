@@ -1,0 +1,11 @@
+# Contract 0.18.0: sealed pure handler artifacts
+
+Canonical interface checkpoint; native install/prepare/complete implementation is still in progress. No executable reactor or publication is claimed by this interface alone.
+
+`handler_registration` exports `CompiledHandlerTemplate`, `HandlerInput`, `HandlerEventType`, `HandlerRecipe` and `HandlerBinding`, plus sealing, validation and identity helpers. Artifact format is `weave-handler-registration/1`, protocol0.18.0. The canonical event vector covers `graph.accepted` and `graph.committed` in that order. Earlier handler artifact protocol declarations reject explicitly; this is not a new Program command or GraphExpression.
+
+One immutable `$event` binding seeds an acyclic pure graph recipe. Every binding and nested operand is validated, including unused bindings and geometry operands. Query, TypedContext and native accepted/view/identity/cluster reads are forbidden. Artifacts are bounded to1MiB,256 bindings,1,000 total expression nodes, depth32, metadata depth8 and1,000 source revisions. Source identity uses a separate handler namespace and framed digest, preserving canonical function/module/source manifests and rejecting label conflicts. Sealing preserves exact ordered semantics and produces a definition digest; neither digest nor template installs authority.
+
+Native host installation explicitly maps one output slot and subscription to an installed principal. The reviewed design stores an immutable prepared single-Commit body with captured output CAS and the exact whole authorized event/preloaded input closure. Snapshot and attachment restrictions use the existing0.17 carrier. Retries recheck current authority and preserve prepared bytes. The proposed store16 boundary prevents earlier runtimes bypassing the compiled registry through caller-built handler completion. Full native behavior and evidence will be appended at its coherent freeze.
+
+New view artifacts declare0.18; legitimate0.16 and0.17 view templates retain their original protocol, own source identity and definition bytes. Existing graph fields, capsule formats, Program commands and historical source manifests are unchanged. Full handler boundaries and acceptance are specified in [the native design](../../proposals/COMPILED_HANDLERS.md).

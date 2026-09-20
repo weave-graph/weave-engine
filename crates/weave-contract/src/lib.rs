@@ -2,8 +2,12 @@
 pub mod context_axes;
 pub mod context_typing;
 pub use context_typing::{ContextTyping, TypedContextWitness};
+pub mod handler_registration;
 pub mod host_types;
 pub mod view_registration;
+pub use handler_registration::{
+    CompiledHandlerTemplate, HandlerBinding, HandlerEventType, HandlerInput, HandlerRecipe,
+};
 pub use host_types::{ClusterRequest, IdentityPolicyRef, IdentityResolve};
 pub use view_registration::{
     AcceptedGraphSelection, CompiledViewTemplate, CurrentViewSelection, ViewClock, ViewReadTime,
@@ -12,7 +16,7 @@ pub mod decimal;
 pub mod quantity;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.17.0";
+pub const VERSION: &str = "0.18.0";
 pub mod influence;
 pub use influence::GraphInfluence;
 pub mod counterpart;
