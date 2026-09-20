@@ -390,7 +390,14 @@ impl Engine {
         let decision = match &selection.decision_id {
             Some(id) => id.clone(),
             None => self
-                .gov_head(&selection.view_id)?
+                .gov_head(&selection.view_id)
+                .map_err(|error| {
+                    if error.code == "E_GOV_UNAVAILABLE" {
+                        unavailable()
+                    } else {
+                        error
+                    }
+                })?
                 .decision_id
                 .ok_or_else(unavailable)?,
         };
