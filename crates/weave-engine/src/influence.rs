@@ -26,7 +26,7 @@ pub(crate) fn requires_v017(data: &GraphData) -> bool {
         })
 }
 impl Engine {
-    pub(crate) fn attachment_influence_visible(
+    pub(crate) fn attachment_flat_visible(
         &self,
         attachment: &MetadataAttachment,
         host: &HostContext,
@@ -51,6 +51,19 @@ impl Engine {
                     budget,
                     depth,
                 )?,
+        )
+    }
+    pub(crate) fn attachment_influence_visible(
+        &self,
+        attachment: &MetadataAttachment,
+        host: &HostContext,
+        visiting: &mut HashSet<(u8, String, String, String)>,
+        budget: &mut usize,
+        depth: u32,
+    ) -> Result<bool> {
+        Ok(
+            self.attachment_flat_visible(attachment, host, visiting, budget, depth)?
+                && self.groups_visible(&attachment.derivations, host, visiting, budget, depth)?,
         )
     }
     pub(crate) fn snapshot_refs_visible(
@@ -86,7 +99,7 @@ impl Engine {
         Ok(true)
     }
 
-    pub(crate) fn graph_influence_visible(
+    pub(crate) fn graph_flat_visible(
         &self,
         data: &GraphData,
         host: &HostContext,
@@ -101,5 +114,92 @@ impl Engine {
         Ok(self.snapshot_refs_visible(&influence.snapshots, host)?
             && self.premises_visible(&influence.assertions, host, visiting, budget, depth)?
             && self.node_refs_visible(&influence.nodes, host, visiting, budget, depth)?)
+    }
+    pub(crate) fn graph_influence_visible(
+        &self,
+        data: &GraphData,
+        host: &HostContext,
+        visiting: &mut HashSet<(u8, String, String, String)>,
+        budget: &mut usize,
+        depth: u32,
+    ) -> Result<bool> {
+        if !self.graph_flat_visible(data, host, visiting, budget, depth)? {
+            return Ok(false);
+        }
+        match &data.influence {
+            Some(i) => self.groups_visible(&i.derivations, host, visiting, budget, depth),
+            None => Ok(true),
+        }
+    }
+    /// Check a branch without leaking its failed active-path bookkeeping to siblings.
+    fn group_visible(
+        &self,
+        group: &Derivation,
+        host: &HostContext,
+        visiting: &HashSet<(u8, String, String, String)>,
+        budget: &mut usize,
+        depth: u32,
+    ) -> Result<bool> {
+        if group.premises.is_empty()
+            && group.node_premises.is_empty()
+            && group.snapshot_premises.is_empty()
+        {
+            return Ok(false);
+        }
+        let mut branch = visiting.clone();
+        Ok(self.snapshot_refs_visible(&group.snapshot_premises, host)?
+            && self.premises_visible(&group.premises, host, &mut branch, budget, depth)?
+            && self.node_refs_visible(&group.node_premises, host, &mut branch, budget, depth)?)
+    }
+    pub(crate) fn groups_visible(
+        &self,
+        groups: &[Derivation],
+        host: &HostContext,
+        visiting: &HashSet<(u8, String, String, String)>,
+        budget: &mut usize,
+        depth: u32,
+    ) -> Result<bool> {
+        if groups.is_empty() {
+            return Ok(true);
+        }
+        for group in groups {
+            if self.group_visible(group, host, visiting, budget, depth)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    /// A nonempty denied carrier is unavailable, never an unrestricted empty carrier.
+    pub(crate) fn authorize_groups(
+        &self,
+        groups: &mut Vec<Derivation>,
+        host: &HostContext,
+        incomplete: &mut bool,
+        budget: &mut usize,
+    ) -> Result<bool> {
+        if groups.is_empty() {
+            return Ok(true);
+        }
+        let mut kept = Vec::new();
+        for mut group in std::mem::take(groups) {
+            if self.group_visible(&group, host, &HashSet::new(), budget, 0)? {
+                group.input_snapshots.retain(|r| {
+                    group
+                        .premises
+                        .iter()
+                        .any(|p| p.graph_id == r.graph_id && p.revision == r.revision)
+                        || group
+                            .node_premises
+                            .iter()
+                            .any(|p| p.graph_id == r.graph_id && p.revision == r.revision)
+                        || group.snapshot_premises.contains(r)
+                });
+                kept.push(group);
+            } else {
+                *incomplete = true;
+            }
+        }
+        *groups = kept;
+        Ok(!groups.is_empty())
     }
 }

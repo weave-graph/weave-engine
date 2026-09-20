@@ -804,6 +804,7 @@ fn clock_expression(
             before: left,
             after: right,
         }
+        | GraphExpression::Sequence { left, right, .. }
         | GraphExpression::Join { left, right, .. } => {
             **left = clock_expression(left, clock, tick, depth + 1, budget)?;
             **right = clock_expression(right, clock, tick, depth + 1, budget)?;
@@ -824,7 +825,8 @@ fn clock_expression(
                 *valid_at = t
             }
         }
-        GraphExpression::Metadata { input, .. }
+        GraphExpression::Window { input, .. }
+        | GraphExpression::Metadata { input, .. }
         | GraphExpression::Project { input, .. }
         | GraphExpression::Reason { input, .. }
         | GraphExpression::TypedContext { input, .. }
@@ -859,11 +861,13 @@ fn collect_heads(expression: &GraphExpression, heads: &mut BTreeMap<(String, Str
             before: left,
             after: right,
         }
+        | GraphExpression::Sequence { left, right, .. }
         | GraphExpression::Join { left, right, .. } => {
             collect_heads(left, heads);
             collect_heads(right, heads)
         }
-        GraphExpression::Filter { input, .. }
+        GraphExpression::Window { input, .. }
+        | GraphExpression::Filter { input, .. }
         | GraphExpression::Support { input, .. }
         | GraphExpression::Metadata { input, .. }
         | GraphExpression::Project { input, .. }

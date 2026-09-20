@@ -195,6 +195,6 @@ fn auxiliary_schema_upgrade_preserves_primary_rows_and_owner_boundary() {
     assert_eq!(
         c.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        17
+        18
     );
 }

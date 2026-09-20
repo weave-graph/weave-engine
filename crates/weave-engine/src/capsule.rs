@@ -275,7 +275,12 @@ impl Engine {
             }
         }
         let capsule = Capsule {
-            format: if revisions.iter().any(|r| influence::requires_v017(&r.data)) {
+            format: if revisions
+                .iter()
+                .any(|r| weave_contract::carrier_profile::requires_v019(&r.data))
+            {
+                "weave-capsule-0.4"
+            } else if revisions.iter().any(|r| influence::requires_v017(&r.data)) {
                 "weave-capsule-0.3"
             } else if manifests.is_empty() {
                 "weave-capsule-0.1"
@@ -317,12 +322,21 @@ impl Engine {
             "weave-capsule-0.1",
             "weave-capsule-0.2",
             "weave-capsule-0.3",
+            "weave-capsule-0.4",
         ]
         .contains(&capsule.format.as_str())
         {
             return Err(err("E_VERSION", "unsupported capsule format"));
         }
-        if capsule.format != "weave-capsule-0.3"
+        if capsule.format != "weave-capsule-0.4"
+            && capsule
+                .revisions
+                .iter()
+                .any(|r| weave_contract::carrier_profile::requires_v019(&r.data))
+        {
+            return Err(err("E_VERSION", "alternative carriers require capsule 0.4"));
+        }
+        if !["weave-capsule-0.3", "weave-capsule-0.4"].contains(&capsule.format.as_str())
             && capsule
                 .revisions
                 .iter()
@@ -400,7 +414,12 @@ impl Engine {
             }
             let digest = record.digest()?;
             if record.revision.starts_with("logical:") {
-                if !["weave-capsule-0.2", "weave-capsule-0.3"].contains(&capsule.format.as_str())
+                if ![
+                    "weave-capsule-0.2",
+                    "weave-capsule-0.3",
+                    "weave-capsule-0.4",
+                ]
+                .contains(&capsule.format.as_str())
                     || logical
                         .get(&record.revision)
                         .is_none_or(|(expected, _)| expected != &digest)

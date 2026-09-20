@@ -43,6 +43,44 @@ pub(crate) fn assertion_edge(
         derivations: assertion.derivations.clone(),
     }
 }
+fn bind_original_groups(
+    groups: &mut [Derivation],
+    source: &AssertionRef,
+    bytes: &mut usize,
+    aggregate: bool,
+) -> Result<()> {
+    let mut total = 0usize;
+    for group in groups.iter() {
+        let count = group
+            .premises
+            .len()
+            .saturating_add(group.node_premises.len())
+            .saturating_add(group.snapshot_premises.len())
+            .saturating_add(usize::from(!group.premises.contains(source)));
+        total = total.saturating_add(count);
+        if count > 1000 || (aggregate && total > 1000) {
+            return Err(err(
+                "E_BUDGET",
+                "original carrier expansion exceeds reference budget",
+            ));
+        }
+    }
+    let pin = GraphRef {
+        graph_id: source.graph_id.clone(),
+        revision: source.revision.clone(),
+    };
+    for group in groups {
+        if !group.premises.contains(source) {
+            *bytes += json_size(source, MATERIALIZED_LIMIT.saturating_sub(*bytes))?;
+            group.premises.push(source.clone());
+        }
+        if !group.input_snapshots.contains(&pin) {
+            *bytes += json_size(&pin, MATERIALIZED_LIMIT.saturating_sub(*bytes))?;
+            group.input_snapshots.push(pin.clone());
+        }
+    }
+    Ok(())
+}
 pub(crate) fn materialize(
     mut data: GraphData,
     graph: &str,
@@ -72,7 +110,35 @@ pub(crate) fn materialize(
             node.derived_nodes.push(origin);
         }
     }
+    // A delivered original grouped record retains its own readers/host authority in
+    // every alternative. Source attribution is not a flat union of OR premises.
+    for attachment in &mut data.attachments {
+        let source = AssertionRef {
+            graph_id: graph.into(),
+            revision: revision.into(),
+            assertion_id: attachment.id.clone(),
+        };
+        bind_original_groups(&mut attachment.derivations, &source, &mut node_bytes, true)?;
+    }
     if data.profile == GraphProfile::Legacy {
+        for edge in &mut data.edges {
+            let source = AssertionRef {
+                graph_id: graph.into(),
+                revision: revision.into(),
+                assertion_id: edge.id.clone(),
+            };
+            let aggregate = edge
+                .derivations
+                .iter()
+                .any(|g| !g.snapshot_premises.is_empty());
+            bind_original_groups(&mut edge.derivations, &source, &mut node_bytes, aggregate)?;
+            if !edge.derivations.is_empty() && !edge.derived_from.contains(&source) {
+                node_bytes += json_size(&source, MATERIALIZED_LIMIT.saturating_sub(node_bytes))?;
+                edge.derived_from.push(source);
+            }
+        }
+        weave_contract::influence::validate_graph(&data).map_err(|d| err(&d.code, &d.message))?;
+        json_size(&data, MATERIALIZED_LIMIT)?;
         return Ok((data, BTreeMap::new()));
     }
     let structures: BTreeMap<_, _> = data.structural_edges.iter().map(|e| (&e.id, e)).collect();
@@ -108,6 +174,7 @@ pub(crate) fn materialize(
                 premises.push(source.clone());
             }
             edge.derivations = vec![Derivation {
+                snapshot_premises: Vec::new(),
                 node_premises: vec![],
                 operator: "weave:assertion".into(),
                 premises,
@@ -309,8 +376,14 @@ fn validate_assertion_provenance(assertion: &Assertion) -> Result<()> {
     if assertion.derivations.len() > 128
         || assertion.derivations.iter().any(|g| {
             !valid_id(&g.operator)
-                || (g.premises.is_empty() && g.node_premises.is_empty())
-                || g.premises.len().saturating_add(g.node_premises.len()) > 1000
+                || (g.premises.is_empty()
+                    && g.node_premises.is_empty()
+                    && g.snapshot_premises.is_empty())
+                || g.premises
+                    .len()
+                    .saturating_add(g.node_premises.len())
+                    .saturating_add(g.snapshot_premises.len())
+                    > 1000
         })
     {
         return Err(err("E_DERIVATION", "invalid explicit derivation groups"));

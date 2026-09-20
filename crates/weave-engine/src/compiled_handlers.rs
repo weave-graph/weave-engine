@@ -317,7 +317,7 @@ impl Engine {
             || preparation.binding_digest
                 != digest("weave-handler-registration-binding/1", registration)?
             || preparation.prepared_at_ms < 0
-            || preparation.program.version != VERSION
+            || ![VERSION, "0.18.0"].contains(&preparation.program.version.as_str())
         {
             return Err(invalid());
         }
@@ -345,6 +345,11 @@ impl Engine {
         else {
             return Err(invalid());
         };
+        if preparation.program.version != VERSION
+            && weave_contract::carrier_profile::requires_v019(data)
+        {
+            return Err(invalid());
+        }
         if graph_id != &registration.output.graph_id || branch_id != &registration.output.branch_id
         {
             return Err(invalid());
@@ -428,6 +433,7 @@ impl Engine {
                     .ok_or_else(invalid)?,
             };
             let gate = GraphInfluence {
+                derivations: Vec::new(),
                 snapshots: closure.clone(),
                 ..Default::default()
             };
@@ -661,7 +667,8 @@ fn charge_references(
             let value = values.get(name).ok_or_else(invalid)?;
             *used += json_size(value, MATERIALIZED_LIMIT.saturating_sub(*used))?;
         }
-        Filter { input, .. }
+        Window { input, .. }
+        | Filter { input, .. }
         | Project { input, .. }
         | Support { input, .. }
         | Metadata { input, .. }
@@ -669,7 +676,7 @@ fn charge_references(
         | Context { input, .. }
         | Explain { input }
         | Counterparts { input, .. } => charge_references(input, values, used)?,
-        Union { left, right } | Join { left, right, .. } => {
+        Sequence { left, right, .. } | Union { left, right } | Join { left, right, .. } => {
             charge_references(left, values, used)?;
             charge_references(right, values, used)?;
         }
@@ -822,6 +829,7 @@ fn owned_output(
         }
     }
     let attribution = MetadataAttachment {
+        derivations: Vec::new(),
         id: local_id(&namespace, "attribution", "sources")?,
         host: MetadataHost::Graph,
         key: "weave.handler.attribution".into(),

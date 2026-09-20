@@ -274,6 +274,13 @@ fn validate_response(response: &SignedCapsuleExport, key: &str) -> Result<()> {
         || b.server_key != key
         || b.root != response.capsule.root
         || ![VERSION, "0.18.0", "0.17.0", "0.16.0"].contains(&b.contract_version.as_str())
+        || (b.contract_version != VERSION
+            && (response.capsule.format == "weave-capsule-0.4"
+                || response
+                    .capsule
+                    .revisions
+                    .iter()
+                    .any(|r| weave_contract::carrier_profile::requires_v019(&r.data))))
         || (b.contract_version == "0.16.0"
             && (response.capsule.format == "weave-capsule-0.3"
                 || response
@@ -391,9 +398,13 @@ pub(crate) fn visit_dependencies(
         .iter()
         .flat_map(|e| &e.derivations)
         .chain(data.assertions.iter().flat_map(|a| &a.derivations))
+        .chain(data.nodes.iter().flat_map(|n| &n.derivations))
+        .chain(data.attachments.iter().flat_map(|a| &a.derivations))
+        .chain(data.influence.iter().flat_map(|i| &i.derivations))
     {
         pins!(&g.premises);
         pins!(&g.node_premises);
+        pins!(&g.snapshot_premises);
         pins!(&g.input_snapshots);
     }
     for a in &data.attachments {
@@ -424,7 +435,15 @@ fn complete_closure(capsule: &Capsule, work: &mut usize) -> Result<Vec<GraphRef>
     if !capsule.external_dependencies.is_empty() {
         return Err(unavailable());
     }
-    if capsule.format != "weave-capsule-0.3"
+    if capsule.format != "weave-capsule-0.4"
+        && capsule
+            .revisions
+            .iter()
+            .any(|r| weave_contract::carrier_profile::requires_v019(&r.data))
+    {
+        return Err(binding_error());
+    }
+    if !["weave-capsule-0.3", "weave-capsule-0.4"].contains(&capsule.format.as_str())
         && capsule
             .revisions
             .iter()
@@ -439,6 +458,7 @@ fn complete_closure(capsule: &Capsule, work: &mut usize) -> Result<Vec<GraphRef>
         "weave-capsule-0.1",
         "weave-capsule-0.2",
         "weave-capsule-0.3",
+        "weave-capsule-0.4",
     ]
     .contains(&capsule.format.as_str())
         || (capsule.format == "weave-capsule-0.1" && !capsule.manifests.is_empty())

@@ -306,6 +306,7 @@ fn geometry_result(
                 }
             }
             let group = Derivation {
+                snapshot_premises: parent.snapshot_premises.clone(),
                 node_premises: parent.node_premises.clone(),
                 operator: operator.into(),
                 premises: parent.premises,
@@ -326,22 +327,10 @@ fn geometry_result(
             origins.push(p.clone());
         }
     }
-    let mut node_gates = BTreeMap::new();
-    for node in derivations.iter().flat_map(|d| &d.node_premises) {
-        node_gates.insert((&node.graph_id, &node.revision, &node.node_id), node);
-        if node_gates.len().saturating_add(origins.len())
-            > weave_contract::influence::MAX_REFERENCES
-        {
-            return Err(err("E_BUDGET", "geometry scalar influence limit exceeded"));
-        }
-    }
-    let node_gates = node_gates.into_values().cloned().collect();
-    let mut node_gates = GraphInfluence {
-        snapshots: vec![],
-        assertions: origins.clone(),
-        nodes: node_gates,
+    let node_gates = GraphInfluence {
+        derivations: derivations.clone(),
+        ..GraphInfluence::default()
     };
-    weave_contract::influence::canonicalize(&mut node_gates);
     weave_contract::influence::validate(&node_gates).map_err(|d| err(&d.code, &d.message))?;
     let encoded = serde_json::to_value(&payload)?;
     let identity = format!(
@@ -375,9 +364,10 @@ fn geometry_result(
         }
     };
     let node = Node {
+        derivations: node_gates.derivations,
         derived_snapshots: vec![],
         derived_nodes: node_gates.nodes,
-        derived_from: origins.clone(),
+        derived_from: vec![],
         context_scope: Some(context.clone().unwrap_or_default()),
         id: "result".into(),
         entity_id: identity,

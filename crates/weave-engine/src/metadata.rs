@@ -68,23 +68,21 @@ impl Engine {
             }
         }
         let path_context = attachment.context.clone();
+        let origin = input
+            .attachment_origins
+            .get(&attachment.id)
+            .cloned()
+            .unwrap_or_default();
+        if origin.is_empty() && attachment.derivations.is_empty() {
+            return Ok(missing(input, "metadata attachment origin unavailable"));
+        }
+        let path = attachment_path(&input, &attachment)?;
+        input.graph.influence =
+            weave_contract::influence::merge(input.graph.influence.as_ref(), Some(&path))
+                .map_err(|d| err(&d.code, &d.message))?;
         let MetadataValue::Graph { reference } = &attachment.value else {
             return Ok(missing(input, "metadata graph unavailable"));
         };
-        let Some(origin) = input.attachment_origins.get(&attachment.id).cloned() else {
-            return Ok(missing(input, "metadata attachment origin unavailable"));
-        };
-        // Selecting this attachment influences even an empty/unavailable target value.
-        // Keep that path restriction independently of emitted object membership.
-        input.graph.influence = weave_contract::influence::merge(
-            input.graph.influence.as_ref(),
-            Some(&GraphInfluence {
-                snapshots: vec![],
-                assertions: origin.clone(),
-                nodes: vec![],
-            }),
-        )
-        .map_err(|d| err(&d.code, &d.message))?;
         // Retain the current original snapshot for a subsequent back-reference through a cycle.
         if input.snapshots.len() == 1 {
             let (graph_id, revision) = input.snapshots.iter().next().expect("one snapshot");
@@ -223,23 +221,6 @@ impl Engine {
         input.node_origins.clear();
         let mut bytes = json_size(&input, MATERIALIZED_LIMIT)?;
         for node in &mut input.graph.nodes {
-            for dependency in &origin {
-                if !node.derived_from.contains(dependency) {
-                    if node
-                        .derived_from
-                        .len()
-                        .saturating_add(node.derived_nodes.len())
-                        >= 1000
-                    {
-                        return Err(err(
-                            "E_BUDGET",
-                            "Node influence expansion exceeds output limit",
-                        ));
-                    }
-                    bytes += json_size(dependency, MATERIALIZED_LIMIT.saturating_sub(bytes))?;
-                    node.derived_from.push(dependency.clone());
-                }
-            }
             let origins = vec![NodeRef {
                 graph_id: reference.graph_id.clone(),
                 revision: reference.revision.clone(),
@@ -265,11 +246,11 @@ impl Engine {
                 revision: reference.revision.clone(),
                 assertion_id: edge.id.clone(),
             };
-            let mut dependencies = origin.clone();
+            let mut dependencies = edge.derived_from.clone();
             if !dependencies.contains(&source) {
                 dependencies.push(source.clone());
                 bytes += json_size(&source, MATERIALIZED_LIMIT.saturating_sub(bytes))?;
-                input.provenance.push(source);
+                input.provenance.push(source.clone());
             }
             bytes += json_size(
                 &(&edge.id, &dependencies),
@@ -277,6 +258,7 @@ impl Engine {
             )?;
             if edge.derivations.is_empty() {
                 edge.derivations = vec![Derivation {
+                    snapshot_premises: Vec::new(),
                     node_premises: edge.derived_nodes.clone(),
                     operator: "weave:metadata".into(),
                     premises: dependencies.clone(),
@@ -294,10 +276,8 @@ impl Engine {
                 }];
             } else {
                 for group in &mut edge.derivations {
-                    for p in &origin {
-                        if !group.premises.contains(p) {
-                            group.premises.push(p.clone());
-                        }
+                    if !group.premises.contains(&source) {
+                        group.premises.push(source.clone());
                     }
                     group.input_snapshots = group
                         .premises
@@ -310,6 +290,7 @@ impl Engine {
                             graph_id: p.graph_id.clone(),
                             revision: p.revision.clone(),
                         }))
+                        .chain(group.snapshot_premises.iter().cloned())
                         .collect();
                 }
                 dependencies.clear();
@@ -379,6 +360,99 @@ impl Engine {
         json_size(&input, MATERIALIZED_LIMIT)?;
         Ok(input)
     }
+}
+// Consume an actual selected path. Origin indexes describe alternatives; they are not
+// an implicit conjunction. Original exact objects still carry their own reader gate.
+fn attachment_path(input: &QueryResult, attachment: &MetadataAttachment) -> Result<GraphInfluence> {
+    use weave_contract::carrier_algebra as ca;
+    let mut budget = ca::Budget::new(ca::Limits::default());
+    let mut references = attachment.derived_from.clone();
+    references.extend(attachment.origin.iter().cloned());
+    let origins = input
+        .attachment_origins
+        .get(&attachment.id)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    if attachment.derivations.is_empty() {
+        if origins.is_empty() {
+            return Err(err(
+                "E_ORIGIN_MISSING",
+                "metadata attachment origin unavailable",
+            ));
+        }
+        references.extend_from_slice(origins);
+    } else {
+        references.extend(
+            origins
+                .iter()
+                .filter(|r| {
+                    r.assertion_id == attachment.id
+                        && input.snapshots.get(&r.graph_id) == Some(&r.revision)
+                })
+                .cloned(),
+        );
+    }
+    let mut path = ca::from_parts(
+        &references,
+        &attachment.derived_nodes,
+        &attachment.derived_snapshots,
+        &attachment.derivations,
+        &mut budget,
+    )
+    .map_err(|d| err(&d.code, &d.message))?;
+    for node in &input.graph.nodes {
+        let consumed = match &attachment.host {
+            MetadataHost::Node { id } => id == &node.id,
+            MetadataHost::Entity { id } => id == &node.entity_id,
+            MetadataHost::Edge { id } | MetadataHost::Assertion { id } => input
+                .graph
+                .edges
+                .iter()
+                .any(|e| &e.id == id && (e.from == node.id || e.to == node.id)),
+            MetadataHost::Graph => false,
+        };
+        if consumed {
+            let mut nodes = node.derived_nodes.clone();
+            nodes.extend(
+                input
+                    .node_origins
+                    .get(&node.id)
+                    .into_iter()
+                    .flatten()
+                    .cloned(),
+            );
+            let carrier = ca::from_parts(
+                &node.derived_from,
+                &nodes,
+                &node.derived_snapshots,
+                &node.derivations,
+                &mut budget,
+            )
+            .map_err(|d| err(&d.code, &d.message))?;
+            path = ca::conjunction(&path, &carrier, &mut budget)
+                .map_err(|d| err(&d.code, &d.message))?;
+        }
+    }
+    if let MetadataHost::Edge { id } | MetadataHost::Assertion { id } = &attachment.host {
+        if let Some(edge) = input.graph.edges.iter().find(|e| &e.id == id) {
+            let flat = if edge.derivations.is_empty() {
+                edge.derived_from.as_slice()
+            } else {
+                &[]
+            };
+            let carrier = ca::from_parts(
+                flat,
+                &edge.derived_nodes,
+                &edge.derived_snapshots,
+                &edge.derivations,
+                &mut budget,
+            )
+            .map_err(|d| err(&d.code, &d.message))?;
+            path = ca::conjunction(&path, &carrier, &mut budget)
+                .map_err(|d| err(&d.code, &d.message))?;
+        }
+    }
+    Ok(ca::into_influence(path))
 }
 // This compatibility shorthand is deliberately limited to a direct, already-authorized
 // metadata materialization. Proof dependencies are not aliases for source object identity.

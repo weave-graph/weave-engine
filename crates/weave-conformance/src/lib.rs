@@ -88,8 +88,76 @@ pub fn golden_profile() -> Vec<u8> {
         "exact_decimal":{"sum":sum,"beyond_binary64":huge,"nonterminating_error":nonterminating.to_string()},
         "nominal_quantity":{"converted":converted,"mismatch_error":mismatch_unit.to_string()},
         "graph_union":union,"four_valued_temporal_support":states,"exact_context":{"selected":default,"reselection_error":mismatch},
-        "authorized_geometry_fixture":geometry,"lazy_clustering":cluster,"typed_context_carrier":typed_context_profile()
+        "authorized_geometry_fixture":geometry,"lazy_clustering":cluster,"typed_context_carrier":typed_context_profile(),"temporal_alternative_carriers":temporal_profile()
     },"limits":["fixed host-authorized test inputs; no authentication or persistent runtime","binary64 fixture agreement is not general bitwise geometry portability","no browser storage, network, mobile energy or adapter sandbox claim"]})).unwrap()
+}
+fn temporal_profile() -> Value {
+    use weave_contract::{
+        temporal, GraphData, GraphInfluence, Interval, JoinMatch, TemporalRelation,
+    };
+    let context = AlgebraContext {
+        principal: "reader".into(),
+        max_objects: 100,
+        max_output_bytes: 1_000_000,
+    };
+    let left = fixture("left", "negative", 0, 10);
+    let clipped = temporal::window(
+        left.clone(),
+        &Interval {
+            start: 2,
+            end: Some(8),
+        },
+        &context,
+    )
+    .unwrap();
+    assert_eq!(
+        clipped.graph.edges[0].valid_time,
+        Interval {
+            start: 2,
+            end: Some(8)
+        }
+    );
+    assert_eq!(
+        clipped.graph.edges[0].polarity,
+        weave_contract::Polarity::Negative
+    );
+    let mut right = fixture("right", "positive", 10, 20);
+    right.graph.nodes[0].entity_id = "B".into();
+    right.graph.nodes[1].entity_id = "C".into();
+    let paired = temporal::sequence(
+        fixture("left", "positive", 0, 10),
+        right,
+        &Interval {
+            start: 5,
+            end: Some(15),
+        },
+        TemporalRelation::Meets,
+        &JoinMatch::EntitySpaceToFrom,
+        &context,
+    )
+    .unwrap();
+    assert_eq!(paired.graph.edges.len(), 2);
+    assert!(paired.graph.edges.iter().all(|e| !e.derivations.is_empty()));
+    let mut empty = fixture("empty", "positive", 0, 10);
+    empty.graph = GraphData::default();
+    empty.node_origins.clear();
+    empty.edge_origins.clear();
+    empty.provenance.clear();
+    empty.graph.influence = Some(GraphInfluence {
+        derivations: ["A", "B"].into_iter().map(|graph| serde_json::from_value(json!({
+            "operator":"weave:conformance-choice", "premises":[], "snapshot_premises":[{"graph_id":graph,"revision":"r"}]
+        })).unwrap()).collect(),
+        ..GraphInfluence::default()
+    });
+    let target = |entity: &str| EntitySpace {
+        entity_id: entity.into(),
+        space_id: "s".into(),
+    };
+    let scalar =
+        algebra::support(empty, "missing", &target("A"), &target("B"), 5, &context).unwrap();
+    assert_eq!(scalar.graph.nodes[0].properties["state"], "unknown");
+    assert_eq!(scalar.graph.nodes[0].derivations.len(), 2);
+    json!({"window":clipped,"sequence":paired,"empty_choice_scalar":scalar})
 }
 fn typed_context_profile() -> Value {
     use weave_contract::context_axes::ContextDefinition;

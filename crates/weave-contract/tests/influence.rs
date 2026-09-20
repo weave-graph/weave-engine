@@ -44,12 +44,10 @@ fn node_only_alternatives_remain_distinct_in_rules_support_and_explanation() {
     let out = rules::reason(source.clone(), &rules(), &budget, &ctx()).unwrap();
     let derived = out.graph.edges.iter().find(|e| e.predicate == "q").unwrap();
     assert_eq!(derived.derivations.len(), 2);
-    assert!(
-        derived
-            .derivations
-            .iter()
-            .all(|g| g.premises.is_empty() && g.node_premises.len() == 1)
-    );
+    assert!(derived
+        .derivations
+        .iter()
+        .all(|g| g.premises.is_empty() && g.node_premises.len() == 1));
     assert_ne!(
         derived.derivations[0].node_premises,
         derived.derivations[1].node_premises
@@ -82,13 +80,11 @@ fn node_only_alternatives_remain_distinct_in_rules_support_and_explanation() {
             .count(),
         2
     );
-    assert!(
-        explained
-            .graph
-            .edges
-            .iter()
-            .all(|e| e.derivations[0].node_premises.len() == 1)
-    );
+    assert!(explained
+        .graph
+        .edges
+        .iter()
+        .all(|e| e.derivations[0].node_premises.len() == 1));
 }
 #[test]
 fn generated_protection_checks_profile_and_exact_final_byte_bound() {
@@ -105,14 +101,12 @@ fn generated_protection_checks_profile_and_exact_final_byte_bound() {
     });
     let mut protected = source.clone();
     influence::protect_generated_result(&mut protected, 1024 * 1024).unwrap();
-    assert!(
-        protected
-            .graph
-            .edges
-            .iter()
-            .flat_map(|e| &e.derivations)
-            .all(|g| g.input_snapshots.iter().any(|p| p.graph_id == "secret"))
-    );
+    assert!(protected
+        .graph
+        .edges
+        .iter()
+        .flat_map(|e| &e.derivations)
+        .all(|g| g.input_snapshots.iter().any(|p| p.graph_id == "secret")));
     let exact = serde_json::to_vec(&protected).unwrap().len();
     assert!(influence::protect_generated_result(&mut source.clone(), exact - 1).is_err());
     let mut explicit = source;
@@ -198,12 +192,10 @@ fn generated_support_explanation_rules_and_graph_attachment_keep_snapshot_gates(
     );
     // Snapshot gates are global AND; the two node-proof OR alternatives remain separate.
     assert_eq!(supported.graph.edges[0].derivations.len(), 2);
-    assert!(
-        supported.graph.edges[0]
-            .derivations
-            .iter()
-            .all(|d| d.premises.is_empty() && d.node_premises.len() == 1)
-    );
+    assert!(supported.graph.edges[0]
+        .derivations
+        .iter()
+        .all(|d| d.premises.is_empty() && d.node_premises.len() == 1));
     let explained = identity::explain(&source, &ctx()).unwrap();
     let pin = explained
         .graph
@@ -391,13 +383,11 @@ fn diff_attachments_and_bridge_empty_selection_keep_declared_gates() {
     let empty = algebra::project(source.clone(), &[], &[], &ctx()).unwrap();
     let changed = algebra::diff(empty, source.clone(), &ctx()).unwrap();
     assert!(!changed.graph.attachments.is_empty());
-    assert!(
-        changed
-            .graph
-            .attachments
-            .iter()
-            .all(|a| a.derived_snapshots == vec![snapshot("gate")])
-    );
+    assert!(changed
+        .graph
+        .attachments
+        .iter()
+        .all(|a| a.derived_snapshots == vec![snapshot("gate")]));
     let bridge = counterpart::select(
         source,
         &CounterpartSelection {

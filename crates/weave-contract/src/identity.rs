@@ -859,13 +859,11 @@ mod tests {
                 !(text.contains("\"revision\":\"a1\"") && text.contains("\"revision\":\"b1\""))
             );
         }
-        assert!(
-            explanation
-                .graph
-                .nodes
-                .iter()
-                .all(|n| n.readers == ["reader"])
-        );
+        assert!(explanation
+            .graph
+            .nodes
+            .iter()
+            .all(|n| n.readers == ["reader"]));
         assert_eq!(explanation.provenance.len(), 2);
         let combined =
             crate::algebra::union(explanation.clone(), explanation.clone(), &ctx).unwrap();

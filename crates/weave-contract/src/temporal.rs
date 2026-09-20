@@ -1025,13 +1025,11 @@ mod tests {
         assert!(out.graph.edges.iter().all(
             |e| e.valid_time == interval(0, Some(5)) || e.valid_time == interval(10, Some(15))
         ));
-        assert!(
-            intersection(
-                &out.graph.edges[0].valid_time,
-                &out.graph.edges[1].valid_time
-            )
-            .is_none()
-        );
+        assert!(intersection(
+            &out.graph.edges[0].valid_time,
+            &out.graph.edges[1].valid_time
+        )
+        .is_none());
         for (relation, count) in [
             (TemporalRelation::Meets, 1),
             (TemporalRelation::Before, 0),
@@ -1098,21 +1096,19 @@ mod tests {
         for node in &mut out.graph.nodes {
             node.readers.clear();
             assert!(!node.derivations.is_empty());
-            assert!(
-                node.derivations
-                    .iter()
-                    .all(|g| g.premises.contains(&left) && g.premises.contains(&private))
-            );
+            assert!(node
+                .derivations
+                .iter()
+                .all(|g| g.premises.contains(&left) && g.premises.contains(&private)));
             assert!(out.node_origins[&node.id].is_empty());
         }
         for edge in &mut out.graph.edges {
             edge.readers.clear();
             assert!(edge.derived_from.contains(&left) && edge.derived_from.contains(&private));
-            assert!(
-                edge.derivations
-                    .iter()
-                    .all(|d| d.premises.contains(&private))
-            );
+            assert!(edge
+                .derivations
+                .iter()
+                .all(|d| d.premises.contains(&private)));
         }
         for attachment in &mut out.graph.attachments {
             attachment.readers.clear();
@@ -1125,36 +1121,31 @@ mod tests {
             );
             assert!(attachment.origin.is_none());
         }
-        assert!(
-            out.graph
-                .attachments
-                .iter()
-                .any(|a| matches!(a.host, MetadataHost::Node { .. }))
-        );
-        assert!(
-            out.graph
-                .attachments
-                .iter()
-                .any(|a| matches!(a.host, MetadataHost::Edge { .. }))
-        );
-        assert!(
-            out.graph
-                .attachments
-                .iter()
-                .any(|a| matches!(a.host, MetadataHost::Assertion { .. }))
-        );
-        assert!(
-            out.graph
-                .attachments
-                .iter()
-                .any(|a| matches!(a.host, MetadataHost::Entity { .. }))
-        );
-        assert!(
-            out.graph
-                .attachments
-                .iter()
-                .all(|a| a.valid_time == interval(0, Some(20)))
-        );
+        assert!(out
+            .graph
+            .attachments
+            .iter()
+            .any(|a| matches!(a.host, MetadataHost::Node { .. })));
+        assert!(out
+            .graph
+            .attachments
+            .iter()
+            .any(|a| matches!(a.host, MetadataHost::Edge { .. })));
+        assert!(out
+            .graph
+            .attachments
+            .iter()
+            .any(|a| matches!(a.host, MetadataHost::Assertion { .. })));
+        assert!(out
+            .graph
+            .attachments
+            .iter()
+            .any(|a| matches!(a.host, MetadataHost::Entity { .. })));
+        assert!(out
+            .graph
+            .attachments
+            .iter()
+            .all(|a| a.valid_time == interval(0, Some(20))));
     }
     #[test]
     fn alternatives_remain_separate_not_a_conjunction() {
@@ -1240,33 +1231,27 @@ mod tests {
             crate::algebra::project(out.clone(), &[], std::slice::from_ref(&selected.id), &ctx())
                 .unwrap();
         let united = crate::algebra::union(projected.clone(), projected, &ctx()).unwrap();
-        assert!(
-            united
-                .graph
-                .influence
-                .as_ref()
-                .is_none_or(|i| i.assertions.is_empty() && i.derivations.is_empty())
-        );
+        assert!(united
+            .graph
+            .influence
+            .as_ref()
+            .is_none_or(|i| i.assertions.is_empty() && i.derivations.is_empty()));
         assert!(united.graph.attachments.iter().all(|m| {
             m.derived_from.is_empty()
                 && m.derivations
                     .iter()
                     .all(|g| g.premises.contains(&a) != g.premises.contains(&b))
         }));
-        assert!(
-            united
-                .graph
-                .attachments
-                .iter()
-                .any(|m| matches!(m.host, MetadataHost::Node { .. }))
-        );
-        assert!(
-            united
-                .graph
-                .attachments
-                .iter()
-                .any(|m| matches!(m.host, MetadataHost::Edge { .. }))
-        );
+        assert!(united
+            .graph
+            .attachments
+            .iter()
+            .any(|m| matches!(m.host, MetadataHost::Node { .. })));
+        assert!(united
+            .graph
+            .attachments
+            .iter()
+            .any(|m| matches!(m.host, MetadataHost::Edge { .. })));
     }
     #[test]
     fn empty_output_preserves_explicit_influence_without_promoting_input_pins() {
@@ -1286,11 +1271,10 @@ mod tests {
         );
         assert!(out.graph.nodes.is_empty() && out.graph.edges.is_empty());
         assert_eq!(out.graph.influence.unwrap().snapshots.len(), 1);
-        assert!(
-            out.input_snapshots
-                .iter()
-                .any(|r| r.graph_id == "private-descriptor")
-        );
+        assert!(out
+            .input_snapshots
+            .iter()
+            .any(|r| r.graph_id == "private-descriptor"));
     }
     #[test]
     fn every_window_attachment_host_is_clipped_and_source_gated() {
@@ -1300,18 +1284,16 @@ mod tests {
         for att in &out.graph.attachments {
             assert_eq!(att.valid_time, interval(2, Some(8)));
             assert!(att.origin.is_none());
-            assert!(
-                att.derivations
-                    .iter()
-                    .all(|g| g.premises.iter().any(|r| r.assertion_id.starts_with('m')))
-            );
-        }
-        assert!(
-            out.graph
-                .attachments
+            assert!(att
+                .derivations
                 .iter()
-                .any(|a| matches!(a.host, MetadataHost::Graph))
-        );
+                .all(|g| g.premises.iter().any(|r| r.assertion_id.starts_with('m'))));
+        }
+        assert!(out
+            .graph
+            .attachments
+            .iter()
+            .any(|a| matches!(a.host, MetadataHost::Graph)));
         for att in &out.graph.attachments {
             if let MetadataHost::Edge { id } | MetadataHost::Assertion { id } = &att.host {
                 assert!(out.graph.edges.iter().any(|e| &e.id == id));
@@ -1360,17 +1342,15 @@ mod tests {
             nodes: BTreeMap::new(),
             edges: BTreeMap::new(),
         });
-        assert!(
-            sequence(
-                typed,
-                r,
-                &interval(0, None),
-                TemporalRelation::Before,
-                &JoinMatch::EntitySpaceToFrom,
-                &ctx()
-            )
-            .is_err()
-        );
+        assert!(sequence(
+            typed,
+            r,
+            &interval(0, None),
+            TemporalRelation::Before,
+            &JoinMatch::EntitySpaceToFrom,
+            &ctx()
+        )
+        .is_err());
         let mut malformed = l;
         malformed.graph.edges[0].to = "missing".into();
         assert_eq!(

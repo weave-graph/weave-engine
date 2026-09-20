@@ -1,0 +1,13 @@
+{
+  "stage": "protocol0.19-store18-capsule0.4-review-checkpoint",
+  "workspace_all_features_test_doctest_checks": 462,
+  "workspace_all_features_all_targets_clippy": "passed",
+  "format_and_diff_checks": "passed",
+  "independent_distinct_graph_carrier_oracle_after_refinement": "4 tests passed, including 24 principal/carrier cases",
+  "portable_execution": "2026-09-20-temporal-portable.json",
+  "native_original_grouped_record_authority": "private edge and private attachment cases pass after Window, reader removal, envelope removal, persistence and principal change",
+  "compatibility": "historical handler0.18 fixed vectors and view0.16/0.17/0.18 sealing tests passed; stored bytes are not rewritten",
+  "rebuilt_examples": ["storage_probe", "compiled_handler_fixture", "source_view_fixture", "three_peer_trace", "governed_effect_probe"],
+  "pending_at_checkpoint": ["independent populated historical migration/process-death checks", "actual source0.19 compiler integration", "browser store upgrade fences", "final joint review and hosted pairing"],
+  "not_claimed": ["historical derived-record privacy recall", "general recorded-time or remote-replica temporal queries", "incremental Window/Sequence maintenance", "full browser/mobile scenario acceptance", "paper completion"]
+}

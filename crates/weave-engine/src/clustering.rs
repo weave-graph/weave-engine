@@ -94,6 +94,19 @@ impl Engine {
         });
         let selected: BTreeSet<_> = value.graph.edges.iter().map(|e| e.id.clone()).collect();
         value.edge_origins.retain(|id, _| selected.contains(id));
+        // This service consumes exact stored records selected by cluster_input, not
+        // the union of their descriptive OR leaves. The record reference preserves
+        // its own readers and re-evaluates its alternatives under current authority.
+        for edge in &value.graph.edges {
+            value.edge_origins.insert(
+                edge.id.clone(),
+                vec![AssertionRef {
+                    graph_id: request.source.graph_id.clone(),
+                    revision: request.source.revision.clone(),
+                    assertion_id: edge.id.clone(),
+                }],
+            );
+        }
         Ok(value)
     }
 
@@ -205,6 +218,7 @@ impl Engine {
         );
         let mut ids: BTreeSet<_> = value.graph.nodes.iter().map(|n| n.id.clone()).collect();
         let derived = |id: String, properties: BTreeMap<String, serde_json::Value>| Node {
+            derivations: Vec::new(),
             derived_snapshots: vec![],
             id: id.clone(),
             entity_id: id,
@@ -307,6 +321,7 @@ impl Engine {
                         vec![]
                     } else {
                         vec![Derivation {
+                            snapshot_premises: Vec::new(),
                             node_premises: node_proofs.clone(),
                             operator: "weave:cluster-navigation:v1".into(),
                             premises: claim_proofs.clone(),
@@ -490,6 +505,7 @@ impl Engine {
             Sha256::digest(serde_json::to_vec(&lineage)?)
         );
         let node = Node {
+            derivations: Vec::new(),
             derived_snapshots: vec![],
             id: id.clone(),
             entity_id: id.clone(),

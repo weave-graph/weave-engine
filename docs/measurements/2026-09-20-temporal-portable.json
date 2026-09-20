@@ -1,0 +1,26 @@
+{
+  "profile": "weave-portable-golden-2",
+  "contract": "0.19.0",
+  "result": "passed",
+  "cases": [
+    "authorized_geometry_fixture",
+    "exact_context",
+    "exact_decimal",
+    "four_valued_temporal_support",
+    "graph_union",
+    "lazy_clustering",
+    "nominal_quantity",
+    "temporal_alternative_carriers",
+    "typed_context_carrier"
+  ],
+  "output_bytes": 43746,
+  "output_sha256": "fdf4a9a9890bd15121f9ef30c9918245635dd6d32ebc6d32915f25dafd143572",
+  "wasm_sha256": "9c8acc20202237de82d6da344288f007fa239aeb4061d3ed8044c9763140ef85",
+  "node": "v26.5.0",
+  "rust": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+  "limits": [
+    "fixed host-authorized test inputs; no authentication or persistent runtime",
+    "binary64 fixture agreement is not general bitwise geometry portability",
+    "no browser storage, network, mobile energy or adapter sandbox claim"
+  ]
+}

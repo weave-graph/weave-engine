@@ -99,18 +99,14 @@ fn snapshot_only_evidence_survives_rules_support_and_explanation() {
         .filter(|n| n.type_id.as_deref() == Some("Snapshot"))
         .collect();
     assert_eq!(snapshots.len(), 2);
-    assert!(
-        snapshots
-            .iter()
-            .all(|n| n.derivations.len() == 1 && n.properties.get("revision") == Some(&json!("r")))
-    );
-    assert!(
-        explained
-            .graph
-            .edges
-            .iter()
-            .all(|e| !e.derivations[0].snapshot_premises.is_empty())
-    );
+    assert!(snapshots
+        .iter()
+        .all(|n| n.derivations.len() == 1 && n.properties.get("revision") == Some(&json!("r"))));
+    assert!(explained
+        .graph
+        .edges
+        .iter()
+        .all(|e| !e.derivations[0].snapshot_premises.is_empty()));
 }
 #[test]
 fn attachment_local_or_is_not_promoted_but_existing_flat_gates_are() {

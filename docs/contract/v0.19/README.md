@@ -1,4 +1,4 @@
-# Protocol 0.19: alternative carriers and temporal graph values
+# Protocol 0.19.0: alternative carriers and temporal graph values
 
 Unpublished implementation stage. Protocol0.19, SQLite marker18 and capsule0.4 form
 one compatibility boundary. The native and portable acceptance evidence must be
@@ -20,7 +20,7 @@ carrier. Whole-snapshot services reject redacted alternatives conservatively.
 `Window { input, window }` clips half-open validity intervals into derived occurrence
 records with distinct local identities. `Sequence { left, right, window, relation,
 match_on }` supports entity-space endpoint matching with Before, Meets, Overlaps and
-Within. Relations compare the original intervals before clipping. Output records
+Within. Sequence matches positive occurrences; Window also preserves negative evidence. Relations compare the original intervals before clipping. Output records
 retain each event's individual interval; no hull is asserted as a simultaneous fact.
 Protected derivation parameters describe the match. Original real metadata remains
 navigable on current returned wrapper IDs; original local IDs are not generic aliases.

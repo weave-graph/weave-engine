@@ -6,6 +6,7 @@ fn host() -> HostContext {
 }
 fn node(id: &str, entity: &str, space: &str) -> Node {
     Node {
+        derivations: Vec::new(),
         derived_snapshots: vec![],
         derived_nodes: vec![],
         derived_from: vec![],
@@ -962,6 +963,7 @@ fn alternative_derivations_preserve_visible_support_without_leaking_hidden_group
     result.edges[0].derivations = refs
         .iter()
         .map(|p| Derivation {
+            snapshot_premises: Vec::new(),
             node_premises: vec![],
             operator: "rule:test".into(),
             premises: vec![p.clone()],

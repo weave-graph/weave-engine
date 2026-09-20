@@ -730,8 +730,16 @@ fn all_dependencies(data: &GraphData) -> Vec<GraphRef> {
         .iter()
         .flat_map(|e| &e.derivations)
         .chain(data.assertions.iter().flat_map(|a| &a.derivations))
+        .chain(data.nodes.iter().flat_map(|n| &n.derivations))
+        .chain(data.attachments.iter().flat_map(|a| &a.derivations))
+        .chain(data.influence.iter().flat_map(|i| &i.derivations))
     {
         references.extend(derivation.input_snapshots.clone());
+        references.extend(derivation.snapshot_premises.clone());
+        references.extend(derivation.node_premises.iter().map(|p| GraphRef {
+            graph_id: p.graph_id.clone(),
+            revision: p.revision.clone(),
+        }));
         references.extend(derivation.premises.iter().map(|p| GraphRef {
             graph_id: p.graph_id.clone(),
             revision: p.revision.clone(),

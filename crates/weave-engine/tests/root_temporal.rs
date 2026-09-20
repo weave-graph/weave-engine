@@ -29,7 +29,7 @@ fn evaluate(e: &mut Engine, value: Value) -> QueryResult {
     let CommandResult::Queried { result } = result.remove(0) else {
         panic!()
     };
-    result
+    *result
 }
 
 #[test]

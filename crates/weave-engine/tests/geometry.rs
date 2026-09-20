@@ -351,6 +351,7 @@ fn whole_value_node_gates_survive_generated_scalar_and_assertion_repersistence()
     };
     let mut source = data();
     source.influence = Some(GraphInfluence {
+        derivations: Vec::new(),
         snapshots: vec![],
         assertions: vec![],
         nodes: vec![gate.clone()],

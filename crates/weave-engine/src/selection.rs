@@ -98,6 +98,7 @@ pub(crate) fn eligible(data: &GraphData) -> bool {
                 && n.derived_from.is_empty()
                 && n.derived_nodes.is_empty()
                 && n.derived_snapshots.is_empty()
+                && n.derivations.is_empty()
                 && n.context_scope.is_none()
         })
         && data.edges.iter().all(|e| {

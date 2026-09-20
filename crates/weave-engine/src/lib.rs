@@ -157,7 +157,7 @@ impl Engine {
         single_owner_image: bool,
     ) -> Result<Self> {
         let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
-        if !(0..=17).contains(&version) {
+        if !(0..=18).contains(&version) {
             return Err(err(
                 "E_STORAGE_VERSION",
                 "database schema version is unsupported",
@@ -234,7 +234,7 @@ impl Engine {
         engine.initialize_governance_delivery()?;
         engine.initialize_governance_graphs()?;
         engine.initialize_governed_effects()?;
-        engine.conn.pragma_update(None, "user_version", 17)?;
+        engine.conn.pragma_update(None, "user_version", 18)?;
         before_commit();
         initialization.commit()?;
         Ok(engine)
@@ -903,12 +903,20 @@ impl Engine {
                 assertion_id: edge.id.clone(),
             };
             query_bytes += json_size(&reference, MATERIALIZED_LIMIT.saturating_sub(query_bytes))?;
+            let mut origins = vec![reference.clone()];
+            for premise in edge.derivations.iter().flat_map(|g| &g.premises) {
+                if !origins.contains(premise) {
+                    query_bytes +=
+                        json_size(premise, MATERIALIZED_LIMIT.saturating_sub(query_bytes))?;
+                    origins.push(premise.clone());
+                }
+            }
             query_bytes += json_size(
-                &(&edge.id, [&reference]),
+                &(&edge.id, &origins),
                 MATERIALIZED_LIMIT.saturating_sub(query_bytes),
             )?;
-            result.provenance.push(reference.clone());
-            result.edge_origins.insert(edge.id.clone(), vec![reference]);
+            result.provenance.push(reference);
+            result.edge_origins.insert(edge.id.clone(), origins);
         }
         let mut live_pins = BTreeMap::new();
         let (initial_refs, unavailable_live) = self.query_refs(&result.graph, &mut live_pins)?;
@@ -1196,7 +1204,8 @@ impl Engine {
                         .find(|n| &n.id == id)
                         .expect("checked endpoints");
                     let candidate = GraphInfluence {
-                        snapshots: vec![],
+                        derivations: node.derivations.clone(),
+                        snapshots: node.derived_snapshots.clone(),
                         assertions: node.derived_from.clone(),
                         nodes: node
                             .derived_nodes
@@ -1215,47 +1224,17 @@ impl Engine {
                             .map_err(|d| err(&d.code, &d.message))?
                             .expect("gate merge");
                 }
-                let mut wrapper_gates = endpoint_gates.clone();
-                premises.clear();
-                for group in &mut derivations {
-                    let gates = weave_contract::influence::merge(
-                        Some(&endpoint_gates),
-                        Some(&GraphInfluence {
-                            snapshots: vec![],
-                            assertions: group.premises.clone(),
-                            nodes: group.node_premises.clone(),
-                        }),
-                    )
-                    .map_err(|d| err(&d.code, &d.message))?
-                    .expect("group merge");
-                    group.premises = gates.assertions.clone();
-                    group.node_premises = gates.nodes.clone();
-                    group.input_snapshots = gates
-                        .assertions
-                        .iter()
-                        .map(|p| GraphRef {
-                            graph_id: p.graph_id.clone(),
-                            revision: p.revision.clone(),
-                        })
-                        .chain(gates.nodes.iter().map(|p| GraphRef {
-                            graph_id: p.graph_id.clone(),
-                            revision: p.revision.clone(),
-                        }))
-                        .collect();
-                    group.input_snapshots.sort_by(|a, b| {
-                        (&a.graph_id, &a.revision).cmp(&(&b.graph_id, &b.revision))
-                    });
-                    group.input_snapshots.dedup();
-                    wrapper_gates =
-                        weave_contract::influence::merge(Some(&wrapper_gates), Some(&gates))
-                            .map_err(|d| err(&d.code, &d.message))?
-                            .expect("wrapper merge");
-                    for reference in &group.premises {
-                        if !premises.contains(reference) {
-                            premises.push(reference.clone());
-                        }
-                    }
-                }
+                use weave_contract::carrier_algebra as ca;
+                let mut carrier_budget = ca::Budget::new(ca::Limits::default());
+                let endpoint = ca::from_influence(&endpoint_gates, &mut carrier_budget)
+                    .map_err(|d| err(&d.code, &d.message))?;
+                let path = ca::from_parts(&[], &[], &[], &derivations, &mut carrier_budget)
+                    .map_err(|d| err(&d.code, &d.message))?;
+                let gates = ca::distribute(&path, &endpoint, &mut carrier_budget)
+                    .map_err(|d| err(&d.code, &d.message))?;
+                let wrapper_gates = ca::into_influence(gates);
+                derivations = wrapper_gates.derivations.clone();
+                premises = ca::assertion_index(&wrapper_gates);
                 let mut source = ln[le.from.as_str()].clone();
                 let mut target = rn[re.to.as_str()].clone();
                 for (node, input) in [(&mut source, &l), (&mut target, &r)] {
@@ -1271,6 +1250,16 @@ impl Engine {
                     );
                     node.derived_from = wrapper_gates.assertions.clone();
                     node.derived_nodes = wrapper_gates.nodes.clone();
+                    node.derived_snapshots = wrapper_gates.snapshots.clone();
+                    node.derivations = wrapper_gates.derivations.clone();
+                    // One path has the historical conjunctive node representation;
+                    // multiple paths must remain alternatives, never a flat union.
+                    if let [group] = node.derivations.as_slice() {
+                        node.derived_from = group.premises.clone();
+                        node.derived_nodes = group.node_premises.clone();
+                        node.derived_snapshots = group.snapshot_premises.clone();
+                        node.derivations.clear();
+                    }
                     node.context_scope = Some(selected_context.clone().unwrap_or_default());
                     // Changed payloads are derived wrappers, not the original pinned record.
                     node_origins.insert(node.id.clone(), Vec::new());
@@ -1477,6 +1466,30 @@ impl Engine {
         }
         *budget -= 1;
         let result = match expression {
+            GraphExpression::Window { input, window } => {
+                let input = self.expression(input, values, host, depth + 1, budget)?;
+                weave_contract::temporal::window(input, window, &algebra_context(host))
+                    .map_err(|d| err(&d.code, &d.message))
+            }
+            GraphExpression::Sequence {
+                left,
+                right,
+                window,
+                relation,
+                match_on,
+            } => {
+                let left = self.expression(left, values, host, depth + 1, budget)?;
+                let right = self.expression(right, values, host, depth + 1, budget)?;
+                weave_contract::temporal::sequence(
+                    left,
+                    right,
+                    window,
+                    *relation,
+                    match_on,
+                    &algebra_context(host),
+                )
+                .map_err(|d| err(&d.code, &d.message))
+            }
             GraphExpression::AcceptedGraph { selection } => self.query_accepted_view(
                 &AcceptedViewSelection {
                     view_id: selection.view_id.clone(),
@@ -1643,13 +1656,23 @@ impl Engine {
         let mut visiting = HashSet::new();
         let mut budget = 1000;
         if !self.context_typing_visible(&data, host, &mut visiting, &mut budget, 0)?
-            || !self.graph_influence_visible(&data, host, &mut visiting, &mut budget, 0)?
+            || !self.graph_flat_visible(&data, host, &mut visiting, &mut budget, 0)?
         {
             return Ok((GraphData::default(), true));
         }
         let mut incomplete = false;
+        if let Some(influence) = &mut data.influence {
+            if !self.authorize_groups(
+                &mut influence.derivations,
+                host,
+                &mut incomplete,
+                &mut budget,
+            )? {
+                return Ok((GraphData::default(), true));
+            }
+        }
         let mut nodes = Vec::new();
-        for node in std::mem::take(&mut data.nodes) {
+        for mut node in std::mem::take(&mut data.nodes) {
             let mut visiting = HashSet::new();
             let mut budget = 1000;
             if self.snapshot_refs_visible(&node.derived_snapshots, host)?
@@ -1660,6 +1683,12 @@ impl Engine {
                     &mut visiting,
                     &mut budget,
                     0,
+                )?
+                && self.authorize_groups(
+                    &mut node.derivations,
+                    host,
+                    &mut incomplete,
+                    &mut budget,
                 )?
             {
                 nodes.push(node);
@@ -1697,7 +1726,7 @@ impl Engine {
         data.edges = edges;
         prune_attachments(&mut data);
         let mut attachments = Vec::new();
-        for attachment in data.attachments {
+        for mut attachment in data.attachments {
             let allowed = match &attachment.origin {
                 Some(reference) => self.premises_visible(
                     std::slice::from_ref(reference),
@@ -1709,12 +1738,18 @@ impl Engine {
                 None => true,
             };
             if allowed
-                && self.attachment_influence_visible(
+                && self.attachment_flat_visible(
                     &attachment,
                     host,
                     &mut HashSet::new(),
                     &mut 1000,
                     0,
+                )?
+                && self.authorize_groups(
+                    &mut attachment.derivations,
+                    host,
+                    &mut incomplete,
+                    &mut 1000,
                 )?
             {
                 attachments.push(attachment);
@@ -1758,41 +1793,16 @@ impl Engine {
             *incomplete |= !allowed;
             return Ok(allowed);
         }
-        let mut groups = Vec::new();
-        for mut group in std::mem::take(&mut edge.derivations) {
-            let mut visiting = HashSet::new();
-            if self.premises_visible(&group.premises, host, &mut visiting, &mut budget, 0)?
-                && self.node_refs_visible(
-                    &group.node_premises,
-                    host,
-                    &mut visiting,
-                    &mut budget,
-                    0,
-                )?
-            {
-                group.input_snapshots.retain(|r| {
-                    group
-                        .premises
-                        .iter()
-                        .any(|p| p.graph_id == r.graph_id && p.revision == r.revision)
-                        || group
-                            .node_premises
-                            .iter()
-                            .any(|p| p.graph_id == r.graph_id && p.revision == r.revision)
-                });
-                groups.push(group);
-            } else {
-                *incomplete = true;
-            }
+        if !self.authorize_groups(&mut edge.derivations, host, incomplete, &mut budget)? {
+            return Ok(false);
         }
         edge.derived_from = Vec::new();
-        for p in groups.iter().flat_map(|g| &g.premises) {
+        for p in edge.derivations.iter().flat_map(|g| &g.premises) {
             if !edge.derived_from.contains(p) {
                 edge.derived_from.push(p.clone());
             }
         }
-        edge.derivations = groups;
-        Ok(!edge.derivations.is_empty())
+        Ok(true)
     }
     fn node_refs_visible(
         &self,
@@ -1852,7 +1862,8 @@ impl Engine {
                     visiting,
                     budget,
                     depth + 1,
-                )?;
+                )?
+                && self.groups_visible(&node.derivations, host, visiting, budget, depth + 1)?;
             visiting.remove(&key);
             if !permitted {
                 return Ok(false);
@@ -1972,6 +1983,7 @@ impl Engine {
                         budget,
                         depth + 1,
                     )?
+                    || !self.groups_visible(&node.derivations, host, visiting, budget, depth + 1)?
                 {
                     return Ok(false);
                 }
@@ -2070,21 +2082,7 @@ impl Engine {
         if edge.derivations.is_empty() {
             return self.premises_visible(&edge.derived_from, host, visiting, budget, depth);
         }
-        for group in &edge.derivations {
-            let mut alternative = visiting.clone();
-            if self.premises_visible(&group.premises, host, &mut alternative, budget, depth)?
-                && self.node_refs_visible(
-                    &group.node_premises,
-                    host,
-                    &mut alternative,
-                    budget,
-                    depth,
-                )?
-            {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+        self.groups_visible(&edge.derivations, host, visiting, budget, depth)
     }
     /// Trusted host administration only; this is deliberately not a plan operation.
     pub fn register_adapter(&self, id: &str, graph: &str) -> Result<()> {
@@ -2389,8 +2387,14 @@ fn validate_graph(data: &GraphData) -> Result<()> {
         if e.derivations.len() > 128
             || e.derivations.iter().any(|d| {
                 !valid_id(&d.operator)
-                    || (d.premises.is_empty() && d.node_premises.is_empty())
-                    || d.premises.len().saturating_add(d.node_premises.len()) > 1000
+                    || (d.premises.is_empty()
+                        && d.node_premises.is_empty()
+                        && d.snapshot_premises.is_empty())
+                    || d.premises
+                        .len()
+                        .saturating_add(d.node_premises.len())
+                        .saturating_add(d.snapshot_premises.len())
+                        > 1000
             })
         {
             return Err(err(

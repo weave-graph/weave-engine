@@ -862,18 +862,15 @@ mod tests {
             })
             .unwrap();
         assert!(ac.derivations.iter().any(|d| d.premises.len() == 2));
-        assert!(
-            ac.derivations
-                .iter()
-                .all(|d| d.parameters["trace"].is_array())
-        );
-        assert!(
-            result
-                .graph
-                .edges
-                .iter()
-                .any(|e| e.predicate == "reach" && e.from == e.to)
-        );
+        assert!(ac
+            .derivations
+            .iter()
+            .all(|d| d.parameters["trace"].is_array()));
+        assert!(result
+            .graph
+            .edges
+            .iter()
+            .any(|e| e.predicate == "reach" && e.from == e.to));
         let repeated = reason(result.clone(), &rules(), &limits(), &ctx()).unwrap();
         assert_eq!(result.graph, repeated.graph);
         assert_eq!(result.coverage, Coverage::Complete);
@@ -939,14 +936,12 @@ mod tests {
         assert!(!result.graph.edges.iter().any(|e| e.predicate == "refuted"));
         let mut input = fixture();
         input.graph.edges[0].polarity = Polarity::Negative;
-        assert!(
-            reason(input, &set, &limits(), &ctx())
-                .unwrap()
-                .graph
-                .edges
-                .iter()
-                .any(|e| e.predicate == "refuted")
-        );
+        assert!(reason(input, &set, &limits(), &ctx())
+            .unwrap()
+            .graph
+            .edges
+            .iter()
+            .any(|e| e.predicate == "refuted"));
         let mut input = fixture();
         input.graph.edges[0].assertion_context = Some(GraphRef {
             graph_id: "world".into(),
@@ -984,13 +979,11 @@ mod tests {
         input.coverage = Coverage::Partial;
         let result = reason(input, &rules(), &limits(), &ctx()).unwrap();
         assert_eq!(result.coverage, Coverage::Partial);
-        assert!(
-            !result
-                .graph
-                .edges
-                .iter()
-                .any(|e| e.predicate == "reach" && e.from == "a" && e.to == "c")
-        );
+        assert!(!result
+            .graph
+            .edges
+            .iter()
+            .any(|e| e.predicate == "reach" && e.from == "a" && e.to == "c"));
     }
     #[test]
     fn independent_support_sets_remain_alternative_and_limit_is_explicit() {
