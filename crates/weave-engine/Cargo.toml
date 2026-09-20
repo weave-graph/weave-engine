@@ -21,6 +21,11 @@ tempfile = "3"
 
 [features]
 recovery-testing = []
+browser-image-experiment = []
+
+[[example]]
+name = "browser_image_probe"
+required-features = ["browser-image-experiment"]
 
 [[example]]
 name = "integration_probe"

@@ -44,8 +44,11 @@ proves the browser VFS implements shared-memory locking. SQLite documents that
 
 The state machine is:
 
-1. Acquire lock; load and validate the current generation's complete bytes.
-   Restore only trusted local storage, never an arbitrary remote database image.
+1. Acquire lock; distinguish an explicit first-create request from reopen.
+   Retain a format/header sentinel and require a matching complete image on
+   reopen; absence cannot silently initialize a fresh database. Load and validate
+   the current generation's bytes. Restore only trusted local storage, never an
+   arbitrary remote database image.
 2. Open the same engine kernel. Persist initialization or migration before
    returning successful open. Keep this engine alive so operation-clock state
    is not reset after every command.
@@ -91,7 +94,10 @@ unknown-before-dispatch fence. A same-origin worker is not a remote authority.
 Transfer Program and result JSON as untouched UTF-8 bytes. JavaScript
 JSON.parse/stringify cannot safely roundtrip arbitrary engine i64 values or
 signed/hash-bearing canonical payloads. Expose native u64 handles using the
-chosen BigInt ABI; represent generation counters as exact strings/BigInt.
+chosen BigInt ABI; the existing open response also encodes a numeric handle in
+JSON, so use an exact bounded handle decoder or a dedicated opaque handle
+export rather than reading it through JSON.parse. Represent generation counters
+as exact strings/BigInt.
 Test 9007199254740993, i64 limits and exact decimal payloads explicitly.
 
 Verify the actual target's SystemTime and cryptographic randomness adapters;
@@ -165,3 +171,51 @@ actual compiled evidence → governance → guarded reference-sink scenario acro
 browser restarts and native peers. Mobile extension reuses the C/Swift kernel
 but still requires background/termination tests and broader device evidence.
 Neither this experiment nor fixed-input portable WASM conformance closes E10.
+
+## Toolchain preparation evidence
+
+Approved preparation completed outside the repository at the host's reusable
+`~/.cache/weave-toolchains` location. The SDK archive SHA256 is
+`b60514308507f64f4138d3c55bdb6979f20222288700fde603dced23b65dd533`;
+its tar entries total 1,490,083,691 unpacked bytes. The pinned emsdk source
+archive SHA256 is
+`ce1e21dc9447d77591f12f78bf82158bc8ef40de646150d6808d5a79555889ff`.
+After extraction and archive removal, the toolchain directory occupies
+1,508,052 KiB. `emcc --version` reports 6.0.9-git, source
+`4e4223852a0835923411059a3929907d7df1232e`. Existing Node is v26.5.0.
+Rust-src was installed from the pinned nightly manifest. These are preparation
+measurements; they are not browser durability evidence.
+
+## First link/image proof
+
+The real engine and bundled SQLite linked in 24.24 seconds with two low-priority
+jobs. The exported DELETE-mode image was 520,192 bytes. Both Node v26.5.0 and a
+dedicated worker in existing Chromium 151.0.7922.34 passed image restore with
+byte-identical full query results, i64 extrema and 9007199254740993, matching
+head and event count. Reopen changes only SQLite header counter offsets 27/95
+in this fixture, because initialization performs a transaction; the host must
+fence successful open as well as later writes. The initial fixture's valid-at
+query correctly pruned its isolated node; the proof uses an unfiltered query.
+
+This uses an experimental opt-in feature and the new single-owner constructor;
+default native opening still requests WAL. No arbitrary authority or source
+objects are synthesized. The Rust clock remains alive while the file is copied.
+The native helper alone does not enforce exclusive ownership or provide
+IndexedDB durability. Those are explicit next host obligations.
+
+Reproduce from the repository root, using the installed pinned SDK:
+
+```sh
+WEAVE_EMSDK="$HOME/.cache/weave-toolchains/emsdk-c59d6e841da55c2c21af32004c4c173cbd1c0f10" sh scripts/build_browser_image_probe.sh
+node -e 'require("./target/wasm32-unknown-emscripten/debug/examples/browser_image_probe.js")()'
+# Set NODE_PATH to an existing installation containing Playwright if not local.
+node scripts/check_browser_image_smoke.cjs
+```
+
+The Emscripten setting WASM_BIGINT emits a deprecation warning because this SDK
+already always uses that ABI for WASM. No symbols are ignored or runtime
+functions stubbed. Pinned SDK source connects `/dev/urandom` to `randomFill`,
+which calls browser `crypto.getRandomValues`; failure behavior remains to be
+fault-tested. Current toolchain, rust-src and target artifacts occupy about
+1.75 GiB before any additional native test rebuild. No IndexedDB writes,
+quota tests or persistent browser restart are claimed by this first proof.

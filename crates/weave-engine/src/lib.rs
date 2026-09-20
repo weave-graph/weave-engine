@@ -29,6 +29,8 @@ pub use identity_acceptance::{
 };
 mod assertions;
 mod authorization;
+#[cfg(feature = "browser-image-experiment")]
+mod image_host;
 mod operation_clock;
 mod read_budget;
 pub use admission::{Admitted, ProposalReceipt};
@@ -146,6 +148,14 @@ impl Engine {
         clock: Arc<dyn TrustedClock>,
         before_commit: impl FnOnce(),
     ) -> Result<Self> {
+        Self::from_connection_profile(conn, clock, before_commit, false)
+    }
+    fn from_connection_profile(
+        conn: Connection,
+        clock: Arc<dyn TrustedClock>,
+        before_commit: impl FnOnce(),
+        single_owner_image: bool,
+    ) -> Result<Self> {
         let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
         if !(0..=17).contains(&version) {
             return Err(err(
@@ -153,7 +163,18 @@ impl Engine {
                 "database schema version is unsupported",
             ));
         }
-        conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;")?;
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        if single_owner_image {
+            let mode: String = conn.query_row("PRAGMA journal_mode=DELETE", [], |r| r.get(0))?;
+            if mode != "delete" {
+                return Err(err(
+                    "E_IMAGE_PROFILE",
+                    "single-owner image journal unavailable",
+                ));
+            }
+        } else {
+            conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+        }
         let engine = Self {
             conn,
             read_budget: read_budget::ReadBudget::default(),
