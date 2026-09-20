@@ -14,8 +14,8 @@
     "typed_context_carrier"
   ],
   "output_bytes": 43746,
-  "output_sha256": "fdf4a9a9890bd15121f9ef30c9918245635dd6d32ebc6d32915f25dafd143572",
-  "wasm_sha256": "9c8acc20202237de82d6da344288f007fa239aeb4061d3ed8044c9763140ef85",
+  "output_sha256": "fa936e1419d4a444282db5eec61cebde5b080563f4073ab8e838b2bac71e7f1b",
+  "wasm_sha256": "6c908a64b2e1a1b818ca9901305edd82fd1e71b6274bb1c07f4bf546d263412e",
   "node": "v26.5.0",
   "rust": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
   "limits": [

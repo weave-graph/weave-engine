@@ -121,6 +121,17 @@ fn temporal_profile() -> Value {
         clipped.graph.edges[0].polarity,
         weave_contract::Polarity::Negative
     );
+    let repeated = temporal::window(
+        clipped.clone(),
+        &Interval {
+            start: 2,
+            end: Some(8),
+        },
+        &context,
+    )
+    .unwrap();
+    assert_eq!(clipped.graph, repeated.graph);
+    assert_eq!(clipped.edge_origins, repeated.edge_origins);
     let mut right = fixture("right", "positive", 10, 20);
     right.graph.nodes[0].entity_id = "B".into();
     right.graph.nodes[1].entity_id = "C".into();
@@ -149,6 +160,15 @@ fn temporal_profile() -> Value {
         })).unwrap()).collect(),
         ..GraphInfluence::default()
     });
+    let empty = temporal::window(
+        empty,
+        &Interval {
+            start: 0,
+            end: Some(20),
+        },
+        &context,
+    )
+    .unwrap();
     let target = |entity: &str| EntitySpace {
         entity_id: entity.into(),
         space_id: "s".into(),

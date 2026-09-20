@@ -21,7 +21,8 @@ fn query(engine: &Engine, graph: &str, principal: &str) -> QueryResult {
 }
 #[test]
 fn generated_copies_retain_grouped_original_edge_and_attachment_readers() {
-    for private_edge in [false, true] {
+    for (private_edge, start, end) in [(false, 1, 9), (true, 1, 9), (false, -1, 11), (true, -1, 11)]
+    {
         let mut engine = Engine::memory().unwrap();
         let proof = commit(
             &mut engine,
@@ -55,7 +56,7 @@ fn generated_copies_retain_grouped_original_edge_and_attachment_readers() {
             .any(|r| r.graph_id == input.graph_id
                 && r.revision == input.revision
                 && r.assertion_id == "a"));
-        let program:Program=serde_json::from_value(json!({"version":weave_contract::VERSION,"commands":[{"op":"evaluate","value":{"kind":"window","window":{"start":1,"end":9},"input":{"kind":"query","query":{"graph_id":"Input"}}}}]})).unwrap();
+        let program:Program=serde_json::from_value(json!({"version":weave_contract::VERSION,"commands":[{"op":"evaluate","value":{"kind":"window","window":{"start":start,"end":end},"input":{"kind":"query","query":{"graph_id":"Input"}}}}]})).unwrap();
         let result = engine
             .execute(&program, &host("alice"))
             .unwrap()
@@ -72,7 +73,7 @@ fn generated_copies_retain_grouped_original_edge_and_attachment_readers() {
             .attachments
             .iter_mut()
             .for_each(|a| a.readers.clear());
-        // Persist only generated records, without relying on the result envelope.
+        // Persist clipped or identity-preserved records without the result envelope.
         let saved: GraphData = copied;
         engine
             .execute(

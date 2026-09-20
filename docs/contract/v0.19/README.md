@@ -18,7 +18,10 @@ budget; an unavailable nonempty list is never converted into an unrestricted emp
 carrier. Whole-snapshot services reject redacted alternatives conservatively.
 
 `Window { input, window }` clips half-open validity intervals into derived occurrence
-records with distinct local identities. `Sequence { left, right, window, relation,
+records with distinct local identities when clipping changes the input. A window
+that changes no edge or attachment interval retains record identities after the
+same context/proof validation and preserves whole-value carriers, so repeated
+application is idempotent. `Sequence { left, right, window, relation,
 match_on }` supports entity-space endpoint matching with Before, Meets, Overlaps and
 Within. Sequence matches positive occurrences; Window also preserves negative evidence. Relations compare the original intervals before clipping. Output records
 retain each event's individual interval; no hull is asserted as a simultaneous fact.
