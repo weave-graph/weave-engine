@@ -221,6 +221,26 @@ fn root_old_wire_rejects_typed_new_carriers_before_first_write_but_not_literal_k
         assert_eq!(e.event_count().unwrap(), 0);
         assert!(e.head("before", "main").unwrap().is_none());
     }
+    let query = json!({"kind":"query","query":{"graph_id":"root"}});
+    for expression in [
+        json!({"kind":"window","input":query,"window":{"start":0,"end":10}}),
+        json!({"kind":"sequence","left":query,"right":query,"window":{"start":0,"end":10},"relation":"meets","match_on":"entity_space_to_from"}),
+    ] {
+        let mut e = Engine::memory().unwrap();
+        let p: Program = serde_json::from_value(json!({"version":"0.18.0","commands":[
+            {"op":"commit","graph_id":"before","data":{}},
+            {"op":"evaluate","value":{"kind":"explain","input":expression}}
+        ]}))
+        .unwrap();
+        assert_eq!(
+            e.execute(&p, &HostContext::new("principal-7", ["before".into()]))
+                .unwrap_err()
+                .code,
+            "E_VERSION"
+        );
+        assert_eq!(e.event_count().unwrap(), 0);
+        assert!(e.head("before", "main").unwrap().is_none());
+    }
     let mut e = Engine::memory().unwrap();
     let p:Program=serde_json::from_value(json!({"version":"0.18.0","commands":[{"op":"commit","graph_id":"root","data":{"nodes":[{"id":"literal","entity_id":"literal","space_id":"s","properties":{"derivations":groups,"snapshot_premises":["inert"],"kind":"window"}}]}}]})).unwrap();
     e.execute(&p, &HostContext::new("principal-7", ["root".into()]))
