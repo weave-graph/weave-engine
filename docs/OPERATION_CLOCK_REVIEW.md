@@ -67,3 +67,7 @@ restarts or database restores. Clock-free trusted administrative head/count and
 lifecycle diagnostics are not reader-authorized payload APIs. The stage does not
 provide distributed time attestation, automatic subscriptions, or remote authority
 through source programs.
+
+## Root integration verification
+
+Root merged the corrected foundation with the public protocol0.15 pairing and this writer-contention regression. All301 workspace test/doctest checks passed, including the API migration compile-fail doctest; strict all-target/all-feature lint and formatting passed. Root also executed dispatch7, governance6 and signed-admission6 actual process-death checks. The protocol crate remains byte-identical to engine5067292, and the source compiler pairing stays5c3e909. Hosted results are tracked separately; no decision-graph exposure is implied.
