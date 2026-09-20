@@ -13,7 +13,7 @@ The CLI is a **trusted local host**: `--actor` selects a principal and `--write`
 
 The companion [Weave language](https://github.com/weave-graph/weave-language) compiles into the shared versioned contract. The engine owns the canonical I/O-free [`weave-contract`](crates/weave-contract/src/lib.rs) crate; the language vendors an exact copy for independent builds.
 
-See [current evidence and limitations](docs/STATUS.md), [implementation plan](docs/IMPLEMENTATION_PLAN.md), [workflow DAG](docs/WORKFLOW.md), [contract](docs/contract/v0.10/README.md) and [source provenance](docs/SOURCES.md). General joins, signed peer synchronization, capabilities/governance, real mobile/browser persistence, broader geometry and automatic clustering remain open. The [original white papers](docs/source/README.md) have been recovered and [reconciled](docs/RECONCILIATION.md). MIT licensed.
+See [current evidence and limitations](docs/STATUS.md), [implementation plan](docs/IMPLEMENTATION_PLAN.md), [workflow DAG](docs/WORKFLOW.md), [contract](docs/contract/v0.19/README.md) and [source provenance](docs/SOURCES.md). Broader joins, selective peer synchronization, complete permission/governance semantics, the integrated persistent browser/mobile scenario, broader geometry and incremental clustering remain open. The [original white papers](docs/source/README.md) have been recovered and [reconciled](docs/RECONCILIATION.md). MIT licensed.
 
 Finite rule closure is available through the [0.7 contract](docs/contract/v0.7/README.md); signed host admission has a separate [security boundary](docs/ADMISSION.md).
 

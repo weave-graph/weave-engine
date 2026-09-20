@@ -2,9 +2,11 @@
 
 ## Current snapshot
 
-The public MIT engine `21c2728` implements protocol0.18 with SQLite marker17. Its paired compiler integration, principal-bound SDK/C facade acceptance, browser image persistence matrix, platform/migration and fuzz jobs passed. The public source compiler `82a45f6` also passed its hosted checks. E00 is complete; E01–E14 remain in progress. These bounded profiles do not complete either paper. See [workflow gates](workflow.json) and [reconciled requirements](RECONCILIATION.md).
+The current implementation uses protocol0.19, SQLite marker18 and capsule0.4. It adds alternative influence on whole values, nodes and attachments, per-branch snapshot premises, and pure Window/Sequence graph operations. The language vendors the exact canonical contract from native freeze `a6adb94`. See [the current contract](contract/v0.19/README.md) and [joint verification](VERIFICATION_019.md).
 
-The current unpublished stage is protocol0.19/store18/capsule0.4: coherent alternative influence on whole values, nodes and attachments, per-branch snapshot premises, and pure Window/Sequence graph operations. Canonical/native implementation and joint acceptance are in progress; the [integration review](proposals/TEMPORAL_CARRIER_INTEGRATION.md) defines the required gate.
+Local joint validation covers actual source compilation and persistent execution, native/WASM parity, authorization after detached persistence, six populated historical migration suites and sixteen real browser persistence/upgrade cases. Commit-specific hosted results are tracked separately; local results alone do not establish CI success. E00 is complete; E01–E14 remain in progress. These bounded profiles do not complete either paper. See [workflow gates](workflow.json) and [reconciled requirements](RECONCILIATION.md).
+
+The preceding public pair, engine `21c2728` and compiler `82a45f6`, passed all hosted checks at protocol0.18/store17. Those results describe that historical revision.
 
 The current native runtime includes genuine accepted-governance graph reads, a trusted operation clock, exact Query/Filter membership maintenance, and durable coalesced view scheduling. Earlier notes describing accepted graphs as unavailable or scheduling as unpublished apply only to their historical checkpoints.
 
