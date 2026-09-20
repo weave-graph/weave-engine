@@ -424,6 +424,18 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             .collect::<Result<Vec<_>>>()?;
         Ok((result, dependencies))
     }
+    fn pending_tick_satisfied(
+        &self,
+        id: &str,
+        tick: Option<i64>,
+        host: &HostContext,
+    ) -> Result<bool> {
+        let requested: Option<Option<i64>> = self.conn.query_row("SELECT requested_tick FROM view_schedules WHERE id=?1 AND principal=?2 AND pending=1",params![id,host.principal],|r|r.get(0)).optional()?;
+        Ok(requested
+            .flatten()
+            .zip(tick)
+            .is_none_or(|(requested, processed)| requested <= processed))
+    }
     fn view_current(
         &self,
         record: &ViewRecord,
@@ -434,12 +446,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         if record.tick != tick || record.result.coverage == Coverage::Partial {
             return Ok(false);
         }
-        let requested: Option<Option<i64>> = self.conn.query_row("SELECT requested_tick FROM view_schedules WHERE id=?1 AND principal=?2 AND pending=1",params![record.definition.id,host.principal],|r|r.get(0)).optional()?;
-        if requested
-            .flatten()
-            .zip(record.tick)
-            .is_some_and(|(requested, processed)| requested > processed)
-        {
+        if !self.pending_tick_satisfied(&record.definition.id, record.tick, host)? {
             return Ok(false);
         }
         for dependency in &record.dependencies {
@@ -530,6 +537,8 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             let change = change_between(Some(&old.result), &result, generation as u64, tick);
             self.record_view_change(id, &host.principal, &change, &dependencies, &old.result)?;
         }
+        let current =
+            result.coverage == Coverage::Complete && self.pending_tick_satisfied(id, tick, host)?;
         if let Some(tx) = tx {
             tx.commit()?;
         }
@@ -537,7 +546,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             ViewSnapshot {
                 generation: generation as u64,
                 tick,
-                current: result.coverage == Coverage::Complete,
+                current,
                 result,
             },
             work,

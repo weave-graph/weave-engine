@@ -122,6 +122,54 @@ fn root_scheduler_partial_fanout_restart_and_principal_cursor_isolation() {
     }
 }
 
+#[test]
+fn root_scheduler_synchronous_receipt_respects_newer_requested_tick() {
+    let mut engine = Engine::memory().unwrap();
+    let alice = owner("alice");
+    write(&mut engine, 0);
+    engine
+        .register_view(
+            &ViewDefinition {
+                id: "tick".into(),
+                clock: ViewClock::Tick,
+                expression: GraphExpression::Query {
+                    query: serde_json::from_value(json!({"graph_id":"source"})).unwrap(),
+                },
+            },
+            Some(0),
+            &alice,
+        )
+        .unwrap();
+    engine.enroll_incremental_view("tick", &alice).unwrap();
+    engine.enable_view_schedule("tick", &alice).unwrap();
+    engine.request_view_tick("tick", 20, &alice).unwrap();
+    let intermediate = engine.refresh_view("tick", Some(10), &alice).unwrap();
+    assert!(
+        !intermediate.current,
+        "a synchronous receipt must not certify a superseded queued tick as current"
+    );
+    assert_eq!(
+        engine
+            .read_view("tick", Some(10), ViewFreshness::RequireCurrent, &alice)
+            .unwrap_err()
+            .code,
+        "E_FRESHNESS"
+    );
+    let caught_up = engine.refresh_view("tick", Some(20), &alice).unwrap();
+    assert!(
+        caught_up.current,
+        "pending acknowledgment alone must not make a caught-up receipt stale"
+    );
+    let drained = engine.drain_view_work(&alice).unwrap().unwrap();
+    assert!(drained.current);
+    assert!(
+        engine
+            .read_view("tick", Some(20), ViewFreshness::RequireCurrent, &alice)
+            .unwrap()
+            .current
+    );
+}
+
 #[cfg(feature = "recovery-testing")]
 #[test]
 fn root_scheduler_scan_and_drain_observer_panics_leave_retryable_work() {
