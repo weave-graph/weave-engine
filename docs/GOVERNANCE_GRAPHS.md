@@ -33,3 +33,7 @@ Raw commits/batches, fork/accept, generic capsule receipt, signed publication/in
 - [Delivery recovery](../scripts/check_governance_delivery_recovery.py) and [migration recovery](../scripts/root_migration.py) retain atomic acknowledgment and DDL rollback invariants.
 
 E05/E11 and the complete white-paper scope remain in progress. Remote acceptance/authority federation, selective disclosure, broader review/merge policies, governed effect execution, portable accepted-view transport, operational retention and language syntax for this native API remain open. The [reviewed design](ACCEPTED_GOVERNANCE_GRAPH_EXPOSURE.md) explains the decisions and wider acceptance map.
+
+## Independent error privacy check
+
+Missing, empty, private and expired accepted selections return the same expected unavailability code and message. This normalization applies only to expected governance unavailability; clock, integrity and resource failures remain distinct errors. The independent `root_missing_empty_private_and_expired_views_have_identical_denials` regression covers current and historical selection.

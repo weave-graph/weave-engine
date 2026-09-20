@@ -945,3 +945,51 @@ fn copied_decision_claim_cannot_escape_policy_via_public_replacement_endpoints()
     assert_eq!(result.graph.nodes.len(), 1);
     assert!(result.graph.edges.is_empty());
 }
+
+#[test]
+fn root_missing_empty_private_and_expired_views_have_identical_denials() {
+    let mut e = test_clock::memory().unwrap();
+    let outsider = HostContext::new("outsider", []);
+    let deny = |e: &Engine, selection: AcceptedViewSelection, actor: &HostContext| {
+        let error = e.query_accepted_view(&selection, actor).unwrap_err();
+        (error.code, error.message)
+    };
+    let missing = deny(&e, choose(None), &outsider);
+    let mut private_policy = policy(2);
+    private_policy.readers = vec!["collector".into()];
+    e.install_governance_root(&private_policy).unwrap();
+    let data: GraphData =
+        serde_json::from_value(json!({"nodes":[{"id":"n","entity_id":"E","space_id":"s"}]}))
+            .unwrap();
+    e.execute(
+        &Program {
+            version: VERSION.into(),
+            source_revisions: vec![],
+            commands: vec![Command::Commit {
+                graph_id: "source".into(),
+                branch_id: "main".into(),
+                expected_head: None,
+                data,
+            }],
+        },
+        &host(),
+    )
+    .unwrap();
+    let source = GraphRef {
+        graph_id: "source".into(),
+        revision: e.head("source", "main").unwrap().unwrap(),
+    };
+    assert_eq!(deny(&e, choose(None), &outsider), missing);
+    let receipt = accept(&e, source);
+    assert_eq!(deny(&e, choose(None), &outsider), missing);
+    assert_eq!(
+        deny(&e, choose(Some(receipt.decision_id)), &outsider),
+        missing
+    );
+    assert_eq!(
+        deny(&e, choose(Some("unknown-decision".into())), &outsider),
+        missing
+    );
+    test_clock::at(10000, || {});
+    assert_eq!(deny(&e, choose(None), &host()), missing);
+}
