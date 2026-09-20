@@ -13,6 +13,11 @@ jobs:
       CARGO_BUILD_JOBS: '2'
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 21c27286749dcfa8833f903b631ea74537692647
+          path: .ci-store17
       - uses: actions/setup-node@v4
         with:
           node-version: '26.5.0'
@@ -24,6 +29,14 @@ jobs:
           "$RUNNER_TEMP/emsdk/emsdk" install 6.0.9
           "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.9
           echo "WEAVE_EMSDK=$RUNNER_TEMP/emsdk" >> "$GITHUB_ENV"
+      - name: Preserve exact store17 browser kernel for migration
+        working-directory: .ci-store17
+        run: |
+          export CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target"
+          sh scripts/build_browser_image_probe.sh
+          mkdir -p "$RUNNER_TEMP/store17-browser"
+          cp "$CARGO_TARGET_DIR/wasm32-unknown-emscripten/debug/examples/browser_image_probe.js" "$RUNNER_TEMP/store17-browser/"
+          cp "$CARGO_TARGET_DIR/wasm32-unknown-emscripten/debug/examples/browser_image_probe.wasm" "$RUNNER_TEMP/store17-browser/"
       - name: Build the actual SQLite kernel for WebAssembly
         run: sh scripts/build_browser_image_probe.sh
       - name: Install pinned browser harness
@@ -34,4 +47,4 @@ jobs:
       - name: Verify actual worker and persistent browser failure boundaries
         run: |
           node scripts/check_browser_image_smoke.cjs
-          node scripts/check_browser_persistence.cjs
+          node scripts/check_browser_persistence.cjs target/wasm32-unknown-emscripten/debug/examples/browser_image_probe.js "$RUNNER_TEMP/store17-browser/browser_image_probe.js"

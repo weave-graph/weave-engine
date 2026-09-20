@@ -16,11 +16,17 @@ async function deadline(promise, label, millis=15000) {
 
 async function main() {
   const artifact = path.resolve(process.argv[2] || 'target/wasm32-unknown-emscripten/debug/examples/browser_image_probe.js');
+  const oldArtifact = process.argv[3] ? path.resolve(process.argv[3]) : null;
   const files = new Map([
     ['/probe.js', artifact], ['/browser_image_probe.wasm', artifact.replace(/\.js$/, '.wasm')],
     ['/worker.js', path.resolve('examples/browser-image/worker.js')],
   ]);
+  function selectArtifact(selected) {
+    files.set('/probe.js', selected);
+    files.set('/browser_image_probe.wasm', selected.replace(/\.js$/, '.wasm'));
+  }
   const server = http.createServer((request, response) => {
+    response.setHeader('Cache-Control', 'no-store');
     const file = files.get(request.url);
     if (!file) {response.end('<!doctype html><title>Weave persistence experiment</title>');return;}
     response.setHeader('Content-Type', file.endsWith('.wasm') ? 'application/wasm' : 'text/javascript');
@@ -86,11 +92,60 @@ async function main() {
       } finally {db.close();}
     },{store,operation,blankSqlite});
   }
+  async function persistedImage(page, store) {
+    return page.evaluate(async store => {
+      const request=indexedDB.open(`weave-image-experiment-${store}`,1);
+      const db=await new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+      try {
+        const record=await new Promise((resolve,reject)=>{
+          const tx=db.transaction('state','readonly');const image=tx.objectStore('state').get('image');
+          tx.oncomplete=()=>resolve(image.result);tx.onabort=()=>reject(tx.error);
+        });
+        const bytes=await record.bytes.arrayBuffer();
+        const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),n=>n.toString(16).padStart(2,'0')).join('');
+        if(sha256!==record.sha256)throw new Error('persisted migration image hash mismatch');
+        return {generation:record.generation,sha256,marker:new DataView(bytes).getUint32(60,false),bytes:bytes.byteLength};
+      } finally {db.close();}
+    },store);
+  }
   try {
     const context=await chromium.launchPersistentContext(profile,{headless:true});
     browser=context.browser();
     await rememberOwnedBrowser();
     const page=await context.newPage();await page.goto(origin);
+    if(oldArtifact) {
+      for(const fault of ['after-sql','abort','during-idb','after-idb']) {
+        const store=`migration-${fault}`;
+        selectArtifact(oldArtifact);await page.reload();
+        assert.equal((await open(page,store,true)).ok,true);
+        value(await step(page,1));const oldValue=value(await step(page,0));
+        const oldImage=await persistedImage(page,store);assert.equal(oldImage.marker,17);
+        selectArtifact(artifact);await page.reload();
+        const interrupted=await rpc(page,{kind:'open',store,create:false,fault});
+        if(fault==='abort') {
+          assert.equal(interrupted.code,'E_IDB_ABORT');
+          assert.equal((await step(page,0)).code,'E_POISON');
+        } else {
+          assert.equal(interrupted.stage,fault);
+          assert.equal((await step(page,0)).code,'E_BUSY');
+        }
+        // Terminate the worker, including any actual open readwrite transaction.
+        await page.reload();const afterDeath=await persistedImage(page,store);
+        if(fault==='after-sql'||fault==='abort')assert.deepEqual(afterDeath,oldImage);
+        else if(fault==='after-idb')assert.equal(afterDeath.marker,18);
+        else assert.ok([17,18].includes(afterDeath.marker));
+        if(afterDeath.marker===17)assert.deepEqual(afterDeath,oldImage);
+        else assert.equal(BigInt(afterDeath.generation),BigInt(oldImage.generation)+1n);
+        assert.equal((await open(page,store,false)).ok,true);
+        assert.deepEqual(value(await step(page,0)),oldValue);
+        const upgraded=await persistedImage(page,store);assert.equal(upgraded.marker,18);
+        selectArtifact(oldArtifact);await page.reload();
+        assert.equal((await open(page,store,false)).code,'E_STORAGE_VERSION');
+        assert.deepEqual(await persistedImage(page,store),upgraded);
+        record(`store17 browser migration ${fault}: complete image, exact values, old runtime refusal`);
+      }
+      selectArtifact(artifact);await page.reload();
+    }
     assert.equal((await open(page,'missing',false)).code,'E_STORE_MISSING');
     await page.reload();assert.equal((await open(page,'primary',true)).ok,true);
     value(await step(page,1));const baseline=value(await step(page,0));
@@ -190,6 +245,7 @@ async function main() {
     record('actual browser-process crash and profile reopen retains acknowledged state');
     console.log(JSON.stringify({profile:'experimental-idb-image-v1',browser:browser.version(),
       image_cap_bytes:8*1024*1024,checks,measurements,physical_power_loss_tested:false,
+      historical_store17_migration:!!oldArtifact,
       real_quota_enforcement:true,synthetic_quota_separate:true}));
     await deadline(restarted.close(),'restarted context close');
   } finally {
