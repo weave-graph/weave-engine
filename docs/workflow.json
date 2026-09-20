@@ -337,6 +337,11 @@
       ],
       "evidence": [
         "docs/VIEWS.md",
+        "docs/INCREMENTAL_SELECTION.md",
+        "crates/weave-engine/src/selection.rs",
+        "crates/weave-engine/tests/incremental_views.rs",
+        "crates/weave-engine/tests/root_incremental_views.rs",
+        "scripts/check_selection_migration.py",
         "crates/weave-engine/src/views.rs",
         "crates/weave-engine/tests/views.rs",
         "docs/contract/v0.7/README.md",

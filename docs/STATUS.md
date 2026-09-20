@@ -14,7 +14,7 @@ Public MIT implementation in progress; recovered original papers are reconciled.
 - Version 0.8 exact context selection, qualified metadata paths and scoped derived status/explanation nodes prevent implicit default/pinned mixing; [profile](contract/v0.8/README.md).
 - Version 0.7 finite range-restricted graph rules with temporal proof closure, host work budgets, explicit negative evidence and live-view retraction; [profile](contract/v0.7/README.md).
 - Version 0.5 bounded union/diff/project and time-specific four-valued support, with typed composition, pinned node origins and persisted alternative derivation groups.
-- Durable principal-scoped named views, exact-snapshot recomputation, explicit freshness, time ticks and membership retractions; [view boundaries](VIEWS.md).
+- Durable principal-scoped named views, exact-snapshot recomputation, explicit freshness, time ticks and membership retractions; opt-in exact Query/Filter membership maintenance with oracle fallback and work counters; [view boundaries](VIEWS.md).
 - Scoped durable adapter dispatch with leases, lifecycle/retry/dead letters, atomic graph writes plus receipt/checkpoint, and explicit unknown external effect intents; [recovery boundary](DISPATCH.md).
 - Unsigned hash-verified capsules, quarantine receive, explicit acceptance and offline branches. Capsule 0.2 carries whole authorized logical manifests, rejects equivocation and cross-receipt ancestry cycles; [transport boundaries](CAPSULES.md). Live handles, signatures and selective manifest proofs remain open.
 

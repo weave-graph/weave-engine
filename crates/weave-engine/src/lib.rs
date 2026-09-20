@@ -29,10 +29,12 @@ use std::sync::Arc;
 mod capsule;
 use assertions::{assertion_edge, materialize, validate_explicit};
 mod dispatch;
+mod selection;
 mod views;
 pub use dispatch::{
     AdapterManifest, DispatchEnvelope, EffectIntent, HandlerReceipt, SubscriptionScope,
 };
+pub use selection::ViewSelectionWork;
 pub use views::{ViewChange, ViewClock, ViewDefinition, ViewFreshness, ViewSnapshot};
 mod clustering;
 mod geometry;
@@ -125,7 +127,7 @@ impl Engine {
         before_commit: impl FnOnce(),
     ) -> Result<Self> {
         let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
-        if !(0..=12).contains(&version) {
+        if !(0..=13).contains(&version) {
             return Err(err(
                 "E_STORAGE_VERSION",
                 "database schema version is unsupported",
@@ -186,7 +188,7 @@ impl Engine {
         engine.initialize_governance()?;
         engine.initialize_governance_delivery()?;
         engine.initialize_governance_graphs()?;
-        engine.conn.pragma_update(None, "user_version", 12)?;
+        engine.conn.pragma_update(None, "user_version", 13)?;
         before_commit();
         initialization.commit()?;
         Ok(engine)

@@ -57,6 +57,7 @@ impl Engine {
 CREATE TABLE IF NOT EXISTS live_view_changes(id TEXT NOT NULL,principal TEXT NOT NULL,generation INTEGER NOT NULL,transition TEXT NOT NULL,PRIMARY KEY(id,principal));
 CREATE TABLE IF NOT EXISTS view_change_authorization(id TEXT NOT NULL,principal TEXT NOT NULL,prior_result TEXT NOT NULL,PRIMARY KEY(id,principal));
 CREATE TABLE IF NOT EXISTS view_dependencies(id TEXT NOT NULL,principal TEXT NOT NULL,graph_id TEXT NOT NULL,branch_id TEXT NOT NULL,PRIMARY KEY(id,principal,graph_id,branch_id));
+CREATE TABLE IF NOT EXISTS view_selection(id TEXT NOT NULL,principal TEXT NOT NULL,state TEXT,digest TEXT,PRIMARY KEY(id,principal));
 CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,branch_id);")?;
         Ok(())
     }
@@ -123,6 +124,185 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             current: result.coverage == Coverage::Complete,
             result,
         })
+    }
+    /// Opt into private membership caching. This grants no query or write authority.
+    /// Ordinary synchronous views remain available when the enrollment quota is full.
+    pub fn enroll_incremental_view(&mut self, id: &str, host: &HostContext) -> Result<()> {
+        let _read_scope = self.read_budget.enter();
+        let tx = self.conn.unchecked_transaction()?;
+        let _clock_scope = self.operation_write_scope()?;
+        let record = self.load_view(id, host)?;
+        self.require_current_result_authority(&record.result, host)?;
+        let enrolled: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM view_selection WHERE id=?1 AND principal=?2)",
+            params![id, host.principal],
+            |r| r.get(0),
+        )?;
+        if !enrolled {
+            let count: i64 = self.conn.query_row(
+                "SELECT count(*) FROM view_selection WHERE principal=?1",
+                [&host.principal],
+                |r| r.get(0),
+            )?;
+            if count >= 256 {
+                return Err(err(
+                    "E_BUDGET",
+                    "incremental view enrollment quota exceeded",
+                ));
+            }
+            self.conn.execute(
+                "INSERT INTO view_selection(id,principal) VALUES (?1,?2)",
+                params![id, host.principal],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+    fn selection_state(
+        &self,
+        id: &str,
+        host: &HostContext,
+    ) -> Result<(bool, Option<selection::State>)> {
+        self.read_budget.request()?;
+        let row: Option<(Option<String>, Option<String>)> = self.conn.query_row(
+            "SELECT CASE WHEN length(CAST(state AS BLOB))<=?3 THEN state END,substr(digest,1,65) FROM view_selection WHERE id=?1 AND principal=?2",
+            params![id,host.principal,self.read_budget.remaining().min(selection::STATE_LIMIT) as i64],
+            |r| Ok((r.get(0)?,r.get(1)?))).optional()?;
+        let Some((Some(encoded), Some(digest))) = row.as_ref() else {
+            return Ok((row.is_some(), None));
+        };
+        self.read_budget.charge(encoded.len())?;
+        if format!("{:x}", Sha256::digest(encoded.as_bytes())) != *digest {
+            return Ok((true, None));
+        }
+        let state = serde_json::from_str::<selection::State>(encoded)
+            .ok()
+            .filter(selection::State::valid);
+        Ok((true, state))
+    }
+    fn store_selection(
+        &self,
+        id: &str,
+        host: &HostContext,
+        state: Option<&selection::State>,
+    ) -> Result<()> {
+        let encoded = match state {
+            Some(state) => {
+                json_size(state, selection::STATE_LIMIT)?;
+                Some(serde_json::to_string(state)?)
+            }
+            None => None,
+        };
+        let other: i64 = self.conn.query_row("SELECT coalesce(sum(length(CAST(state AS BLOB))),0) FROM view_selection WHERE principal=?1 AND id<>?2", params![host.principal,id], |r| r.get(0))?;
+        if usize::try_from(other)
+            .unwrap_or(usize::MAX)
+            .saturating_add(encoded.as_ref().map_or(0, String::len))
+            > 256 * 1024 * 1024
+        {
+            return Err(err("E_BUDGET", "incremental view state quota exceeded"));
+        }
+        let digest = encoded
+            .as_ref()
+            .map(|s| format!("{:x}", Sha256::digest(s.as_bytes())));
+        self.conn.execute(
+            "UPDATE view_selection SET state=?3,digest=?4 WHERE id=?1 AND principal=?2",
+            params![id, host.principal, encoded, digest],
+        )?;
+        Ok(())
+    }
+    fn compute_selection_view(
+        &self,
+        definition: &ViewDefinition,
+        tick: Option<i64>,
+        host: &HostContext,
+        work: &mut ViewSelectionWork,
+    ) -> Result<(QueryResult, Vec<HeadDependency>)> {
+        let (enrolled, prior) = self.selection_state(&definition.id, host)?;
+        if !enrolled {
+            return self.compute_view(definition, tick, host);
+        }
+        validate_expression_profile(&definition.expression, VERSION)?;
+        let expression = clock_expression(
+            &definition.expression,
+            &definition.clock,
+            tick,
+            0,
+            &mut 1000,
+        )?;
+        let mut tentative = None;
+        if let Some(plan) = selection::Plan::parse(&expression) {
+            let query = plan.query;
+            if !identity_acceptance::reserved(&query.graph_id)
+                && !governance_graph::reserved(&query.graph_id)
+                && valid_id(&query.graph_id)
+                && valid_id(&query.branch_id)
+                && valid_id(&host.principal)
+                && query.revision.as_ref().is_none_or(|r| valid_id(r))
+                && query.max_depth <= 32
+            {
+                let revision = match &query.revision {
+                    Some(r) => Some(r.clone()),
+                    None => self.head(&query.graph_id, &query.branch_id)?,
+                };
+                if let Some(revision) = revision {
+                    if !self.protected_reference_allowed(&query.graph_id, &revision, host)? {
+                        return Err(err("E_UNAVAILABLE", "graph unavailable"));
+                    }
+                    if let Some(raw) = self.load(&query.graph_id, &revision)? {
+                        if selection::eligible(&raw) {
+                            let definition_hash = selection::fingerprint(definition)?;
+                            let reusable = prior
+                                .as_ref()
+                                .map(|s| s.reusable(&definition_hash, &host.principal, &raw))
+                                .transpose()?
+                                .unwrap_or(false);
+                            match selection::evaluate(
+                                &plan,
+                                &definition_hash,
+                                &revision,
+                                raw,
+                                &host.principal,
+                                prior.as_ref(),
+                                work,
+                            ) {
+                                Ok((result, state)) => {
+                                    let dependencies = if query.revision.is_none() {
+                                        vec![HeadDependency {
+                                            graph: query.graph_id.clone(),
+                                            branch: query.branch_id.clone(),
+                                            revision: Some(revision),
+                                        }]
+                                    } else {
+                                        vec![]
+                                    };
+                                    tentative = Some((result, state, dependencies, reusable));
+                                }
+                                Err(error) if error.code == "E_BUDGET" => {}
+                                Err(error) => return Err(error),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Some((result, state, dependencies, reusable)) = tentative {
+            if !reusable {
+                // Cold/corrupt state is rebuilt only after the authoritative full oracle agrees.
+                work.fallback_runs += 1;
+                let (oracle, oracle_dependencies) = self.compute_view(definition, tick, host)?;
+                if result != oracle || dependencies != oracle_dependencies {
+                    work.oracle_disagreements += 1;
+                    self.store_selection(&definition.id, host, None)?;
+                    return Ok((oracle, oracle_dependencies));
+                }
+            }
+            self.store_selection(&definition.id, host, Some(&state))?;
+            return Ok((result, dependencies));
+        }
+        work.fallback_runs += 1;
+        let result = self.compute_view(definition, tick, host)?;
+        self.store_selection(&definition.id, host, None)?;
+        Ok(result)
     }
     fn load_view(&self, id: &str, host: &HostContext) -> Result<ViewRecord> {
         self.read_budget.request()?;
@@ -282,6 +462,17 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         tick: Option<i64>,
         host: &HostContext,
     ) -> Result<ViewSnapshot> {
+        self.refresh_view_with_work(id, tick, host)
+            .map(|(snapshot, _)| snapshot)
+    }
+    /// Membership work counts are trusted-host diagnostics, never graph output.
+    pub fn refresh_view_with_work(
+        &mut self,
+        id: &str,
+        tick: Option<i64>,
+        host: &HostContext,
+    ) -> Result<(ViewSnapshot, ViewSelectionWork)> {
+        let mut work = ViewSelectionWork::default();
         let _read_scope = self.read_budget.enter();
         let tx = self.conn.unchecked_transaction()?;
         let _clock_scope = self.operation_write_scope()?;
@@ -293,7 +484,8 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
                 "view tick cannot move backwards; register a separate historical view",
             ));
         }
-        let (result, dependencies) = self.compute_view(&old.definition, tick, host)?;
+        let (result, dependencies) =
+            self.compute_selection_view(&old.definition, tick, host, &mut work)?;
         let changed = old.result != result || old.tick != tick;
         let generation = old
             .generation
@@ -305,12 +497,15 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             self.record_view_change(id, &host.principal, &change, &dependencies, &old.result)?;
         }
         tx.commit()?;
-        Ok(ViewSnapshot {
-            generation: generation as u64,
-            tick,
-            current: result.coverage == Coverage::Complete,
-            result,
-        })
+        Ok((
+            ViewSnapshot {
+                generation: generation as u64,
+                tick,
+                current: result.coverage == Coverage::Complete,
+                result,
+            },
+            work,
+        ))
     }
     fn record_view_change(
         &self,
