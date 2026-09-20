@@ -361,3 +361,38 @@ fn owned_identity_records_preserve_original_object_provenance() {
     assert!(encoded.contains(&source.revision));
     assert!(encoded.contains("claim"));
 }
+#[test]
+fn prepare_and_complete_capture_one_clock_sample_per_outer_operation() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    struct Clock(AtomicUsize);
+    impl weave_engine::TrustedClock for Clock {
+        fn unix_millis(&self) -> weave_engine::Result<i64> {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            Ok(100)
+        }
+    }
+    let clock = Arc::new(Clock(AtomicUsize::new(0)));
+    let mut e = Engine::memory_with_clock(clock.clone()).unwrap();
+    write(&mut e, "input", json!({}));
+    setup(&e, &template());
+    let d = e.poll_adapter("compiled").unwrap().unwrap();
+    clock.0.store(0, Ordering::Relaxed);
+    let p = e
+        .prepare_compiled_handler("compiled", &d.id, &d.lease)
+        .unwrap();
+    assert_eq!(clock.0.load(Ordering::Relaxed), 1);
+    clock.0.store(0, Ordering::Relaxed);
+    e.complete_prepared_handler("compiled", &d.id, &d.lease, &p.preparation_id)
+        .unwrap();
+    assert_eq!(clock.0.load(Ordering::Relaxed), 1);
+    clock.0.store(0, Ordering::Relaxed);
+    assert!(
+        e.complete_prepared_handler("compiled", &d.id, &d.lease, &p.preparation_id)
+            .unwrap()
+            .duplicate
+    );
+    assert_eq!(clock.0.load(Ordering::Relaxed), 1);
+}
