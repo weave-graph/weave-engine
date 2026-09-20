@@ -1,12 +1,6 @@
 //! Durable principal-scoped live values. Full recomputation is the correctness oracle.
 use super::*;
 use serde::{Deserialize, Serialize};
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ViewClock {
-    Fixed,
-    Tick,
-}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ViewDefinition {
@@ -68,6 +62,15 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         tick: Option<i64>,
         host: &HostContext,
     ) -> Result<ViewSnapshot> {
+        self.register_view_inner(definition, tick, host, None)
+    }
+    pub(crate) fn register_view_inner(
+        &self,
+        definition: &ViewDefinition,
+        tick: Option<i64>,
+        host: &HostContext,
+        template: Option<&CompiledViewTemplate>,
+    ) -> Result<ViewSnapshot> {
         let _read_scope = self.read_budget.enter();
         if !valid_id(&definition.id) || !valid_id(&host.principal) {
             return Err(err("E_VIEW", "view and principal IDs required"));
@@ -82,11 +85,20 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             params![definition.id, host.principal, definition_limit], |r| r.get(0)
         ).optional()?;
         let encoded = serde_json::to_string(definition)?;
+        validate_expression_profile(&definition.expression, VERSION)?;
+        clock_expression(
+            &definition.expression,
+            &definition.clock,
+            tick,
+            0,
+            &mut 1000,
+        )?;
         if let Some(prior) = prior {
             let prior =
                 prior.ok_or_else(|| err("E_BUDGET", "view definition exceeds read budget"))?;
             self.read_budget.charge(prior.len())?;
-            if prior != encoded {
+            let stored = self.compiled_view_template(definition, host)?;
+            if prior != encoded || stored.as_ref() != template {
                 return Err(err(
                     "E_VIEW_CONFLICT",
                     "view definition is immutable; register a new ID",
@@ -97,19 +109,33 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             tx.commit()?;
             return Ok(result);
         }
-        let (result, dependencies) = self.compute_view(definition, tick, host)?;
+        let sources = template.map_or(&[][..], |t| t.source_revisions.as_slice());
+        let (result, dependencies) =
+            self.compute_view_with_sources(definition, tick, host, sources)?;
         let change = change_between(None, &result, 1, tick);
         self.conn.execute(
-            "INSERT INTO live_views VALUES (?1,?2,?3,?4,1,?5,?6)",
+            "INSERT INTO live_views(id,principal,definition,tick,generation,result,dependencies,source_digest) VALUES (?1,?2,?3,?4,1,?5,?6,?7)",
             params![
                 definition.id,
                 host.principal,
                 encoded,
                 tick,
                 serde_json::to_string(&result)?,
-                serde_json::to_string(&dependencies)?
+                serde_json::to_string(&dependencies)?,
+                template.map(|t|&t.definition_digest)
             ],
         )?;
+        if let Some(template) = template {
+            self.conn.execute(
+                "INSERT INTO view_sources VALUES (?1,?2,?3,?4)",
+                params![
+                    definition.id,
+                    host.principal,
+                    serde_json::to_string(template)?,
+                    template.definition_digest
+                ],
+            )?;
+        }
         self.record_view_change(
             &definition.id,
             &host.principal,
@@ -263,7 +289,8 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
                     }
                     if let Some(raw) = self.load(&query.graph_id, &revision)? {
                         if selection::eligible(&raw) {
-                            let definition_hash = selection::fingerprint(definition)?;
+                            let definition_hash =
+                                self.view_definition_fingerprint(definition, host)?;
                             let reusable = prior
                                 .as_ref()
                                 .map(|s| s.reusable(&definition_hash, &host.principal, &raw))
@@ -278,7 +305,8 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
                                 prior.as_ref(),
                                 work,
                             ) {
-                                Ok((result, state)) => {
+                                Ok((mut result, state)) => {
+                                    self.attach_view_sources(definition, host, &mut result)?;
                                     let dependencies = if query.revision.is_none() {
                                         vec![HeadDependency {
                                             graph: query.graph_id.clone(),
@@ -368,11 +396,23 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         if dependencies.len() > 1000 {
             return Err(err("E_BUDGET", "stored view dependency count exceeded"));
         }
+        let definition: ViewDefinition = serde_json::from_str(&definition)?;
+        let result: QueryResult = serde_json::from_str(&result)?;
+        if let Some(template) = self.compiled_view_template(&definition, host)? {
+            let merged = algebra::merge_source_revisions(
+                &result.source_revisions,
+                &template.source_revisions,
+            )
+            .map_err(|d| err(&d.code, &d.message))?;
+            if merged != result.source_revisions {
+                return Err(err("E_INTEGRITY", "stored view source manifest mismatch"));
+            }
+        }
         Ok(ViewRecord {
-            definition: serde_json::from_str(&definition)?,
+            definition,
             tick,
             generation,
-            result: serde_json::from_str(&result)?,
+            result,
             dependencies,
         })
     }
@@ -381,6 +421,23 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         definition: &ViewDefinition,
         tick: Option<i64>,
         host: &HostContext,
+    ) -> Result<(QueryResult, Vec<HeadDependency>)> {
+        let template = self.compiled_view_template(definition, host)?;
+        self.compute_view_with_sources(
+            definition,
+            tick,
+            host,
+            template
+                .as_ref()
+                .map_or(&[][..], |t| t.source_revisions.as_slice()),
+        )
+    }
+    fn compute_view_with_sources(
+        &self,
+        definition: &ViewDefinition,
+        tick: Option<i64>,
+        host: &HostContext,
+        sources: &[SourceRevision],
     ) -> Result<(QueryResult, Vec<HeadDependency>)> {
         validate_expression_profile(&definition.expression, VERSION)?;
         let expression = clock_expression(
@@ -393,7 +450,9 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         validate_expression_profile(&expression, VERSION)?;
         let mut dependencies = BTreeMap::new();
         collect_heads(&expression, &mut dependencies);
-        let result = self.expression(&expression, &BTreeMap::new(), host, 0, &mut 1000)?;
+        let mut result = self.expression(&expression, &BTreeMap::new(), host, 0, &mut 1000)?;
+        merge_sources(&mut result.source_revisions, sources)?;
+        json_size(&result, MATERIALIZED_LIMIT)?;
         // Observe authorized live metadata dependencies from exactly the snapshots used by evaluation.
         for reference in &result.input_snapshots {
             if let Some(data) = self.load(&reference.graph_id, &reference.revision)? {
@@ -691,6 +750,12 @@ fn clock_expression(
     *budget -= 1;
     let mut value = expression.clone();
     match &mut value {
+        GraphExpression::AcceptedGraph { .. } | GraphExpression::CurrentView { .. } => {
+            return Err(err(
+                "E_VIEW_DEPENDENCY",
+                "governed or cached view reads cannot be registered as view dependencies",
+            ))
+        }
         GraphExpression::ResolveIdentity { selection } => {
             if let Some(t) = tick {
                 selection.valid_at = t;
@@ -802,7 +867,9 @@ fn collect_heads(expression: &GraphExpression, heads: &mut BTreeMap<(String, Str
         | GraphExpression::Context { input, .. }
         | GraphExpression::Explain { input }
         | GraphExpression::Counterparts { input, .. } => collect_heads(input, heads),
-        GraphExpression::Reference { .. }
+        GraphExpression::AcceptedGraph { .. }
+        | GraphExpression::CurrentView { .. }
+        | GraphExpression::Reference { .. }
         | GraphExpression::ResolveIdentity { .. }
         | GraphExpression::Cluster { .. } => {}
     }

@@ -171,7 +171,7 @@ fn valid_json_cache_corruption_rebuilds_and_unsupported_sources_fall_back() {
         .unwrap());
 }
 #[test]
-fn schema_thirteen_upgrade_preserves_primary_rows_and_owner_boundary() {
+fn auxiliary_schema_upgrade_preserves_primary_rows_and_owner_boundary() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("v.db");
     let mut e = Engine::open(&path).unwrap();
@@ -195,6 +195,6 @@ fn schema_thirteen_upgrade_preserves_primary_rows_and_owner_boundary() {
     assert_eq!(
         c.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        13
+        14
     );
 }

@@ -567,7 +567,7 @@ fn old_sql_only_decisions_are_not_backfilled_and_next_publication_is_real() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        13
+        14
     );
     assert_eq!(
         db.query_row("SELECT count(*) FROM governance_graphs", [], |r| r
@@ -992,4 +992,60 @@ fn root_missing_empty_private_and_expired_views_have_identical_denials() {
     );
     test_clock::at(10000, || {});
     assert_eq!(deny(&e, choose(None), &host()), missing);
+}
+
+#[test]
+fn accepted_graph_expression_matches_exact_native_occurrence_and_expiry_rolls_back() {
+    let clock = std::sync::Arc::new(ManualClock::new(20));
+    let mut e = Engine::memory_with_clock(clock.clone()).unwrap();
+    let source = seed(&mut e, 2);
+    let receipt = accept(&e, source);
+    let expected = e
+        .query_accepted_view(&choose(Some(receipt.decision_id.clone())), &host())
+        .unwrap();
+    let expression = GraphExpression::AcceptedGraph {
+        selection: AcceptedGraphSelection {
+            view_id: "team".into(),
+            decision_id: receipt.decision_id,
+        },
+    };
+    let before = clock.samples();
+    let result = e
+        .execute(
+            &Program {
+                version: VERSION.into(),
+                source_revisions: vec![],
+                commands: vec![Command::Evaluate {
+                    value: expression.clone(),
+                }],
+            },
+            &host(),
+        )
+        .unwrap();
+    assert_eq!(clock.samples(), before + 1);
+    let CommandResult::Queried { result: actual } = &result[0] else {
+        panic!("query expected")
+    };
+    assert_eq!(actual.as_ref(), &expected);
+    clock.set(10000);
+    let error = e
+        .execute(
+            &Program {
+                version: VERSION.into(),
+                source_revisions: vec![],
+                commands: vec![
+                    Command::Commit {
+                        graph_id: "saved".into(),
+                        branch_id: "main".into(),
+                        expected_head: None,
+                        data: GraphData::default(),
+                    },
+                    Command::Evaluate { value: expression },
+                ],
+            },
+            &writer(),
+        )
+        .unwrap_err();
+    assert_eq!(error.code, "E_GOV_UNAVAILABLE");
+    assert!(e.head("saved", "main").unwrap().is_none());
 }

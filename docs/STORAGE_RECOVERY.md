@@ -51,3 +51,7 @@ A new process completes the upgrade while preserving evidence/events; another
 reopen is idempotent. The callback exists only under `recovery-testing`. Broader
 historical upgrade fixtures, fuzzing and production backup operations remain open
 under E14.
+
+## Marker14 compiled-view identity
+
+The 0.16 candidate atomically adds `live_views.source_digest` and `view_sources` during initialization. Existing source-less views retain NULL markers; graph revision bytes, events and legacy results are not rewritten. Missing/mismatched bindings on a compiled row fail closed, including legacy native cached reads. A marker13 binary refuses the upgraded store before DDL. `scripts/check_compiled_view_migration.py` uses a preserved marker13 executable and the recovery-only storage probe to kill before migration COMMIT, verify complete rollback, restart, verify unchanged source rows/events, test old-binary refusal, and reopen idempotently. Registration SQL-failure regression separately proves no partial definition, artifact, transition or dependencies are installed. As with other storage integrity tests, these checks do not protect against a trusted administrator rewriting all binding anchors coherently.

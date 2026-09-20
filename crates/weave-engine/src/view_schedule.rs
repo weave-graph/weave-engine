@@ -371,7 +371,7 @@ CREATE INDEX IF NOT EXISTS view_schedule_pending ON view_schedules(principal,pen
             .collect::<Result<Vec<_>>>()?;
         let manifest = ProcessedManifest {
             evaluator: "selection-1/full-0.15",
-            definition: selection::fingerprint(&definition)?,
+            definition: self.view_definition_fingerprint(&definition, host)?,
             tick,
             generation: snapshot.generation,
             input_snapshots: &snapshot.result.input_snapshots,
