@@ -338,7 +338,12 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
         candidate: &IdentityCandidate,
         host: &HostContext,
     ) -> Result<bool> {
+        let transaction = self.conn.unchecked_transaction()?;
+        let _clock_scope = self.operation_write_scope()?;
         let _scope = self.read_budget.enter();
+        if !valid_id(&host.principal) {
+            return Err(err("E_ID", "invalid identity proposer"));
+        }
         let policy = self.identity_policy(&candidate.policy)?;
         if !policy.proposers.contains(&host.principal) {
             return Err(err(
@@ -380,6 +385,7 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
                 host.principal
             ],
         )?;
+        transaction.commit()?;
         Ok(true)
     }
     /// Trusted host administration only; this head lookup is not a discoverability endpoint.
@@ -426,7 +432,7 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
             return Err(err("E_ID", "invalid identity decision request"));
         }
         self.conn.execute_batch("SAVEPOINT identity_acceptance")?;
-        let result = (|| {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock_scope = self.operation_write_scope()?;
             let candidate = self.identity_candidate(&request.candidate_id)?;
             let policy = self.identity_policy(&candidate.policy)?;
@@ -547,11 +553,16 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
                     serde_json::to_string(&receipt)?
                 ],
             )?;
+            before_commit();
             Ok(receipt)
-        })();
+        }));
+        let result = operation_clock::rollback_unwind(
+            outcome,
+            &self.conn,
+            "ROLLBACK TO identity_acceptance; RELEASE identity_acceptance",
+        );
         match result {
             Ok(value) => {
-                before_commit();
                 self.conn.execute_batch("RELEASE identity_acceptance")?;
                 Ok(value)
             }

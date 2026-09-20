@@ -149,3 +149,20 @@ impl Engine {
         }
     }
 }
+
+/// Restore the manual transaction boundary before propagating a trusted callback panic.
+/// Ordinary errors still use each caller's existing rollback and error semantics.
+pub(crate) fn rollback_unwind<T>(
+    outcome: std::thread::Result<T>,
+    connection: &rusqlite::Connection,
+    rollback: &str,
+) -> T {
+    match outcome {
+        Ok(value) => value,
+        Err(panic) => {
+            // Preserve the original panic. SQLite errors cannot be returned while unwinding.
+            let _ = connection.execute_batch(rollback);
+            std::panic::resume_unwind(panic)
+        }
+    }
+}

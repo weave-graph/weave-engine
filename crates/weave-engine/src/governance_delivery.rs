@@ -86,10 +86,15 @@ impl Engine {
     }
     fn governance_delivery_atomic<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
         self.conn.execute_batch(BEGIN_DELIVERY)?;
-        match (|| {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock_scope = self.operation_write_scope()?;
             f()
-        })() {
+        }));
+        match operation_clock::rollback_unwind(
+            outcome,
+            &self.conn,
+            "ROLLBACK TO governance_delivery; RELEASE governance_delivery",
+        ) {
             Ok(value) => {
                 if let Err(error) = self.conn.execute_batch(COMMIT_DELIVERY) {
                     self.conn.execute_batch(ROLLBACK_DELIVERY)?;

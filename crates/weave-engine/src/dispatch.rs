@@ -359,7 +359,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         json_size(program, 16 * 1024 * 1024)?;
         let hash = format!("{:x}", Sha256::digest(serde_json::to_vec(program)?));
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
-        let result = (|| {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock_scope = self.operation_write_scope()?;
             let (manifest, state, _) = self.dispatch_manifest(adapter)?;
             if state != "running" && state != "draining" {
@@ -453,7 +453,8 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                 duplicate: false,
                 results,
             })
-        })();
+        }));
+        let result = operation_clock::rollback_unwind(outcome, &self.conn, "ROLLBACK");
         match result {
             Ok(v) => {
                 self.conn.execute_batch("COMMIT")?;

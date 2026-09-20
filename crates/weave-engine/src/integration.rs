@@ -65,7 +65,7 @@ impl Engine {
             return Err(err("E_ID", "invalid integration request"));
         }
         self.conn.execute_batch("SAVEPOINT proposal_integration")?;
-        let result = (|| {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock_scope = self.operation_write_scope()?;
             self.read_budget.request()?;
             let limit = self.read_budget.remaining().min(16 * 1024 * 1024) as i64;
@@ -182,11 +182,16 @@ impl Engine {
                     serde_json::to_string(&receipt)?
                 ],
             )?;
+            before_commit();
             Ok(receipt)
-        })();
+        }));
+        let result = operation_clock::rollback_unwind(
+            outcome,
+            &self.conn,
+            "ROLLBACK TO proposal_integration; RELEASE proposal_integration",
+        );
         match result {
             Ok(value) => {
-                before_commit();
                 self.conn.execute_batch("RELEASE proposal_integration")?;
                 Ok(value)
             }

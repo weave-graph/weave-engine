@@ -461,3 +461,37 @@ fn current_policy_expiry_blocks_inspection_pending_and_cached_ack_without_head_c
     assert_eq!(e.event_count().unwrap(), 1);
     assert_eq!(e.governance_event_count().unwrap(), 1);
 }
+
+#[cfg(feature = "recovery-testing")]
+#[test]
+fn delivery_observer_panic_rolls_back_and_preserves_retry() {
+    let mut e = test_clock::memory().unwrap();
+    let source = seed(&mut e, 2);
+    accepted(&e, "a", source, None);
+    let reader = install(&e, "reader", "reader");
+    let first = e
+        .poll_governance("reader", "team", &reader)
+        .unwrap()
+        .unwrap();
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        e.acknowledge_governance_test_before_commit(
+            "reader",
+            "team",
+            &first.event.id,
+            &first.lease,
+            &reader,
+            || panic!("observer"),
+        )
+    }));
+    assert!(panic.is_err());
+    assert!(
+        !e.acknowledge_governance("reader", "team", &first.event.id, &first.lease, &reader)
+            .unwrap()
+            .duplicate
+    );
+    assert!(
+        e.acknowledge_governance("reader", "team", &first.event.id, &first.lease, &reader)
+            .unwrap()
+            .duplicate
+    );
+}
