@@ -106,6 +106,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                 "invalid or unauthorized adapter manifest",
             ));
         }
+        json_size(manifest, 256 * 1024)?;
         let json = serde_json::to_string(manifest)?;
         let existing: Option<String> = self
             .conn
@@ -127,17 +128,18 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         )?;
         Ok(())
     }
-    fn dispatch_manifest(&self, id: &str) -> Result<(AdapterManifest, String, i64)> {
-        let row: (String, String, i64) = self
-            .conn
-            .query_row(
-                "SELECT manifest,state,checkpoint FROM dispatch_adapters WHERE id=?1",
-                [id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )
-            .optional()?
-            .ok_or_else(|| err("E_ADAPTER", "adapter unavailable"))?;
-        Ok((serde_json::from_str(&row.0)?, row.1, row.2))
+    pub(crate) fn dispatch_manifest(&self, id: &str) -> Result<(AdapterManifest, String, i64)> {
+        self.read_budget.request()?;
+        let limit = self.read_budget.remaining().min(256 * 1024);
+        let row: (Option<String>, String, i64) = self.conn.query_row(
+            "SELECT CASE WHEN length(CAST(manifest AS BLOB))<=?2 THEN manifest END,substr(state,1,32),checkpoint FROM dispatch_adapters WHERE id=?1",
+            params![id, limit as i64], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))
+            .optional()?.ok_or_else(|| err("E_ADAPTER", "adapter unavailable"))?;
+        let encoded = row
+            .0
+            .ok_or_else(|| err("E_BUDGET", "adapter manifest exceeds read budget"))?;
+        self.read_budget.charge(encoded.len())?;
+        Ok((serde_json::from_str(&encoded)?, row.1, row.2))
     }
     /// Trusted lifecycle management; removed identities cannot silently restart.
     pub fn set_adapter_state(&self, id: &str, state: &str) -> Result<()> {
@@ -175,7 +177,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         }
         Ok(())
     }
-    fn scoped_event(
+    pub(crate) fn scoped_event(
         &self,
         manifest: &AdapterManifest,
         id: &str,
@@ -355,118 +357,138 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         program: &Program,
         before_commit: impl FnOnce(),
     ) -> Result<HandlerReceipt> {
-        let _read_scope = self.read_budget.enter();
-        json_size(program, 16 * 1024 * 1024)?;
-        let hash = format!("{:x}", Sha256::digest(serde_json::to_vec(program)?));
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock_scope = self.operation_write_scope()?;
-            let (manifest, state, _) = self.dispatch_manifest(adapter)?;
-            if state != "running" && state != "draining" {
-                return Err(err("E_PAUSED", "adapter is not running"));
+            if self.is_compiled_handler(adapter)? {
+                return Err(err(
+                    "E_HANDLER_BOUND",
+                    "compiled handlers require prepared completion",
+                ));
             }
-            // Replays remain subject to current event authority, even after their lease
-            // has been acknowledged. The handler may also have read unrelated graphs.
-            let (_, _, _, sequence) = self
-                .scoped_event(&manifest, event)?
-                .ok_or_else(|| err("E_UNAVAILABLE", "delivery is unavailable"))?;
-            let host = HostContext::new(&manifest.principal, manifest.output_graphs.clone());
-            self.read_budget.request()?;
-            let limit = self.read_budget.remaining().min(MATERIALIZED_LIMIT + 4096);
-            let prior: Option<(String, Option<String>)> = self.conn.query_row(
-                "SELECT substr(request_hash,1,65),CASE WHEN length(CAST(results AS BLOB))<=?3 THEN results ELSE NULL END FROM handler_receipts WHERE adapter=?1 AND event_id=?2",
-                params![adapter,event,limit as i64], |r| Ok((r.get(0)?,r.get(1)?))).optional()?;
-            if let Some((prior, results)) = prior {
-                if prior != hash {
-                    return Err(err(
-                        "E_RECEIPT_CONFLICT",
-                        "processed occurrence has different commands",
-                    ));
-                }
-                let results = results
-                    .ok_or_else(|| err("E_BUDGET", "stored handler receipt exceeds read budget"))?;
-                self.read_budget.charge(results.len())?;
-                let results: Vec<CommandResult> = serde_json::from_str(&results)?;
-                for result in &results {
-                    if let CommandResult::Queried { result } = result {
-                        self.require_current_result_authority(result, &host)?;
-                    }
-                }
-                return Ok(HandlerReceipt {
-                    duplicate: true,
-                    results,
-                });
-            }
-            self.check_lease(adapter, event, lease)?;
-            // Until declassification exists, derived handler output stays within the installed principal.
-            for command in &program.commands {
-                let datas: Vec<&GraphData> = match command {
-                    Command::Commit { data, .. } => vec![data],
-                    Command::CommitBatch { commits, .. } => {
-                        commits.iter().map(|c| &c.data).collect()
-                    }
-                    _ => vec![],
-                };
-                for data in datas {
-                    if data
-                        .nodes
-                        .iter()
-                        .any(|n| n.readers != [manifest.principal.clone()])
-                        || data
-                            .edges
-                            .iter()
-                            .any(|e| e.readers != [manifest.principal.clone()])
-                        || data
-                            .structural_edges
-                            .iter()
-                            .any(|e| e.readers != [manifest.principal.clone()])
-                        || data
-                            .assertions
-                            .iter()
-                            .any(|a| a.readers != [manifest.principal.clone()])
-                        || data
-                            .attachments
-                            .iter()
-                            .any(|a| a.readers != [manifest.principal.clone()])
-                    {
-                        return Err(err(
-                            "E_EGRESS",
-                            "handler output must retain its installed principal restriction",
-                        ));
-                    }
-                }
-            }
-            let results = self.execute(program, &host)?;
-            let json = serde_json::to_string(&results)?;
-            self.conn.execute(
-                "INSERT INTO handler_receipts VALUES (?1,?2,?3,?4)",
-                params![adapter, event, hash, json],
-            )?;
-            self.conn.execute(
-                "UPDATE dispatch_adapters SET checkpoint=?2 WHERE id=?1",
-                params![adapter, sequence],
-            )?;
-            self.conn
-                .execute("DELETE FROM dispatch_pending WHERE adapter=?1", [adapter])?;
+            let result = self.complete_handler_in_transaction(adapter, event, lease, program)?;
             before_commit();
-            Ok(HandlerReceipt {
-                duplicate: false,
-                results,
-            })
+            Ok(result)
         }));
         let result = operation_clock::rollback_unwind(outcome, &self.conn, "ROLLBACK");
         match result {
-            Ok(v) => {
+            Ok(value) => {
                 self.conn.execute_batch("COMMIT")?;
-                Ok(v)
+                Ok(value)
             }
-            Err(e) => {
+            Err(error) => {
                 self.conn.execute_batch("ROLLBACK")?;
-                Err(e)
+                Err(error)
             }
         }
     }
-    fn check_lease(&self, adapter: &str, event: &str, lease: &str) -> Result<()> {
+    pub(crate) fn complete_handler_in_transaction(
+        &mut self,
+        adapter: &str,
+        event: &str,
+        lease: &str,
+        program: &Program,
+    ) -> Result<HandlerReceipt> {
+        if self.conn.is_autocommit() {
+            return Err(err(
+                "E_TRANSACTION",
+                "handler completion requires transaction",
+            ));
+        }
+        let _clock_scope = self.operation_write_scope()?;
+        json_size(program, 16 * 1024 * 1024)?;
+        let hash = format!("{:x}", Sha256::digest(serde_json::to_vec(program)?));
+        let (manifest, state, _) = self.dispatch_manifest(adapter)?;
+        if state != "running" && state != "draining" {
+            return Err(err("E_PAUSED", "adapter is not running"));
+        }
+        // Replays remain subject to current event authority, even after their lease
+        // has been acknowledged. The handler may also have read unrelated graphs.
+        let (_, _, _, sequence) = self
+            .scoped_event(&manifest, event)?
+            .ok_or_else(|| err("E_UNAVAILABLE", "delivery is unavailable"))?;
+        let host = HostContext::new(&manifest.principal, manifest.output_graphs.clone());
+        self.read_budget.request()?;
+        let limit = self.read_budget.remaining().min(MATERIALIZED_LIMIT + 4096);
+        let prior: Option<(String, Option<String>)> = self.conn.query_row(
+                "SELECT substr(request_hash,1,65),CASE WHEN length(CAST(results AS BLOB))<=?3 THEN results ELSE NULL END FROM handler_receipts WHERE adapter=?1 AND event_id=?2",
+                params![adapter,event,limit as i64], |r| Ok((r.get(0)?,r.get(1)?))).optional()?;
+        if let Some((prior, results)) = prior {
+            if prior != hash {
+                return Err(err(
+                    "E_RECEIPT_CONFLICT",
+                    "processed occurrence has different commands",
+                ));
+            }
+            let results = results
+                .ok_or_else(|| err("E_BUDGET", "stored handler receipt exceeds read budget"))?;
+            self.read_budget.charge(results.len())?;
+            let results: Vec<CommandResult> = serde_json::from_str(&results)?;
+            for result in &results {
+                if let CommandResult::Queried { result } = result {
+                    self.require_current_result_authority(result, &host)?;
+                }
+            }
+            return Ok(HandlerReceipt {
+                duplicate: true,
+                results,
+            });
+        }
+        self.check_lease(adapter, event, lease)?;
+        // Until declassification exists, derived handler output stays within the installed principal.
+        for command in &program.commands {
+            let datas: Vec<&GraphData> = match command {
+                Command::Commit { data, .. } => vec![data],
+                Command::CommitBatch { commits, .. } => commits.iter().map(|c| &c.data).collect(),
+                _ => vec![],
+            };
+            for data in datas {
+                if data
+                    .nodes
+                    .iter()
+                    .any(|n| n.readers != [manifest.principal.clone()])
+                    || data
+                        .edges
+                        .iter()
+                        .any(|e| e.readers != [manifest.principal.clone()])
+                    || data
+                        .structural_edges
+                        .iter()
+                        .any(|e| e.readers != [manifest.principal.clone()])
+                    || data
+                        .assertions
+                        .iter()
+                        .any(|a| a.readers != [manifest.principal.clone()])
+                    || data
+                        .attachments
+                        .iter()
+                        .any(|a| a.readers != [manifest.principal.clone()])
+                {
+                    return Err(err(
+                        "E_EGRESS",
+                        "handler output must retain its installed principal restriction",
+                    ));
+                }
+            }
+        }
+        let results = self.execute(program, &host)?;
+        let json = serde_json::to_string(&results)?;
+        self.conn.execute(
+            "INSERT INTO handler_receipts VALUES (?1,?2,?3,?4)",
+            params![adapter, event, hash, json],
+        )?;
+        self.conn.execute(
+            "UPDATE dispatch_adapters SET checkpoint=?2 WHERE id=?1",
+            params![adapter, sequence],
+        )?;
+        self.conn
+            .execute("DELETE FROM dispatch_pending WHERE adapter=?1", [adapter])?;
+        Ok(HandlerReceipt {
+            duplicate: false,
+            results,
+        })
+    }
+    pub(crate) fn check_lease(&self, adapter: &str, event: &str, lease: &str) -> Result<()> {
         let matches:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM dispatch_pending WHERE adapter=?1 AND event_id=?2 AND lease=?3 AND status='leased' AND expires>?4)",params![adapter,event,lease,self.operation_time()?],|r|r.get(0))?;
         if !matches {
             return Err(err("E_LEASE", "delivery lease is not current"));
