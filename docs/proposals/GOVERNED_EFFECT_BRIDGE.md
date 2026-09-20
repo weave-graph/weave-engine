@@ -1,6 +1,6 @@
 # Governed effect-intent bridge: native interface for review
 
-Base: paired engine `edd58fd` / compiled-handler freeze `9b444ff`. This is the concrete next design, not an implementation or version reservation. Protocol remains0.18: no new Program operation, expression, compiler artifact or remote admission action is proposed. SQLite **store17** is required if this design is approved, because older dispatchers would ignore its binding and current-authorization guards.
+Base: paired engine `edd58fd` / compiled-handler freeze `9b444ff`. This design is approved for native implementation; the implementation remains pending. Protocol remains0.18: no new Program operation, expression, compiler artifact or remote admission action is proposed. SQLite **store17** is required, because older dispatchers would ignore its binding and current-authorization guards.
 
 ## Requirement and trust boundary
 
@@ -43,7 +43,12 @@ struct GovernedEffectGrant {
 struct GovernedEffectReceipt {
     duplicate: bool,
     ordinal: u64,                    // existing recipient-local ordinal
-    intent_id: Option<String>,       // None only for policy-change control event
+    disposition: GovernedEffectDisposition,
+}
+enum GovernedEffectDisposition {
+    Intent { intent_id: String },
+    PolicyChange,
+    SupersededPublication,
 }
 struct GovernedEffectDispatch {
     intent_id: String,
@@ -72,7 +77,7 @@ Engine::revoke_governed_effect_grant(&self, adapter: &str, host: &HostContext)
 
 `GovernedEffectStatus` exposes the opaque intent/attempt IDs and pending/unknown/confirmed/failed/canceled state, not the private closure or payload. Payload disclosure is only the first successful `begin`, after the durable unknown fence. `ReconciledOutcome` is Confirmed or Failed. `SinkEvidence` is a bounded opaque reference/hash from the explicitly trusted broker; it does not pretend to independently attest a remote system. Reference tests verify it against the fake sink's durable ledger.
 
-Installation is one transaction with the existing adapter and a single governance subscription. Require host = manifest = grant = destination principal, exactly the declared source subscription, no graph outputs, exactly the declared destination, `projection_replay=false`, valid artifact/config identities and grant interval. The bridge's artifact digest is the domain-separated complete normalized grant digest; the manifest/config is also bound in the registry. A legacy or compiled-projection adapter cannot be adopted. Reinstallation is exact-only; revoked grants and canceled subscriptions cannot be reactivated.
+Installation is one transaction with the existing adapter and a single governance subscription. Require host = manifest = grant = destination principal, exactly the declared source subscription, no graph outputs, exactly the declared destination, `projection_replay=false`, valid artifact/config identities and grant interval. The bridge's artifact digest is the domain-separated complete normalized grant digest; the manifest/config is also bound in the registry. A legacy or compiled-projection adapter cannot be adopted. Reinstallation is exact-only; revoked grants and canceled subscriptions cannot be reactivated. A durable UNIQUE(principal, destination_id, execution_id) constraint reserves the execution namespace across all adapter IDs, including revoked or removed history. Registry rows are never deleted by lifecycle cleanup. A new adapter or grant label cannot reuse a historical execution namespace.
 
 `AfterInstallation` captures the current internal governance-stream checkpoint atomically, so ordinary installation does not execute historical acceptance. `ReplayHistory` is an explicit host-authorized new execution namespace; it must never be inferred from a new adapter ID alone. Existing generic subscribe behavior is unchanged for legacy adapters. No global checkpoint is returned. Installing a grant for a currently unreadable view fails; bootstrap an initial policy/view through existing APIs first.
 
@@ -80,9 +85,9 @@ Installation is one transaction with the existing adapter and a single governanc
 
 Private domains distinguish grant identity, registration binding, payload bytes, immutable intent authorization context and receipt body. Do not change legacy request/effect hashes. A durable intent and attempt use independent opaque random IDs. An idempotency key binds installed execution identity + source replica/typed occurrence + destination; it must reveal no private graph/policy content. Bind the full tuple durably and reject key/body mismatch. A new occurrence/explicit execution namespace is distinct; delivery attempts, renewed leases and imported copies are not new authorizations.
 
-At enqueue, reserve the writer and capture one operation clock and SQL snapshot. Verify registered grant, adapter lifecycle, owning principal, active bound subscription, lease, genuine typed event, current view/policy, exact publication registry/source and descriptor. Require the event's publication to remain the **effective current publication** of the view. A policy-transition head may retain that publication, but a later publication supersedes it even if source bytes are equal. Reuse the protected registry's publication binding, not source-only equality or approval-time policy. Historic-but-superseded requests cannot execute under this first grant profile.
+At enqueue, reserve the writer and capture one operation clock and SQL snapshot. Verify registered grant, adapter lifecycle, owning principal, active bound subscription, lease, genuine typed event, current view/policy, exact publication registry/source and descriptor. Creating or reusing an intent requires the event's publication to remain the **effective current publication** of the view. A policy-transition head may retain that publication, but a later publication supersedes it even if source bytes are equal. Reuse the protected registry's publication binding, not source-only equality or approval-time policy. Historic-but-superseded requests cannot execute under this first grant profile.
 
-For a publication, construct the canonical payload and exact closure from authenticated stored records. Persist it with the exact source/event/decision/registration/execution binding and checksum. Atomically insert one intent, store the bridge receipt, invoke the private governance acknowledgment core, advance its private checkpoint and delete pending delivery. No network I/O occurs inside this transaction. A policy-change event instead stores an explicit no-effect disposition and acknowledges atomically. An invalid request remains unacknowledged; it is not silently skipped as a successful effect.
+For a publication, construct the canonical payload and exact closure from authenticated stored records. Persist it with the exact source/event/decision/registration/execution binding and checksum. Atomically insert one intent, store the bridge receipt, invoke the private governance acknowledgment core, advance its private checkpoint and delete pending delivery. No network I/O occurs inside this transaction. A policy-change event instead stores PolicyChange and acknowledges atomically. A genuine publication superseded before enqueue stores SupersededPublication and acknowledges atomically, without an intent or payload disclosure. This disposition still requires the active grant, current view and historical source authorization, exact genuine publication binding, allowed source/branch, fixed closure and expected schema. Missing, denied, malformed or wrong-scope requests remain unacknowledged. Thus two accepted publications before polling, and explicit history replay, can advance past authorized obsolete work without executing it. A later supersession never rewrites an existing Intent receipt: retry and dispatch fail current-publication checks; pending intents remain explicitly owner-cancelable.
 
 A duplicate enqueue rechecks all current guards before the receipt path. It returns the same intent and follows existing acknowledgment lease/epoch rules, including denial after lifecycle invalidates the old epoch. It does not recompute payload, renew the execution grant, create another intent or refresh historical authority. The existing reference-sink or broker can separately inspect an already known intent under current authorization.
 
@@ -104,7 +109,7 @@ Pending intent cancellation is a terminal owner cleanup, allowed after read auth
 
 ## Storage and bounds
 
-Proposed private tables: `governed_effect_bindings(adapter PRIMARY KEY, principal, body, digest, revoked)`, `governed_effect_receipts(adapter,event_id,body,digest, PRIMARY KEY(adapter,event_id))`, and `governed_effect_context(intent_id PRIMARY KEY, adapter, principal, body, digest, attempt_id, reconciliation_digest)`. Reuse the existing effect-intent state machine while adding bridge-only canceled state handling; legacy code cannot see those rows through its guarded public APIs.
+Proposed private tables: `governed_effect_bindings(adapter PRIMARY KEY, principal, destination_id, execution_id, body, digest, revoked, UNIQUE(principal,destination_id,execution_id))`, `governed_effect_receipts(adapter,event_id,body,digest, PRIMARY KEY(adapter,event_id))`, and `governed_effect_context(intent_id PRIMARY KEY, adapter, principal, body, digest, attempt_id, reconciliation_digest)`. Reuse the existing effect-intent state machine while adding bridge-only canceled state handling; legacy code cannot see those rows through its guarded public APIs.
 
 Store17 creates these tables and marker atomically. Old store16 runtimes must refuse before opening a bridge-bearing database. Do not backfill legacy intents/receipts as governed. Populate migration fixtures with actual0.18 compiled registrations/preparations/receipts plus historical0.16/0.17 views/export receipts, preserving their bytes.
 
@@ -122,6 +127,8 @@ Initial limits:128 bridge registrations/16MiB registered bytes per principal;256
 | Before/after reconciliation commit | Before leaves unknown; after exact evidence retry succeeds; changed evidence fails. |
 | Current policy/grant expires, is revoked, or publication is superseded | No fresh payload/ticket/receipt disclosure; no graph or intent mutation except explicit owner cleanup. |
 | Pause/resume/drain/cancel/remove or stale lease | Existing lifecycle fences retained; unknown never resets; no hidden new subscription or replay. |
+| Two publications before poll or ReplayHistory with obsolete publications | Authorized superseded publication yields explicit no-effect receipt and atomic checkpoint; current publication yields one intent. No starvation or silent re-execution. |
+| New adapter/grant with historical execution namespace, including removed/revoked adapter | Durable uniqueness rejects installation; explicit new execution identity is required for history replay. |
 | Forged event, policy-change event, changed grant/schema/destination/payload/closure | Generic denial or explicit no-effect control disposition; no external action. |
 | Partially visible request, empty request, mixed proof cycle or missing exact revision | Whole-profile partial/missing/cycle denial; genuinely empty authorized fixed request succeeds with real exact source/decision context. |
 | Old binary opens store17; death during migration | Refusal; transaction rollback leaves old marker and no new registry, restart preserves historical bodies. |
