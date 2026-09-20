@@ -242,8 +242,8 @@ impl Engine {
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
         let _read_scope = self.read_budget.enter();
         if ![
-            VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-            "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0",
+            VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+            "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0",
         ]
         .contains(&program.version.as_str())
             && program.version != "0.2.0"
@@ -261,8 +261,8 @@ impl Engine {
             return Err(err("E_VERSION", "join requires contract 0.2.0"));
         }
         if ![
-            VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-            "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0",
+            VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+            "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0",
         ]
         .contains(&program.version.as_str())
             && program
@@ -272,10 +272,10 @@ impl Engine {
         {
             return Err(err("E_VERSION", "graph expressions require contract 0.3.0"));
         }
-        if ![VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
+        if ![VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
         if ![
-            VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-            "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0",
+            VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+            "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0",
         ]
         .contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
@@ -294,8 +294,8 @@ impl Engine {
             ));
         }
         if ![
-            VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-            "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0",
+            VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+            "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0",
         ]
         .contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
@@ -312,8 +312,8 @@ impl Engine {
             ));
         }
         if ![
-            VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-            "0.10.0", "0.9.0", "0.8.0",
+            VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+            "0.11.0", "0.10.0", "0.9.0", "0.8.0",
         ]
         .contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
@@ -334,8 +334,8 @@ impl Engine {
             ));
         }
         if ![
-            VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-            "0.10.0", "0.9.0",
+            VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+            "0.11.0", "0.10.0", "0.9.0",
         ]
         .contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
@@ -355,7 +355,7 @@ impl Engine {
             ));
         }
         if ![
-            VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
+            VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
         ]
         .contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
@@ -374,7 +374,7 @@ impl Engine {
             ));
         }
         if ![
-            VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+            VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
         ]
         .contains(&program.version.as_str())
             && program.commands.iter().any(|command| match command {
@@ -390,7 +390,8 @@ impl Engine {
                 "exact Decimal and Quantity schemas require contract 0.12.0",
             ));
         }
-        if ![VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0"]
+            .contains(&program.version.as_str())
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => data.context_typing.is_some(),
                 Command::CommitBatch { commits, .. } => {
@@ -404,7 +405,7 @@ impl Engine {
                 "typed context carriers require contract 0.14.0",
             ));
         }
-        if ![VERSION, "0.17.0", "0.16.0", "0.15.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0"].contains(&program.version.as_str())
             && program.commands.iter().any(|command| match command {
                 Command::Commit { data, .. } => influence::requires_v015(data),
                 Command::CommitBatch { commits, .. } => {
@@ -418,7 +419,7 @@ impl Engine {
                 "whole-value and assertion node influence requires contract 0.15.0",
             ));
         }
-        if ![VERSION, "0.17.0"].contains(&program.version.as_str())
+        if ![VERSION, "0.18.0", "0.17.0"].contains(&program.version.as_str())
             && program.commands.iter().any(|command| match command {
                 Command::Commit { data, .. } => influence::requires_v017(data),
                 Command::CommitBatch { commits, .. } => {
@@ -432,6 +433,22 @@ impl Engine {
                 "snapshot influence requires contract 0.17.0",
             ));
         }
+        if program.version != VERSION
+            && program.commands.iter().any(|command| match command {
+                Command::Commit { data, .. } => {
+                    weave_contract::carrier_profile::requires_v019(data)
+                }
+                Command::CommitBatch { commits, .. } => commits
+                    .iter()
+                    .any(|c| weave_contract::carrier_profile::requires_v019(&c.data)),
+                _ => false,
+            })
+        {
+            return Err(err(
+                "E_VERSION",
+                "alternative carriers require contract 0.19.0",
+            ));
+        }
         for command in &program.commands {
             if let Command::Bind { value, .. } | Command::Evaluate { value } = command {
                 validate_expression_profile(value, &program.version)?;
@@ -439,8 +456,8 @@ impl Engine {
         }
         if !program.source_revisions.is_empty()
             && ![
-                VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-                "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0",
+                VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+                "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0",
             ]
             .contains(&program.version.as_str())
         {
@@ -486,9 +503,9 @@ impl Engine {
                 let mut command_result = match command {
                     Command::CommitBatch { batch_id, commits } => {
                         if ![
-                            VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
-                            "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0",
-                            "0.4.0",
+                            VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0",
+                            "0.12.0", "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0",
+                            "0.5.0", "0.4.0",
                         ]
                         .contains(&program.version.as_str())
                         {
@@ -2511,8 +2528,27 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             return Err(err("E_BUDGET", "expression structure exceeds budget"));
         }
         match expression {
+            GraphExpression::Window { input, .. } => {
+                if version != VERSION {
+                    return Err(err(
+                        "E_VERSION",
+                        "temporal operators require contract 0.19.0",
+                    ));
+                }
+                pending.push((input, depth + 1));
+            }
+            GraphExpression::Sequence { left, right, .. } => {
+                if version != VERSION {
+                    return Err(err(
+                        "E_VERSION",
+                        "temporal operators require contract 0.19.0",
+                    ));
+                }
+                pending.push((left, depth + 1));
+                pending.push((right, depth + 1));
+            }
             GraphExpression::AcceptedGraph { .. } | GraphExpression::CurrentView { .. } => {
-                if ![VERSION, "0.17.0", "0.16.0"].contains(&version) {
+                if ![VERSION, "0.18.0", "0.17.0", "0.16.0"].contains(&version) {
                     return Err(err(
                         "E_VERSION",
                         "governed/view reads require contract 0.16.0",
@@ -2520,13 +2556,17 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 }
             }
             GraphExpression::TypedContext { input, .. } => {
-                if ![VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0"].contains(&version) {
+                if ![VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0"].contains(&version) {
                     return Err(err("E_VERSION", "typed contexts require contract 0.14.0"));
                 }
                 pending.push((input, depth + 1));
             }
             GraphExpression::ResolveIdentity { .. } | GraphExpression::Cluster { .. } => {
-                if ![VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0"].contains(&version) {
+                if ![
+                    VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0",
+                ]
+                .contains(&version)
+                {
                     return Err(err(
                         "E_VERSION",
                         "native pinned services require contract 0.13.0",
@@ -2535,8 +2575,8 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             }
             GraphExpression::Counterparts { input, .. } => {
                 if ![
-                    VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-                    "0.10.0",
+                    VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+                    "0.11.0", "0.10.0",
                 ]
                 .contains(&version)
                 {
@@ -2549,8 +2589,8 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             }
             GraphExpression::Geometry { operation, .. } => {
                 if ![
-                    VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-                    "0.10.0", "0.9.0",
+                    VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+                    "0.11.0", "0.10.0", "0.9.0",
                 ]
                 .contains(&version)
                 {
@@ -2565,8 +2605,8 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             }
             GraphExpression::Explain { input } => {
                 if ![
-                    VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-                    "0.10.0", "0.9.0",
+                    VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+                    "0.11.0", "0.10.0", "0.9.0",
                 ]
                 .contains(&version)
                 {
@@ -2579,8 +2619,8 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             }
             GraphExpression::Context { input, .. } => {
                 if ![
-                    VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-                    "0.10.0", "0.9.0", "0.8.0",
+                    VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+                    "0.11.0", "0.10.0", "0.9.0", "0.8.0",
                 ]
                 .contains(&version)
                 {
@@ -2593,8 +2633,8 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             }
             GraphExpression::Reason { input, .. } => {
                 if ![
-                    VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-                    "0.10.0", "0.9.0", "0.8.0", "0.7.0",
+                    VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+                    "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0",
                 ]
                 .contains(&version)
                 {
@@ -2608,8 +2648,8 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 after: right,
             } => {
                 if ![
-                    VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-                    "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0",
+                    VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+                    "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0",
                 ]
                 .contains(&version)
                 {
@@ -2620,8 +2660,8 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             }
             GraphExpression::Project { input, .. } | GraphExpression::Support { input, .. } => {
                 if ![
-                    VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-                    "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0",
+                    VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+                    "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0",
                 ]
                 .contains(&version)
                 {
@@ -2632,8 +2672,8 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             GraphExpression::Metadata { input, host, .. } => {
                 if matches!(host, MetadataHost::Assertion { .. })
                     && ![
-                        VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
-                        "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0",
+                        VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0",
+                        "0.12.0", "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0",
                     ]
                     .contains(&version)
                 {
@@ -2643,8 +2683,8 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                     ));
                 }
                 if ![
-                    VERSION, "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-                    "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0",
+                    VERSION, "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
+                    "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0",
                 ]
                 .contains(&version)
                 {

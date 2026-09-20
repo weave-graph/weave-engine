@@ -6,6 +6,13 @@ pub const MAX_REFERENCES: usize = 1000;
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GraphInfluence {
+    /// Whole-value alternatives, conjunctive with all declared flat gates.
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "crate::carrier_profile::bounded_derivations"
+    )]
+    pub derivations: Vec<crate::Derivation>,
     #[serde(
         default,
         skip_serializing_if = "Vec::is_empty",

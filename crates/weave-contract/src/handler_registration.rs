@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 pub const HANDLER_TEMPLATE_FORMAT: &str = "weave-handler-registration/1";
-pub const HANDLER_TEMPLATE_PROTOCOL: &str = "0.18.0";
+pub const HANDLER_TEMPLATE_PROTOCOL: &str = "0.19.0";
 pub const HANDLER_EVENT_BINDING: &str = "$event";
 pub const MAX_HANDLER_BYTES: usize = 1024 * 1024;
 
@@ -96,9 +96,12 @@ fn id(value: &str) -> bool {
 }
 
 pub fn validate_handler_recipe(recipe: &HandlerRecipe) -> Result<(), Diagnostic> {
-    recipe_sources(recipe).map(|_| ())
+    recipe_sources(recipe, true).map(|_| ())
 }
-fn recipe_sources(recipe: &HandlerRecipe) -> Result<Vec<SourceRevision>, Diagnostic> {
+fn recipe_sources(
+    recipe: &HandlerRecipe,
+    temporal: bool,
+) -> Result<Vec<SourceRevision>, Diagnostic> {
     let mut sources = Vec::new();
     identity::digest("weave-handler-recipe-bound", recipe, MAX_HANDLER_BYTES)?;
     if recipe.bindings.len() > 256 {
@@ -123,6 +126,19 @@ fn recipe_sources(recipe: &HandlerRecipe) -> Result<Vec<SourceRevision>, Diagnos
                 return Err(fail("E_BUDGET", "handler expression budget exceeded"));
             }
             match expression {
+                GraphExpression::Window { input, .. } if temporal => {
+                    pending.push((input, depth + 1))
+                }
+                GraphExpression::Sequence { left, right, .. } if temporal => {
+                    pending.push((left, depth + 1));
+                    pending.push((right, depth + 1));
+                }
+                GraphExpression::Window { .. } | GraphExpression::Sequence { .. } => {
+                    return Err(fail(
+                        "E_HANDLER_VERSION",
+                        "temporal recipe requires contract 0.19.0",
+                    ));
+                }
                 GraphExpression::Reference { name } => {
                     if !names.contains(name.as_str()) {
                         return Err(fail(
@@ -187,7 +203,8 @@ fn recipe_sources(recipe: &HandlerRecipe) -> Result<Vec<SourceRevision>, Diagnos
 }
 fn fields(template: &CompiledHandlerTemplate) -> Result<(), Diagnostic> {
     identity::digest("weave-handler-template-bound", template, MAX_HANDLER_BYTES)?;
-    if template.format != HANDLER_TEMPLATE_FORMAT || template.protocol != HANDLER_TEMPLATE_PROTOCOL
+    if template.format != HANDLER_TEMPLATE_FORMAT
+        || ![HANDLER_TEMPLATE_PROTOCOL, "0.18.0"].contains(&template.protocol.as_str())
     {
         return Err(fail(
             "E_HANDLER_VERSION",
@@ -233,7 +250,11 @@ fn fields(template: &CompiledHandlerTemplate) -> Result<(), Diagnostic> {
             ));
         }
     }
-    validate_handler_recipe(&template.recipe)
+    recipe_sources(
+        &template.recipe,
+        template.protocol == HANDLER_TEMPLATE_PROTOCOL,
+    )
+    .map(|_| ())
 }
 pub fn handler_source_revision(
     template: &CompiledHandlerTemplate,
@@ -291,7 +312,10 @@ pub fn seal_handler_template(
     fields(&template)?;
     let own = handler_source_revision(&template)?;
     template.event_types.sort();
-    let rule_sources = recipe_sources(&template.recipe)?;
+    let rule_sources = recipe_sources(
+        &template.recipe,
+        template.protocol == HANDLER_TEMPLATE_PROTOCOL,
+    )?;
     template.source_revisions =
         algebra::merge_source_revisions(&template.source_revisions, &rule_sources)?;
     template.source_revisions =

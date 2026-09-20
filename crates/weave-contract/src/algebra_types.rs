@@ -18,9 +18,16 @@ pub struct EntitySpace {
     pub space_id: String,
 }
 /// An AND group of premises. Multiple groups on an edge are OR alternatives.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Derivation {
+    /// Authoritative whole-snapshot premises in this AND branch; unlike input_snapshots.
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "crate::influence::bounded_snapshot_refs"
+    )]
+    pub snapshot_premises: Vec<GraphRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub node_premises: Vec<NodeRef>,
     pub operator: String,
