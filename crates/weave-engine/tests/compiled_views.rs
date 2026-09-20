@@ -197,3 +197,38 @@ fn binding_corruption_fails_closed_and_registration_storage_failure_rolls_back()
         "E_INTEGRITY"
     );
 }
+
+#[test]
+fn stored_definition_cannot_redirect_binding_to_another_instance() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("v.db");
+    let mut e = Engine::open(&path).unwrap();
+    commit(&mut e, GraphData::default());
+    let t = template(ViewClock::Fixed);
+    for id in ["v", "other"] {
+        e.register_compiled_view(id, &t, None, &host()).unwrap();
+    }
+    let db = rusqlite::Connection::open(&path).unwrap();
+    db.execute("UPDATE live_views SET definition=(SELECT definition FROM live_views WHERE id='other') WHERE id='v'",[]).unwrap();
+    assert_eq!(
+        e.read_current_view(&selection(&t, ViewReadTime::Fixed), &host())
+            .unwrap_err()
+            .code,
+        "E_INTEGRITY"
+    );
+    assert_eq!(
+        e.read_view("v", None, ViewFreshness::AllowStale, &host())
+            .unwrap_err()
+            .code,
+        "E_INTEGRITY"
+    );
+    assert_eq!(
+        e.refresh_view("v", None, &host()).unwrap_err().code,
+        "E_INTEGRITY"
+    );
+    assert!(
+        e.read_view("other", None, ViewFreshness::RequireCurrent, &host())
+            .unwrap()
+            .current
+    );
+}

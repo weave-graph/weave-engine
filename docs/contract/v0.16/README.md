@@ -25,3 +25,7 @@ Sources enter initial/full/fallback results and incremental rematerializations b
 Fresh `CurrentView` execution matches definition, clock mode, requested fact tick, pending tick and dependency heads under one SQL snapshot, then applies current authority. It does not refresh. A duplicate adapter handler completion returns its **historical receipt**, marked `duplicate`, after current authorization checks; it does not re-execute CurrentView or promise fresh heads/ticks. The existing signed facade admits bounded QueryPlan operations, not arbitrary expression Programs or registration artifacts.
 
 The whole snapshot load and output repinning costs remain O(input)/O(output) for the selection profile. These operators add source access to bounded native services, not general incremental evaluation or a background reactive scheduler.
+
+## Candidate verification
+
+Engine verification passed 344 workspace tests/doctests with all features, strict all-target/all-feature lint, formatting and the portable contract WASM build check. This includes three independent native boundary tests and focused source binding corruption, clock, fallback/scheduler and exact accepted-expression tests. Actual preserved-binary marker13→14 and marker12→14 scripts passed process-death rollback, restart, old-reader refusal and idempotence. Compiler fixture acceptance and independent root review are separate release gates; these native counts do not claim that those gates have passed.

@@ -85,20 +85,18 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             params![definition.id, host.principal, definition_limit], |r| r.get(0)
         ).optional()?;
         let encoded = serde_json::to_string(definition)?;
-        validate_expression_profile(&definition.expression, VERSION)?;
-        clock_expression(
-            &definition.expression,
-            &definition.clock,
-            tick,
-            0,
-            &mut 1000,
-        )?;
         if let Some(prior) = prior {
             let prior =
                 prior.ok_or_else(|| err("E_BUDGET", "view definition exceeds read budget"))?;
             self.read_budget.charge(prior.len())?;
+            if prior != encoded {
+                return Err(err(
+                    "E_VIEW_CONFLICT",
+                    "view definition is immutable; register a new ID",
+                ));
+            }
             let stored = self.compiled_view_template(definition, host)?;
-            if prior != encoded || stored.as_ref() != template {
+            if stored.as_ref() != template {
                 return Err(err(
                     "E_VIEW_CONFLICT",
                     "view definition is immutable; register a new ID",
@@ -195,7 +193,11 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         let definition =
             definition.ok_or_else(|| err("E_BUDGET", "view definition exceeds read budget"))?;
         self.read_budget.charge(definition.len())?;
-        Ok((serde_json::from_str(&definition)?, tick))
+        let definition: ViewDefinition = serde_json::from_str(&definition)?;
+        if definition.id != id {
+            return Err(err("E_INTEGRITY", "stored view instance binding mismatch"));
+        }
+        Ok((definition, tick))
     }
     fn selection_state(
         &self,
@@ -397,6 +399,9 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             return Err(err("E_BUDGET", "stored view dependency count exceeded"));
         }
         let definition: ViewDefinition = serde_json::from_str(&definition)?;
+        if definition.id != id {
+            return Err(err("E_INTEGRITY", "stored view instance binding mismatch"));
+        }
         let result: QueryResult = serde_json::from_str(&result)?;
         if let Some(template) = self.compiled_view_template(&definition, host)? {
             let merged = algebra::merge_source_revisions(
