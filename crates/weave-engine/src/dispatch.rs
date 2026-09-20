@@ -141,14 +141,54 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         self.read_budget.charge(encoded.len())?;
         Ok((serde_json::from_str(&encoded)?, row.1, row.2))
     }
+    /// Checks a trusted embedding session against durable adapter authority.
+    /// Call inside the same transaction as the operation, before any cached receipt.
+    pub(crate) fn require_adapter_host(&self, id: &str, host: &HostContext) -> Result<()> {
+        let unavailable = || err("E_HOST_AUTH", "adapter unavailable to this host");
+        if !valid_id(id) || !valid_id(&host.principal) {
+            return Err(unavailable());
+        }
+        let (manifest, _, _) = self.dispatch_manifest(id).map_err(|e| {
+            if e.code == "E_ADAPTER" {
+                unavailable()
+            } else {
+                e
+            }
+        })?;
+        if manifest.id != id
+            || manifest.principal != host.principal
+            || manifest
+                .output_graphs
+                .iter()
+                .any(|g| !host.writable_graphs.contains(g))
+        {
+            return Err(unavailable());
+        }
+        Ok(())
+    }
     /// Trusted lifecycle management; removed identities cannot silently restart.
     pub fn set_adapter_state(&self, id: &str, state: &str) -> Result<()> {
+        self.set_adapter_state_boundary(id, state, None)
+    }
+    /// Principal- and output-scope-bound lifecycle operation for embedding sessions.
+    pub fn set_adapter_state_for(&self, id: &str, state: &str, host: &HostContext) -> Result<()> {
+        self.set_adapter_state_boundary(id, state, Some(host))
+    }
+    fn set_adapter_state_boundary(
+        &self,
+        id: &str,
+        state: &str,
+        host: Option<&HostContext>,
+    ) -> Result<()> {
         let transaction = if self.conn.is_autocommit() {
             Some(self.conn.unchecked_transaction()?)
         } else {
             None
         };
         let _clock_scope = self.operation_write_scope()?;
+        if let Some(host) = host {
+            self.require_adapter_host(id, host)?;
+        }
         let (_, current, _) = self.dispatch_manifest(id)?;
         if !["running", "paused", "draining", "removed"].contains(&state) || current == "removed" {
             return Err(err("E_LIFECYCLE", "invalid lifecycle transition"));
@@ -220,9 +260,31 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
     /// let _ = engine.poll_adapter("adapter", 123);
     /// ```
     pub fn poll_adapter(&mut self, id: &str) -> Result<Option<DispatchEnvelope>> {
-        self.reject_governed_effect_adapter(id)?;
+        self.poll_adapter_boundary(id, None)
+    }
+    /// Polls only durable adapters owned by the fixed host principal and write scope.
+    pub fn poll_adapter_for(
+        &mut self,
+        id: &str,
+        host: &HostContext,
+    ) -> Result<Option<DispatchEnvelope>> {
+        self.poll_adapter_boundary(id, Some(host))
+    }
+    fn poll_adapter_boundary(
+        &mut self,
+        id: &str,
+        host: Option<&HostContext>,
+    ) -> Result<Option<DispatchEnvelope>> {
+        if host.is_none() {
+            // Preserve the legacy trusted API's rejection before clock/transaction work.
+            self.reject_governed_effect_adapter(id)?;
+        }
         let tx = self.conn.unchecked_transaction()?;
         let _clock_scope = self.operation_write_scope()?;
+        if let Some(host) = host {
+            self.require_adapter_host(id, host)?;
+            self.reject_governed_effect_adapter(id)?;
+        }
         let now_ms = self.operation_time()?;
         let (manifest, state, mut checkpoint) = self.dispatch_manifest(id)?;
         if state != "running" && state != "draining" {

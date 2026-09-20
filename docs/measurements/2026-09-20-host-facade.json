@@ -1,0 +1,61 @@
+{
+  "profile": "native-trusted-host-facade-A",
+  "source_compiler_sdk_sha256": "8192dd6e0ed7707e81a188035adad7481ab272d2bb8880c226cdf0996fe7529f",
+  "native_library_sha256": "3b926e6ce05f6598fddcf736fc679d76e8cdc991769eaba4360eab4db4778d04",
+  "cases": [
+    {
+      "source_sha256": "13b80588d1049e942bfa4d6f23568f1bbd7e9602fda5b8a1c07c0ecbbf6ee35a",
+      "artifact_fingerprint": "sha256:8fba24f24ad6fecae2324c1d4fe6485835ebad8454d80de9084bf8d2881a482d",
+      "handler_digest": "sha256:6934ddc75ccfe9c1cc6d8881729dc7fea0fc320ce61d06da96321cabc4cd0bd9",
+      "sdk_bytes": 3334,
+      "exact_integer": "9007199254740994",
+      "reopen_duplicate": true,
+      "foreign_completion_denied": true,
+      "complete_inventory_retained": true
+    },
+    {
+      "source_sha256": "57957efccf0110a6e45477a548532abc2141619a59925b2462fe7dae46241e61",
+      "artifact_fingerprint": "sha256:0b1877939d8c9e7ac6780abcc44cd45ec768c36303a82ce8cb1d188141d4631a",
+      "handler_digest": "sha256:4c30f233390d32e6ec8273f269627f280026446ca52400cbb9030323f4edadc4",
+      "sdk_bytes": 3472,
+      "exact_integer": "9007199254740995",
+      "reopen_duplicate": true,
+      "foreign_completion_denied": true,
+      "complete_inventory_retained": true
+    }
+  ],
+  "independent_sdk_fixtures": [
+    {
+      "file": "1.response.json",
+      "sha256": "8bc91b265aaf7335d0433a5c06c4aac49f9149e9b635f5098213af38169535ee",
+      "inventory": {
+        "artifact_fingerprint": "sha256:71b2ae2aa8bc66f6375099e1c272fd54159c1eddd7ade54d77e3533212e87679",
+        "values": [
+          "Blob",
+          "Exact"
+        ],
+        "view_templates": [],
+        "handler_templates": [
+          "Warning"
+        ]
+      }
+    },
+    {
+      "file": "2.response.json",
+      "sha256": "a1c4c5d5b23b799fb326d7d928cec1f8f7c4047cd21afdc0717023d51ce9b7d4",
+      "inventory": {
+        "artifact_fingerprint": "sha256:add040235c87763c578829f9b6c135086dea01e42d35385ca1da6ed8d9ba4eee",
+        "values": [
+          "Blob",
+          "Exact"
+        ],
+        "view_templates": [],
+        "handler_templates": [
+          "Warning"
+        ]
+      }
+    }
+  ],
+  "browser_durability_tested": false,
+  "mobile_execution_tested": false
+}

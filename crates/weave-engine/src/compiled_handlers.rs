@@ -368,7 +368,17 @@ impl Engine {
         event: &str,
         lease: &str,
     ) -> Result<PreparedHandlerReceipt> {
-        self.prepare_handler_boundary(adapter, event, lease, || {})
+        self.prepare_handler_boundary(adapter, event, lease, None, || {})
+    }
+    /// Prepare under the embedding session's durable principal/output authority.
+    pub fn prepare_compiled_handler_for(
+        &mut self,
+        adapter: &str,
+        event: &str,
+        lease: &str,
+        host: &HostContext,
+    ) -> Result<PreparedHandlerReceipt> {
+        self.prepare_handler_boundary(adapter, event, lease, Some(host), || {})
     }
     #[cfg(feature = "recovery-testing")]
     pub fn prepare_compiled_handler_test_before_commit(
@@ -378,18 +388,22 @@ impl Engine {
         lease: &str,
         before_commit: impl FnOnce(),
     ) -> Result<PreparedHandlerReceipt> {
-        self.prepare_handler_boundary(adapter, event, lease, before_commit)
+        self.prepare_handler_boundary(adapter, event, lease, None, before_commit)
     }
     fn prepare_handler_boundary(
         &mut self,
         adapter: &str,
         event: &str,
         lease: &str,
+        host: Option<&HostContext>,
         before_commit: impl FnOnce(),
     ) -> Result<PreparedHandlerReceipt> {
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock = self.operation_write_scope()?;
+            if let Some(host) = host {
+                self.require_adapter_host(adapter, host)?;
+            }
             let registration = self.handler_registration(adapter)?;
             self.handler_running(&registration, event)?;
             if let Some((id, preparation)) = self.stored_preparation(adapter, event)? {
@@ -569,7 +583,18 @@ impl Engine {
         lease: &str,
         preparation_id: &str,
     ) -> Result<HandlerReceipt> {
-        self.complete_prepared_boundary(adapter, event, lease, preparation_id, || {})
+        self.complete_prepared_boundary(adapter, event, lease, preparation_id, None, || {})
+    }
+    /// Complete under current durable host authority, including historical retries.
+    pub fn complete_prepared_handler_for(
+        &mut self,
+        adapter: &str,
+        event: &str,
+        lease: &str,
+        preparation_id: &str,
+        host: &HostContext,
+    ) -> Result<HandlerReceipt> {
+        self.complete_prepared_boundary(adapter, event, lease, preparation_id, Some(host), || {})
     }
     #[cfg(feature = "recovery-testing")]
     pub fn complete_prepared_handler_test_before_commit(
@@ -580,7 +605,7 @@ impl Engine {
         preparation_id: &str,
         before_commit: impl FnOnce(),
     ) -> Result<HandlerReceipt> {
-        self.complete_prepared_boundary(adapter, event, lease, preparation_id, before_commit)
+        self.complete_prepared_boundary(adapter, event, lease, preparation_id, None, before_commit)
     }
     fn complete_prepared_boundary(
         &mut self,
@@ -588,11 +613,15 @@ impl Engine {
         event: &str,
         lease: &str,
         preparation_id: &str,
+        host: Option<&HostContext>,
         before_commit: impl FnOnce(),
     ) -> Result<HandlerReceipt> {
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock = self.operation_write_scope()?;
+            if let Some(host) = host {
+                self.require_adapter_host(adapter, host)?;
+            }
             let registration = self.handler_registration(adapter)?;
             self.handler_running(&registration, event)?;
             let (id, preparation) = self

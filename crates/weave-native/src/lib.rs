@@ -1,4 +1,8 @@
 //! Trusted embedding-host ABI. JSON plans never grant authority; each handle has fixed host grants.
+pub mod artifacts;
+pub mod host;
+mod host_abi;
+mod strict_json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
