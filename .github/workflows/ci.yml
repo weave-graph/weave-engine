@@ -38,6 +38,16 @@ jobs:
         if: runner.os == 'macOS'
         run: python3 scripts/root_native.py
   snapshot-migration:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ref: c209d49d33a8b4369a853673958bd9cec2765a96
+            protocol: 0.16.0
+            marker: 14
+          - ref: 5e4e20699550ecede86e88296c9147392386b436
+            protocol: 0.17.0
+            marker: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,10 +56,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: weave-graph/weave-engine
-          ref: c209d49d33a8b4369a853673958bd9cec2765a96
+          ref: ${{ matrix.ref }}
           path: previous
       - uses: dtolnay/rust-toolchain@stable
-      - name: Build exact prior protocol 0.16 fixtures
+      - name: Build exact prior protocol ${{ matrix.protocol }} fixtures
         working-directory: previous
         run: cargo build --locked -p weave-engine --features recovery-testing --example source_view_fixture --example three_peer_trace
       - name: Build current migration and replay fixtures
@@ -57,4 +67,4 @@ jobs:
         run: cargo build --locked -p weave-engine --features recovery-testing --example source_view_fixture --example three_peer_trace --example storage_probe
       - name: Verify populated upgrade, both crash boundaries and exact old replay
         working-directory: current
-        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace
+        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol ${{ matrix.protocol }} --old-marker ${{ matrix.marker }} --new-marker 16
