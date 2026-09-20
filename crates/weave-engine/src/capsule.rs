@@ -22,7 +22,7 @@ pub struct Capsule {
     pub manifests: Vec<SnapshotManifest>,
 }
 impl CapsuleRevision {
-    fn digest(&self) -> Result<String> {
+    pub(crate) fn digest(&self) -> Result<String> {
         Ok(format!(
             "sha256:{:x}",
             Sha256::digest(serde_json::to_vec(&(
@@ -68,7 +68,7 @@ impl CapsuleRevision {
     }
 }
 impl Engine {
-    fn revision_record(&self, reference: &GraphRef) -> Result<Option<CapsuleRevision>> {
+    pub(crate) fn revision_record(&self, reference: &GraphRef) -> Result<Option<CapsuleRevision>> {
         let Some(data) = self.load(&reference.graph_id, &reference.revision)? else {
             return Ok(None);
         };
@@ -87,10 +87,20 @@ impl Engine {
     /// Export exact authorized snapshots. Logical snapshots include their whole manifest.
     /// Hidden manifest members cannot be disclosed through hashes or membership lists.
     pub fn export_capsule(&self, root: &GraphRef, host: &HostContext) -> Result<Capsule> {
+        self.export_capsule_profile(root, host, false, &mut 0)
+    }
+    pub(crate) fn export_capsule_profile(
+        &self,
+        root: &GraphRef,
+        host: &HostContext,
+        complete: bool,
+        work: &mut usize,
+    ) -> Result<Capsule> {
         let _snapshot = self.optional_read_transaction()?;
         let _clock_scope = self.operation_scope()?;
         let _read_scope = self.read_budget.enter();
         let mut pending = std::collections::VecDeque::from([(root.clone(), 0usize)]);
+        let mut queued = HashSet::from([(root.graph_id.clone(), root.revision.clone())]);
         let mut seen = HashSet::new();
         let mut included = HashSet::new();
         let mut revisions = Vec::new();
@@ -103,6 +113,9 @@ impl Engine {
                 continue;
             }
             if seen.len() > 1000 || depth > 32 {
+                if complete {
+                    return Err(err("E_BUDGET", "export closure exceeds budget"));
+                }
                 external_dependencies.push(reference);
                 continue;
             }
@@ -220,7 +233,27 @@ impl Engine {
                 if !included.insert((row.graph_id.clone(), row.revision.clone())) {
                     continue;
                 }
-                pending.extend(row.dependencies().into_iter().map(|r| (r, depth + 1)));
+                if complete {
+                    capsule_export::visit_dependencies(&row, work, |graph, revision| {
+                        let key = (graph.to_owned(), revision.to_owned());
+                        if !queued.contains(&key) {
+                            if queued.len() >= 1000 {
+                                return Err(err("E_BUDGET", "export queue exceeds budget"));
+                            }
+                            queued.insert(key);
+                            pending.push_back((
+                                GraphRef {
+                                    graph_id: graph.into(),
+                                    revision: revision.into(),
+                                },
+                                depth + 1,
+                            ));
+                        }
+                        Ok(())
+                    })?;
+                } else {
+                    pending.extend(row.dependencies().into_iter().map(|r| (r, depth + 1)));
+                }
                 export_bytes +=
                     json_size(&row, (16usize * 1024 * 1024).saturating_sub(export_bytes))?;
                 revisions.push(row);
@@ -583,7 +616,10 @@ impl Engine {
 }
 
 /// Verify canonical whole-manifest membership and each record's content binding.
-fn verify_manifest(manifest: &SnapshotManifest, records: &[CapsuleRevision]) -> Result<String> {
+pub(crate) fn verify_manifest(
+    manifest: &SnapshotManifest,
+    records: &[CapsuleRevision],
+) -> Result<String> {
     if manifest.batch_id.is_empty()
         || manifest.batch_id.len() > 64
         || !manifest

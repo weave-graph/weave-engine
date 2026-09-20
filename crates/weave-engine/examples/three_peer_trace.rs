@@ -49,7 +49,7 @@ fn scopes() -> Vec<Scope> {
             ["main", "phone", "phone-import", "work"].map(|b| Scope {
                 graph_id: g.into(),
                 branch_id: b.into(),
-                actions: [Action::Propose].into(),
+                actions: [Action::Propose, Action::Read, Action::Traverse].into(),
             })
         })
         .collect();
@@ -111,6 +111,61 @@ fn proof(peer: &str, capsule: &Capsule, nonce: &str) -> TestResult<AdmissionProo
                 branch_id: root.branch_id.clone(),
             },
             body_digest: weave_policy::body_digest(&serde_json::to_vec(capsule)?),
+        },
+        &owner_key(),
+    )?;
+    Ok(AdmissionProof {
+        chain: vec![cap],
+        request,
+    })
+}
+fn server_key(peer: &str) -> TestResult<SigningKey> {
+    Ok(SigningKey::from_bytes(
+        &[match peer {
+            "P" => 211,
+            "W" => 212,
+            "T" => 213,
+            _ => return Err("unknown peer".into()),
+        }; 32],
+    ))
+}
+fn read_proof(
+    peer: &str,
+    body: &impl serde::Serialize,
+    graph: &str,
+    branch: &str,
+    nonce: &str,
+) -> TestResult<AdmissionProof> {
+    let cap = weave_policy::sign_capability(
+        Capability {
+            version: weave_policy::VERSION.into(),
+            issuer: weave_policy::public_key(&root_key(peer)?),
+            subject: owner(),
+            audience: format!("fixture-{peer}"),
+            policy_revision: "1".into(),
+            scopes: scopes(),
+            not_before_ms: 0,
+            expires_at_ms: 9000,
+            delegations_remaining: 0,
+            parent: None,
+        },
+        &root_key(peer)?,
+    )?;
+    let request = weave_policy::sign_request(
+        Request {
+            version: weave_policy::REQUEST_VERSION.into(),
+            subject: owner(),
+            audience: format!("fixture-{peer}"),
+            capability_id: weave_policy::capability_id(&cap)?,
+            nonce: format!("{:x}", Sha256::digest(nonce.as_bytes())),
+            issued_at_ms: 0,
+            expires_at_ms: 9000,
+            operation: Operation {
+                action: Action::Read,
+                graph_id: graph.into(),
+                branch_id: branch.into(),
+            },
+            body_digest: weave_policy::body_digest(&serde_json::to_vec(body)?),
         },
         &owner_key(),
     )?;
@@ -205,6 +260,70 @@ fn run(e: &mut Engine, peer: &str, v: &Value) -> TestResult<Value> {
                 &host(),
             )?;
             json!({"forked":true})
+        }
+        "export_signed" => {
+            let reference: GraphRef = serde_json::from_value(v["reference"].clone())?;
+            let recipient = field(v, "recipient")?;
+            root_key(recipient)?;
+            let request = CapsuleExportRequest {
+                format: "weave-capsule-export-request-0.1".into(),
+                root: reference.clone(),
+                branch_id: field(v, "branch")?.into(),
+                server_key: weave_policy::public_key(&server_key(peer)?),
+                response_audience: format!("fixture-{recipient}"),
+            };
+            let proof = read_proof(
+                peer,
+                &request,
+                &reference.graph_id,
+                &request.branch_id,
+                field(v, "nonce")?,
+            )?;
+            let signer = CapsuleExportSigner::new(
+                server_key(peer)?,
+                format!("fixture-{peer}"),
+                [(owner(), [format!("fixture-{recipient}")].into())].into(),
+            )?;
+            #[cfg(feature = "recovery-testing")]
+            if v["kill_before_commit"] == true {
+                e.admit_capsule_export_test_before_commit(&proof, &request, &signer, || {
+                    std::process::exit(95)
+                })?;
+                return Err("export kill hook not reached".into());
+            }
+            let response = e.admit_capsule_export(&proof, &request, &signer)?;
+            if v["kill_after_commit"] == true {
+                std::process::exit(96);
+            }
+            json!({"request":request,"proof":proof,"response":response})
+        }
+        "verify_export" => {
+            let server = field(v, "server")?;
+            let bundle = &v["bundle"];
+            let request = serde_json::from_value(bundle["request"].clone())?;
+            let proof: AdmissionProof = serde_json::from_value(bundle["proof"].clone())?;
+            let response = serde_json::from_value(bundle["response"]["result"].clone())?;
+            let expectation = CapsuleExportExpectation::new(
+                weave_policy::public_key(&server_key(server)?),
+                format!("fixture-{server}"),
+                owner(),
+                format!("fixture-{peer}"),
+                request,
+                proof.request.request,
+            )?;
+            let verified = e.verify_capsule_export_response(&response, &expectation)?;
+            json!({"capsule":verified.capsule(),"verified":true})
+        }
+        "make_query_proof" => {
+            let query: QueryPlan = serde_json::from_value(v["query"].clone())?;
+            let proof = read_proof(
+                peer,
+                &query,
+                &query.graph_id,
+                &query.branch_id,
+                field(v, "nonce")?,
+            )?;
+            json!({"query":query,"proof":proof})
         }
         "export" => {
             json!({"trusted_export":true,"capsule":e.export_capsule(&serde_json::from_value(v["reference"].clone())?,&host())?})

@@ -8,12 +8,14 @@ import hashlib
 import json
 import subprocess
 import tempfile
+import sqlite3
 import time
 from pathlib import Path
 
 p = argparse.ArgumentParser()
 p.add_argument('--probe', type=Path, default=Path('target/debug/examples/three_peer_trace'))
 p.add_argument('--report', type=Path)
+p.add_argument('--signed-export', action='store_true')
 a = p.parse_args()
 trace = []
 checks = []
@@ -48,11 +50,35 @@ with tempfile.TemporaryDirectory(prefix='weave-three-peers-') as tmp:
         for key in ['nodes','edges','structural_edges','assertions','attachments']:
             for obj in data.get(key,[]): obj['readers']=[owner]
         return data
-    def export(peer,reference):
+    def export(peer,reference,recipient,branch='main'):
         global transferred
-        exported=call(peer,'export',reference=reference)
-        assert exported['trusted_export'] is True
-        capsule=exported['capsule']
+        if a.signed_export:
+            nonce=f"export-{reference['graph_id']}-{reference['revision']}-{recipient}"
+            kwargs={'reference':reference,'recipient':recipient,'branch':branch,'nonce':nonce}
+            if transferred == 0:
+                def receipts():
+                    with sqlite3.connect(dbs[peer]) as conn:
+                        return conn.execute('SELECT COUNT(*) FROM admission_receipts').fetchone()[0]
+                before=receipts()
+                call(peer,'export_signed',**kwargs,kill_before_commit=True,expect=95)
+                assert receipts()==before
+                call(peer,'export_signed',**kwargs,kill_after_commit=True,expect=96)
+                assert receipts()==before+1
+            exported=call(peer,'export_signed',**kwargs)
+            retry=call(peer,'export_signed',**kwargs)
+            assert retry['response']['duplicate']
+            assert retry['response']['result']==exported['response']['result']
+            before=events(recipient)
+            tampered=copy.deepcopy(exported)
+            tampered['response']['result']['binding']['served_at_ms']+=1
+            assert call(recipient,'verify_export',server=peer,bundle=tampered,expect=1)['code'] in ['E_SIGNATURE','E_EXPORT_BINDING']
+            verified=call(recipient,'verify_export',server=peer,bundle=exported)
+            assert verified['verified'] and events(recipient)==before
+            capsule=verified['capsule']
+        else:
+            exported=call(peer,'export',reference=reference)
+            assert exported['trusted_export'] is True
+            capsule=exported['capsule']
         assert 'Annotations' not in {r['graph_id'] for r in capsule['revisions']}
         transferred += len(json.dumps(capsule,separators=(',',':')).encode())
         return capsule
@@ -66,7 +92,7 @@ with tempfile.TemporaryDirectory(prefix='weave-three-peers-') as tmp:
     installation={'nodes':[{'id':'device','entity_id':'device','space_id':'operations'},{'id':'physical','entity_id':'device','space_id':'physical'},{'id':'gateway','entity_id':'gateway','space_id':'operations'}],'edges':[{'id':'connection','from':'device','to':'gateway','predicate':'connected','valid_time':{'start':0,'end':100}},{'id':'counterpart','from':'device','to':'physical','predicate':'counterpart','valid_time':{'start':0,'end':100}}],'attachments':[{'id':'evidence-binding','host':{'kind':'edge','id':'connection'},'key':'evidence','value':{'kind':'graph','reference':ref('Evidence','logical:seed:Evidence')},'valid_time':{'start':0,'end':100},'required':True}]}
     call('W','execute',program=plan({'op':'commit_batch','batch_id':'seed','commits':[{'graph_id':'Evidence','data':evidence},{'graph_id':'Installation','data':installation}]},commit('Annotations',{'nodes':[{'id':'private-note','entity_id':'secret','space_id':'private','readers':['independent-reviewer'],'properties':{'text':'not in operational working set'}}]})))
     original=ref('Installation',head('W','Installation')); old_evidence=ref('Evidence',head('W','Evidence'))
-    initial=export('W',original)
+    initial=export('W',original,'P')
     before=events('P'); prop=proposed('P',initial,'working-set')
     assert events('P')==before and head('P','Installation') is None
     assert proposed('P',initial,'working-set')['admitted']['duplicate']
@@ -130,7 +156,7 @@ with tempfile.TemporaryDirectory(prefix='weave-three-peers-') as tmp:
     competing=copy.deepcopy(installation);competing['nodes'][0]['properties']={'workstation_note':'concurrent'}
     call('W','execute',program=plan(commit('Installation',competing,expected=original['revision'])))
     work_head=head('W','Installation')
-    offline_capsule=export('P',changed)
+    offline_capsule=export('P',changed,'W','phone')
     p_to_w=proposed('W',offline_capsule,'offline-to-work')
     before=events('W');error=integrate('W',p_to_w,'main','conflict',expected=original['revision'],expect=1)
     assert error['code']=='E_CONFLICT' and events('W')==before and head('W','Installation')==work_head
@@ -140,7 +166,7 @@ with tempfile.TemporaryDirectory(prefix='weave-three-peers-') as tmp:
     assert head('W','Installation')==work_head
     call('W','accept_revision',reference=ref('Evidence','logical:offline:Evidence'),branch='phone-import',expected=None)
     # Drop a transfer before invoking receiver, then repeat the identical proposal after restart.
-    p_cluster_capsule=export('P',phone_cluster); before=events('W')
+    p_cluster_capsule=export('P',phone_cluster,'W'); before=events('W')
     assert events('W')==before
     cluster_proposal=proposed('W',p_cluster_capsule,'cluster-to-work')
     assert proposed('W',p_cluster_capsule,'cluster-to-work')['admitted']['duplicate']
@@ -150,9 +176,9 @@ with tempfile.TemporaryDirectory(prefix='weave-three-peers-') as tmp:
     call('W','execute',program=plan(commit('ClustersWork',scope(larger['graph']))))
     assert head('W','ClustersPhone','phone-import')==phone_cluster['revision'] and head('W','ClustersWork') is not None
     assert query('W','Evidence',old_evidence['revision'])['coverage']=='complete'
-    checks.append('trusted-export reconnect, signed proposal duplicates, local CAS conflict, explicit branch integration and coexisting organizations')
+    checks.append(('signed-export' if a.signed_export else 'trusted-export') + ' reconnect, signed proposal duplicates, local CAS conflict, explicit branch integration and coexisting organizations')
 
-    team_capsule=export('W',phone_cluster)
+    team_capsule=export('W',phone_cluster,'T','phone-import')
     team_prop=proposed('T',team_capsule,'work-to-team')
     integrate('T',team_prop,'main','team-import')
     receipt=call('T','govern',source=phone_cluster,view='team-review',id='accept-offline-evidence',branch='main')
@@ -179,7 +205,9 @@ with tempfile.TemporaryDirectory(prefix='weave-three-peers-') as tmp:
     assert call('T','accepted',selection=chosen,fixture_clock_ms=10000,expect=1)['code']=='E_GOV_UNAVAILABLE'
     checks.append('one fake external action, durable unknown after response-loss kill, no automatic redispatch and explicit reconciliation')
     event_counts={peer:events(peer) for peer in 'PWT'}
-report={'profile':'native-three-peer-existing-apis/1','status':'passed','protocol':version,'peers':3,'process_invocations':len(trace),'transferred_capsule_bytes':transferred,'events':event_counts,'checks':checks,'trace':trace,'limits':['trusted export and trusted host recipes; no authenticated export endpoint or new peer crypto protocol','same owner across peers; independent reviewer denied; no declassification','graph.committed/graph.accepted events; no typed MetaGraphRebound or compiled reactor','whole-capsule transfer; no selective proofs, implicit multi-root acceptance or semantic merge','separate effect request and handler completion; fake local destination only','small native fixture; no browser/mobile persistence or production performance claim']}
+if a.signed_export:
+    checks.append('signed whole-closure export, exact response retry, pre/postcommit export death, paired verification and tamper denial without receiver mutation')
+report={'profile':'native-three-peer-signed-export/1' if a.signed_export else 'native-three-peer-existing-apis/1','status':'passed','protocol':version,'peers':3,'process_invocations':len(trace),'transferred_capsule_bytes':transferred,'events':event_counts,'checks':checks,'trace':trace,'limits':[('native signed export/paired response verification; host-installed test keys, no network transport service' if a.signed_export else 'trusted export and trusted host recipes; no authenticated export endpoint or new peer crypto protocol'),'same owner across peers; independent reviewer denied; no declassification','graph.committed/graph.accepted events; no typed MetaGraphRebound or compiled reactor','whole-capsule transfer; no selective proofs, implicit multi-root acceptance or semantic merge','separate effect request and handler completion; fake local destination only','small native fixture; no browser/mobile persistence or production performance claim']}
 text=json.dumps(report,indent=2)+'\n'
 if a.report:a.report.write_text(text)
 print(json.dumps({k:v for k,v in report.items() if k!='trace'},indent=2))

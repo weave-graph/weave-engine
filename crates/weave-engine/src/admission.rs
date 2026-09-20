@@ -164,30 +164,36 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
             .map_err(policy_error)?;
         Ok(verified)
     }
-    fn prior_admission<T: serde::de::DeserializeOwned>(
+    pub(crate) fn prior_admission<T: serde::de::DeserializeOwned>(
         &self,
         verified: &VerifiedRequest,
     ) -> Result<Option<T>> {
-        let row: Option<(String, String, String)> = self
+        self.read_budget.request()?;
+        let remaining = self.read_budget.remaining();
+        let row: Option<(String, String, Option<String>, Option<String>)> = self
             .conn
             .query_row(
-                "SELECT epoch,body_digest,response FROM admission_receipts WHERE nonce=?1",
-                [verified.replay_id()],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                "SELECT substr(epoch,1,513),substr(body_digest,1,513),
+                 CASE WHEN length(CAST(response AS BLOB))<=?2 AND length(CAST(operation AS BLOB))<=16384 AND length(CAST(response AS BLOB))+length(CAST(operation AS BLOB))+4104<=?3 THEN response END,
+                 CASE WHEN length(CAST(operation AS BLOB))<=16384 AND length(CAST(response AS BLOB))+length(CAST(operation AS BLOB))+4104<=?3 THEN operation END
+                 FROM admission_receipts WHERE nonce=?1",
+                params![verified.replay_id(), MATERIALIZED_LIMIT as i64, remaining as i64],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .optional()?;
-        if let Some((epoch, body, response)) = row {
+        if let Some((epoch, body, response, operation)) = row {
+            let response =
+                response.ok_or_else(|| err("E_BUDGET", "admission receipt exceeds read budget"))?;
+            let operation = operation
+                .ok_or_else(|| err("E_BUDGET", "admission operation exceeds read budget"))?;
+            self.read_budget
+                .charge(epoch.len() + body.len() + response.len() + operation.len())?;
             if epoch != verified.policy_epoch() {
                 return Err(err("E_POLICY_CHANGED", "retry crosses an admission epoch"));
             }
             if body != verified.body_digest() {
                 return Err(err("E_REPLAY", "nonce already binds another request body"));
             }
-            let operation: String = self.conn.query_row(
-                "SELECT operation FROM admission_receipts WHERE nonce=?1",
-                [verified.replay_id()],
-                |r| r.get(0),
-            )?;
             if operation != serde_json::to_string(verified.operation())? {
                 return Err(err("E_REPLAY", "nonce already binds another operation"));
             }
@@ -195,7 +201,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         }
         Ok(None)
     }
-    fn record_admission(
+    pub(crate) fn record_admission(
         &self,
         verified: &VerifiedRequest,
         response: &impl Serialize,
@@ -510,7 +516,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         }
         Ok(())
     }
-    fn require_reference_scope(
+    pub(crate) fn require_reference_scope(
         &self,
         reference: &GraphRef,
         scopes: &[Scope],
@@ -543,7 +549,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
     ) -> Result<bool> {
         self.reachable_revision_bounded(graph, branch, revision, &mut 0)
     }
-    fn reachable_revision_bounded(
+    pub(crate) fn reachable_revision_bounded(
         &self,
         graph: &str,
         branch: &str,

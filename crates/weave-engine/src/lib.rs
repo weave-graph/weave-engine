@@ -5,6 +5,11 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use weave_contract::*;
 mod admission;
+mod capsule_export;
+pub use capsule_export::{
+    CapsuleExportBinding, CapsuleExportExpectation, CapsuleExportRequest, CapsuleExportSigner,
+    SignedCapsuleExport, VerifiedCapsuleExport,
+};
 mod whole_visibility;
 use whole_visibility::whole_graph_visible;
 mod governance;

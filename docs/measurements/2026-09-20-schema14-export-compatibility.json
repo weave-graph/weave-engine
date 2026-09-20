@@ -1,0 +1,13 @@
+{
+  "source_commit": "8d359df4bc9b7b276411609b18cc7ef10de8bfa7",
+  "probe_source_sha256": "5ed985933821edf5444da21d688dba371fb50af7f8749e291ec3d0722942fa86",
+  "binary_sha256": "12060e53f61133e8ae2e8550a0b798a6cae07d4b00b3967ca74b1457dae6c3c0",
+  "build": "locked/offline; existing target; nice10; CARGO_BUILD_JOBS=2",
+  "execution": {
+    "same_nonce": "E_REPLAY; no state change",
+    "fresh_nonce": "ordinary QueryResult; one normal receipt",
+    "original_export_bytes": "unchanged",
+    "heads": "unchanged",
+    "new_export_receipt_sha256": "f0a7c1e185d9c346c4ce565674541ecaf0f778046a7ad25bdf12705f7293d74b"
+  }
+}
