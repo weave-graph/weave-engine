@@ -2,6 +2,7 @@
 """Populate historical sealed views/signed receipts; verify atomic migration and exact identities."""
 import argparse, hashlib, json, sqlite3, subprocess, tempfile
 from pathlib import Path
+from contextlib import closing
 p=argparse.ArgumentParser()
 p.add_argument('--old-view',type=Path,required=True)
 p.add_argument('--old-trace',type=Path,required=True)
@@ -37,11 +38,11 @@ with tempfile.TemporaryDirectory(prefix='weave-snapshot-migration-') as tmp:
  registered=run(a.old_view,db,'register',templatefile,'migration-view','fixed')
  before_current=run(a.old_view,db,'current','migration-view',template['definition_digest'],'fixed')
  def state():
-  with sqlite3.connect(db) as c:
+  with closing(sqlite3.connect(db)) as c:
    return {'marker':c.execute('PRAGMA user_version').fetchone()[0],**{t:c.execute('SELECT * FROM '+t+' ORDER BY rowid').fetchall() for t in ['revisions','events','admission_receipts','live_views','view_sources']}}
  before=state();assert before['marker']==a.old_marker
  def new_tables():
-  with sqlite3.connect(db) as c:return {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('compiled_handlers','handler_preparations','governed_effect_bindings','governed_effect_receipts','governed_effect_context')")}
+  with closing(sqlite3.connect(db)) as c:return {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('compiled_handlers','handler_preparations','governed_effect_bindings','governed_effect_receipts','governed_effect_context')")}
  if a.old_marker<16:assert not new_tables()
  run(a.storage,db,'crash',code=82);assert state()==before
  if a.old_marker<16:assert not new_tables()

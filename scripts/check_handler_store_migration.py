@@ -2,6 +2,7 @@
 """Real historical compiler/handler state survives atomic runtime schema upgrade."""
 import argparse, json, sqlite3, subprocess, tempfile
 from pathlib import Path
+from contextlib import closing
 p=argparse.ArgumentParser()
 for name in ['old-compiler','old-handler','handler','storage']:
  p.add_argument('--'+name,type=Path,required=True)
@@ -39,7 +40,7 @@ handler {name} revision "1" using Keep {{
  pending,_=populate('HistoricalPending','Installation','Warnings',False)
  new_tables={'governed_effect_bindings','governed_effect_receipts','governed_effect_context'}
  def snapshot():
-  with sqlite3.connect(db) as c:
+  with closing(sqlite3.connect(db)) as c:
    tables={row[0]:row[1] for row in c.execute("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
    contents={t:(sql,sorted(c.execute('SELECT * FROM "'+t.replace('"','""')+'"').fetchall(),key=repr)) for t,sql in tables.items() if t not in new_tables}
    return c.execute('PRAGMA user_version').fetchone()[0],set(tables)&new_tables,contents

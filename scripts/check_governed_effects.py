@@ -3,6 +3,7 @@
 import argparse
 import json
 from pathlib import Path
+from contextlib import closing
 import sqlite3
 import subprocess
 import tempfile
@@ -33,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix='weave-governed-effects-') as temporary:
   assert result.returncode==expected,(body,result.returncode,result.stdout,result.stderr)
   return json.loads(result.stdout) if expected==0 else result.stderr
  def row(db,query):
-  with sqlite3.connect(db) as c:return c.execute(query).fetchone()[0]
+  with closing(sqlite3.connect(db)) as c:return c.execute(query).fetchone()[0]
  def setup(name):
   db=root/f'{name}.db';seed=call(db,'seed',**({'template':template} if template is not None else {}));d=seed['delivery']
   assert seed['preparation']['preparation_id']
