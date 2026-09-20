@@ -1,7 +1,9 @@
 # Combined source-to-effect scenario and trusted host facade
 
-Design for review, based on browser freeze `d8e223c`, protocol 0.18/store17,
-compiler SDK ABI 1 and the existing native services. No protocol, schema, ABI or
+Original architecture proposal based on browser freeze `d8e223c`, protocol
+0.18/store17 and compiler SDK ABI 1. Step A is implemented and published at
+`21c2728`; the current unpublished temporal pair is protocol0.19/store18.
+The concrete next native handoff is [scenario B](NATIVE_SCENARIO_B.md). No protocol, schema, ABI or
 implementation change is reserved by this document. The parent owns browser CI
 and publication. The first deliverable is a reusable embedding boundary; the
 acceptance controller supplies artifacts and operations at run time.
@@ -12,8 +14,10 @@ Paper §12 requires offline evidence and metadata rebinding, durable reaction,
 cluster proposals, authorized synchronization, explicit acceptance and an effect
 with uncertain-outcome recovery. Existing native traces exercise these in pieces.
 The compiler SDK already accepts arbitrary bounded source/modules and returns
-complete artifacts. The native C ABI currently exposes only open/Program/close;
-the browser host is a fixed fixture. Neither exposes the combined services.
+complete artifacts. Step A now supplies a safe Rust host facade and thin native bindings for bounded
+Program execution and owner-checked compiled-handler operations, with exact complete
+SDK artifact extraction. The browser host remains a fixed fixture; neither host
+yet exposes all combined services.
 
 Use the existing Engine and compiler throughout. Add one strict trusted-host
 facade shared by native and Emscripten builds, then run the same scenario through
@@ -227,7 +231,9 @@ native/mobile operation adapters. Language owns source/modules, SDK extraction
 agreement and compiler acceptance; proposed temporal Window/Sequence work belongs
 in its isolated canonical module and is not a scenario prerequisite. Root owns
 independent adversarial orchestration, baseline preservation, CI and publication.
-Only this proposal is edited now; no builds while the sibling owns the slot.
+This document records the original stage ordering; the linked B handoff is
+design-only until the current .19 pair is published. Proposal changes use no
+build slot and introduce no protocol/storage changes.
 
 This advances persistent E10 scenario evidence, not full paper completion. Typed
 metadata event contracts, true incremental clustering, general lifecycle/retention,
