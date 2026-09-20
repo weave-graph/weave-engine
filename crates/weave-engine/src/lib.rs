@@ -5,6 +5,8 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use weave_contract::*;
 mod admission;
+mod whole_visibility;
+use whole_visibility::whole_graph_visible;
 mod governance;
 mod governance_graph;
 pub use governance_graph::AcceptedViewSelection;

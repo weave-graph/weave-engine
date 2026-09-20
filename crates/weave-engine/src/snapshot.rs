@@ -387,7 +387,7 @@ impl Engine {
                 ));
             };
             let (visible, incomplete) = self.authorized(target.clone(), host)?;
-            if incomplete || visible != target {
+            if !whole_graph_visible(&target, visible, incomplete) {
                 return Err(err(
                     "E_DEPENDENCY_UNAVAILABLE",
                     "required metadata unavailable",

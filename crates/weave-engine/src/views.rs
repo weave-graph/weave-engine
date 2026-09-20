@@ -658,7 +658,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
             std::iter::once(&value.graph).chain(value.metadata_graphs.iter().map(|g| &g.graph))
         {
             let (authorized, incomplete) = self.authorized(data.clone(), host)?;
-            if incomplete || &authorized != data {
+            if !whole_graph_visible(data, authorized, incomplete) {
                 return Err(err(
                     "E_UNAVAILABLE",
                     "stored result unavailable under current authority",

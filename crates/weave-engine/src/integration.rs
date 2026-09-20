@@ -221,7 +221,7 @@ impl Engine {
             ));
         }
         let (visible, incomplete) = self.authorized(stored, host)?;
-        if incomplete || visible != record.data {
+        if !whole_graph_visible(&record.data, visible, incomplete) {
             return Err(err("E_UNAVAILABLE", "proposal content unavailable"));
         }
         self.validate_required_metadata(&record.data, host)

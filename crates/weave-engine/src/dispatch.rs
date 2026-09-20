@@ -206,7 +206,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             return Ok(None);
         };
         let (visible, incomplete) = self.authorized(data.clone(), &host)?;
-        if incomplete || visible != data {
+        if !whole_graph_visible(&data, visible, incomplete) {
             return Ok(None);
         }
         Ok(Some((graph, branch, revision, sequence)))

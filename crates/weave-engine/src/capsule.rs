@@ -141,8 +141,7 @@ impl Engine {
                         .revision_record(&member_ref)?
                         .ok_or_else(|| err("E_INTEGRITY", "logical snapshot member unavailable"))?;
                     let (visible, incomplete) = self.authorized(row.data.clone(), host)?;
-                    if visible != row.data
-                        || incomplete
+                    if !whole_graph_visible(&row.data, visible, incomplete)
                         || !self.protected_reference_allowed(&row.graph_id, &row.revision, host)?
                     {
                         if &reference == root {
@@ -186,8 +185,7 @@ impl Engine {
                     .iter()
                     .any(|a| matches!(a.value, MetadataValue::LiveGraph { .. }));
                 let (visible, incomplete) = self.authorized(row.data.clone(), host)?;
-                available &= visible == row.data
-                    && !incomplete
+                available &= whole_graph_visible(&row.data, visible, incomplete)
                     && self.protected_reference_allowed(&row.graph_id, &row.revision, host)?;
             }
             if !available || live {
@@ -552,7 +550,7 @@ impl Engine {
             .revision_record(reference)?
             .ok_or_else(|| err("E_UNAVAILABLE", "revision unavailable"))?;
         let (visible, incomplete) = self.authorized(record.data.clone(), host)?;
-        if visible != record.data || incomplete {
+        if !whole_graph_visible(&record.data, visible, incomplete) {
             return Err(err("E_UNAVAILABLE", "revision unavailable"));
         }
         self.validate_required_metadata(&record.data, host)?;

@@ -259,7 +259,7 @@ impl Engine {
                 ));
             }
             let (visible, incomplete) = self.authorized(data.clone(), host)?;
-            if incomplete || visible != data {
+            if !whole_graph_visible(&data, visible, incomplete) {
                 return Err(unavailable());
             }
             let mut dependencies = refs(&data);

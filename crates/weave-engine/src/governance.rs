@@ -368,10 +368,10 @@ impl Engine {
             .load(&source.graph_id, &source.revision)?
             .ok_or_else(|| failure("E_GOV_UNAVAILABLE"))?;
         let (data, incomplete) = self.authorized(raw.clone(), host)?;
-        if incomplete || data != raw {
+        if !whole_graph_visible(&raw, data, incomplete) {
             return Err(failure("E_GOV_UNAVAILABLE"));
         }
-        self.validate_required_metadata(&data, host)?;
+        self.validate_required_metadata(&raw, host)?;
         Ok(())
     }
     fn gov_existing_source(
