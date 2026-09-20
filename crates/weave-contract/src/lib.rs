@@ -446,6 +446,20 @@ pub enum MetadataValue {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct MetadataAttachment {
+    /// Conservative assertion influence, independent of origin and host placement.
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "influence::bounded_refs"
+    )]
+    pub derived_from: Vec<AssertionRef>,
+    /// Conservative node influence, independent of origin and host placement.
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "influence::bounded_refs"
+    )]
+    pub derived_nodes: Vec<NodeRef>,
     /// Conservative whole-snapshot AND gates, independent of record readers.
     #[serde(
         default,
