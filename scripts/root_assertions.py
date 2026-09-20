@@ -13,8 +13,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--engine',type=Path,default=Path(__file__).resolve().parents[1])
     parser.add_argument('--language',type=Path,default=Path(__file__).resolve().parents[2]/'weave-language')
+    parser.add_argument('--no-build',action='store_true')
     args=parser.parse_args()
-    compiled=subprocess.run(['cargo','run','--locked','--quiet','--','plan','examples/assertions.weave'],cwd=args.language,capture_output=True,text=True,check=True)
+    compiler=[str(args.language.resolve()/'target/debug/weave')] if args.no_build else ['cargo','run','--locked','--quiet','--']
+    compiled=subprocess.run(compiler+['plan','examples/assertions.weave'],cwd=args.language,capture_output=True,text=True,check=True)
     source=json.loads(compiled.stdout)
     # Select the source graph and reusable values without a projection that
     # intentionally fails when its named assertion becomes unavailable.
@@ -27,7 +29,8 @@ def main():
         def run(program,db,actor='alice',writes=(),code=None):
             nonlocal serial
             serial+=1; path=root/f'plan-{serial}.json';path.write_text(json.dumps(program))
-            command=['cargo','run','--locked','--quiet','-p','weave-engine','--','run','--db',str(db),'--actor',actor]
+            runtime=[str(args.engine.resolve()/'target/debug/weave-engine')] if args.no_build else ['cargo','run','--locked','--quiet','-p','weave-engine','--']
+            command=runtime+['run','--db',str(db),'--actor',actor]
             for graph in writes: command += ['--write',graph]
             r=subprocess.run(command+[str(path)],cwd=args.engine,capture_output=True,text=True)
             if code:

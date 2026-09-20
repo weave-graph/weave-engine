@@ -12,9 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument('--language', type=Path, default=ROOT.parent / 'weave-language')
 parser.add_argument('--engine', type=Path, default=ROOT)
+parser.add_argument('--no-build', action='store_true', help='Use already-built compiler and runtime')
 args = parser.parse_args()
-plan = json.loads(subprocess.check_output(['cargo', 'run', '--locked', '--quiet', '--', 'plan', 'examples/geometry.weave'], cwd=args.language))
-subprocess.run(['cargo', 'build', '--locked', '-p', 'weave-engine'], cwd=args.engine, check=True)
+compiler = [str(args.language.resolve() / 'target/debug/weave')] if args.no_build else ['cargo', 'run', '--locked', '--quiet', '--']
+plan = json.loads(subprocess.check_output(compiler + ['plan', 'examples/geometry.weave'], cwd=args.language))
+if not args.no_build:
+    subprocess.run(['cargo', 'build', '--locked', '-p', 'weave-engine'], cwd=args.engine, check=True)
 
 with tempfile.TemporaryDirectory(prefix='weave-root-geometry-') as directory:
     tmp = Path(directory)
@@ -40,9 +43,15 @@ with tempfile.TemporaryDirectory(prefix='weave-root-geometry-') as directory:
     for name in ['Range', 'Proof']:
         graph = copy.deepcopy(values[name]['graph'])
         graph['edges'] = []
+        graph.pop('influence', None)
         for node in graph['nodes']:
             node['readers'] = []
-            assert node.get('derived_from'), node
+            # Current outputs may use explicit OR groups instead of one flat
+            # conjunction. Every retained alternative must carry a real gate.
+            groups = node.get('derivations', [])
+            assert node.get('derived_from') or (groups and all(
+                any(group.get(field) for field in ['premises', 'node_premises', 'attachment_premises', 'snapshot_premises'])
+                for group in groups)), node
         stored = 'Copied' + name
         commit = {'version': plan['version'], 'commands': [{'op': 'commit', 'graph_id': stored, 'data': graph}]}
         success(commit, 'alice', 'save-' + name, writes=[stored])

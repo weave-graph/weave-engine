@@ -9,9 +9,10 @@ import subprocess
 import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
-parser=argparse.ArgumentParser();parser.add_argument('--language',type=Path,default=ROOT.parent/'weave-language');args=parser.parse_args()
-plan=json.loads(subprocess.check_output(['cargo','run','--locked','--quiet','--','plan','examples/contexts.weave'],cwd=args.language))
-subprocess.run(['cargo','build','--locked','-p','weave-engine'],cwd=ROOT,check=True)
+parser=argparse.ArgumentParser();parser.add_argument('--language',type=Path,default=ROOT.parent/'weave-language');parser.add_argument('--no-build',action='store_true');args=parser.parse_args()
+compiler=[str(args.language.resolve()/'target/debug/weave')] if args.no_build else ['cargo','run','--locked','--quiet','--']
+plan=json.loads(subprocess.check_output(compiler+['plan','examples/contexts.weave'],cwd=args.language))
+if not args.no_build:subprocess.run(['cargo','build','--locked','-p','weave-engine'],cwd=ROOT,check=True)
 with tempfile.TemporaryDirectory(prefix='weave-context-root-') as directory:
     tmp=Path(directory)
     def run(program,name,error=None):
