@@ -3,6 +3,8 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use weave_contract::Program;
 use weave_engine::{Engine, HostContext};
+#[path = "browser_image_probe/host.rs"]
+mod host;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir = std::env::temp_dir().join(format!("weave-image-probe-{}", std::process::id()));
@@ -23,7 +25,7 @@ fn run(dir: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
     let image = engine.export_single_owner_image()?;
     assert_ne!(initial_image, image);
     std::fs::write(dir.join("restored.sqlite"), &image)?;
-    let mut restored = Engine::open_single_owner_image(dir.join("restored.sqlite"))?;
+    let mut restored = Engine::open_restored_single_owner_image(dir.join("restored.sqlite"))?;
     let query: Program = serde_json::from_value(json!({"version":"0.18.0","commands":[{
         "op":"query","query":{"graph_id":"browser"}
     }]}))?;

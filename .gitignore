@@ -1,4 +1,4 @@
-/target/
+/target
 .DS_Store
 /docs/source/conversation.md
 *.db

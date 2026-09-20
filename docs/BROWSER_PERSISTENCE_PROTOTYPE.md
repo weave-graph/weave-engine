@@ -1,7 +1,8 @@
 # Bounded browser persistence prototype
 
-Status: proposed implementation profile, 2026-09-20. Native base is public
-protocol 0.18/store 17. No browser persistence or full E10 acceptance is claimed.
+Status: locally verified experimental profile, 2026-09-20. Native base is public
+protocol 0.18/store 17. This is bounded browser persistence evidence, not full E10
+acceptance or a published general browser SDK.
 The first experiment has an **8 MiB database-image cap**; this is a resource
 limit of the experiment, not a product capacity claim.
 
@@ -206,7 +207,7 @@ IndexedDB durability. Those are explicit next host obligations.
 Reproduce from the repository root, using the installed pinned SDK:
 
 ```sh
-WEAVE_EMSDK="$HOME/.cache/weave-toolchains/emsdk-c59d6e841da55c2c21af32004c4c173cbd1c0f10" sh scripts/build_browser_image_probe.sh
+WEAVE_RUST_TOOLCHAIN=nightly WEAVE_EMSDK="$HOME/.cache/weave-toolchains/emsdk-c59d6e841da55c2c21af32004c4c173cbd1c0f10" sh scripts/build_browser_image_probe.sh
 node -e 'require("./target/wasm32-unknown-emscripten/debug/examples/browser_image_probe.js")()'
 # Set NODE_PATH to an existing installation containing Playwright if not local.
 node scripts/check_browser_image_smoke.cjs
@@ -219,3 +220,119 @@ which calls browser `crypto.getRandomValues`; failure behavior remains to be
 fault-tested. Current toolchain, rust-src and target artifacts occupy about
 1.75 GiB before any additional native test rebuild. No IndexedDB writes,
 quota tests or persistent browser restart are claimed by this first proof.
+
+## Bounded IndexedDB host checkpoint
+
+The subsequent fixed-fixture host is
+[`examples/browser-image/worker.js`](../examples/browser-image/worker.js). It uses
+a lifetime Web Lock, explicit create/reopen intent and a retained header sentinel.
+One IndexedDB transaction stores the complete image Blob, SHA256 and an exact
+decimal generation string. Reopen checks Blob size before allocating bytes,
+checks the hash, and invokes `open_restored_single_owner_image`. That constructor
+refuses missing files and schema marker zero before initialization; supported
+nonzero historical markers retain the existing migration path. This prevents a
+valid but empty ordinary SQLite file from silently replacing an acknowledged
+Weave store.
+
+Native fixture replies use a singleton string handle and carry engine result
+JSON as a string, avoiding JSON-number conversion. These are fixed trusted test
+operations, not a new general host SDK, public wire protocol or source language.
+The worker blocks concurrent operations while a write is awaiting durability,
+withholds native results until transaction completion, and refuses every further
+operation after a storage/trap/oversize failure until worker replacement.
+
+The actual Chromium 151.0.7922.34 matrix passed all **12 named checks**:
+
+- Explicit create, acknowledged commit, page reload and exact i64 preservation.
+- Worker death after SQL and before IndexedDB retains the old image; pending
+  writes expose no concurrent read.
+- Worker termination during an actual readwrite transaction yields a complete
+  old/new state, never mixed data and generation.
+- Lost acknowledgment after IndexedDB completion retains the new state without
+  automatically re-executing a Program.
+- Explicit transaction abort and separately labeled synthetic quota failure
+  poison the host and retain the previous acknowledged state.
+- A real Chromium quota-enforced IndexedDB write fails and preserves that state.
+- Cross-tab exclusion and owner termination/reacquisition load the latest image.
+- Mixed-program authorization failure rolls back all graph writes.
+- A committed in-memory image over 8 MiB releases no success and requires reload.
+- A **7,864,320-byte** image acknowledges and reopens through actual IndexedDB.
+- Malformed bytes, valid SQLite with marker zero, and missing image with retained
+  sentinel fail closed rather than creating a new store.
+- Actual `Browser.crash` followed by a new browser process using the same test
+  profile preserves acknowledged state.
+
+The quota case allows Chromium's 30-second cached space allowance to expire
+before applying the enforcement assertion. The first immediate override did
+not reject a write and was not counted as quota evidence. The failing browser
+operation subsequently produced an actual QuotaExceededError. The test uses a
+temporary persistent browser profile, bounded disconnect/close paths and forced
+closure of owned HTTP sockets. Cleanup fallback verifies an exact test-profile
+command before terminating an owned browser PID. No app, user profile, simulator
+or external destination is touched; successful runs leave no fixture processes
+or profiles.
+
+Reproduce without rebuilding:
+
+```sh
+# Requires an existing Playwright installation and cached Chromium; no downloads.
+node scripts/check_browser_persistence.cjs
+```
+
+The [owner report](measurements/2026-09-20-browser-image-prototype.json) records
+artifact SHA256 hashes and per-operation samples. Its `persist_ms` measures only
+IndexedDB transaction completion, excluding SQL, image copying and hashing:
+520,192-byte images had 20 local samples spanning 2.6–8.7 ms; 7,864,320-byte
+images had two spanning 6.8–7.3 ms. These are small acceptance-run observations,
+not throughput promises or end-to-end performance claims. Peak resident memory
+and complete operation timing remain unmeasured. WASM linear memory has a
+256 MiB ceiling. The unoptimized WASM artifact is 11,992,841 bytes plus 180,425
+bytes of JS glue. Conservative logical sizes for the SDK, rust-src and all
+engine target files modified since preparation totaled about 3.46 GiB after the
+native checks and lint, below
+the 4 GiB installation/build cap; actual allocated space can be lower because
+toolchain aliases share files. Rebuildable targets now live outside iCloud with
+the original target path retained as a symlink.
+
+Relevant native verification passed 13 library tests (including four new image
+guards) and seven storage/integrity tests. Strict engine all-target/all-feature
+Clippy and workspace formatting passed. No unchanged full workspace rerun is
+claimed. Commands:
+
+```sh
+CARGO_BUILD_JOBS=2 nice -n 10 cargo test --locked -p weave-engine --features browser-image-experiment,recovery-testing --lib --test root_storage
+CARGO_BUILD_JOBS=2 nice -n 10 cargo clippy --locked -p weave-engine --all-targets --all-features -- -D warnings
+cargo fmt --all -- --check
+```
+
+The prototype does not yet expose arbitrary compiled handlers, accepted-view
+governance, peer exchange or effect dispatch to browser applications. It has not
+demonstrated mobile browsers, physical power loss, eviction recovery, full
+current-policy scenario parity or a production browser SDK. O(database size)
+copy/write costs and the experimental 8 MiB cap remain explicit. Those limits
+do not change the kernel's semantics or close the full portability gate.
+
+## Hosted reproduction inputs
+
+The build script defaults to the explicit `nightly-2026-09-19` toolchain name.
+`WEAVE_RUST_TOOLCHAIN=nightly` is only a local alias reuse option; the script
+checks its exact rustc version/hash before proceeding. For an isolated Linux
+runner, the expected installation steps are:
+
+```sh
+rustup toolchain install nightly-2026-09-19 --profile minimal --component rust-src
+git clone https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+git -C "$RUNNER_TEMP/emsdk" checkout c59d6e841da55c2c21af32004c4c173cbd1c0f10
+"$RUNNER_TEMP/emsdk/emsdk" install 6.0.9
+"$RUNNER_TEMP/emsdk/emsdk" activate 6.0.9
+export WEAVE_EMSDK="$RUNNER_TEMP/emsdk"
+sh scripts/build_browser_image_probe.sh
+```
+
+Install Playwright **1.62.1** in a temporary runner directory and its Chromium
+with required system libraries; that package provided the existing local browser
+used above. Set NODE_PATH to that installation's node_modules and invoke both
+browser scripts. Use Node **26.5.0** for the exact local host version. The SDK's
+own configured Node is a build dependency and may be supplied by emsdk; no local
+duplicate Node/browser installation was used for the owner proof. These commands
+are the CI handoff, not a claim that Linux hosted browser acceptance already ran.

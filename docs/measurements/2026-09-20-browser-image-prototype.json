@@ -1,0 +1,228 @@
+{
+  "profile": "experimental-idb-image-v1",
+  "browser": "151.0.7922.34",
+  "image_cap_bytes": 8388608,
+  "checks": [
+    "create, acknowledged commit, actual page reload, exact i64",
+    "death after SQL before IDB retains previous image; no concurrent unflushed read",
+    "actual readwrite transaction termination restores a complete old or new state",
+    "IDB commit before lost acknowledgement survives reload without blind replay",
+    "actual transaction abort and separately labeled synthetic quota poison host",
+    "real browser quota-enforced IDB failure retains acknowledged image",
+    "cross-tab lifetime lock and owner termination/reacquisition",
+    "mixed Program authorization failure preserves atomic rollback",
+    "post-SQL oversized image withholds result, poisons and reloads prior state",
+    "near-cap image acknowledges and restores through real IndexedDB",
+    "malformed, valid uninitialized SQLite, and missing image never silently reset",
+    "actual browser-process crash and profile reopen retains acknowledged state"
+  ],
+  "measurements": [
+    {
+      "stage": "open",
+      "generation": "1",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 8.700000047683716
+    },
+    {
+      "stage": "operation",
+      "generation": "2",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 2.5999999046325684
+    },
+    {
+      "stage": "operation",
+      "generation": "2"
+    },
+    {
+      "stage": "open",
+      "generation": "3",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 3.6000001430511475
+    },
+    {
+      "stage": "open",
+      "generation": "4",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 3.6000001430511475
+    },
+    {
+      "stage": "open",
+      "generation": "5",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 5.799999952316284
+    },
+    {
+      "stage": "operation",
+      "generation": "6",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 2.6000001430511475
+    },
+    {
+      "stage": "operation",
+      "generation": "6"
+    },
+    {
+      "stage": "open",
+      "generation": "8",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 2.5999999046325684
+    },
+    {
+      "stage": "open",
+      "generation": "9",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 2.9000000953674316
+    },
+    {
+      "stage": "open",
+      "generation": "10",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 3.5
+    },
+    {
+      "stage": "open",
+      "generation": "11",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 3.0999999046325684
+    },
+    {
+      "stage": "open",
+      "generation": "12",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 3
+    },
+    {
+      "stage": "open",
+      "generation": "13",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 3.5
+    },
+    {
+      "stage": "operation",
+      "generation": "14"
+    },
+    {
+      "stage": "open",
+      "generation": "15",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 3.5
+    },
+    {
+      "stage": "open",
+      "generation": "16",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 3.3000001907348633
+    },
+    {
+      "stage": "open",
+      "generation": "1",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 2.799999952316284
+    },
+    {
+      "stage": "operation",
+      "generation": "2",
+      "image_bytes": 7864320,
+      "durability": "strict",
+      "persist_ms": 6.799999952316284
+    },
+    {
+      "stage": "open",
+      "generation": "3",
+      "image_bytes": 7864320,
+      "durability": "strict",
+      "persist_ms": 7.299999952316284
+    },
+    {
+      "stage": "open",
+      "generation": "1",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 3.200000047683716
+    },
+    {
+      "stage": "operation",
+      "generation": "2",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 2.6999998092651367
+    },
+    {
+      "stage": "open",
+      "generation": "1",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 4.299999952316284
+    },
+    {
+      "stage": "open",
+      "generation": "1",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 4.1000001430511475
+    },
+    {
+      "stage": "open",
+      "generation": "17",
+      "image_bytes": 520192,
+      "durability": "strict",
+      "persist_ms": 3.4000000953674316
+    },
+    {
+      "stage": "operation",
+      "generation": "17"
+    }
+  ],
+  "physical_power_loss_tested": false,
+  "real_quota_enforcement": true,
+  "synthetic_quota_separate": true,
+  "scope_notes": [
+    "Fixed fixture only; no full browser runtime SDK, native governance/effect bindings or E10 completion.",
+    "persist_ms measures IndexedDB transaction completion only; excludes SQLite, image extraction and hashing. Local samples are not a throughput guarantee.",
+    "Chromium quota cache was allowed to expire for31seconds before CDP quota enforcement.",
+    "Browser-process crash and worker/page reload tested; physical power loss and browser eviction not tested."
+  ],
+  "artifacts": [
+    {
+      "path": "target/wasm32-unknown-emscripten/debug/examples/browser_image_probe.js",
+      "bytes": 180425,
+      "sha256": "20538cd3b0825334ed04bfbf4b0ad134d05df98876ad7bc5be6bdda2463eecaa"
+    },
+    {
+      "path": "target/wasm32-unknown-emscripten/debug/examples/browser_image_probe.wasm",
+      "bytes": 11992841,
+      "sha256": "2547b27b86d5848170e5e8f6f78b69c6fc95695e6093795f94c54cf81c38d914"
+    },
+    {
+      "path": "examples/browser-image/worker.js",
+      "bytes": 6436,
+      "sha256": "a649b1a40aa33c35a6cf7c933b63d6191ad808422f10057bd33d51d96c32f626"
+    },
+    {
+      "path": "scripts/check_browser_persistence.cjs",
+      "bytes": 13026,
+      "sha256": "d237c1d54d28a0a4b55b808b14a4febdd6a75d356f0d4cb3c7c47a02c9072782"
+    }
+  ],
+  "toolchain": {
+    "rustc": "1.100.0-nightly (420ed2a0c 2026-09-18)",
+    "nightly_manifest": "2026-09-19",
+    "emscripten": "6.0.9-git (4e4223852a0835923411059a3929907d7df1232e)",
+    "wasm_heap_limit_bytes": 268435456
+  }
+}
