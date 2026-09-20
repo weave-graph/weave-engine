@@ -16,6 +16,14 @@ fn key(value: &impl Serialize) -> String {
     let bytes = serde_json::to_vec(value).expect("contract values serialize");
     format!("{:x}", Sha256::digest(bytes))
 }
+fn snapshot_keyed(value: &impl Serialize, snapshots: &[GraphRef]) -> String {
+    let original = key(value);
+    if snapshots.is_empty() {
+        original
+    } else {
+        key(&(original, snapshots))
+    }
+}
 struct Counter {
     remaining: usize,
 }
@@ -65,6 +73,7 @@ fn checked(mut result: QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             .derived_from
             .len()
             .saturating_add(node.derived_nodes.len())
+            .saturating_add(node.derived_snapshots.len())
             > 1000
         {
             return Err(err(
@@ -143,12 +152,13 @@ fn envelope(left: &QueryResult, right: Option<&QueryResult>) -> Result<QueryResu
         right.map_or(&[], |r| r.source_revisions.as_slice()),
     )?;
     out.graph = GraphData::default();
-    out.graph.influence = match right {
-        Some(r) => {
-            crate::influence::merge(left.graph.influence.as_ref(), r.graph.influence.as_ref())?
-        }
-        None => left.graph.influence.clone(),
-    };
+    let left_influence = crate::influence::input_influence(&left.graph)?;
+    let right_influence = right
+        .map(|r| crate::influence::input_influence(&r.graph))
+        .transpose()?
+        .flatten();
+    out.graph.influence =
+        crate::influence::merge(left_influence.as_ref(), right_influence.as_ref())?;
     out.graph.context_typing = match right {
         Some(r) => crate::context_typing::merge(
             left.graph.context_typing.as_ref(),
@@ -185,6 +195,16 @@ fn envelope(left: &QueryResult, right: Option<&QueryResult>) -> Result<QueryResu
             out.snapshots
                 .entry(g.clone())
                 .or_insert_with(|| rev.clone());
+        }
+    }
+    if let Some(influence) = &out.graph.influence {
+        if !influence.snapshots.is_empty() {
+            out.input_snapshots = unique(
+                out.input_snapshots
+                    .iter()
+                    .chain(&influence.snapshots)
+                    .cloned(),
+            );
         }
     }
     out.version = VERSION.into();
@@ -299,7 +319,8 @@ fn edge_key(input: &QueryResult, edge: &Edge) -> Result<String, Diagnostic> {
                 .iter()
                 .find(|n| n.id == id)
                 .ok_or_else(|| err("E_ENDPOINT", "Synthetic edge endpoint is unavailable"))?;
-            let grounded = !node.derived_nodes.is_empty()
+            let grounded = !node.derived_snapshots.is_empty()
+                || !node.derived_nodes.is_empty()
                 || !node.derived_from.is_empty()
                 || input
                     .node_origins
@@ -323,25 +344,28 @@ fn edge_key(input: &QueryResult, edge: &Edge) -> Result<String, Diagnostic> {
         // These are graph-value relations, not new independently corroborating assertions.
         return Ok(format!(
             "synthetic-edge:{}",
-            key(&(
-                (
-                    &from,
-                    &to,
-                    &type_id,
-                    &edge.predicate,
-                    &edge.valid_time,
-                    &edge.polarity
+            snapshot_keyed(
+                &(
+                    (
+                        &from,
+                        &to,
+                        &type_id,
+                        &edge.predicate,
+                        &edge.valid_time,
+                        &edge.polarity
+                    ),
+                    (
+                        &edge.properties,
+                        &edge.assertion_properties,
+                        &edge.assertion_source,
+                        &edge.assertion_context,
+                        &edge.structural_ref,
+                        &edge.metadata,
+                        &edge.derived_nodes
+                    )
                 ),
-                (
-                    &edge.properties,
-                    &edge.assertion_properties,
-                    &edge.assertion_source,
-                    &edge.assertion_context,
-                    &edge.structural_ref,
-                    &edge.metadata,
-                    &edge.derived_nodes
-                )
-            ))
+                &edge.derived_snapshots
+            )
         ));
     }
     let origins = input.edge_origins.get(&edge.id).filter(|v| !v.is_empty());
@@ -360,18 +384,21 @@ fn edge_key(input: &QueryResult, edge: &Edge) -> Result<String, Diagnostic> {
     } else {
         Ok(format!(
             "derived:{}",
-            key(&(
-                &edge.predicate,
-                &edge.valid_time,
-                &edge.polarity,
-                &edge.properties,
-                &edge.assertion_properties,
-                &edge.assertion_source,
-                &edge.assertion_context,
-                &edge.structural_ref,
-                &edge.derivations,
-                &edge.derived_nodes
-            ))
+            snapshot_keyed(
+                &(
+                    &edge.predicate,
+                    &edge.valid_time,
+                    &edge.polarity,
+                    &edge.properties,
+                    &edge.assertion_properties,
+                    &edge.assertion_source,
+                    &edge.assertion_context,
+                    &edge.structural_ref,
+                    &edge.derivations,
+                    &edge.derived_nodes
+                ),
+                &edge.derived_snapshots
+            )
         ))
     }
 }
@@ -508,6 +535,17 @@ pub fn project(
 ) -> Result<QueryResult, Diagnostic> {
     preflight(&input, ctx)?;
     let mut out = input;
+    out.graph.influence = crate::influence::input_influence(&out.graph)?;
+    if let Some(influence) = &out.graph.influence {
+        if !influence.snapshots.is_empty() {
+            out.input_snapshots = unique(
+                out.input_snapshots
+                    .iter()
+                    .chain(&influence.snapshots)
+                    .cloned(),
+            );
+        }
+    }
     let mut ns: BTreeSet<_> = node_ids.iter().cloned().collect();
     let es: BTreeSet<_> = edge_ids.iter().cloned().collect();
     let available_nodes: BTreeSet<_> = out.graph.nodes.iter().map(|node| &node.id).collect();
@@ -618,6 +656,22 @@ pub fn diff(
         }
     }
     let mut out = union(before, after, ctx)?;
+    let (assertions, nodes) = out
+        .graph
+        .context_typing
+        .as_ref()
+        .map(crate::context_typing::gates)
+        .transpose()?
+        .unwrap_or_default();
+    let attachment_influence = crate::influence::merge(
+        out.graph.influence.as_ref(),
+        Some(&GraphInfluence {
+            assertions,
+            nodes,
+            snapshots: vec![],
+        }),
+    )?
+    .unwrap_or_default();
     let mut budget = Budget::new(ctx);
     budget.add(&out)?;
     for (id, status) in statuses {
@@ -627,7 +681,13 @@ pub fn diff(
             .iter()
             .find(|e| e.id == id)
             .expect("union retains members");
+        // Precharge repeated carrier copies before allocating the generated record.
+        serde_json::to_writer(&mut budget.bytes, &attachment_influence)
+            .map_err(|_| err("E_ALGEBRA_LIMIT", "Graph algebra byte budget exceeded"))?;
         let attachment = MetadataAttachment {
+            derived_from: attachment_influence.assertions.clone(),
+            derived_nodes: attachment_influence.nodes.clone(),
+            derived_snapshots: attachment_influence.snapshots.clone(),
             id: format!("weave:diff:{}", key(&(&id, status))),
             host: MetadataHost::Edge { id: id.clone() },
             key: "weave:diff:membership".into(),
@@ -648,7 +708,13 @@ pub fn diff(
         out.graph.attachments.push(attachment);
     }
     for (id, status) in node_statuses {
+        // Precharge repeated carrier copies before allocating the generated record.
+        serde_json::to_writer(&mut budget.bytes, &attachment_influence)
+            .map_err(|_| err("E_ALGEBRA_LIMIT", "Graph algebra byte budget exceeded"))?;
         let attachment = MetadataAttachment {
+            derived_from: attachment_influence.assertions.clone(),
+            derived_nodes: attachment_influence.nodes.clone(),
+            derived_snapshots: attachment_influence.snapshots.clone(),
             id: format!("weave:diff:{}", key(&(&id, status))),
             context: out
                 .graph
@@ -790,8 +856,15 @@ pub fn support(
         }
         _ => {}
     }
-    let id = format!("support:{}", key(&(&parameters, &input.input_snapshots)));
+    let declared_snapshots = crate::influence::collect_declared_snapshots(&input.graph)?;
+    let identity = if declared_snapshots.is_empty() {
+        key(&(&parameters, &input.input_snapshots))
+    } else {
+        key(&(&parameters, &input.input_snapshots, &declared_snapshots))
+    };
+    let id = format!("support:{identity}");
     let node = Node {
+        derived_snapshots: vec![],
         derived_nodes: identity::node_dependencies(
             input
                 .graph
@@ -940,6 +1013,7 @@ pub fn support(
     if !derivations.is_empty() {
         let origins = unique(derivations.iter().flat_map(|d| d.premises.clone()));
         let edge = Edge {
+            derived_snapshots: vec![],
             derived_nodes: vec![],
             structural_ref: None,
             assertion_source: None,
@@ -992,10 +1066,12 @@ pub fn edge_alternatives(
     for group in &mut groups {
         let merged = crate::influence::merge(
             Some(&GraphInfluence {
+                snapshots: vec![],
                 assertions: group.premises.clone(),
                 nodes: group.node_premises.clone(),
             }),
             Some(&GraphInfluence {
+                snapshots: vec![],
                 assertions: vec![],
                 nodes: edge.derived_nodes.clone(),
             }),

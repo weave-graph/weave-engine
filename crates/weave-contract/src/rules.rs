@@ -157,10 +157,12 @@ fn intersection(a: Option<i64>, b: Option<i64>) -> Option<i64> {
 fn merge(left: &Proof, right: &Proof) -> Result<Proof, Diagnostic> {
     let gates = crate::influence::merge(
         Some(&GraphInfluence {
+            snapshots: vec![],
             assertions: left.leaves.clone(),
             nodes: left.nodes.clone(),
         }),
         Some(&GraphInfluence {
+            snapshots: vec![],
             assertions: right.leaves.clone(),
             nodes: right.nodes.clone(),
         }),
@@ -312,6 +314,18 @@ pub fn reason(
     }
     crate::context_typing::validate_result(&input)?;
     crate::influence::validate_graph(&input.graph)?;
+    input.graph.influence = crate::influence::input_influence(&input.graph)?;
+    if let Some(influence) = &input.graph.influence {
+        if !influence.snapshots.is_empty() {
+            input.input_snapshots = unique(
+                input
+                    .input_snapshots
+                    .iter()
+                    .chain(&influence.snapshots)
+                    .cloned(),
+            );
+        }
+    }
     bytes(&input, ctx.max_output_bytes)?;
     bytes(set, ctx.max_output_bytes)?;
     if let Some(d) = validate_schema_graph(&input.graph).into_iter().next() {
@@ -357,6 +371,7 @@ pub fn reason(
     let whole = crate::influence::merge(
         input.graph.influence.as_ref(),
         Some(&GraphInfluence {
+            snapshots: vec![],
             assertions: context_assertions,
             nodes: context_nodes,
         }),
@@ -385,6 +400,7 @@ pub fn reason(
         for mut proof in source_proofs(&input, edge)? {
             let gates = crate::influence::merge(
                 Some(&GraphInfluence {
+                    snapshots: vec![],
                     assertions: proof.leaves,
                     nodes: proof.nodes,
                 }),
@@ -535,10 +551,17 @@ pub fn reason(
         if proofs.is_empty() {
             continue;
         }
-        let id = format!(
-            "rule:{}",
+        let identity = if whole.snapshots.is_empty() {
             hash(&(&set_digest, &fact, &input.selected_context))
-        );
+        } else {
+            hash(&(
+                &set_digest,
+                &fact,
+                &input.selected_context,
+                &whole.snapshots,
+            ))
+        };
+        let id = format!("rule:{identity}");
         let mut type_id = None;
         if let Some(schema) = &mut input.graph.schema {
             let from_type = nodes[&fact.from].type_id.clone().ok_or_else(|| {
@@ -616,6 +639,7 @@ pub fn reason(
         }
         let origins = unique(derivations.iter().flat_map(|d| d.premises.clone()));
         let edge = Edge {
+            derived_snapshots: whole.snapshots.clone(),
             derived_nodes: vec![],
             id: id.clone(),
             type_id,
@@ -691,6 +715,7 @@ pub fn reason(
     });
     input.source_revisions = unique(input.source_revisions);
     input.version = VERSION.into();
+    crate::influence::validate_graph(&input.graph)?;
     if let Some(d) = validate_schema_graph(&input.graph).into_iter().next() {
         return Err(d);
     }

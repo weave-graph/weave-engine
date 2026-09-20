@@ -144,3 +144,22 @@ fn embedded_duplicate_schema_and_bounded_witness_arrays_reject_before_use() {
     let mut graph = empty(Some(carrier("A"))).graph;
     assert!(protect_generated_bounded(&mut graph, 1).is_err());
 }
+
+#[test]
+fn graph_host_attachment_retains_typed_descriptor_gates_without_envelope() {
+    let mut result = empty(Some(carrier("A")));
+    result.graph.attachments.push(serde_json::from_value(json!({"id":"status","host":{"kind":"graph"},"key":"value","value":{"kind":"literal","value":0},"context":pin("A"),"valid_time":{"start":0,"end":null}})).unwrap());
+    protect_result_generated(&mut result).unwrap();
+    let attachment = result.graph.attachments.pop().unwrap();
+    assert_eq!(attachment.derived_from[0].assertion_id, "definition");
+    assert_eq!(attachment.derived_nodes[0].node_id, "anchor");
+    assert_eq!(result.attachment_origins["status"], attachment.derived_from);
+    let detached = GraphData {
+        attachments: vec![attachment],
+        ..GraphData::default()
+    };
+    let gates = influence::input_influence(&detached).unwrap().unwrap();
+    assert_eq!(gates.assertions[0].assertion_id, "definition");
+    assert_eq!(gates.nodes[0].node_id, "anchor");
+    assert!(gates.snapshots.is_empty());
+}

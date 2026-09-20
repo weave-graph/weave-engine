@@ -1,5 +1,5 @@
 //! Restriction-only influence references. Serialized references never grant authority.
-use crate::{AssertionRef, Diagnostic, GraphData, NodeRef};
+use crate::{AssertionRef, Diagnostic, GraphData, GraphRef, NodeRef};
 use serde::{Deserialize, Serialize};
 
 pub const MAX_REFERENCES: usize = 1000;
@@ -18,8 +18,21 @@ pub struct GraphInfluence {
         deserialize_with = "bounded_refs"
     )]
     pub nodes: Vec<NodeRef>,
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "bounded_snapshot_refs"
+    )]
+    pub snapshots: Vec<GraphRef>,
 }
-fn bounded_refs<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+/// Bounded decoding shared by every restriction-only snapshot carrier.
+pub fn bounded_snapshot_refs<'de, D>(deserializer: D) -> Result<Vec<GraphRef>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    bounded_refs(deserializer)
+}
+pub fn bounded_refs<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: Deserialize<'de>,
@@ -69,7 +82,22 @@ pub fn node_key(reference: &NodeRef) -> (&str, &str, &str) {
     (&reference.graph_id, &reference.revision, &reference.node_id)
 }
 pub fn validate_refs(assertions: &[AssertionRef], nodes: &[NodeRef]) -> Result<(), Diagnostic> {
-    if assertions.len().saturating_add(nodes.len()) > MAX_REFERENCES {
+    validate_record_refs(assertions, nodes, &[])
+}
+pub fn snapshot_key(reference: &GraphRef) -> (&str, &str) {
+    (&reference.graph_id, &reference.revision)
+}
+pub fn validate_record_refs(
+    assertions: &[AssertionRef],
+    nodes: &[NodeRef],
+    snapshots: &[GraphRef],
+) -> Result<(), Diagnostic> {
+    if assertions
+        .len()
+        .saturating_add(nodes.len())
+        .saturating_add(snapshots.len())
+        > MAX_REFERENCES
+    {
         return Err(error("E_BUDGET"));
     }
     if assertions
@@ -78,13 +106,20 @@ pub fn validate_refs(assertions: &[AssertionRef], nodes: &[NodeRef]) -> Result<(
         || nodes
             .iter()
             .any(|r| !id(&r.graph_id) || !id(&r.revision) || !id(&r.node_id))
+        || snapshots
+            .iter()
+            .any(|r| !id(&r.graph_id) || !id(&r.revision))
     {
         return Err(error("E_INFLUENCE"));
     }
     Ok(())
 }
 pub fn validate(influence: &GraphInfluence) -> Result<(), Diagnostic> {
-    validate_refs(&influence.assertions, &influence.nodes)
+    validate_record_refs(
+        &influence.assertions,
+        &influence.nodes,
+        &influence.snapshots,
+    )
 }
 pub fn canonicalize(influence: &mut GraphInfluence) {
     influence
@@ -95,6 +130,11 @@ pub fn canonicalize(influence: &mut GraphInfluence) {
         .nodes
         .sort_by(|a, b| node_key(a).cmp(&node_key(b)));
     influence.nodes.dedup();
+    canonicalize_snapshots(&mut influence.snapshots);
+}
+pub fn canonicalize_snapshots(refs: &mut Vec<GraphRef>) {
+    refs.sort_by(|a, b| snapshot_key(a).cmp(&snapshot_key(b)));
+    refs.dedup();
 }
 pub fn merge(
     left: Option<&GraphInfluence>,
@@ -108,11 +148,12 @@ pub fn merge(
     }
     let mut assertion_keys = std::collections::BTreeSet::new();
     let mut node_keys = std::collections::BTreeSet::new();
+    let mut snapshot_keys = std::collections::BTreeSet::new();
     let mut output = GraphInfluence::default();
     for influence in left.into_iter().chain(right) {
         for reference in &influence.assertions {
             if assertion_keys.insert(assertion_key(reference)) {
-                if assertion_keys.len() + node_keys.len() > MAX_REFERENCES {
+                if assertion_keys.len() + node_keys.len() + snapshot_keys.len() > MAX_REFERENCES {
                     return Err(error("E_BUDGET"));
                 }
                 output.assertions.push(reference.clone());
@@ -120,10 +161,18 @@ pub fn merge(
         }
         for reference in &influence.nodes {
             if node_keys.insert(node_key(reference)) {
-                if assertion_keys.len() + node_keys.len() > MAX_REFERENCES {
+                if assertion_keys.len() + node_keys.len() + snapshot_keys.len() > MAX_REFERENCES {
                     return Err(error("E_BUDGET"));
                 }
                 output.nodes.push(reference.clone());
+            }
+        }
+        for reference in &influence.snapshots {
+            if snapshot_keys.insert(snapshot_key(reference)) {
+                if assertion_keys.len() + node_keys.len() + snapshot_keys.len() > MAX_REFERENCES {
+                    return Err(error("E_BUDGET"));
+                }
+                output.snapshots.push(reference.clone());
             }
         }
     }
@@ -134,8 +183,39 @@ pub fn validate_graph(data: &GraphData) -> Result<(), Diagnostic> {
     if let Some(influence) = &data.influence {
         validate(influence)?;
     }
+    for node in &data.nodes {
+        validate_record_refs(
+            &node.derived_from,
+            &node.derived_nodes,
+            &node.derived_snapshots,
+        )?;
+    }
+    for attachment in &data.attachments {
+        validate_record_refs(
+            &attachment.derived_from,
+            &attachment.derived_nodes,
+            &attachment.derived_snapshots,
+        )?;
+        if let Some(origin) = &attachment.origin {
+            validate_refs(std::slice::from_ref(origin), &[])?;
+        }
+        if attachment
+            .derived_from
+            .len()
+            .saturating_add(attachment.derived_nodes.len())
+            .saturating_add(attachment.derived_snapshots.len())
+            .saturating_add(usize::from(attachment.origin.is_some()))
+            > MAX_REFERENCES
+        {
+            return Err(error("E_BUDGET"));
+        }
+    }
     for edge in &data.edges {
-        validate_refs(&edge.derived_from, &edge.derived_nodes)?;
+        validate_record_refs(
+            &edge.derived_from,
+            &edge.derived_nodes,
+            &edge.derived_snapshots,
+        )?;
         if edge.derivations.len() > 128 {
             return Err(error("E_BUDGET"));
         }
@@ -144,7 +224,11 @@ pub fn validate_graph(data: &GraphData) -> Result<(), Diagnostic> {
         }
     }
     for assertion in &data.assertions {
-        validate_refs(&assertion.derived_from, &assertion.derived_nodes)?;
+        validate_record_refs(
+            &assertion.derived_from,
+            &assertion.derived_nodes,
+            &assertion.derived_snapshots,
+        )?;
         if assertion.derivations.len() > 128 {
             return Err(error("E_BUDGET"));
         }
@@ -155,14 +239,102 @@ pub fn validate_graph(data: &GraphData) -> Result<(), Diagnostic> {
     Ok(())
 }
 
+/// Collect only declared whole-snapshot gates, never descriptive execution pins.
+/// Validate per-record raw counts before deduplication, and cap the union before cloning.
+pub fn collect_declared_snapshots(data: &GraphData) -> Result<Vec<GraphRef>, Diagnostic> {
+    validate_graph(data)?;
+    let mut refs = std::collections::BTreeMap::new();
+    let lists = data
+        .influence
+        .iter()
+        .map(|i| i.snapshots.as_slice())
+        .chain(data.nodes.iter().map(|n| n.derived_snapshots.as_slice()))
+        .chain(data.edges.iter().map(|e| e.derived_snapshots.as_slice()))
+        .chain(
+            data.assertions
+                .iter()
+                .map(|a| a.derived_snapshots.as_slice()),
+        )
+        .chain(
+            data.attachments
+                .iter()
+                .map(|a| a.derived_snapshots.as_slice()),
+        );
+    for reference in lists.flatten() {
+        refs.insert(snapshot_key(reference), reference);
+        if refs.len() > MAX_REFERENCES {
+            return Err(error("E_BUDGET"));
+        }
+    }
+    Ok(refs.into_values().cloned().collect())
+}
+/// Preserve declared snapshot gates and the three explicit attachment carrier kinds
+/// when a pure operation can discard every member. Ordinary node/edge proof pins,
+/// attachment origins, and descriptive query pins are not upgraded to global gates.
+pub fn input_influence(data: &GraphData) -> Result<Option<GraphInfluence>, Diagnostic> {
+    let snapshots = collect_declared_snapshots(data)?;
+    let mut assertions = std::collections::BTreeMap::new();
+    let mut nodes = std::collections::BTreeMap::new();
+    for reference in data
+        .influence
+        .iter()
+        .flat_map(|i| &i.assertions)
+        .chain(data.attachments.iter().flat_map(|a| &a.derived_from))
+    {
+        assertions.insert(assertion_key(reference), reference);
+        if assertions.len() + snapshots.len() > MAX_REFERENCES {
+            return Err(error("E_BUDGET"));
+        }
+    }
+    for reference in data
+        .influence
+        .iter()
+        .flat_map(|i| &i.nodes)
+        .chain(data.attachments.iter().flat_map(|a| &a.derived_nodes))
+    {
+        nodes.insert(node_key(reference), reference);
+        if assertions.len() + nodes.len() + snapshots.len() > MAX_REFERENCES {
+            return Err(error("E_BUDGET"));
+        }
+    }
+    if data.influence.is_none() && assertions.is_empty() && nodes.is_empty() && snapshots.is_empty()
+    {
+        return Ok(None);
+    }
+    Ok(Some(GraphInfluence {
+        assertions: assertions.into_values().cloned().collect(),
+        nodes: nodes.into_values().cloned().collect(),
+        snapshots,
+    }))
+}
+
 /// New influence-only dependency snapshots; callers add legacy metadata/source paths too.
 pub fn snapshots(data: &GraphData) -> Vec<crate::GraphRef> {
     let mut refs = std::collections::BTreeSet::new();
+    for reference in data
+        .influence
+        .iter()
+        .flat_map(|i| &i.snapshots)
+        .chain(data.nodes.iter().flat_map(|n| &n.derived_snapshots))
+        .chain(data.edges.iter().flat_map(|e| &e.derived_snapshots))
+        .chain(data.assertions.iter().flat_map(|a| &a.derived_snapshots))
+        .chain(data.attachments.iter().flat_map(|a| &a.derived_snapshots))
+    {
+        refs.insert((&reference.graph_id, &reference.revision));
+    }
     if let Some(influence) = &data.influence {
         for r in &influence.assertions {
             refs.insert((&r.graph_id, &r.revision));
         }
         for r in &influence.nodes {
+            refs.insert((&r.graph_id, &r.revision));
+        }
+    }
+    for attachment in &data.attachments {
+        for r in &attachment.derived_from {
+            refs.insert((&r.graph_id, &r.revision));
+        }
+        for r in &attachment.derived_nodes {
             refs.insert((&r.graph_id, &r.revision));
         }
     }
@@ -233,6 +405,8 @@ pub fn protect_generated_result(
             .derived_from
             .len()
             .saturating_add(node.derived_nodes.len())
+            .saturating_add(node.derived_snapshots.len())
+            .saturating_add(influence.snapshots.len())
             .saturating_add(influence.assertions.len())
             .saturating_add(influence.nodes.len())
             > MAX_REFERENCES
@@ -246,6 +420,8 @@ pub fn protect_generated_result(
             .derived_from
             .len()
             .saturating_add(edge.derived_nodes.len())
+            .saturating_add(edge.derived_snapshots.len())
+            .saturating_add(influence.snapshots.len())
             .saturating_add(influence.assertions.len())
             .saturating_add(influence.nodes.len())
             > MAX_REFERENCES
@@ -300,7 +476,46 @@ pub fn protect_generated_result(
             }
         }
     }
+    for attachment in &result.graph.attachments {
+        if attachment
+            .derived_snapshots
+            .len()
+            .saturating_add(usize::from(attachment.origin.is_some()))
+            .saturating_add(attachment.derived_from.len())
+            .saturating_add(attachment.derived_nodes.len())
+            .saturating_add(influence.assertions.len())
+            .saturating_add(influence.nodes.len())
+            .saturating_add(influence.snapshots.len())
+            > MAX_REFERENCES
+        {
+            return Err(error("E_BUDGET"));
+        }
+        charge(&mut budget, influence)?;
+    }
+    for attachment in &mut result.graph.attachments {
+        attachment
+            .derived_from
+            .extend(influence.assertions.iter().cloned());
+        attachment
+            .derived_from
+            .sort_by(|a, b| assertion_key(a).cmp(&assertion_key(b)));
+        attachment.derived_from.dedup();
+        attachment
+            .derived_nodes
+            .extend(influence.nodes.iter().cloned());
+        attachment
+            .derived_nodes
+            .sort_by(|a, b| node_key(a).cmp(&node_key(b)));
+        attachment.derived_nodes.dedup();
+        attachment
+            .derived_snapshots
+            .extend(influence.snapshots.iter().cloned());
+        canonicalize_snapshots(&mut attachment.derived_snapshots);
+    }
     for node in &mut result.graph.nodes {
+        node.derived_snapshots
+            .extend(influence.snapshots.iter().cloned());
+        canonicalize_snapshots(&mut node.derived_snapshots);
         node.derived_from
             .extend(influence.assertions.iter().cloned());
         node.derived_from
@@ -312,6 +527,9 @@ pub fn protect_generated_result(
         node.derived_nodes.dedup();
     }
     for edge in &mut result.graph.edges {
+        edge.derived_snapshots
+            .extend(influence.snapshots.iter().cloned());
+        canonicalize_snapshots(&mut edge.derived_snapshots);
         edge.derived_from
             .extend(influence.assertions.iter().cloned());
         edge.derived_from
@@ -354,12 +572,24 @@ pub fn protect_generated_result(
     for edge in &result.graph.edges {
         charge(&mut budget, &edge.derived_from)?;
     }
+    for attachment in &result.graph.attachments {
+        charge(&mut budget, &attachment.derived_from)?;
+    }
     charge(&mut budget, &influence.assertions)?;
     let pins = snapshots(&result.graph);
     charge(&mut budget, &pins)?;
     for edge in &result.graph.edges {
         let refs = result.edge_origins.entry(edge.id.clone()).or_default();
         refs.extend(edge.derived_from.iter().cloned());
+        refs.sort_by(|a, b| assertion_key(a).cmp(&assertion_key(b)));
+        refs.dedup();
+    }
+    for attachment in &result.graph.attachments {
+        let refs = result
+            .attachment_origins
+            .entry(attachment.id.clone())
+            .or_default();
+        refs.extend(attachment.derived_from.iter().cloned());
         refs.sort_by(|a, b| assertion_key(a).cmp(&assertion_key(b)));
         refs.dedup();
     }
@@ -411,6 +641,7 @@ mod tests {
     #[test]
     fn canonical_merge_retains_empty_value_gates_without_duplicate_amplification() {
         let full = GraphInfluence {
+            snapshots: vec![],
             assertions: vec![],
             nodes: (0..MAX_REFERENCES).map(node).collect(),
         };
@@ -432,6 +663,7 @@ mod tests {
         invalid.revision.clear();
         assert_eq!(
             validate(&GraphInfluence {
+                snapshots: vec![],
                 assertions: vec![],
                 nodes: vec![invalid]
             })

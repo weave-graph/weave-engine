@@ -289,6 +289,7 @@ pub fn protect_generated_bounded(graph: &mut GraphData, limit: usize) -> Result<
             .derived_from
             .len()
             .saturating_add(node.derived_nodes.len())
+            .saturating_add(node.derived_snapshots.len())
             .saturating_add(assertions.len())
             .saturating_add(nodes.len())
             > 1000
@@ -300,7 +301,13 @@ pub fn protect_generated_bounded(graph: &mut GraphData, limit: usize) -> Result<
     }
     for edge in &graph.edges {
         if edge.derivations.len() > 128
-            || edge.derived_from.len().saturating_add(assertions.len()) > 1000
+            || edge
+                .derived_from
+                .len()
+                .saturating_add(edge.derived_nodes.len())
+                .saturating_add(edge.derived_snapshots.len())
+                .saturating_add(assertions.len())
+                > 1000
         {
             return Err(error("E_CONTEXT_BUDGET"));
         }
@@ -321,6 +328,22 @@ pub fn protect_generated_bounded(graph: &mut GraphData, limit: usize) -> Result<
             }
         }
     }
+    for attachment in &graph.attachments {
+        if attachment
+            .derived_from
+            .len()
+            .saturating_add(attachment.derived_nodes.len())
+            .saturating_add(attachment.derived_snapshots.len())
+            .saturating_add(usize::from(attachment.origin.is_some()))
+            .saturating_add(assertions.len())
+            .saturating_add(nodes.len())
+            > 1000
+        {
+            return Err(error("E_CONTEXT_BUDGET"));
+        }
+        charge(&mut bytes, &assertions)?;
+        charge(&mut bytes, &nodes)?;
+    }
     let snapshots: Vec<_> = assertions
         .iter()
         .map(|a| GraphRef {
@@ -328,6 +351,18 @@ pub fn protect_generated_bounded(graph: &mut GraphData, limit: usize) -> Result<
             revision: a.revision.clone(),
         })
         .collect();
+    for attachment in &mut graph.attachments {
+        attachment.derived_from.extend(assertions.iter().cloned());
+        attachment
+            .derived_from
+            .sort_by(|a, b| assertion_label(a).cmp(&assertion_label(b)));
+        attachment.derived_from.dedup();
+        attachment.derived_nodes.extend(nodes.iter().cloned());
+        attachment
+            .derived_nodes
+            .sort_by(|a, b| node_label(a).cmp(&node_label(b)));
+        attachment.derived_nodes.dedup();
+    }
     for node in &mut graph.nodes {
         node.derived_from.extend(assertions.iter().cloned());
         node.derived_from
@@ -377,6 +412,9 @@ pub fn protect_result_generated_bounded(
     for edge in &result.graph.edges {
         charge(&mut bytes, &edge.derived_from)?;
     }
+    for attachment in &result.graph.attachments {
+        charge(&mut bytes, &attachment.derived_from)?;
+    }
     charge(&mut bytes, &assertions)?;
     for assertion in &assertions {
         charge(
@@ -390,6 +428,15 @@ pub fn protect_result_generated_bounded(
     for edge in &result.graph.edges {
         let origins = result.edge_origins.entry(edge.id.clone()).or_default();
         origins.extend(edge.derived_from.iter().cloned());
+        origins.sort_by(|a, b| assertion_label(a).cmp(&assertion_label(b)));
+        origins.dedup();
+    }
+    for attachment in &result.graph.attachments {
+        let origins = result
+            .attachment_origins
+            .entry(attachment.id.clone())
+            .or_default();
+        origins.extend(attachment.derived_from.iter().cloned());
         origins.sort_by(|a, b| assertion_label(a).cmp(&assertion_label(b)));
         origins.dedup();
     }

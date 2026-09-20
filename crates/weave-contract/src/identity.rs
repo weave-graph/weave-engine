@@ -192,6 +192,10 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
         ));
     }
     size(input, ctx.max_output_bytes)?;
+    let input_influence = crate::influence::input_influence(&input.graph)?;
+    let snapshot_gates = input_influence
+        .as_ref()
+        .map_or(&[][..], |i| i.snapshots.as_slice());
     let mut remaining = ctx.max_output_bytes;
     let mut objects = 0usize;
     let mut nodes: BTreeMap<String, Node> = BTreeMap::new();
@@ -223,6 +227,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             }
             size(&(kind, scope, dependencies, &local_nodes), remaining)?;
             let n = Node {
+                derived_snapshots: vec![],
                 derived_nodes: local_nodes,
                 derived_from: ordered(dependencies)?,
                 context_scope: Some(scope.clone()),
@@ -447,6 +452,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                 .collect::<Vec<_>>(),
         )?;
         let record = Edge {
+            derived_snapshots: vec![],
             derived_nodes: vec![],
             id: id.clone(),
             structural_ref: None,
@@ -487,7 +493,48 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
         edge_origins.insert(id, premises);
         edges.push(record);
     }
-    let schema = GraphSchema {
+    // Whole-snapshot restrictions are graph pin records, never invented assertions.
+    for reference in snapshot_gates {
+        let scope = input.selected_context.clone().unwrap_or_default();
+        let id = format!(
+            "snapshot:{}",
+            digest(
+                "snapshot-influence",
+                &(reference, &scope),
+                ctx.max_output_bytes
+            )?
+        );
+        let record = Node {
+            id: id.clone(),
+            entity_id: id,
+            space_id: "weave:explanation".into(),
+            type_id: Some("Snapshot".into()),
+            context_scope: Some(scope),
+            properties: [
+                ("kind".into(), json!("snapshot_influence")),
+                ("graph_id".into(), json!(reference.graph_id)),
+                ("revision".into(), json!(reference.revision)),
+            ]
+            .into(),
+            metadata: vec![],
+            readers: vec![ctx.principal.clone()],
+            derived_from: vec![],
+            derived_nodes: vec![],
+            derived_snapshots: vec![],
+        };
+        remaining = remaining
+            .checked_sub(size(&record, remaining)?)
+            .ok_or_else(|| failure("E_EXPLAIN_LIMIT", "Explanation byte budget exceeded"))?;
+        objects += 1;
+        if objects > ctx.max_objects {
+            return Err(failure(
+                "E_EXPLAIN_LIMIT",
+                "Explanation object budget exceeded",
+            ));
+        }
+        nodes.insert(record.id.clone(), record);
+    }
+    let mut schema = GraphSchema {
         id: "weave:explanation".into(),
         revision: "1".into(),
         nodes: [(
@@ -527,6 +574,29 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
         )]
         .into(),
     };
+    if !snapshot_gates.is_empty() {
+        schema.revision = "2".into();
+        schema.nodes.insert(
+            "Snapshot".into(),
+            NodeSchema {
+                properties: ["kind", "graph_id", "revision"]
+                    .into_iter()
+                    .map(|name| {
+                        (
+                            name.into(),
+                            PropertySchema {
+                                value_type: ScalarType::String,
+                                required: true,
+                                nullable: false,
+                            },
+                        )
+                    })
+                    .collect(),
+                space_id: Some("weave:explanation".into()),
+                allow_extra_properties: false,
+            },
+        );
+    }
     let provenance = ordered(&edge_origins.values().flatten().cloned().collect::<Vec<_>>())?;
     let input_snapshots = ordered(
         &provenance
@@ -543,7 +613,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
         source_revisions: input.source_revisions.clone(),
         version: VERSION.into(),
         graph: GraphData {
-            influence: input.graph.influence.clone(),
+            influence: input_influence,
             context_typing: input.graph.context_typing.clone(),
             schema: Some(schema),
             nodes: nodes.into_values().collect(),

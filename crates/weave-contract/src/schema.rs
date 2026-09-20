@@ -246,6 +246,7 @@ pub fn validate_schema_graph(graph: &GraphData) -> Vec<Diagnostic> {
                 .structural_edges
                 .iter()
                 .map(|e| Edge {
+                    derived_snapshots: vec![],
                     derived_nodes: vec![],
                     id: e.id.clone(),
                     structural_ref: None,
