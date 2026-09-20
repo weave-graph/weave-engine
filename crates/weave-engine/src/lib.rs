@@ -37,6 +37,12 @@ use std::sync::Arc;
 mod capsule;
 use assertions::{assertion_edge, materialize, validate_explicit};
 mod compiled_handlers;
+mod governed_effects;
+pub use governed_effects::{
+    governed_effect_grant_digest, EffectEncoder, EffectStart, GovernedEffectDispatch,
+    GovernedEffectDisposition, GovernedEffectGrant, GovernedEffectReceipt, GovernedEffectStatus,
+    ReconciledOutcome, SinkEvidence,
+};
 mod dispatch;
 pub use compiled_handlers::{HandlerOutputBinding, PreparedHandlerReceipt};
 mod selection;
@@ -141,7 +147,7 @@ impl Engine {
         before_commit: impl FnOnce(),
     ) -> Result<Self> {
         let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
-        if !(0..=16).contains(&version) {
+        if !(0..=17).contains(&version) {
             return Err(err(
                 "E_STORAGE_VERSION",
                 "database schema version is unsupported",
@@ -206,7 +212,8 @@ impl Engine {
         engine.initialize_governance()?;
         engine.initialize_governance_delivery()?;
         engine.initialize_governance_graphs()?;
-        engine.conn.pragma_update(None, "user_version", 16)?;
+        engine.initialize_governed_effects()?;
+        engine.conn.pragma_update(None, "user_version", 17)?;
         before_commit();
         initialization.commit()?;
         Ok(engine)

@@ -41,13 +41,16 @@ with tempfile.TemporaryDirectory(prefix='weave-snapshot-migration-') as tmp:
    return {'marker':c.execute('PRAGMA user_version').fetchone()[0],**{t:c.execute('SELECT * FROM '+t+' ORDER BY rowid').fetchall() for t in ['revisions','events','admission_receipts','live_views','view_sources']}}
  before=state();assert before['marker']==a.old_marker
  def new_tables():
-  with sqlite3.connect(db) as c:return {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('compiled_handlers','handler_preparations')")}
+  with sqlite3.connect(db) as c:return {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('compiled_handlers','handler_preparations','governed_effect_bindings','governed_effect_receipts','governed_effect_context')")}
  if a.old_marker<16:assert not new_tables()
  run(a.storage,db,'crash',code=82);assert state()==before
  if a.old_marker<16:assert not new_tables()
  run(a.storage,db,'after_commit',code=83)
  committed=state()
- if a.new_marker>=16:assert new_tables()=={'compiled_handlers','handler_preparations'}
+ if a.new_marker>=16:
+  expected={'compiled_handlers','handler_preparations'}
+  if a.new_marker>=17:expected|={'governed_effect_bindings','governed_effect_receipts','governed_effect_context'}
+  assert new_tables()==expected
  assert committed['marker']==a.new_marker and {**committed,'marker':a.old_marker}==before
  current=run(a.view,db,'current','migration-view',template['definition_digest'],'fixed')
  assert current==before_current,(current,before_current)

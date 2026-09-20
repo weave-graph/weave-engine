@@ -824,7 +824,10 @@ impl Engine {
             return Ok(None);
         }
         let (mut record, _) = self.gov_proposal(&proposal_id)?;
-        if record.proposal.view_id != view {
+        if record.proposal.view_id != view
+            || matches!(record.proposal.action, GovernanceAction::Publish { .. })
+                != (event_type == "view.accepted")
+        {
             return Err(failure("E_INTEGRITY"));
         }
         // A policy-change event inherits the source selected at that historical decision,

@@ -453,3 +453,48 @@ impl Engine {
         Ok(result)
     }
 }
+
+/// Authenticated publication details for the native effect bridge. Never inferred from metadata.
+pub(crate) struct EffectPublication {
+    pub reference: GraphRef,
+    pub source: GraphRef,
+    pub branch: String,
+    pub current: bool,
+}
+impl Engine {
+    pub(crate) fn effect_publication(
+        &self,
+        view: &str,
+        decision: &str,
+        host: &HostContext,
+    ) -> Result<EffectPublication> {
+        let head = self.inspect_governance_head(view, host)?;
+        let (reference, binding) = self.governance_binding(decision)?.ok_or_else(unavailable)?;
+        if binding.view != view
+            || binding.action != "publish"
+            || binding.publication != decision
+            || !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)?
+        {
+            return Err(unavailable());
+        }
+        let current_decision = head.decision_id.ok_or_else(unavailable)?;
+        let (current_ref, current) = self
+            .governance_binding(&current_decision)?
+            .ok_or_else(unavailable)?;
+        if current.view != view
+            || !self.protected_reference_allowed(
+                &current_ref.graph_id,
+                &current_ref.revision,
+                host,
+            )?
+        {
+            return Err(unavailable());
+        }
+        Ok(EffectPublication {
+            reference,
+            source: binding.source,
+            branch: binding.branch,
+            current: current.publication == decision,
+        })
+    }
+}

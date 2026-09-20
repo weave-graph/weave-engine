@@ -220,6 +220,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
     /// let _ = engine.poll_adapter("adapter", 123);
     /// ```
     pub fn poll_adapter(&mut self, id: &str) -> Result<Option<DispatchEnvelope>> {
+        self.reject_governed_effect_adapter(id)?;
         let tx = self.conn.unchecked_transaction()?;
         let _clock_scope = self.operation_write_scope()?;
         let now_ms = self.operation_time()?;
@@ -360,6 +361,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock_scope = self.operation_write_scope()?;
+            self.reject_governed_effect_adapter(adapter)?;
             if self.is_compiled_handler(adapter)? {
                 return Err(err(
                     "E_HANDLER_BOUND",
@@ -542,6 +544,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         key: &str,
         payload: serde_json::Value,
     ) -> Result<EffectIntent> {
+        self.reject_governed_effect_adapter(adapter)?;
         let tx = self.conn.unchecked_transaction()?;
         let _clock_scope = self.operation_write_scope()?;
         let (manifest, state, _) = self.dispatch_manifest(adapter)?;
@@ -593,6 +596,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             .ok_or_else(|| err("E_EFFECT", "intent unavailable"))
     }
     pub fn effect_intent(&self, id: &str) -> Result<Option<EffectIntent>> {
+        self.reject_governed_effect_intent(id)?;
         let raw:Option<EffectRow>=self.conn.query_row("SELECT adapter,event_id,destination,idempotency_key,payload,state,response FROM effect_intents WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?))).optional()?;
         raw.map(
             |(adapter, event_id, destination, idempotency_key, payload, state, response)| {
@@ -651,6 +655,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         outcome: &str,
         response: serde_json::Value,
     ) -> Result<()> {
+        self.reject_governed_effect_intent(id)?;
         if !["confirmed", "failed"].contains(&outcome) {
             return Err(err("E_EFFECT", "invalid reconciliation outcome"));
         }

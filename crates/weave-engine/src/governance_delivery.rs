@@ -182,6 +182,7 @@ impl Engine {
         view: &str,
         host: &HostContext,
     ) -> Result<bool> {
+        self.reject_governed_effect_adapter(adapter)?;
         let _scope = self.read_budget.enter();
         self.governance_delivery_atomic(|| {
             self.governance_adapter(adapter, host)?;
@@ -239,6 +240,7 @@ impl Engine {
     ) -> Result<Option<GovernanceDelivery>> {
         let _scope = self.read_budget.enter();
         self.governance_delivery_atomic(|| {
+            self.guard_governed_effect_poll(adapter, view, host)?;
             let now = self.operation_time()?;
             let (manifest, state) = self.governance_adapter(adapter, host)?;
             if state != "running" && state != "draining" {
@@ -358,62 +360,79 @@ impl Engine {
         host: &HostContext,
         hook: impl FnOnce(),
     ) -> Result<GovernanceAcknowledgment> {
+        self.reject_governed_effect_adapter(adapter)?;
         let _scope = self.read_budget.enter();
-        if !valid_id(event) || lease.len() != 48 || !lease.bytes().all(|b| b.is_ascii_hexdigit()) {
+        self.governance_delivery_atomic(|| {
+            let result =
+                self.acknowledge_governance_in_transaction(adapter, view, event, lease, host)?;
+            hook();
+            Ok(result)
+        })
+    }
+    pub(crate) fn acknowledge_governance_in_transaction(
+        &self,
+        adapter: &str,
+        view: &str,
+        event: &str,
+        lease: &str,
+        host: &HostContext,
+    ) -> Result<GovernanceAcknowledgment> {
+        if self.conn.is_autocommit()
+            || !valid_id(event)
+            || lease.len() != 48
+            || !lease.bytes().all(|b| b.is_ascii_hexdigit())
+        {
             return Err(unavailable());
         }
-        self.governance_delivery_atomic(|| {
-            let now = self.operation_time()?;
-            let (_, state) = self.governance_adapter(adapter, host)?;
-            if state != "running" && state != "draining" {
-                return Err(err("E_PAUSED", "adapter is not running"));
-            }
-            let sub = self.governance_subscription(adapter, view)?;
-            self.governance_delivery_event(view, event, host)?
-                .ok_or_else(unavailable)?;
-            let prior: Option<(String, i64, i64)> = self
-                .conn
-                .query_row(LOAD_ACK_RECEIPT, params![adapter, view, event], |r| {
-                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-                })
-                .optional()?;
-            if let Some((prior_lease, ordinal, epoch)) = prior {
-                if lease != prior_lease || epoch != sub.epoch {
-                    return Err(err("E_LEASE", "governance lease is no longer current"));
-                }
-                return Ok(GovernanceAcknowledgment {
-                    ordinal: u64::try_from(ordinal).map_err(|_| unavailable())?,
-                    duplicate: true,
-                });
-            }
-            let pending = self
-                .governance_pending(adapter, view)?
-                .ok_or_else(unavailable)?;
-            if pending.event != event
-                || pending.lease != lease
-                || pending.dead
-                || now >= pending.expires
-            {
+        let now = self.operation_time()?;
+        let (_, state) = self.governance_adapter(adapter, host)?;
+        if state != "running" && state != "draining" {
+            return Err(err("E_PAUSED", "adapter is not running"));
+        }
+        let sub = self.governance_subscription(adapter, view)?;
+        self.governance_delivery_event(view, event, host)?
+            .ok_or_else(unavailable)?;
+        let prior: Option<(String, i64, i64)> = self
+            .conn
+            .query_row(LOAD_ACK_RECEIPT, params![adapter, view, event], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .optional()?;
+        if let Some((prior_lease, ordinal, epoch)) = prior {
+            if lease != prior_lease || epoch != sub.epoch {
                 return Err(err("E_LEASE", "governance lease is no longer current"));
             }
-            let count: i64 =
-                self.conn
-                    .query_row(COUNT_ACK_RECEIPTS, params![adapter, view], |r| r.get(0))?;
-            if count >= 10000 {
-                return Err(err("E_BUDGET", "governance receipt limit"));
-            }
-            self.conn.execute(
-                INSERT_ACK_RECEIPT,
-                params![adapter, view, event, lease, pending.ordinal, sub.epoch],
-            )?;
-            self.conn
-                .execute(ADVANCE_CHECKPOINT, params![adapter, view, pending.sequence])?;
-            self.conn.execute(DELETE_PENDING, params![adapter, view])?;
-            hook();
-            Ok(GovernanceAcknowledgment {
-                ordinal: u64::try_from(pending.ordinal).map_err(|_| unavailable())?,
-                duplicate: false,
-            })
+            return Ok(GovernanceAcknowledgment {
+                ordinal: u64::try_from(ordinal).map_err(|_| unavailable())?,
+                duplicate: true,
+            });
+        }
+        let pending = self
+            .governance_pending(adapter, view)?
+            .ok_or_else(unavailable)?;
+        if pending.event != event
+            || pending.lease != lease
+            || pending.dead
+            || now >= pending.expires
+        {
+            return Err(err("E_LEASE", "governance lease is no longer current"));
+        }
+        let count: i64 = self
+            .conn
+            .query_row(COUNT_ACK_RECEIPTS, params![adapter, view], |r| r.get(0))?;
+        if count >= 10000 {
+            return Err(err("E_BUDGET", "governance receipt limit"));
+        }
+        self.conn.execute(
+            INSERT_ACK_RECEIPT,
+            params![adapter, view, event, lease, pending.ordinal, sub.epoch],
+        )?;
+        self.conn
+            .execute(ADVANCE_CHECKPOINT, params![adapter, view, pending.sequence])?;
+        self.conn.execute(DELETE_PENDING, params![adapter, view])?;
+        Ok(GovernanceAcknowledgment {
+            ordinal: u64::try_from(pending.ordinal).map_err(|_| unavailable())?,
+            duplicate: false,
         })
     }
     pub fn replay_governance_dead_letter(
@@ -424,6 +443,7 @@ impl Engine {
     ) -> Result<()> {
         let _scope = self.read_budget.enter();
         self.governance_delivery_atomic(|| {
+            self.guard_governed_effect_poll(adapter, view, host)?;
             let (_, state) = self.governance_adapter(adapter, host)?;
             if state != "running" {
                 return Err(err("E_PAUSED", "adapter is not running"));
