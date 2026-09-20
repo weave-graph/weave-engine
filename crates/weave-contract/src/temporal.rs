@@ -425,7 +425,7 @@ impl<'a> Builder<'a> {
     }
     fn occurrence(
         &mut self,
-        input: &QueryResult,
+        nodes: &NodeIndex<'_>,
         edge: &Edge,
         clipped: &Interval,
         proof: &Derivation,
@@ -435,12 +435,7 @@ impl<'a> Builder<'a> {
         let mut map = BTreeMap::new();
         for id in [&edge.from, &edge.to] {
             if !map.contains_key(id) {
-                let node = input
-                    .graph
-                    .nodes
-                    .iter()
-                    .find(|n| &n.id == id)
-                    .expect("validated endpoint");
+                let node = nodes[id.as_str()];
                 let derived = self.record_node(node, gates, proof, role)?;
                 map.insert(id.clone(), derived);
             }
@@ -640,18 +635,22 @@ impl<'a> Builder<'a> {
         Ok(self.out)
     }
 }
-fn edge_context(input: &QueryResult, edge: &Edge) -> Result<()> {
+type NodeIndex<'a> = BTreeMap<&'a str, &'a Node>;
+fn node_index(input: &QueryResult) -> NodeIndex<'_> {
+    input
+        .graph
+        .nodes
+        .iter()
+        .map(|n| (n.id.as_str(), n))
+        .collect()
+}
+fn edge_context(input: &QueryResult, edge: &Edge, nodes: &NodeIndex<'_>) -> Result<()> {
     crate::context::ensure_consumable(
         input.selected_context.as_ref(),
         edge.assertion_context.as_ref(),
     )?;
     for id in [&edge.from, &edge.to] {
-        let node = input
-            .graph
-            .nodes
-            .iter()
-            .find(|n| &n.id == id)
-            .expect("validated endpoint");
+        let node = nodes[id.as_str()];
         if let Some(scope) = &node.context_scope {
             crate::context::compatible_context(input.selected_context.as_ref(), Some(scope))?;
         }
@@ -662,6 +661,7 @@ fn endpoint_gates(
     input: &QueryResult,
     edge: &Edge,
     base: &GraphInfluence,
+    nodes: &NodeIndex<'_>,
 ) -> Result<GraphInfluence> {
     let mut gates = merge(
         base,
@@ -672,12 +672,7 @@ fn endpoint_gates(
         },
     )?;
     for id in [&edge.from, &edge.to] {
-        let node = input
-            .graph
-            .nodes
-            .iter()
-            .find(|n| &n.id == id)
-            .expect("validated endpoint");
+        let node = nodes[id.as_str()];
         gates = merge(&gates, &node_gates(input, node)?)?;
     }
     Ok(gates)
@@ -724,6 +719,7 @@ fn derivation(
 pub fn window(input: QueryResult, window: &Interval, ctx: &AlgebraContext) -> Result<QueryResult> {
     valid(window)?;
     validate_input(&input, ctx)?;
+    let nodes = node_index(&input);
     if input
         .graph
         .edges
@@ -741,10 +737,28 @@ pub fn window(input: QueryResult, window: &Interval, ctx: &AlgebraContext) -> Re
         budget.charge(&input)?;
         let base = base_gates(&input)?;
         for edge in &input.graph.edges {
-            edge_context(&input, edge)?;
-            endpoint_gates(&input, edge, &base)?;
+            edge_context(&input, edge, &nodes)?;
+            endpoint_gates(&input, edge, &base, &nodes)?;
             alternatives(&input, edge, &mut budget)?;
         }
+        // Borrowed indexes avoid scanning every node for every attachment. Graph,
+        // edge and assertion hosts never need a node lookup here.
+        let mut entities: BTreeMap<&str, Vec<&Node>> = BTreeMap::new();
+        if input
+            .graph
+            .attachments
+            .iter()
+            .any(|a| matches!(a.host, MetadataHost::Entity { .. }))
+        {
+            for node in &input.graph.nodes {
+                entities
+                    .entry(node.entity_id.as_str())
+                    .or_default()
+                    .push(node);
+            }
+        }
+        let mut checked_entities = BTreeSet::new();
+        let mut checked_nodes = BTreeSet::new();
         for attachment in &input.graph.attachments {
             crate::context::ensure_consumable(
                 input.selected_context.as_ref(),
@@ -765,13 +779,19 @@ pub fn window(input: QueryResult, window: &Interval, ctx: &AlgebraContext) -> Re
                     "Temporal attachment needs source evidence",
                 ));
             }
-            for node in &input.graph.nodes {
-                let host = match &attachment.host {
-                    MetadataHost::Node { id } => &node.id == id,
-                    MetadataHost::Entity { id } => &node.entity_id == id,
-                    _ => false,
-                };
-                if host {
+            let hosts: &[&Node] = match &attachment.host {
+                MetadataHost::Node { id } => nodes
+                    .get(id.as_str())
+                    .map(std::slice::from_ref)
+                    .unwrap_or_default(),
+                MetadataHost::Entity { id } if checked_entities.insert(id.as_str()) => entities
+                    .get(id.as_str())
+                    .map(Vec::as_slice)
+                    .unwrap_or_default(),
+                _ => &[],
+            };
+            for node in hosts {
+                if checked_nodes.insert(node.id.as_str()) {
                     node_gates(&input, node)?;
                 }
             }
@@ -804,8 +824,8 @@ pub fn window(input: QueryResult, window: &Interval, ctx: &AlgebraContext) -> Re
         let Some(clipped) = intersection(&edge.valid_time, window) else {
             continue;
         };
-        edge_context(&input, edge)?;
-        let base = endpoint_gates(&input, edge, &builder.base)?;
+        edge_context(&input, edge, &nodes)?;
+        let base = endpoint_gates(&input, edge, &builder.base, &nodes)?;
         let groups = alternatives(&input, edge, &mut builder.budget)?;
         for group in &groups {
             let (proof, gates) = derivation(
@@ -816,7 +836,7 @@ pub fn window(input: QueryResult, window: &Interval, ctx: &AlgebraContext) -> Re
                 &mut builder.budget,
             )?;
             let (id, nodes) =
-                builder.occurrence(&input, edge, &clipped, &proof, &gates, "window")?;
+                builder.occurrence(&nodes, edge, &clipped, &proof, &gates, "window")?;
             builder.carry(&input, edge, &id, &nodes, window, &gates, &proof, false)?;
         }
     }
@@ -871,8 +891,8 @@ pub fn sequence(
         ));
     }
     let mut builder = Builder::new(envelope(&left, Some(&right), ctx)?, ctx)?;
-    let left_nodes: BTreeMap<_, _> = left.graph.nodes.iter().map(|n| (&n.id, n)).collect();
-    let right_nodes: BTreeMap<_, _> = right.graph.nodes.iter().map(|n| (&n.id, n)).collect();
+    let left_nodes = node_index(&left);
+    let right_nodes = node_index(&right);
     for le in &left.graph.edges {
         if le.polarity != Polarity::Positive {
             continue;
@@ -888,17 +908,22 @@ pub fn sequence(
             let Some(rc) = intersection(&re.valid_time, window) else {
                 continue;
             };
-            let ln = left_nodes[&le.to];
-            let rn = right_nodes[&re.from];
+            let ln = left_nodes[le.to.as_str()];
+            let rn = right_nodes[re.from.as_str()];
             if ln.entity_id != rn.entity_id
                 || ln.space_id != rn.space_id
                 || !relation.matches(&le.valid_time, &re.valid_time)?
             {
                 continue;
             }
-            edge_context(&left, le)?;
-            edge_context(&right, re)?;
-            let base = endpoint_gates(&right, re, &endpoint_gates(&left, le, &builder.base)?)?;
+            edge_context(&left, le, &left_nodes)?;
+            edge_context(&right, re, &right_nodes)?;
+            let base = endpoint_gates(
+                &right,
+                re,
+                &endpoint_gates(&left, le, &builder.base, &left_nodes)?,
+                &right_nodes,
+            )?;
             let lg = alternatives(&left, le, &mut builder.budget)?;
             let rg = alternatives(&right, re, &mut builder.budget)?;
             if lg
@@ -921,9 +946,9 @@ pub fn sequence(
                         &mut builder.budget,
                     )?;
                     let (lid, lnodes) =
-                        builder.occurrence(&left, le, &lc, &proof, &gates, "left")?;
+                        builder.occurrence(&left_nodes, le, &lc, &proof, &gates, "left")?;
                     let (rid, rnodes) =
-                        builder.occurrence(&right, re, &rc, &proof, &gates, "right")?;
+                        builder.occurrence(&right_nodes, re, &rc, &proof, &gates, "right")?;
                     builder.carry(&left, le, &lid, &lnodes, window, &gates, &proof, true)?;
                     builder.carry(&right, re, &rid, &rnodes, window, &gates, &proof, true)?;
                 }
@@ -1114,6 +1139,36 @@ mod tests {
             window(once.clone(), &broad, &ctx()).unwrap().graph,
             once.graph
         );
+    }
+    #[test]
+    fn identity_graph_attachment_hosts_do_not_scan_unrelated_nodes() {
+        let mut source = input("L", 0, Some(10), true);
+        source.graph.edges.clear();
+        for index in 0..4000 {
+            let mut node = source.graph.nodes[0].clone();
+            node.id = format!("unrelated-{index}");
+            node.derived_snapshots = vec![GraphRef {
+                graph_id: "source".into(),
+                revision: "r".into(),
+            }];
+            source.graph.nodes.push(node);
+            let attachment: MetadataAttachment = serde_json::from_value(json!({
+                "id":format!("m{index}"),"host":{"kind":"graph"},"key":"note",
+                "value":{"kind":"literal","value":0},"valid_time":{"start":0,"end":10},
+                "derived_snapshots":[{"graph_id":"source","revision":"r"}]
+            }))
+            .unwrap();
+            source.graph.attachments.push(attachment);
+        }
+        let out = window(source, &interval(-1, None), &ctx()).unwrap();
+        assert_eq!(out.graph.nodes.len(), 4002);
+        assert_eq!(out.graph.attachments.len(), 4000);
+        let mut repeated = out;
+        for attachment in &mut repeated.graph.attachments {
+            attachment.host = MetadataHost::Entity { id: "start".into() };
+        }
+        let out = window(repeated, &interval(-1, None), &ctx()).unwrap();
+        assert_eq!(out.graph.attachments.len(), 4000);
     }
     #[test]
     fn finite_set_oracle_and_open_boundaries() {
