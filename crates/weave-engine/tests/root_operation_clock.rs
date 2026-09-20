@@ -210,3 +210,29 @@ fn effect_fence_checks_clock_before_transition_and_reuses_one_sample() {
         "unknown"
     );
 }
+
+#[test]
+fn contended_writer_does_not_sample_clock_and_retry_captures_fresh_time() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("contended.db");
+    let clock = Arc::new(ManualClock::new(10));
+    let mut engine = Engine::open_with_clock(&path, clock.clone()).unwrap();
+    engine.execute(&program("input", false), &host()).unwrap();
+    let other = rusqlite::Connection::open(&path).unwrap();
+    other.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let samples = clock.samples();
+    clock.set(20);
+    assert!(engine.execute(&program("output", false), &host()).is_err());
+    assert_eq!(
+        clock.samples(),
+        samples,
+        "reserve the writer before sampling authority time"
+    );
+    assert!(engine.head("output", "main").unwrap().is_none());
+    other.execute_batch("ROLLBACK").unwrap();
+    clock.set(30);
+    engine.execute(&program("output", false), &host()).unwrap();
+    assert_eq!(clock.samples(), samples + 1);
+    let revision = engine.head("output", "main").unwrap().unwrap();
+    assert_eq!(engine.recorded_at(&revision).unwrap(), 30);
+}
