@@ -2,11 +2,11 @@
 
 ## Current snapshot
 
-Public MIT engine `7de6839` and language `8a914c7` implement a bounded protocol0.15 profile with SQLite marker13. The source/repository baseline E00 is complete; E01–E14 remain in progress. Green CI and the implemented subsets below do not mean completion of either paper. See [workflow gates](workflow.json) and the [reconciled source requirements](RECONCILIATION.md).
+The public MIT engine and paired language `bb5b142` implement a bounded protocol0.16 profile with SQLite marker14. The source/repository baseline E00 is complete; E01–E14 remain in progress. Green CI and the implemented subsets below do not mean completion of either paper. See [workflow gates](workflow.json) and the [reconciled source requirements](RECONCILIATION.md).
 
 The current native runtime includes genuine accepted-governance graph reads, a trusted operation clock, exact Query/Filter membership maintenance, and durable coalesced view scheduling. Earlier notes describing accepted graphs as unavailable or scheduling as unpublished apply only to their historical checkpoints.
 
-Protocol0.16 is the next candidate: exact accepted-occurrence expressions, definition-matched RequireCurrent view expressions, and separate canonical host registration artifacts. Source manifests persist through initial/full/incremental/fallback evaluation. SQLite marker14 protects compiled registration identity. Candidate evidence and remaining source/release checks are recorded in [the 0.16 contract](contract/v0.16/README.md); this status page does not claim the candidate is public.
+Protocol0.16 adds: exact accepted-occurrence expressions, definition-matched RequireCurrent view expressions, and separate canonical host registration artifacts. Source manifests persist through initial/full/incremental/fallback evaluation. SQLite marker14 protects compiled registration identity. The [0.16 contract](contract/v0.16/README.md) records the native boundary; paired compiler acceptance is now executed in integration CI.
 
 ## Implemented boundaries
 
@@ -28,3 +28,5 @@ The public marker13 checkpoint includes focused independent selection/scheduler 
 Required work remains across broader structural/assertion typing and algebra, graph-backed numeric conversions, richer context compatibility, full governance and permission topology semantics, authenticated peer synchronization and selective transport, complete reactor/source effects, generalized incremental evaluation, clustering quality/incremental maintenance, durable browser runtime, mobile/platform breadth and an integrated multi-peer paper scenario. Local administration APIs remain trusted embedding-host operations. System history selects exact revisions; general system-time range queries remain open. Serialized budgets are not measured RSS isolation.
 
 N-ary relations and reward-based traversal learning are optional in the papers. NAT/rendezvous services are optional operational infrastructure; their absence alone does not prevent a direct reference peer transport from satisfying its scoped acceptance.
+
+Protocol0.16 native8d359df passed344 workspace test/doctest checks, strict all-target/all-feature lint/fmt and contract WASM compilation. Root independently passed seven compiled-view/binding tests, actual compiler-to-host acceptance, schema13-to14 process-death rollback/restart/refusal, exact26-file canonical vendor equality and source native/WASM parity. The compiler freeze25b1da8 passed134 tests and a locked/offline source-archive build; its21 historical example plans/source identities remain unchanged except the declared protocol version. Hosted results are recorded in the public issues after completion. No full gate is closed by this bounded checkpoint.
