@@ -287,9 +287,18 @@ impl Engine {
                 self.proof_pin_groups(&mut walk, &a.derivations, host, budget)?;
                 match &a.host {
                     MetadataHost::Node { id } => walk.object(1, &graph, &revision, id)?,
-                    MetadataHost::Edge { id } | MetadataHost::Assertion { id } => {
-                        walk.object(0, &graph, &revision, id)?
+                    MetadataHost::Edge { id } => {
+                        if source.edges.iter().any(|e| &e.id == id) {
+                            walk.object(0, &graph, &revision, id)?;
+                        } else if let Some(e) = source.structural_edges.iter().find(|e| &e.id == id)
+                        {
+                            // Structural IDs are hosts, not assertion premises. Only
+                            // their actually consumed endpoint nodes carry proofs.
+                            walk.object(1, &graph, &revision, &e.from)?;
+                            walk.object(1, &graph, &revision, &e.to)?;
+                        }
                     }
+                    MetadataHost::Assertion { id } => walk.object(0, &graph, &revision, id)?,
                     MetadataHost::Entity { id } => {
                         for n in source.nodes.iter().filter(|n| &n.entity_id == id) {
                             walk.object(1, &graph, &revision, &n.id)?;

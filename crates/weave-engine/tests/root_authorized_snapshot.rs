@@ -211,6 +211,44 @@ fn entity_attachment_explanation_excludes_reader_hidden_manifestation_ancestry()
 }
 
 #[test]
+fn structural_edge_attachment_preserves_authorized_endpoint_explanation() {
+    let mut e = engine();
+    let original = commit(&mut e, "Proofs", source(json!(["alice"])));
+    let explicit: GraphData = serde_json::from_value(json!({
+        "profile":"explicit",
+        "nodes":[
+            {"id":"u","entity_id":"u","space_id":"s","derived_from":[assertion(&original,"a")]},
+            {"id":"v","entity_id":"v","space_id":"s"}
+        ],
+        "structural_edges":[{"id":"structure","predicate":"relation","from":"u","to":"v"}],
+        "attachments":[{"id":"note","host":{"kind":"edge","id":"structure"},"key":"note",
+            "value":{"kind":"literal","value":"edge annotation"},"valid_time":{"start":0}}]
+    }))
+    .unwrap();
+    let intermediate = commit(&mut e, "Secret", explicit);
+    let data = saved(
+        false,
+        vec![assertion(&intermediate, "note")],
+        vec![group(
+            vec![assertion(&intermediate, "note")],
+            vec![],
+            vec![original, intermediate],
+        )],
+    );
+    let expected = serde_json::to_vec(&data).unwrap();
+    let root = commit(&mut e, "Saved", data);
+    assert_eq!(query(&e, &root).coverage, Coverage::Complete);
+    let capsule = e.export_capsule(&root, &host()).unwrap();
+    let record = capsule
+        .revisions
+        .iter()
+        .find(|r| r.graph_id == "Saved")
+        .unwrap();
+    assert_eq!(serde_json::to_vec(&record.data).unwrap(), expected);
+    assert!(capsule.revisions.iter().any(|r| r.graph_id == "Proofs"));
+}
+
+#[test]
 fn a_withheld_alternative_is_not_whole_snapshot_authorization() {
     for explicit in [false, true] {
         for node_only in [false, true] {
