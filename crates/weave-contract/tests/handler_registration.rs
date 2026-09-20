@@ -10,7 +10,9 @@ fn reference() -> GraphExpression {
 }
 #[test]
 fn sealed_identity_has_fixed_framing_and_canonical_events() {
-    let value = seal_handler_template(draft()).unwrap();
+    let mut historical = draft();
+    historical.protocol = "0.18.0".into();
+    let value = seal_handler_template(historical).unwrap();
     validate_handler_template(&value).unwrap();
     assert_eq!(seal_handler_template(value.clone()).unwrap(), value);
     assert_eq!(
@@ -33,6 +35,7 @@ fn sealed_identity_has_fixed_framing_and_canonical_events() {
         "sha256:bdc9d1cde698a8adae7b8300682e39b6af8fda26d138b79f72e3d620a1d1a2da"
     );
     let mut another = draft();
+    another.protocol = "0.18.0".into();
     another.output_slot = "other".into();
     assert_ne!(
         seal_handler_template(another).unwrap().definition_digest,
@@ -166,7 +169,7 @@ fn source_conflicts_and_changed_recipe_cannot_keep_old_identity() {
 }
 #[test]
 fn prior_view_protocols_preserve_sealed_source_and_definition_bytes() {
-    for version in ["0.16.0", "0.17.0"] {
+    for version in ["0.16.0", "0.17.0", "0.18.0"] {
         let value:CompiledViewTemplate=serde_json::from_value(json!({"format":"weave-view-registration/1","protocol":version,"name":"Old","revision":"1","expression":{"kind":"query","query":{"graph_id":"Input"}},"clock":"fixed","source_revisions":[],"definition_digest":""})).unwrap();
         let sealed = view_registration::seal_template(value).unwrap();
         let bytes = serde_json::to_vec(&sealed).unwrap();
@@ -217,5 +220,33 @@ fn sealed_nested_reason_sources_are_derived_and_cannot_be_spoofed() {
     assert_eq!(
         seal_handler_template(value).unwrap_err().code,
         "E_SOURCE_REVISION"
+    );
+}
+
+#[test]
+fn temporal_recipe_requires_new_profile_without_resealing_old_artifacts() {
+    let current = seal_handler_template(draft()).unwrap();
+    assert_eq!(current.protocol, "0.19.0");
+    assert_eq!(
+        current.definition_digest,
+        "sha256:b23292b6476c3541b3c53c8a266bc08e82e0dc9ddbf3cb25ac37bccd0a92f91d"
+    );
+    let mut temporal = draft();
+    temporal.recipe.bindings.push(HandlerBinding {
+        name: "clipped".into(),
+        value: GraphExpression::Window {
+            input: Box::new(reference()),
+            window: Interval {
+                start: 0,
+                end: Some(1),
+            },
+        },
+    });
+    temporal.recipe.output = "clipped".into();
+    validate_handler_template(&seal_handler_template(temporal.clone()).unwrap()).unwrap();
+    temporal.protocol = "0.18.0".into();
+    assert_eq!(
+        seal_handler_template(temporal).unwrap_err().code,
+        "E_HANDLER_VERSION"
     );
 }
