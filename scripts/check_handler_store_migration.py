@@ -29,7 +29,19 @@ handler {name} revision "1" using Keep {{
 ''')
   artifact=invoke(a.old_compiler,'handler-plan',source,'--handler',name)
   # The CLI emits the sealed template directly; never hand-author its digest.
-  host(a.old_handler,'run',program={'version':'0.18.0','commands':[{'op':'commit','graph_id':graph,'data':{}}]})
+  if complete:
+   # A real old grouped derivation catches accidental re-materialization/resealing
+   # after the new runtime strengthens original-record authority on fresh queries.
+   batch='historical-'+name;pin={'graph_id':graph,'revision':'logical:'+batch+':'+graph}
+   premise={**pin,'assertion_id':'base'}
+   data={'nodes':[{'id':n,'entity_id':n,'space_id':'s'} for n in ['a','b']],
+         'edges':[{'id':'base','predicate':'p','from':'a','to':'b','valid_time':{'start':0}},
+                  {'id':'derived','predicate':'q','from':'a','to':'b','valid_time':{'start':0},
+                   'derived_from':[premise],'derivations':[{'operator':'historical-proof','premises':[premise],
+                   'parameters':{'historical':'preserve-exactly'},'input_snapshots':[pin]}]}]}
+   seed={'op':'commit_batch','batch_id':batch,'commits':[{'graph_id':graph,'data':data}]}
+  else:seed={'op':'commit','graph_id':graph,'data':{}}
+  host(a.old_handler,'run',program={'version':'0.18.0','commands':[seed]})
   host(a.old_handler,'install',id=name,template=artifact,output=output)
   event=host(a.old_handler,'poll',id=name)
   args={'id':name,'event':event['id'],'lease':event['lease']}
@@ -64,6 +76,6 @@ handler {name} revision "1" using Keep {{
  request.write_text(json.dumps({'mode':'head','graph':'Warnings'}))
  error=invoke(a.old_handler,db,request,code=1)
  assert 'E_STORAGE_VERSION' in error and snapshot()==stable
- report={'profile':'populated-compiled-handler-migration','old_marker':a.old_marker,'new_marker':a.new_marker,'old_protocol':'0.18.0','checks':['actual historical compiler emitted sealed templates','completed and pending historical preparations','precommit rollback with no new tables','postcommit death preserves every historical table byte','exact historical completion replay','unchanged preparation identity and bytes','pending prepared command completes once after migration','old binary refusal'],'status':'passed'}
+ report={'profile':'populated-compiled-handler-migration','old_marker':a.old_marker,'new_marker':a.new_marker,'old_protocol':'0.18.0','checks':['actual historical compiler emitted sealed templates','completed grouped-proof and pending empty historical preparations','precommit rollback with no new tables','postcommit death preserves every historical table byte','exact historical completion replay','unchanged preparation identity and bytes','pending prepared command completes once after migration','old binary refusal'],'status':'passed'}
  if a.report:a.report.write_text(json.dumps(report,indent=2)+'\n')
  print(json.dumps(report))
