@@ -35,6 +35,6 @@ with tempfile.TemporaryDirectory(prefix="weave-governance-delivery-") as directo
         assert c.execute("SELECT count(*) FROM governance_delivery_pending").fetchone()[0] == 0
         assert c.execute("SELECT checkpoint FROM governance_subscriptions").fetchone()[0] == 1
         assert c.execute("SELECT count(*) FROM governance_events").fetchone()[0] == 1
-        assert c.execute("SELECT count(*) FROM events").fetchone()[0] == 1
+        assert c.execute("SELECT count(*) FROM events").fetchone()[0] == 2
     assert run("revoke", event, lease)["error"] == "E_GOV_UNAVAILABLE"
 print("governance delivery process-death acceptance: 6 checks passed")

@@ -268,7 +268,7 @@ impl Engine {
         let _snapshot = self.optional_read_transaction()?;
         let _clock_scope = self.operation_scope()?;
         let _read_scope = self.read_budget.enter();
-        if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
+        if !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)? {
             return Ok(None);
         }
         let Some(data) = self.load(&reference.graph_id, &reference.revision)? else {
@@ -289,7 +289,7 @@ impl Engine {
         let _snapshot = self.optional_read_transaction()?;
         let _clock_scope = self.operation_scope()?;
         let _read_scope = self.read_budget.enter();
-        if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
+        if !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)? {
             return Ok(None);
         }
         let Some(data) = self.load(&reference.graph_id, &reference.revision)? else {

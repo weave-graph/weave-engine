@@ -1,6 +1,6 @@
 # Accepted governance graphs and trusted operation time
 
-**Status: design for review; no implementation or protocol reservation.** This document is based on engine `c51393b`. The native [governance API](GOVERNANCE.md) already records signed approvals, decisions, receipts, and authorized delivery. Protocol [0.15](contract/v0.15/README.md) supplies generic assertion/node influence. Neither fact makes a SQL governance decision a graph assertion. The metadata selector compatibility blocker in the 0.15 candidate must be resolved independently before its publication.
+**Status: reviewed design; native implementation and evidence are described in [GOVERNANCE_GRAPHS.md](GOVERNANCE_GRAPHS.md).** This document is based on engine `c51393b`. The native [governance API](GOVERNANCE.md) already records signed approvals, decisions, receipts, and authorized delivery. Protocol [0.15](contract/v0.15/README.md) supplies generic assertion/node influence. Neither fact makes a SQL governance decision a graph assertion. The metadata selector compatibility blocker in the 0.15 candidate must be resolved independently before its publication.
 
 This proposal adds genuine immutable decision graphs and a native accepted-view query. Every use remains subject to current policy and current source authorization, evaluated at one engine-owned operation time. It does not install remote policy roots, add a language operator, or complete federation, selective disclosure, or the broader governance roadmap.
 

@@ -143,7 +143,7 @@ impl Engine {
                     let (visible, incomplete) = self.authorized(row.data.clone(), host)?;
                     if visible != row.data
                         || incomplete
-                        || !self.identity_reference_allowed(&row.graph_id, &row.revision, host)?
+                        || !self.protected_reference_allowed(&row.graph_id, &row.revision, host)?
                     {
                         if &reference == root {
                             return Err(err("E_UNAVAILABLE", "capsule root unavailable"));
@@ -188,7 +188,7 @@ impl Engine {
                 let (visible, incomplete) = self.authorized(row.data.clone(), host)?;
                 available &= visible == row.data
                     && !incomplete
-                    && self.identity_reference_allowed(&row.graph_id, &row.revision, host)?;
+                    && self.protected_reference_allowed(&row.graph_id, &row.revision, host)?;
             }
             if !available || live {
                 if &reference == root {

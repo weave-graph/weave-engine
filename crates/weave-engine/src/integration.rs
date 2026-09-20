@@ -208,7 +208,7 @@ impl Engine {
         record: &CapsuleRevision,
         host: &HostContext,
     ) -> Result<()> {
-        if !self.identity_reference_allowed(&record.graph_id, &record.revision, host)? {
+        if !self.protected_reference_allowed(&record.graph_id, &record.revision, host)? {
             return Err(err("E_UNAVAILABLE", "proposal content unavailable"));
         }
         let stored = self

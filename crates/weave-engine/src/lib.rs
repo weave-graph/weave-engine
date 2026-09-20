@@ -6,6 +6,8 @@ use std::path::Path;
 use weave_contract::*;
 mod admission;
 mod governance;
+mod governance_graph;
+pub use governance_graph::AcceptedViewSelection;
 mod governance_delivery;
 mod influence;
 pub use governance::*;
@@ -87,6 +89,7 @@ pub struct Engine {
     conn: Connection,
     read_budget: read_budget::ReadBudget,
     operation_clock: operation_clock::OperationClock,
+    protected_reads: governance_graph::ProtectedReads,
 }
 impl Engine {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -122,7 +125,7 @@ impl Engine {
         before_commit: impl FnOnce(),
     ) -> Result<Self> {
         let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
-        if !(0..=11).contains(&version) {
+        if !(0..=12).contains(&version) {
             return Err(err(
                 "E_STORAGE_VERSION",
                 "database schema version is unsupported",
@@ -133,6 +136,7 @@ impl Engine {
             conn,
             read_budget: read_budget::ReadBudget::default(),
             operation_clock: operation_clock::OperationClock::new(clock),
+            protected_reads: governance_graph::ProtectedReads::default(),
         };
         let initialization = rusqlite::Transaction::new_unchecked(
             &engine.conn,
@@ -181,7 +185,8 @@ impl Engine {
         engine.initialize_integration()?;
         engine.initialize_governance()?;
         engine.initialize_governance_delivery()?;
-        engine.conn.pragma_update(None, "user_version", 11)?;
+        engine.initialize_governance_graphs()?;
+        engine.conn.pragma_update(None, "user_version", 12)?;
         before_commit();
         initialization.commit()?;
         Ok(engine)
@@ -689,7 +694,7 @@ impl Engine {
                 .head(&query.graph_id, &query.branch_id)?
                 .ok_or_else(|| err("E_UNAVAILABLE", "graph unavailable"))?,
         };
-        if !self.identity_reference_allowed(&query.graph_id, &revision, host)? {
+        if !self.protected_reference_allowed(&query.graph_id, &revision, host)? {
             return Err(err("E_UNAVAILABLE", "graph unavailable"));
         }
         let data = self
@@ -850,7 +855,7 @@ impl Engine {
                     partial(&mut result, "E_BUDGET", "metadata traversal budget reached");
                     continue;
                 }
-                match if self.identity_reference_allowed(
+                match if self.protected_reference_allowed(
                     &reference.graph_id,
                     &reference.revision,
                     host,
@@ -1689,7 +1694,7 @@ impl Engine {
             if !visiting.insert(key.clone()) {
                 return Ok(false);
             }
-            if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
+            if !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)? {
                 return Ok(false);
             }
             let Some(source) = self.load(&reference.graph_id, &reference.revision)? else {
@@ -1745,7 +1750,7 @@ impl Engine {
             if !visiting.insert(key.clone()) {
                 return Ok(false);
             }
-            if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
+            if !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)? {
                 return Ok(false);
             }
             let Some(source) = self.load(&reference.graph_id, &reference.revision)? else {

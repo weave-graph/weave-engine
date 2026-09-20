@@ -253,7 +253,9 @@
           "unresolved_findings": "Explicit compatibility/broadcast mappings and accepted-view governance remain open; whole-value witness AND gating can conservatively deny mixed results."
         },
         "docs/INFLUENCE.md",
-        "crates/weave-engine/tests/root_influence.rs"
+        "crates/weave-engine/tests/root_influence.rs",
+        "docs/GOVERNANCE_GRAPHS.md",
+        "crates/weave-engine/tests/governance_graph.rs"
       ]
     },
     {
@@ -285,7 +287,9 @@
         "scripts/root_dispatch.py",
         "docs/GOVERNANCE_DELIVERY.md",
         "crates/weave-engine/tests/governance_delivery.rs",
-        "scripts/check_governance_delivery_recovery.py"
+        "scripts/check_governance_delivery_recovery.py",
+        "docs/GOVERNANCE_GRAPHS.md",
+        "crates/weave-engine/tests/governance_graph.rs"
       ]
     },
     {
@@ -470,7 +474,9 @@
         "docs/GOVERNANCE_DELIVERY.md",
         "crates/weave-engine/tests/governance_delivery.rs",
         "scripts/check_governance_delivery_recovery.py",
-        "docs/INFLUENCE.md"
+        "docs/INFLUENCE.md",
+        "docs/GOVERNANCE_GRAPHS.md",
+        "crates/weave-engine/tests/governance_graph.rs"
       ]
     },
     {

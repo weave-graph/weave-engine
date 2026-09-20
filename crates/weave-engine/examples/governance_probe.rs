@@ -160,6 +160,24 @@ fn main() {
             "{}",
             json!({"error": test_clock::at(8001, || engine.accept_governance(&request("a", "accept"), &host())).unwrap_err().code})
         ),
+        "accepted" => println!(
+            "{}",
+            serde_json::to_string(
+                &test_clock::at(21, || engine.query_accepted_view(
+                    &AcceptedViewSelection {
+                        view_id: "team".into(),
+                        decision_id: None
+                    },
+                    &host()
+                ))
+                .unwrap()
+            )
+            .unwrap()
+        ),
+        "expired_read" => println!(
+            "{}",
+            json!({"error":test_clock::at(10000,||engine.query_accepted_view(&AcceptedViewSelection{view_id:"team".into(),decision_id:None},&host())).unwrap_err().code})
+        ),
         "inspect" => println!(
             "{}",
             serde_json::to_string(

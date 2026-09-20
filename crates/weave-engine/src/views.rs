@@ -343,7 +343,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         host: &HostContext,
     ) -> Result<()> {
         for reference in &value.input_snapshots {
-            if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
+            if !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)? {
                 return Err(err(
                     "E_UNAVAILABLE",
                     "stored result unavailable under current authority",

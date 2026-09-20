@@ -215,7 +215,7 @@ fn delivery_restart_pause_lease_rotation_and_ack_retry() {
             .unwrap()
             .is_none()
     );
-    assert_eq!(e.event_count().unwrap(), 1);
+    assert_eq!(e.event_count().unwrap(), 2); // Source plus genuine decision graph.
     assert_eq!(e.governance_event_count().unwrap(), 1);
     e.cancel_governance_subscription("reader", "team", &reader)
         .unwrap();
@@ -458,7 +458,7 @@ fn current_policy_expiry_blocks_inspection_pending_and_cached_ack_without_head_c
         .code,
         "E_GOV_POLICY"
     );
-    assert_eq!(e.event_count().unwrap(), 1);
+    assert_eq!(e.event_count().unwrap(), 2); // Source plus genuine decision graph.
     assert_eq!(e.governance_event_count().unwrap(), 1);
 }
 

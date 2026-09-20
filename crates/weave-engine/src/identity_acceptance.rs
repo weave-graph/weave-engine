@@ -46,6 +46,7 @@ pub(crate) fn reserved(graph: &str) -> bool {
     graph.starts_with(PREFIX)
 }
 pub(crate) fn require_external_graph(graph: &str) -> Result<()> {
+    governance_graph::require_external_graph(graph)?;
     if reserved(graph) {
         Err(err(
             "E_RESERVED_NAMESPACE",
@@ -56,6 +57,7 @@ pub(crate) fn require_external_graph(graph: &str) -> Result<()> {
     }
 }
 pub(crate) fn require_external_schema(data: &GraphData) -> Result<()> {
+    governance_graph::require_external_schema(data)?;
     if let Some(schema) = &data.schema {
         if schema.id.starts_with("weave:identity") && schema != &membership_schema() {
             return Err(err(
@@ -598,7 +600,7 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
         let graph = graph_id(&request.mapping_id)?;
         let policy_ref:Option<IdentityPolicyRef>=self.conn.query_row("SELECT policy_id,policy_revision FROM identity_decisions WHERE mapping_id=?1 AND revision=?2 AND graph_id=?3",params![request.mapping_id,request.revision,graph],|r|Ok(IdentityPolicyRef{id:r.get(0)?,revision:r.get(1)?})).optional()?;
         if policy_ref.as_ref() != Some(&request.policy)
-            || !self.identity_reference_allowed(&graph, &request.revision, host)?
+            || !self.protected_reference_allowed(&graph, &request.revision, host)?
         {
             return Err(err(
                 "E_IDENTITY_UNAVAILABLE",

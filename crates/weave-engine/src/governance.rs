@@ -263,6 +263,10 @@ impl Engine {
     }
     fn gov_quota(&self, view: &str) -> Result<()> {
         let bytes: i64 = self.conn.query_row(QUOTA_BYTES, [view], |r| r.get(0))?;
+        let protected_bytes: i64 = self.conn.query_row("SELECT COALESCE(SUM(length(CAST(g.body AS BLOB))+length(CAST(r.data AS BLOB))),0) FROM governance_graphs g JOIN revisions r ON r.graph_id=g.graph_id AND r.revision=g.revision WHERE g.view_id=?1",[view],|r|r.get(0))?;
+        let bytes = bytes
+            .checked_add(protected_bytes)
+            .ok_or_else(|| failure("E_BUDGET"))?;
         let records: i64 = self.conn.query_row(QUOTA_RECORDS, [view], |r| r.get(0))?;
         if bytes < 0
             || records < 0
@@ -280,7 +284,7 @@ impl Engine {
         }
         Ok(serde_json::from_str(&text)?)
     }
-    fn gov_head(&self, view: &str) -> Result<GovernanceHead> {
+    pub(crate) fn gov_head(&self, view: &str) -> Result<GovernanceHead> {
         let row: Option<(String, String, Option<String>, Option<String>)> = self
             .conn
             .query_row(LOAD_HEAD, [view], |r| {
@@ -303,7 +307,11 @@ impl Engine {
             source: source.map(|s| self.gov_text(Some(s))).transpose()?,
         })
     }
-    fn gov_policy(&self, view: &str, reference: &GovernancePolicyRef) -> Result<GovernancePolicy> {
+    pub(crate) fn gov_policy(
+        &self,
+        view: &str,
+        reference: &GovernancePolicyRef,
+    ) -> Result<GovernancePolicy> {
         let now = self.operation_time()?;
         let body: Option<Option<String>> = self
             .conn
@@ -338,7 +346,7 @@ impl Engine {
         }
         Ok((record, expected))
     }
-    fn gov_source(
+    pub(crate) fn gov_source(
         &self,
         source: &GraphRef,
         branch: &str,
@@ -353,7 +361,7 @@ impl Engine {
         {
             return Err(failure("E_GOV_SOURCE"));
         }
-        if !self.identity_reference_allowed(&source.graph_id, &source.revision, host)? {
+        if !self.protected_reference_allowed(&source.graph_id, &source.revision, host)? {
             return Err(failure("E_GOV_UNAVAILABLE"));
         }
         let raw = self
@@ -674,6 +682,9 @@ impl Engine {
                     return Err(failure("E_GOV_REPLAY"));
                 }
                 let mut receipt: GovernanceReceipt = self.gov_text(body)?;
+                if !self.governance_decision_current(&receipt.decision_id, host)? {
+                    return Err(failure("E_GOV_UNAVAILABLE"));
+                }
                 receipt.duplicate = true;
                 return Ok(receipt);
             }
@@ -730,6 +741,13 @@ impl Engine {
             self.conn.execute(
                 "INSERT INTO governance_events(id,view_id,decision_id,event_type,recorded_at_ms) VALUES (?1,?2,?3,?4,?5)",
                 params![event_id, proposal.view_id, decision, event_type, now])?;
+            self.record_governance_graph(
+                &decision,
+                &proposal.view_id,
+                &proposal.action,
+                proposal.expected_head.as_deref(),
+                host,
+            )?;
             self.gov_quota(&proposal.view_id)?;
             hook();
             Ok(receipt)
@@ -764,6 +782,11 @@ impl Engine {
         if let Some(source) = &head.source {
             self.gov_existing_source(source, &policy, host)?;
         }
+        if let Some(decision) = &head.decision_id {
+            if !self.governance_decision_current(decision, host)? {
+                return Err(failure("E_GOV_UNAVAILABLE"));
+            }
+        }
         if let Some(transaction) = read_transaction {
             transaction.commit()?;
         }
@@ -796,6 +819,9 @@ impl Engine {
             || !["view.accepted", "policy.changed"].contains(&event_type.as_str())
         {
             return Err(failure("E_INTEGRITY"));
+        }
+        if !self.governance_decision_current(&decision_id, host)? {
+            return Ok(None);
         }
         let (mut record, _) = self.gov_proposal(&proposal_id)?;
         if record.proposal.view_id != view {

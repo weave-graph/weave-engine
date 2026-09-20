@@ -374,7 +374,7 @@ impl Engine {
                     "required metadata unavailable",
                 ));
             };
-            if !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)? {
+            if !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)? {
                 return Err(err(
                     "E_DEPENDENCY_UNAVAILABLE",
                     "required dependency unavailable",

@@ -2,7 +2,7 @@
 
 Current authority time comes from the [constructor-installed operation clock](OPERATION_CLOCK.md). Explicit native `now` arguments have been removed; fixture callers must migrate to an installed test clock.
 
-This stage implements owner and threshold acceptance over immutable source snapshots. It is a trusted native host API, independent of the language wire protocol. The SQLite schema advances from 8 to 9 transactionally. Raw graph properties, imported capsules, and signed generic graph plans cannot install governance roots, cast approvals, or change accepted heads.
+This stage implements owner and threshold acceptance over immutable source snapshots. It is a trusted native host API, independent of the language wire protocol. The initial governance tables advanced SQLite from 8 to 9; the [genuine decision graph stage](GOVERNANCE_GRAPHS.md) now uses marker 12. Raw graph properties, imported capsules, and signed generic graph plans cannot install governance roots, cast approvals, or change accepted heads.
 
 ## Admission and current authority
 
@@ -10,7 +10,7 @@ The host installs one initial policy per view. A policy binds exact member publi
 
 A collector proposes either publication of a pinned source graph or a complete policy replacement, with an exact expected accepted head and expiry. Proposals remain isolated until acceptance. Ed25519 approvals bind the proposal digest, view, policy revision, expected head, member, nonce, and validity interval under a dedicated domain. The stored proposal digest includes its collector identity. The collector is a trusted `HostContext` principal; member approvals are independently signed. This API is not a network endpoint or a replacement for remote request admission.
 
-Approval covers the exact stored source snapshot body. A LiveGraph metadata handle inside that body is not approval of future target revisions. Required live metadata is checked for current availability during admission, but no accepted expansion graph is returned by this API. Any future reusable accepted expansion must pin and separately preserve its actual influence and authority.
+Approval covers the exact stored source snapshot body. A LiveGraph metadata handle inside that body is not approval of future target revisions. The graph-exposure profile rejects any reachable live handle at acceptance; it never approves later target revisions. The new native accepted query returns pinned source records with genuine decision influence.
 
 At proposal, approval collection, acceptance, and receipt retry, the collector must still be permitted by the current policy. Publication also rechecks current source authorization, transitive assertion/node restrictions, required metadata availability, and pinned revision reachability in an allowed accepted branch. Policy replacement rechecks the predecessor's existing source under the predecessor policy. A source must be wholly visible in this first profile; there is no selective publication or declassification. Native head inspection independently applies current policy readers and current source authorization.
 
@@ -24,13 +24,13 @@ Acceptance revalidates a current quorum and compares the expected head inside th
 
 Exact lost-response retry returns the original decision only while current policy, source authority, proposal lifetime, and enough approvals remain valid. A changed body under the same collector nonce fails. A policy-transition request is deliberately rejected on retry after it installs the new policy epoch; its old approval epoch no longer authorizes the operation. Hosts can inspect the current head separately under current authority. Historical admission evidence does not confer current read authority.
 
-The durable outbox has typed `view.accepted` and `policy.changed` events. These are separate from graph-commit events: accepting a pointer does not fabricate a graph mutation. The unscoped event count is a trusted administrative diagnostic only. [Authorized typed delivery](GOVERNANCE_DELIVERY.md) now attaches this outbox to existing adapter identities/lifecycle, with current-authority checks and atomic acknowledgments. Graph-producing handlers, remote dissemination and broader bus integration remain open.
+The durable outbox has typed `view.accepted` and `policy.changed` events. These remain separate from graph-commit events. New exposed decisions persist a genuine immutable graph, so they also emit its real graph-commit event. The unscoped event count is a trusted administrative diagnostic only. [Authorized typed delivery](GOVERNANCE_DELIVERY.md) now attaches this outbox to existing adapter identities/lifecycle, with current-authority checks and atomic acknowledgments. Graph-producing handlers, remote dissemination and broader bus integration remain open.
 
 ## Bounds and exposure
 
 Policies have at most 32 members, collectors, readers, and source scopes. Bodies are limited to 64 KiB before storage and before loading into Rust. A view retains at most 1,000 proposals and 64 MiB of conservatively charged governance records; collector receipt count is bounded. Cumulative operation reads use the existing engine read budget. These are logical record limits, not physical SQLite file or process-memory guarantees. Retention/garbage collection is not implemented.
 
-The API exposes a currently authorized native head descriptor, not a reusable accepted graph result. Generic graph influence and a real immutable decision assertion with current-policy gates must be implemented and reviewed before accepted empty/scalar graph values can be exposed. No voter list, hidden partition count, or graph-shaped decision proof is synthesized by this stage.
+The API now also exposes a native accepted graph result through genuine immutable decision assertions and current-policy gates. See [accepted graph records, composition and restrictions](GOVERNANCE_GRAPHS.md). Private voter lists and quorum counts remain absent from graph records.
 
 ## Evidence and remaining scope
 
@@ -38,4 +38,4 @@ The API exposes a currently authorized native head descriptor, not a reusable ac
 - [Process-death acceptance](../scripts/check_governance_recovery.py): feature-only local test host exits after acceptance SQL before commit (all acceptance rows roll back), and after commit before response (restart returns one durable receipt/event), with changed-body and expired-quorum rejection.
 - [Test host](../crates/weave-engine/examples/governance_probe.rs) uses fixed local keys and is built only with `recovery-testing`.
 
-This does not complete E11 governance or E05 event delivery. Required follow-ups include authorized governance outbox dispatch, signed remote collector admission, reusable accepted graph influence, broader merge/review policies, and operational retention. The full white-paper scope remains mapped in the project workflow.
+This does not complete E11 governance or E05 event delivery. Required follow-ups include signed remote collector admission, portable governed transport, broader merge/review policies, effect execution and operational retention. The full white-paper scope remains mapped in the project workflow.

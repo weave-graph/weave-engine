@@ -64,7 +64,7 @@ impl Engine {
             || expected.validate().is_err()
             || !valid_id(&reference.graph_id)
             || !valid_id(&reference.revision)
-            || !self.identity_reference_allowed(&reference.graph_id, &reference.revision, host)?
+            || !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)?
         {
             return Ok(None);
         }

@@ -155,7 +155,7 @@ fn isolated_proposals_threshold_distinct_signers_cas_and_durable_exact_retry() {
         "E_CAS"
     );
     assert_eq!(e.governance_event_count().unwrap(), 1);
-    assert_eq!(e.event_count().unwrap(), 1); // Graph source event remains independent.
+    assert_eq!(e.event_count().unwrap(), 2); // Source and genuine decision graph commits.
     drop(e);
     let e = test_clock::open(&path).unwrap();
     let retry =
