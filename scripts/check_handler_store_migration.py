@@ -6,6 +6,7 @@ from contextlib import closing
 p=argparse.ArgumentParser()
 for name in ['old-compiler','old-handler','handler','storage']:
  p.add_argument('--'+name,type=Path,required=True)
+p.add_argument('--old-marker',type=int,default=16)
 p.add_argument('--new-marker',type=int,default=17)
 p.add_argument('--report',type=Path)
 a=p.parse_args()
@@ -38,13 +39,13 @@ handler {name} revision "1" using Keep {{
   return args,receipt
  done,receipt=populate('HistoricalDone','Empty','EmptyWarnings',True)
  pending,_=populate('HistoricalPending','Installation','Warnings',False)
- new_tables={'governed_effect_bindings','governed_effect_receipts','governed_effect_context'}
+ new_tables=({'governed_effect_bindings','governed_effect_receipts','governed_effect_context'} if a.old_marker<17 else set())
  def snapshot():
   with closing(sqlite3.connect(db)) as c:
    tables={row[0]:row[1] for row in c.execute("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
    contents={t:(sql,sorted(c.execute('SELECT * FROM "'+t.replace('"','""')+'"').fetchall(),key=repr)) for t,sql in tables.items() if t not in new_tables}
    return c.execute('PRAGMA user_version').fetchone()[0],set(tables)&new_tables,contents
- before=snapshot();assert before[0]==16 and not before[1]
+ before=snapshot();assert before[0]==a.old_marker and not before[1]
  assert len(before[2]['compiled_handlers'][1])==2
  assert len(before[2]['handler_preparations'][1])==2
  assert len(before[2]['handler_receipts'][1])==1
@@ -63,6 +64,6 @@ handler {name} revision "1" using Keep {{
  request.write_text(json.dumps({'mode':'head','graph':'Warnings'}))
  error=invoke(a.old_handler,db,request,code=1)
  assert 'E_STORAGE_VERSION' in error and snapshot()==stable
- report={'profile':'populated-compiled-handler-migration','old_marker':16,'new_marker':a.new_marker,'old_protocol':'0.18.0','checks':['actual historical compiler emitted sealed templates','completed and pending historical preparations','precommit rollback with no new tables','postcommit death preserves every historical table byte','exact historical completion replay','unchanged preparation identity and bytes','pending prepared command completes once after migration','old binary refusal'],'status':'passed'}
+ report={'profile':'populated-compiled-handler-migration','old_marker':a.old_marker,'new_marker':a.new_marker,'old_protocol':'0.18.0','checks':['actual historical compiler emitted sealed templates','completed and pending historical preparations','precommit rollback with no new tables','postcommit death preserves every historical table byte','exact historical completion replay','unchanged preparation identity and bytes','pending prepared command completes once after migration','old binary refusal'],'status':'passed'}
  if a.report:a.report.write_text(json.dumps(report,indent=2)+'\n')
  print(json.dumps(report))

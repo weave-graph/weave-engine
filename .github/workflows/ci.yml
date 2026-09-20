@@ -71,7 +71,7 @@ jobs:
         run: cargo build --locked -p weave-engine --features recovery-testing --example source_view_fixture --example three_peer_trace --example storage_probe
       - name: Verify populated upgrade, both crash boundaries and exact old replay
         working-directory: current
-        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol ${{ matrix.protocol }} --old-marker ${{ matrix.marker }} --new-marker 17
+        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol ${{ matrix.protocol }} --old-marker ${{ matrix.marker }} --new-marker 18
   compiled-handler-migration:
     runs-on: ubuntu-latest
     steps:
@@ -98,4 +98,39 @@ jobs:
         run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example storage_probe
       - name: Preserve actual completed and pending historical handlers across store upgrade
         working-directory: current
-        run: python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --new-marker 17
+        run: python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --new-marker 18
+  store17-migration:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 21c27286749dcfa8833f903b631ea74537692647
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 82a45f6391696b77e25710bde7276b40faf68d6f
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store17 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe
+      - name: Preserve store17 views and signed replies exactly
+        working-directory: current
+        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.18.0 --old-marker 17 --new-marker 18
+      - name: Preserve store17 pending and completed handlers exactly
+        working-directory: current
+        run: python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-marker 17 --new-marker 18
+      - name: Preserve unknown governed effect and independent sink
+        working-directory: current
+        run: python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --new-marker 18

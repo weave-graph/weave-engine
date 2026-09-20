@@ -10,7 +10,7 @@ p.add_argument('--view',type=Path,default=Path('target/debug/examples/source_vie
 p.add_argument('--trace',type=Path,default=Path('target/debug/examples/three_peer_trace'))
 p.add_argument('--storage',type=Path,default=Path('target/debug/examples/storage_probe'))
 p.add_argument('--report',type=Path)
-p.add_argument('--old-protocol',default='0.16.0',choices=['0.16.0','0.17.0'])
+p.add_argument('--old-protocol',default='0.16.0',choices=['0.16.0','0.17.0','0.18.0'])
 p.add_argument('--old-marker',default=14,type=int)
 p.add_argument('--new-marker',default=17,type=int)
 a=p.parse_args()
@@ -39,7 +39,8 @@ with tempfile.TemporaryDirectory(prefix='weave-snapshot-migration-') as tmp:
  before_current=run(a.old_view,db,'current','migration-view',template['definition_digest'],'fixed')
  def state():
   with closing(sqlite3.connect(db)) as c:
-   return {'marker':c.execute('PRAGMA user_version').fetchone()[0],**{t:c.execute('SELECT * FROM '+t+' ORDER BY rowid').fetchall() for t in ['revisions','events','admission_receipts','live_views','view_sources']}}
+   tables = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")] if a.old_marker>=17 else ['revisions','events','admission_receipts','live_views','view_sources']
+   return {'marker':c.execute('PRAGMA user_version').fetchone()[0],**{t:sorted(c.execute('SELECT * FROM '+t).fetchall(),key=repr) for t in tables}}
  before=state();assert before['marker']==a.old_marker
  def new_tables():
   with closing(sqlite3.connect(db)) as c:return {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('compiled_handlers','handler_preparations','governed_effect_bindings','governed_effect_receipts','governed_effect_context')")}
