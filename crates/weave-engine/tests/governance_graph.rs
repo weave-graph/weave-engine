@@ -567,7 +567,7 @@ fn old_sql_only_decisions_are_not_backfilled_and_next_publication_is_real() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        15
+        16
     );
     assert_eq!(
         db.query_row("SELECT count(*) FROM governance_graphs", [], |r| r
@@ -1081,4 +1081,58 @@ fn snapshot_gate_retains_current_governance_policy_through_cached_values() {
             .read_view("snapshot-cache", None, ViewFreshness::AllowStale, &host())
             .is_err());
     });
+}
+
+#[test]
+fn compiled_preparation_and_historical_receipt_recheck_current_policy_expiry() {
+    for completed in [false, true] {
+        let mut e = test_clock::at(0, test_clock::memory).unwrap();
+        let source = seed(&mut e, 2);
+        accept(&e, source);
+        let accepted = e.query_accepted_view(&choose(None), &host()).unwrap();
+        let input = save(&mut e, accepted.graph);
+        let template=handler_registration::seal_handler_template(serde_json::from_value(json!({"format":"weave-handler-registration/1","protocol":VERSION,"name":"governed-handler","revision":"1","input":{"graph_id":input.graph_id,"branch_id":"main","metadata_depth":0},"event_types":["graph.accepted","graph.committed"],"recipe":{"bindings":[],"output":"$event"},"output_slot":"out","source_revisions":[],"definition_digest":""})).unwrap()).unwrap();
+        let manifest:AdapterManifest=serde_json::from_value(json!({"id":"governed-handler","version":"1","artifact_digest":template.definition_digest,"config_revision":"1","principal":"collector","subscriptions":[{"graph_id":"saved","branch_id":"main"}],"output_graphs":["handler-output"],"effect_destinations":[],"max_attempts":5,"lease_ms":100000,"max_pending_events":10,"projection_replay":true})).unwrap();
+        let authority = HostContext::new("collector", ["handler-output".into()]);
+        e.install_compiled_handler(
+            &manifest,
+            &template,
+            &HandlerOutputBinding {
+                slot: "out".into(),
+                graph_id: "handler-output".into(),
+                branch_id: "main".into(),
+            },
+            &authority,
+        )
+        .unwrap();
+        e.set_adapter_state(&manifest.id, "running").unwrap();
+        let d = e.poll_adapter(&manifest.id).unwrap().unwrap();
+        let p = e
+            .prepare_compiled_handler(&manifest.id, &d.id, &d.lease)
+            .unwrap();
+        if completed {
+            e.complete_prepared_handler(&manifest.id, &d.id, &d.lease, &p.preparation_id)
+                .unwrap();
+        }
+        let count = e.event_count().unwrap();
+        test_clock::at(10001, || {
+            assert!(e
+                .prepare_compiled_handler(&manifest.id, &d.id, &d.lease)
+                .is_err());
+            assert!(e
+                .complete_prepared_handler(&manifest.id, &d.id, &d.lease, &p.preparation_id)
+                .is_err());
+            assert_eq!(e.event_count().unwrap(), count);
+            if completed {
+                let result = e
+                    .query(
+                        &serde_json::from_value(json!({"graph_id":"handler-output"})).unwrap(),
+                        &authority,
+                    )
+                    .unwrap();
+                assert!(result.graph.nodes.is_empty());
+                assert!(result.graph.attachments.is_empty());
+            }
+        });
+    }
 }
