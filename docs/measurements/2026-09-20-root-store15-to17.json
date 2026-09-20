@@ -1,0 +1,14 @@
+{
+  "old_marker": 15,
+  "new_marker": 17,
+  "old_protocol": "0.17.0",
+  "checks": [
+    "populated old template and signed receipt",
+    "precommit rollback",
+    "postcommit death and exact restart",
+    "unchanged persisted template/cache/receipt/rows",
+    "exact historical response replay",
+    "old binary refusal"
+  ],
+  "template_digest": "sha256:cbae2fe8c1bdc92a3c7e6b566f29024f4074ef88e58c8dbc4435c784760afa3d"
+}

@@ -19,13 +19,17 @@ jobs:
         with:
           node-version: '24'
       - run: cargo fmt --all -- --check
-      - run: cargo test --workspace --locked
+      - run: cargo test --workspace --all-features --locked
       - name: Build native three-peer recovery fixture
         run: cargo build --locked -p weave-engine --example three_peer_trace --features recovery-testing
       - name: Execute isolated three-peer offline and recovery trace
         run: python3 scripts/check_three_peer_trace.py
       - name: Execute paired signed export and recovery trace
         run: python3 scripts/check_three_peer_trace.py --signed-export
+      - name: Build governed effect recovery fixture
+        run: cargo build --locked -p weave-engine --features recovery-testing --example governed_effect_probe
+      - name: Execute governed effect and independent sink recovery
+        run: python3 scripts/check_governed_effects.py
       - run: cargo run --locked -p weave-cluster --example measure_quality
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo check -p weave-contract --target wasm32-unknown-unknown --locked
@@ -67,4 +71,31 @@ jobs:
         run: cargo build --locked -p weave-engine --features recovery-testing --example source_view_fixture --example three_peer_trace --example storage_probe
       - name: Verify populated upgrade, both crash boundaries and exact old replay
         working-directory: current
-        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol ${{ matrix.protocol }} --old-marker ${{ matrix.marker }} --new-marker 16
+        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol ${{ matrix.protocol }} --old-marker ${{ matrix.marker }} --new-marker 17
+  compiled-handler-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: edd58fdb0cbdc5f9299c2e55ba2765c37a2bca90
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: e18608b842ad6efc14f977e30ed428513c5900a5
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact historical compiler and handler fixture
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example storage_probe
+      - name: Preserve actual completed and pending historical handlers across store upgrade
+        working-directory: current
+        run: python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --new-marker 17

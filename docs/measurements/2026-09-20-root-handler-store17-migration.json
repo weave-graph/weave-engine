@@ -1,0 +1,17 @@
+{
+  "profile": "populated-compiled-handler-migration",
+  "old_marker": 16,
+  "new_marker": 17,
+  "old_protocol": "0.18.0",
+  "checks": [
+    "actual historical compiler emitted sealed templates",
+    "completed and pending historical preparations",
+    "precommit rollback with no new tables",
+    "postcommit death preserves every historical table byte",
+    "exact historical completion replay",
+    "unchanged preparation identity and bytes",
+    "pending prepared command completes once after migration",
+    "old binary refusal"
+  ],
+  "status": "passed"
+}
