@@ -67,7 +67,15 @@ def main():
         result = execute([batch, {'op': 'evaluate', 'value': extract(extract(query('A')))}],
                          database, writes=['A', 'B', 'C'])[-1]['result']
         assert result['coverage'] == 'complete', result
-        assert [n['id'] for n in result['graph']['nodes']] == ['C'], result
+        # Traversal adds path restrictions, so this is a derived wrapper rather
+        # than an unchanged source record. Its exact source remains a proof gate.
+        assert len(result['graph']['nodes']) == 1, result
+        wrapped = result['graph']['nodes'][0]
+        assert wrapped['entity_id'] == 'C' and wrapped['space_id'] == 's', result
+        assert wrapped['id'].startswith('metadata-node:'), result
+        assert result['node_origins'][wrapped['id']] == [], result
+        assert {'graph_id': 'C', 'revision': result['snapshots']['C'],
+                'node_id': 'C'} in wrapped['derived_nodes'], result
         premises = {(p['graph_id'], p['assertion_id']) for p in result['provenance']}
         assert {('A', 'proof-A'), ('B', 'proof-B')} <= premises, premises
         assert result['graph']['nodes'][0]['readers'] == ['bob'], result
