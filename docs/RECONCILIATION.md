@@ -40,3 +40,8 @@ The next active work combines actual source-authored offline evidence, a pinned 
 The complete R01–R40 mapping remains in `IMPLEMENTATION_PLAN.md`; exact public evidence is tracked by the workflow and parent publication review.
 
 The resumed native B/C profile executes both exact source variants through retained clusters and signed peers. Its journal rechecks current whole-input visibility while retaining scoped Partial navigation, preserves exact CAS and historical receipts, and rejects rehashed trimmed closure and unavailable premises. See [native compiled scenario](NATIVE_COMPILED_SCENARIO.md); no full gate or portable host is closed by this local profile.
+
+The combined trace additionally runs in iOS simulator Rust processes. The separate
+[Swift app profile](SWIFT_HOST.md) verifies source-backed offline edits and sealed
+diagnostic preparation/completion recovery inside application-owned SQLite.
+Neither result closes the full mobile/browser, lifecycle, history or resource gates.

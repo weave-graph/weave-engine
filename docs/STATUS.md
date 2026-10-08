@@ -24,6 +24,13 @@ See [native compiled acceptance](NATIVE_COMPILED_SCENARIO.md). This is unpublish
 local evidence; broader lifecycle/retention, history, incremental, transport and
 portable application requirements remain open.
 
+The same combined trace now passes in iOS26.4 simulator-target Rust processes.
+A separate [Swift facade app](SWIFT_HOST.md) passes actual source-backed offline
+edits, sealed diagnostic recovery and privacy in its own application container
+across 24 launches. These are distinct profiles; the app does not yet bind the
+cluster/peer/governance/effect services. Exact archived engine/compiler workspaces
+pass 480/191 checks respectively; no full paper gate or hosted result is inferred.
+
 ## Published 0.18 boundaries and historical checkpoints
 
 Sealed pure handler artifacts and native immutable install/prepare/complete are published, with SQLite marker16. Exact event/preloaded input gates survive empty outputs and generated records. Output CAS, current authority and historical receipt replay are checked atomically; caller-built completion cannot bypass a compiled binding. Genuine historical0.16 and0.17 templates and signed receipts retain their original bytes through migration. Source/runtime joint verification and publication are complete for this bounded profile. See [contract](contract/v0.18/README.md) and [native handler profile](proposals/COMPILED_HANDLERS.md). This stage does not close complete reactor/effect semantics or a paper gate.

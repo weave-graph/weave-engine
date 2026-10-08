@@ -110,12 +110,38 @@ Browser worker bindings, generic mobile application bindings, retention/rebase,
 causal-loop limits, stateful upgrades, broader recorded-history querying, incremental
 cluster maintenance and full requirement/resource acceptance remain separate gates.
 
+The [Swift facade and source-backed app profile](SWIFT_HOST.md) now cover native
+Program/diagnostic operations inside a simulator app container. Cluster/peer/
+governance/effect application bindings and the complete browser/mobile profile
+remain separate requirements.
+
+For the combined Rust-process trace on an existing booted simulator, build both
+examples for `aarch64-apple-ios-sim`, then use:
+
+```sh
+python3 scripts/check_native_scenario_ios.py \
+  --simulator EXISTING_BOOTED_SIMULATOR_UUID \
+  --compiler-sdk /path/to/libweave_compiler_sdk.dylib \
+  --host target/aarch64-apple-ios-sim/debug/examples/native_scenario \
+  --peer-host target/aarch64-apple-ios-sim/debug/examples/three_peer_trace \
+  --fixtures /path/to/weave-language/examples/native_scenario \
+  --report ios-native-scenario-bc.json
+```
+
+This controller runs the native compiler on macOS and the Rust binaries via
+`simctl spawn`, using host-owned temporary SQLite/artifact files. Its 202-process
+success is not application-container evidence. It makes no simulator-engine RSS,
+physical-device, power-loss or mobile app lifecycle claim. Controller child RSS
+includes the compiler and excludes simulator grandchildren.
+
 ## Current verification checkpoint
 
-The 2026-10-09 local macOS run passed 202 runtime processes, 12 compiler processes
-and 22 controlled exits across the two variants. The workspace passed 479 tests
-and doctests before the final capacity test addition; the final three journal tests
-and strict workspace/all-target/all-feature Clippy passed separately. Exact revision
-archive results and platform evidence are recorded in the measurement report after
-the implementation freeze. These numbers describe this checkpoint, not full paper
-conformance or hosted CI success.
+The 2026-10-09 exact engine archive `dcc063f` passed 480 workspace tests/doctests;
+the exact companion compiler archive `f18d35c` passed 191. The archived compiler and
+runtime passed 202 macOS runtime processes, 12 compiler processes and 22 controlled
+exits in 19.792 seconds. The same combined trace passed on the iOS26.4 simulator in
+77.290 seconds. These small fixture measurements include fresh process startup and
+make no throughput or production SLO claim. Strict workspace/all-target/all-feature
+Clippy passed on the unchanged Rust implementation. See the resumed measurement
+record for artifact identities and the separate Swift application profile. These
+numbers do not attest full paper conformance or hosted CI success.

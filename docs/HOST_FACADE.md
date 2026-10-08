@@ -13,6 +13,11 @@ generic persistent browser adapter or mobile acceptance in the
 [combined proposal](proposals/COMBINED_PORTABLE_SCENARIO.md). The earlier browser
 fixture's persistence evidence remains distinct.
 
+The [Swift byte-preserving wrapper](SWIFT_HOST.md) now uses this facade through
+the existing C header. Its two-variant simulator app-container trace covers
+Program/diagnostic persistence and lost-response recovery; combined cluster/peer/
+governance/effect mobile bindings and the browser facade remain open.
+
 ## Safe Rust and authority
 
 ```rust
