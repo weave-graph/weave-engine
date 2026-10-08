@@ -142,6 +142,8 @@ runtime passed 202 macOS runtime processes, 12 compiler processes and 22 control
 exits in 19.792 seconds. The same combined trace passed on the iOS26.4 simulator in
 77.290 seconds. These small fixture measurements include fresh process startup and
 make no throughput or production SLO claim. Strict workspace/all-target/all-feature
-Clippy passed on the unchanged Rust implementation. See the resumed measurement
-record for artifact identities and the separate Swift application profile. These
+Clippy passed on the unchanged Rust implementation. See the [resumed measurement
+record](measurements/2026-10-09-resumed-native-mobile.json) for artifact identities
+and the separate Swift application profile. The committed archive also passed all
+nine fixed native/WASM semantic groups with identical 43,746 output bytes. These
 numbers do not attest full paper conformance or hosted CI success.
