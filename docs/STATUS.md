@@ -12,6 +12,18 @@ The current native runtime includes genuine accepted-governance graph reads, a t
 
 Protocol0.16 adds: exact accepted-occurrence expressions, definition-matched RequireCurrent view expressions, and separate canonical host registration artifacts. Source manifests persist through initial/full/incremental/fallback evaluation. SQLite marker14 protects compiled registration identity. The [0.16 contract](contract/v0.16/README.md) records the native boundary; paired compiler acceptance is now executed in integration CI.
 
+## Resumed source-backed native acceptance
+
+The recovered export repair and retained cluster implementation now have a combined
+actual compiler→offline evidence/rebind→sealed diagnostic→retained cluster→signed
+P/W/T exchange→team acceptance→unknown effect/reconciliation process trace. Both
+source variants preserve exact original SDK artifacts, old history and private
+reader gates. The journal preserves scoped Partial cluster coverage and checks
+whole exact inputs separately, before fresh and historical completion.
+See [native compiled acceptance](NATIVE_COMPILED_SCENARIO.md). This is unpublished
+local evidence; broader lifecycle/retention, history, incremental, transport and
+portable application requirements remain open.
+
 ## Published 0.18 boundaries and historical checkpoints
 
 Sealed pure handler artifacts and native immutable install/prepare/complete are published, with SQLite marker16. Exact event/preloaded input gates survive empty outputs and generated records. Output CAS, current authority and historical receipt replay are checked atomically; caller-built completion cannot bypass a compiled binding. Genuine historical0.16 and0.17 templates and signed receipts retain their original bytes through migration. Source/runtime joint verification and publication are complete for this bounded profile. See [contract](contract/v0.18/README.md) and [native handler profile](proposals/COMPILED_HANDLERS.md). This stage does not close complete reactor/effect semantics or a paper gate.

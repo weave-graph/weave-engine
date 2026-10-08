@@ -63,8 +63,8 @@ enum Operation {
 }
 /// Owns one Engine and immutable authority. It never runs source code or installs config from JSON.
 pub struct HostSession {
-    engine: Engine,
-    authority: HostContext,
+    pub(crate) engine: Engine,
+    pub(crate) authority: HostContext,
     poisoned: bool,
 }
 fn valid(s: &str) -> bool {
@@ -161,6 +161,51 @@ impl HostSession {
             encode_value(&true)
         })
     }
+    /// Privileged trusted host cluster adapter installation; no operational install opcode.
+    pub fn install_cluster_adapter(&mut self, manifest: &AdapterManifest) -> HostReply {
+        if manifest.output_graphs.len() != 1 || !manifest.effect_destinations.is_empty() {
+            return self.rejected("E_HOST_CONFIG", "invalid cluster adapter configuration");
+        }
+        self.invoke(|engine, host| {
+            engine.install_adapter(manifest, host)?;
+            encode_value(&true)
+        })
+    }
+    /// Recovery harness only: the same principal checks as ordinary prepared operations.
+    #[cfg(feature = "recovery-testing")]
+    pub fn prepare_test_before_commit(
+        &mut self,
+        adapter: &str,
+        event: &str,
+        lease: &str,
+        before: impl FnOnce(),
+    ) -> HostReply {
+        self.invoke(|engine, host| {
+            encode_value(&engine.prepare_compiled_handler_test_for_before_commit(
+                adapter, event, lease, host, before,
+            )?)
+        })
+    }
+    #[cfg(feature = "recovery-testing")]
+    pub fn complete_test_before_commit(
+        &mut self,
+        adapter: &str,
+        event: &str,
+        lease: &str,
+        preparation: &str,
+        before: impl FnOnce(),
+    ) -> HostReply {
+        self.invoke(|engine, host| {
+            encode_value(&engine.complete_prepared_handler_test_for_before_commit(
+                adapter,
+                event,
+                lease,
+                preparation,
+                host,
+                before,
+            )?)
+        })
+    }
     /// Privileged lifecycle management, still constrained by this session's durable ownership.
     pub fn set_adapter_state(&mut self, adapter: &str, state: &str) -> HostReply {
         if self.poisoned {
@@ -190,13 +235,20 @@ impl HostSession {
             }
         }
     }
-    fn invoke(
+    pub(crate) fn invoke(
         &mut self,
         f: impl FnOnce(&mut Engine, &HostContext) -> weave_engine::Result<Vec<u8>>,
     ) -> HostReply {
+        if self.poisoned {
+            return self.rejected("E_HOST_POISONED", "host unavailable; reopen and inspect");
+        }
         match catch_unwind(AssertUnwindSafe(|| f(&mut self.engine, &self.authority))) {
             Ok(Ok(value)) => self.response(true, &value, true),
-            Ok(Err(e)) if e.code != "E_HOST_ENCODE" && e.code != "E_STORAGE" => {
+            Ok(Err(e))
+                if e.code != "E_HOST_ENCODE"
+                    && e.code != "E_STORAGE"
+                    && e.code != "E_HOST_UNCERTAIN" =>
+            {
                 let error = serde_json::to_vec(&HostError::new(&e.code, "host operation rejected"))
                     .expect("small error");
                 self.response(false, &error, true)
@@ -254,7 +306,7 @@ impl Write for Bounded {
         Ok(())
     }
 }
-fn encode_value(value: &impl Serialize) -> weave_engine::Result<Vec<u8>> {
+pub(crate) fn encode_value(value: &impl Serialize) -> weave_engine::Result<Vec<u8>> {
     let mut out = Bounded(Vec::new());
     serde_json::to_writer(&mut out, value).map_err(|_| weave_engine::Error {
         code: "E_HOST_ENCODE".into(),

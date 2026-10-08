@@ -58,6 +58,8 @@ pub use dispatch::{
 pub use selection::ViewSelectionWork;
 pub use views::{ViewChange, ViewDefinition, ViewFreshness, ViewSnapshot};
 mod clustering;
+mod retained_cluster;
+pub use retained_cluster::{HandlerSlotState, RetainedClusterCompletion};
 mod geometry;
 pub use weave_contract::{ClusterRequest, IdentityPolicyRef, IdentityResolve, ViewClock};
 mod metadata;

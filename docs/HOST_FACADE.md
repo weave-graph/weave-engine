@@ -5,8 +5,10 @@ operations under an immutable `HostContext`. This local embedding format is
 independent of Program protocol 0.18 and store17; neither version changes. The
 existing `weave_native_*` C ABI remains compatible.
 
-This checkpoint implements Program execution and compiled handler operation. It
-does not yet implement the combined cluster/transport/governance/effect facade,
+This checkpoint implements Program execution and compiled handler operation. The
+[retained native cluster journal and source-backed peer trace](NATIVE_COMPILED_SCENARIO.md)
+now extend the trusted Rust embedding profile. It does not yet implement the generic
+combined cluster/transport/governance/effect facade,
 generic persistent browser adapter or mobile acceptance in the
 [combined proposal](proposals/COMBINED_PORTABLE_SCENARIO.md). The earlier browser
 fixture's persistence evidence remains distinct.

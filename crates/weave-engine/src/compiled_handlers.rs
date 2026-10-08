@@ -395,6 +395,17 @@ impl Engine {
     ) -> Result<PreparedHandlerReceipt> {
         self.prepare_handler_boundary(adapter, event, lease, None, before_commit)
     }
+    #[cfg(feature = "recovery-testing")]
+    pub fn prepare_compiled_handler_test_for_before_commit(
+        &mut self,
+        adapter: &str,
+        event: &str,
+        lease: &str,
+        host: &HostContext,
+        before_commit: impl FnOnce(),
+    ) -> Result<PreparedHandlerReceipt> {
+        self.prepare_handler_boundary(adapter, event, lease, Some(host), before_commit)
+    }
     fn prepare_handler_boundary(
         &mut self,
         adapter: &str,
@@ -612,6 +623,25 @@ impl Engine {
         before_commit: impl FnOnce(),
     ) -> Result<HandlerReceipt> {
         self.complete_prepared_boundary(adapter, event, lease, preparation_id, None, before_commit)
+    }
+    #[cfg(feature = "recovery-testing")]
+    pub fn complete_prepared_handler_test_for_before_commit(
+        &mut self,
+        adapter: &str,
+        event: &str,
+        lease: &str,
+        preparation_id: &str,
+        host: &HostContext,
+        before_commit: impl FnOnce(),
+    ) -> Result<HandlerReceipt> {
+        self.complete_prepared_boundary(
+            adapter,
+            event,
+            lease,
+            preparation_id,
+            Some(host),
+            before_commit,
+        )
     }
     fn complete_prepared_boundary(
         &mut self,

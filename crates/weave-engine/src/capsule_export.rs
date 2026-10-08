@@ -331,6 +331,37 @@ pub(crate) fn visit_dependencies(
     work: &mut usize,
     mut visit: impl FnMut(&str, &str) -> Result<()>,
 ) -> Result<()> {
+    if let Some(parent) = &record.parent {
+        charge_work(work)?;
+        if !valid_id(&record.graph_id) || !valid_id(parent) {
+            return Err(binding_error());
+        }
+        visit(&record.graph_id, parent)?;
+    }
+    visit_graph_dependencies(&record.data, work, visit)
+}
+
+pub(crate) fn visit_graph_dependencies(
+    data: &GraphData,
+    work: &mut usize,
+    visit: impl FnMut(&str, &str) -> Result<()>,
+) -> Result<()> {
+    visit_data_dependencies(data, work, true, visit)
+}
+/// Semantic gates exclude explanatory input_snapshots; whole transport retains them separately.
+pub(crate) fn visit_semantic_dependencies(
+    data: &GraphData,
+    work: &mut usize,
+    visit: impl FnMut(&str, &str) -> Result<()>,
+) -> Result<()> {
+    visit_data_dependencies(data, work, false, visit)
+}
+fn visit_data_dependencies(
+    data: &GraphData,
+    work: &mut usize,
+    descriptive: bool,
+    mut visit: impl FnMut(&str, &str) -> Result<()>,
+) -> Result<()> {
     let mut one = |graph: &str, revision: &str| {
         charge_work(work)?;
         if !valid_id(graph) || !valid_id(revision) {
@@ -344,10 +375,6 @@ pub(crate) fn visit_dependencies(
                 one(&r.graph_id, &r.revision)?;
             }
         };
-    }
-    let data = &record.data;
-    if let Some(parent) = &record.parent {
-        one(&record.graph_id, parent)?;
     }
     if let Some(t) = &data.context_typing {
         pins!(t.selected.iter());
@@ -405,7 +432,9 @@ pub(crate) fn visit_dependencies(
         pins!(&g.premises);
         pins!(&g.node_premises);
         pins!(&g.snapshot_premises);
-        pins!(&g.input_snapshots);
+        if descriptive {
+            pins!(&g.input_snapshots);
+        }
     }
     for a in &data.attachments {
         pins!(&a.derived_from);

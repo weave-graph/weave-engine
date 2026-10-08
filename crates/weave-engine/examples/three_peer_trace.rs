@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::sync::Arc;
+use std::sync::OnceLock;
 use weave_contract::*;
 use weave_engine::*;
 use weave_policy::{
@@ -20,6 +21,15 @@ const GRAPHS: [&str; 7] = [
     "ClustersWork",
     "Saved",
 ];
+// Optional trusted fixture registry lets the same peer protocol exercise actual
+// compiler-defined graph names. This is configuration, never incoming authority.
+static CONFIGURED_GRAPHS: OnceLock<Vec<String>> = OnceLock::new();
+fn graphs() -> Vec<String> {
+    CONFIGURED_GRAPHS
+        .get()
+        .cloned()
+        .unwrap_or_else(|| GRAPHS.map(String::from).into())
+}
 fn owner_key() -> SigningKey {
     SigningKey::from_bytes(&[201; 32])
 }
@@ -27,7 +37,7 @@ fn owner() -> String {
     weave_policy::public_key(&owner_key())
 }
 fn host() -> HostContext {
-    HostContext::new(owner(), GRAPHS.map(String::from))
+    HostContext::new(owner(), graphs())
 }
 fn field<'a>(v: &'a Value, k: &str) -> TestResult<&'a str> {
     v[k].as_str().ok_or_else(|| format!("missing {k}").into())
@@ -43,11 +53,11 @@ fn root_key(peer: &str) -> TestResult<SigningKey> {
     ))
 }
 fn scopes() -> Vec<Scope> {
-    let mut scopes: Vec<Scope> = GRAPHS
+    let mut scopes: Vec<Scope> = graphs()
         .into_iter()
         .flat_map(|g| {
             ["main", "phone", "phone-import", "work"].map(|b| Scope {
-                graph_id: g.into(),
+                graph_id: g.clone(),
                 branch_id: b.into(),
                 actions: [Action::Propose, Action::Read, Action::Traverse].into(),
             })
@@ -444,8 +454,33 @@ fn run(e: &mut Engine, peer: &str, v: &Value) -> TestResult<Value> {
 fn main() {
     let result = (|| -> TestResult<Value> {
         let a: Vec<_> = std::env::args().collect();
-        if a.len() != 4 {
-            return Err("usage: three_peer_trace DATABASE P|W|T REQUEST.json".into());
+        if a.len() != 4 && a.len() != 5 {
+            return Err(
+                "usage: three_peer_trace DATABASE P|W|T REQUEST.json [TRUSTED_CONFIG.json]".into(),
+            );
+        }
+        if a.len() == 5 {
+            let config: Value =
+                serde_json::from_reader(std::fs::File::open(&a[4])?.take(64 * 1024))?;
+            let graph_map = config["graphs"]
+                .as_object()
+                .ok_or("fixture graph registry")?;
+            if graph_map.is_empty() || graph_map.len() > 128 {
+                return Err("fixture graph registry budget".into());
+            }
+            let configured = graph_map
+                .values()
+                .map(|v| {
+                    let id = v.as_str().ok_or("fixture graph name")?;
+                    if id.is_empty() || id.len() > 512 || id.chars().any(char::is_control) {
+                        return Err("fixture graph name");
+                    }
+                    Ok(id.to_owned())
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            CONFIGURED_GRAPHS
+                .set(configured)
+                .map_err(|_| "fixture registry initialized")?;
         }
         root_key(&a[2])?;
         let mut bytes = Vec::new();

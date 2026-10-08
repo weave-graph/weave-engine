@@ -1,6 +1,8 @@
 # Native scenario B: compiled diagnosis and retained cluster completion
 
-Design-only implementation handoff, 2026-09-20. Start after the coherent 0.19 pair
+Historical implementation handoff, 2026-09-20. The implemented boundary and the
+scoped-Partial coverage correction are in [native acceptance](../NATIVE_COMPILED_SCENARIO.md).
+The original proposal below is preserved as design provenance. Start after the coherent 0.19 pair
 is published; the reviewed native candidate is `a6adb94`. No runtime edit, Cargo
 run, protocol reservation or store migration is part of this proposal. This refines
 step B of [the combined scenario](COMBINED_PORTABLE_SCENARIO.md); transfer,
