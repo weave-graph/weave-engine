@@ -137,6 +137,195 @@ fn harmless_flat_index_order_and_duplicates_preserve_exact_transport_bytes() {
 }
 
 #[test]
+fn fully_authorized_transitive_explanation_pins_preserve_whole_snapshot_export() {
+    let mut e = engine();
+    let original = commit(&mut e, "Proofs", source(json!(["alice"])));
+    let intermediate = commit(
+        &mut e,
+        "Secret",
+        saved(
+            false,
+            vec![assertion(&original, "a")],
+            vec![group(
+                vec![assertion(&original, "a")],
+                vec![],
+                vec![original.clone()],
+            )],
+        ),
+    );
+    // The original is a real transitive dependency, not a direct premise of
+    // this final edge. Its explanatory pin must neither grant authority nor
+    // make an otherwise completely authorized immutable snapshot unexportable.
+    let data = saved(
+        false,
+        vec![assertion(&intermediate, "derived")],
+        vec![group(
+            vec![assertion(&intermediate, "derived")],
+            vec![],
+            vec![original, intermediate],
+        )],
+    );
+    let expected = serde_json::to_vec(&data).unwrap();
+    let root = commit(&mut e, "Saved", data);
+    assert_eq!(query(&e, &root).coverage, Coverage::Complete);
+    let capsule = e.export_capsule(&root, &host()).unwrap();
+    let record = capsule
+        .revisions
+        .iter()
+        .find(|r| r.graph_id == "Saved")
+        .unwrap();
+    assert_eq!(serde_json::to_vec(&record.data).unwrap(), expected);
+    assert!(capsule.revisions.iter().any(|r| r.graph_id == "Proofs"));
+    assert!(capsule.revisions.iter().any(|r| r.graph_id == "Secret"));
+}
+
+#[test]
+fn entity_attachment_explanation_excludes_reader_hidden_manifestation_ancestry() {
+    let mut e = engine();
+    let secret = commit(&mut e, "Secret", source(json!(["bob"])));
+    let data: GraphData = serde_json::from_value(json!({
+        "nodes":[
+            {"id":"public","entity_id":"shared","space_id":"s"},
+            {"id":"hidden","entity_id":"shared","space_id":"s","readers":["bob"],
+                "derived_from":[assertion(&secret,"z")]}
+        ],
+        "attachments":[{"id":"note","host":{"kind":"entity","id":"shared"},"key":"note",
+            "value":{"kind":"literal","value":"public note"},"valid_time":{"start":0}}]
+    }))
+    .unwrap();
+    let visible_host = commit(&mut e, "Proofs", data);
+    let data = saved(
+        false,
+        vec![assertion(&visible_host, "note")],
+        vec![group(
+            vec![assertion(&visible_host, "note")],
+            vec![],
+            vec![visible_host, secret],
+        )],
+    );
+    let root = commit(&mut e, "Saved", data);
+    let result = query(&e, &root);
+    assert_eq!(result.coverage, Coverage::Complete);
+    assert_eq!(result.graph.edges.len(), 1);
+    assert!(!serde_json::to_string(&result).unwrap().contains("Secret"));
+}
+
+#[test]
+fn structural_edge_attachment_preserves_authorized_endpoint_explanation() {
+    let mut e = engine();
+    let original = commit(&mut e, "Proofs", source(json!(["alice"])));
+    let explicit: GraphData = serde_json::from_value(json!({
+        "profile":"explicit",
+        "nodes":[
+            {"id":"u","entity_id":"u","space_id":"s","derived_from":[assertion(&original,"a")]},
+            {"id":"v","entity_id":"v","space_id":"s"}
+        ],
+        "structural_edges":[{"id":"structure","predicate":"relation","from":"u","to":"v"}],
+        "attachments":[{"id":"note","host":{"kind":"edge","id":"structure"},"key":"note",
+            "value":{"kind":"literal","value":"edge annotation"},"valid_time":{"start":0}}]
+    }))
+    .unwrap();
+    let intermediate = commit(&mut e, "Secret", explicit);
+    let data = saved(
+        false,
+        vec![assertion(&intermediate, "note")],
+        vec![group(
+            vec![assertion(&intermediate, "note")],
+            vec![],
+            vec![original, intermediate],
+        )],
+    );
+    let expected = serde_json::to_vec(&data).unwrap();
+    let root = commit(&mut e, "Saved", data);
+    assert_eq!(query(&e, &root).coverage, Coverage::Complete);
+    let capsule = e.export_capsule(&root, &host()).unwrap();
+    let record = capsule
+        .revisions
+        .iter()
+        .find(|r| r.graph_id == "Saved")
+        .unwrap();
+    assert_eq!(serde_json::to_vec(&record.data).unwrap(), expected);
+    assert!(capsule.revisions.iter().any(|r| r.graph_id == "Proofs"));
+}
+
+#[test]
+fn snapshot_only_proof_preserves_transitive_explanation_pins() {
+    let mut e = engine();
+    let original = commit(&mut e, "Proofs", source(json!(["alice"])));
+    let intermediate = commit(
+        &mut e,
+        "Secret",
+        saved(
+            false,
+            vec![assertion(&original, "a")],
+            vec![group(
+                vec![assertion(&original, "a")],
+                vec![],
+                vec![original.clone()],
+            )],
+        ),
+    );
+    let data: GraphData = serde_json::from_value(json!({"nodes":[{
+        "id":"summary","entity_id":"summary","space_id":"s","derivations":[{
+            "operator":"whole-snapshot-proof","premises":[],"snapshot_premises":[intermediate],
+            "input_snapshots":[original,intermediate]
+        }]
+    }]}))
+    .unwrap();
+    let expected = serde_json::to_vec(&data).unwrap();
+    let root = commit(&mut e, "Saved", data);
+    assert_eq!(query(&e, &root).coverage, Coverage::Complete);
+    let capsule = e.export_capsule(&root, &host()).unwrap();
+    let record = capsule
+        .revisions
+        .iter()
+        .find(|r| r.graph_id == "Saved")
+        .unwrap();
+    assert_eq!(serde_json::to_vec(&record.data).unwrap(), expected);
+    assert!(capsule.revisions.iter().any(|r| r.graph_id == "Proofs"));
+}
+
+#[test]
+fn source_context_witness_is_real_transitive_proof_ancestry() {
+    let mut e = engine();
+    let schema = weave_contract::context_axes::ContextSchema::from_json(br#"{"reference":{"id":"World","revision":"1"},"axes":{"jurisdiction":{"kind":"enum","members":["EE","FI"]}}}"#).unwrap();
+    let descriptor: GraphData = serde_json::from_value(json!({
+        "profile":"explicit",
+        "nodes":[{"id":"anchor","entity_id":"world","space_id":"contexts","readers":["alice"]}],
+        "structural_edges":[{"id":"describes","predicate":"weave:context:definition","from":"anchor","to":"anchor"}],
+        "assertions":[{"id":"definition","edge_id":"describes","source":"test-author","valid_time":{"start":i64::MIN},"properties":{"weave.context":{"schema":schema,"values":{"jurisdiction":"EE"}}}}]
+    })).unwrap();
+    let context = commit(&mut e, "Proofs", descriptor);
+    let data: GraphData = serde_json::from_value(json!({
+        "nodes":[{"id":"n","entity_id":"n","space_id":"s"}],
+        "context_typing":{"selected":null,"witnesses":[{
+            "context":context,"schema":schema,"definition":assertion(&context,"definition"),
+            "anchor_nodes":[{"graph_id":context.graph_id,"revision":context.revision,"node_id":"anchor"}]
+        }]}
+    })).unwrap();
+    let intermediate = commit(&mut e, "Secret", data);
+    let data: GraphData = serde_json::from_value(json!({"nodes":[{
+        "id":"summary","entity_id":"summary","space_id":"s","derivations":[group(
+            vec![],vec![json!({"graph_id":intermediate.graph_id,"revision":intermediate.revision,"node_id":"n"})],vec![context,intermediate]
+        )]
+    }]})).unwrap();
+    let expected = serde_json::to_vec(&data).unwrap();
+    let root = commit(&mut e, "Saved", data);
+    assert_eq!(query(&e, &root).coverage, Coverage::Complete);
+    let capsule = e.export_capsule(&root, &host()).unwrap();
+    let record = capsule
+        .revisions
+        .iter()
+        .find(|r| r.graph_id == "Saved")
+        .unwrap();
+    assert_eq!(serde_json::to_vec(&record.data).unwrap(), expected);
+    assert!(capsule.revisions.iter().any(|r| r.graph_id == "Proofs"));
+    assert!(e
+        .export_capsule(&root, &HostContext::new("bob", []))
+        .is_err());
+}
+
+#[test]
 fn a_withheld_alternative_is_not_whole_snapshot_authorization() {
     for explicit in [false, true] {
         for node_only in [false, true] {
