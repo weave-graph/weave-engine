@@ -421,6 +421,7 @@ impl Engine {
             if let Some(host) = host {
                 self.require_adapter_host(adapter, host)?;
             }
+            self.require_uncanceled_delivery(adapter, event)?;
             let registration = self.handler_registration(adapter)?;
             self.handler_running(&registration, event)?;
             if let Some((id, preparation)) = self.stored_preparation(adapter, event)? {
@@ -659,6 +660,7 @@ impl Engine {
             if let Some(host) = host {
                 self.require_adapter_host(adapter, host)?;
             }
+            self.require_uncanceled_delivery(adapter, event)?;
             let registration = self.handler_registration(adapter)?;
             self.handler_running(&registration, event)?;
             let (id, preparation) = self

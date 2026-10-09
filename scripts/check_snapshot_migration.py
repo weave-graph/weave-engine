@@ -50,7 +50,8 @@ with tempfile.TemporaryDirectory(prefix='weave-snapshot-migration-') as tmp:
  def new_tables():
   with closing(sqlite3.connect(db)) as c:return {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('compiled_handlers','handler_preparations','governed_effect_bindings','governed_effect_receipts','governed_effect_context','head_observations')")}
  if a.old_marker<16:assert not new_tables()
- run(a.storage,db,'crash',20,code=82);assert state()==before;assert not retention_tables(db)
+ run(a.storage,db,'crash',20,code=82);assert state()==before
+ if a.old_marker<22:assert not retention_tables(db)
  assert recorded_history(db)==old_history
  if a.old_marker<16:assert not new_tables()
  run(a.storage,db,'after_commit',20,code=83)

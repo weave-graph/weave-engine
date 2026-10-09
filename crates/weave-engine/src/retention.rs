@@ -6,6 +6,9 @@ use std::collections::{BTreeSet, VecDeque};
 
 const KNOWN_TABLES: &[&str] = &[
     "adapters",
+    "delivery_cancellations",
+    "projection_rebuild_requests",
+    "projection_migrations",
     "admission_epochs",
     "admission_policy",
     "admission_receipts",
@@ -588,6 +591,8 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                         table.as_str(),
                                         "retention_adapter_states"
                                             | "retention_projection_receipts"
+                                            | "delivery_cancellations"
+                                            | "projection_migrations"
                                     )
                                 {
                                     let field = |name: &str| -> Result<String> {
@@ -597,8 +602,39 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                             .ok_or_else(failure)?;
                                         Ok(row.get(2 * index + 1)?)
                                     };
-                                    let adapter = field("adapter")?;
-                                    if table == "retention_adapter_states" {
+                                    let adapter = if table == "projection_migrations" {
+                                        field("source_adapter")?
+                                    } else {
+                                        field("adapter")?
+                                    };
+                                    if table == "projection_migrations" {
+                                        projection_migration::validate_retained_migration(
+                                            &adapter,
+                                            &field("destination_adapter")?,
+                                            &field("principal")?,
+                                            &field("nonce")?,
+                                            &field("digest")?,
+                                            &value,
+                                        )?;
+                                    } else if table == "delivery_cancellations" {
+                                        let event = field("event_id")?;
+                                        let revision = events.get(&event).ok_or_else(|| {
+                                            err(
+                                                "E_LIFECYCLE_INTEGRITY",
+                                                "cancellation occurrence unavailable",
+                                            )
+                                        })?;
+                                        let source =
+                                            &revisions.get(revision).ok_or_else(failure)?.0;
+                                        adapter_lifecycle::validate_retained_cancellation(
+                                            &adapter,
+                                            &event,
+                                            &field("nonce")?,
+                                            source,
+                                            &field("digest")?,
+                                            &value,
+                                        )?;
+                                    } else if table == "retention_adapter_states" {
                                         self.projection_state(&adapter)?.ok_or_else(failure)?;
                                     } else {
                                         projection_rebase::validate_retained_receipt(

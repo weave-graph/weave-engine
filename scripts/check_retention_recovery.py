@@ -3,6 +3,7 @@
 import argparse,hashlib,json,sqlite3,subprocess,tempfile
 from contextlib import closing
 from pathlib import Path
+from version_profile import store_marker
 
 def snapshot(path):
     with closing(sqlite3.connect(path)) as c:
@@ -23,7 +24,7 @@ def main():
             if a.evidence_dir:
                 stem=f'{len(trace):02d}-{mode}';(a.evidence_dir/(stem+'.stdout')).write_bytes(r.stdout);(a.evidence_dir/(stem+'.stderr')).write_bytes(r.stderr)
             return json.loads(r.stdout) if code==0 else None
-        invoke('seed');invoke('next');initial=invoke('inspect');assert initial['marker']==22 and initial['events']==3 and initial['output'] is None
+        invoke('seed');invoke('next');initial=invoke('inspect');assert initial['marker']==store_marker() and initial['events']==3 and initial['output'] is None
         before=snapshot(db);invoke('complete_crash',82);assert snapshot(db)==before
         invoke('complete_after',83);completed=invoke('inspect');assert completed['events']==4 and completed['state']['state']=={'total':3}
         before=snapshot(db);assert invoke('complete')['duplicate'];assert snapshot(db)==before
@@ -39,7 +40,7 @@ def main():
         before=snapshot(db);assert invoke('complete')['duplicate'];assert snapshot(db)==before
         assert invoke('inspect')['state']==rebuilt['state']
         if a.evidence_dir:(a.evidence_dir/'actual-completion-request.json').write_bytes(request.read_bytes())
-    report={'profile':'native-retention-projection-recovery/1','status':'passed','store_marker':22,'processes':len(trace),'controlled_deaths':6,'trace':trace,
+    report={'profile':'native-retention-projection-recovery/1','status':'passed','store_marker':store_marker(),'processes':len(trace),'controlled_deaths':6,'trace':trace,
         'checks':['actual immutable inputs and leased occurrence','state/output/receipt/checkpoint rollback before commit','exact persisted completion after lost response','raw completion cannot bypass state binding','unreachable payload erasure and policy commit together','input and receipt roots survive erasure','explicit rebuilt state and private checkpoint commit together','historical duplicate never rewinds rebuilt state'],
         'scope':'fixed trusted native worker, original opaque state supplied by host; payload-column erasure only'}
     if a.report:a.report.write_text(json.dumps(report,indent=2)+'\n')

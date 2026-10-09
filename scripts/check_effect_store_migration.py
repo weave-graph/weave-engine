@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Preserve a real historical unknown effect and its separate sink across migration."""
-from retention_migration import RETENTION_TABLES,retention_tables,assert_retention_baseline
+from retention_migration import RETENTION_TABLES,LIFECYCLE_TABLES,retention_tables,assert_retention_baseline
 from version_profile import store_marker
 import argparse
 from contextlib import closing
@@ -43,7 +43,7 @@ def main():
     parser.add_argument('--probe', type=Path)
     parser.add_argument('--storage', type=Path)
     parser.add_argument('--new-marker', type=int, default=store_marker())
-    parser.add_argument('--old-marker', type=int, default=17, choices=[17,18,19,20,21])
+    parser.add_argument('--old-marker', type=int, default=17, choices=[17,18,19,20,21,22])
     parser.add_argument('--old-protocol', default='0.18.0', choices=['0.18.0','0.19.0','0.20.0','0.21.0'])
     parser.add_argument('--prepare-only', action='store_true', help='verify historical population only; no migration claim')
     parser.add_argument('--report', type=Path)
@@ -100,6 +100,7 @@ handler ReferenceRequest revision "1" using Identity {
             migrated = (args.new_marker, before[1])
             added = ('head_observations',) if args.old_marker < 19 <= args.new_marker else ()
             if args.old_marker<22<=args.new_marker: added+=tuple(RETENTION_TABLES)
+            if args.old_marker<23<=args.new_marker: added+=tuple(LIFECYCLE_TABLES)
             assert_retention_baseline(db,args.new_marker)
             assert snapshot(db, added) == migrated and snapshot(sink) == sink_before
             history = assert_recorded_baselines(db, 10) if 'head_observations' in added else old_history

@@ -16,6 +16,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+from version_profile import store_marker
 
 
 def snapshot(path):
@@ -53,7 +54,7 @@ def main():
                         continue
                 with closing(sqlite3.connect(path)) as connection:
                     marker = connection.execute('PRAGMA user_version').fetchone()[0]
-                if marker != 22:
+                if marker != store_marker():
                     continue
                 name = f'{len(checks):02d}'
                 before = snapshot(path)
@@ -82,7 +83,7 @@ def main():
         runpy.run_path(str(controller), run_name='__main__')
     finally:
         tempfile.TemporaryDirectory.__exit__ = original_exit
-    assert checks, 'no actual store22 fixture was inspected'
+    assert checks, 'no actual current native fixture was inspected'
     report = {'profile': 'populated-default-retention-inventory/1', 'status': 'passed',
               'controller': controller.name, 'checks': checks,
               'scope': 'actual known native registry encodings, complete default roots, no erasure'}

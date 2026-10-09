@@ -468,6 +468,6 @@ fn panic_before_commit_rolls_back_payload_anchor_and_policy_together_across_reop
     assert_eq!(
         conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        22
+        STORAGE_VERSION
     );
 }

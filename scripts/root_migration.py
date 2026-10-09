@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Synthetic legacy backfill fixture; genuine prior binaries have separate controllers."""
 import argparse
+from contextlib import closing
 import json
 from version_profile import store_marker
-from retention_migration import RETENTION_TABLES,assert_retention_baseline
+from retention_migration import RETENTION_TABLES,LIFECYCLE_TABLES,assert_retention_baseline
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -27,22 +28,22 @@ with tempfile.TemporaryDirectory(prefix="weave-migration-") as directory:
     # after proving the seed has only the genuine default non-erasing state.
     # Retaining modern tables under marker5 is a downgrade, not a legacy store.
     assert_retention_baseline(db,store_marker())
-    with sqlite3.connect(db) as c:
-        for table in sorted(RETENTION_TABLES):
+    with closing(sqlite3.connect(db)) as c:
+        for table in sorted(RETENTION_TABLES|LIFECYCLE_TABLES):
             c.execute('DROP TABLE "'+table+'"')
         c.execute("DROP TABLE head_observations")
         c.execute("DELETE FROM edge_structures")
         c.execute("PRAGMA user_version=5")
         c.execute("DROP TABLE admission_epochs")
     run("crash",82)
-    with sqlite3.connect(db) as c:
+    with closing(sqlite3.connect(db)) as c:
         assert c.execute("PRAGMA user_version").fetchone()[0]==5
         assert c.execute("SELECT COUNT(*) FROM edge_structures").fetchone()[0]==0
         assert c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='admission_epochs'").fetchone()[0]==0
         assert c.execute("SELECT COUNT(*) FROM revisions").fetchone()[0]==1
         assert c.execute("SELECT COUNT(*) FROM events").fetchone()[0]==1
     assert run("open")==before
-    with sqlite3.connect(db) as c:
+    with closing(sqlite3.connect(db)) as c:
         assert c.execute("PRAGMA user_version").fetchone()[0]==store_marker()
         assert c.execute("SELECT COUNT(*) FROM edge_structures").fetchone()[0]==1
         assert c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='admission_epochs'").fetchone()[0]==1

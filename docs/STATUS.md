@@ -1,3 +1,21 @@
+## Native explicit cancellation and state migration (protocol0.21 / store23)
+
+Fixed owners can cancel an actual pending pure handler occurrence by comparing
+its lease. The immutable audit/preparation survives; canceled work cannot execute,
+and native bound state requires an explicit rebuild. Cleanup returns no source
+payload and remains possible after source-policy expiry. Actual unknown effects
+are excluded. Pure native upgrades and rollback atomically bind a fresh immutable
+artifact namespace, actual host state, compatible private checkpoint and retained
+inputs. Old namespaces remain removed, historical duplicate receipts never
+rewind state, and private unrelated scans leave public transfer inputs unchanged.
+
+A genuine populated compacted store22 upgrades without changing any original
+row or schema. The lifecycle process controller exercises24 processes and8
+controlled deaths. See [the bounded native profile](ADAPTER_LIFECYCLE.md) and
+[verification](VERIFICATION_023.md). Source/portable bindings, compiled/effectful
+upgrades, complete actor/resource/causal controls and remaining original assurance
+stay mandatory. E01–E14 remain in progress; E15 remains open.
+
 ## Native retention and projection/view rebuild (protocol0.21 / store22)
 
 Trusted native storage administration now previews and atomically rechecks a

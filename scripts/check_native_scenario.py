@@ -70,7 +70,7 @@ def main():
     parser.add_argument('--compiler-sdk', type=Path, required=True)
     parser.add_argument('--host', type=Path, required=True)
     parser.add_argument('--fixtures', type=Path, required=True)
-    parser.add_argument('--upgrade-host', type=Path, help='switch from a real store19/20/21 host to the current host after retaining an empty cluster receipt')
+    parser.add_argument('--upgrade-host', type=Path, help='switch from a real store19/20/21/22 host to the current host after retaining an empty cluster receipt')
     parser.add_argument('--peer-host', type=Path, help='continue actual source state through signed P/W/T exchange, governance and effect fencing')
     parser.add_argument('--accepted-history', action='store_true', help='verify native accepted-time selection over the actual transferred source')
     parser.add_argument('--report', type=Path)
@@ -187,7 +187,7 @@ def main():
             empty_receipt = invoke('cluster_complete', record=empty_record, lease=empty_event['lease'])
             if args.upgrade_host:
                 with database(db) as c:
-                    old_marker = c.execute('PRAGMA user_version').fetchone()[0]; assert old_marker in [19,20,21]; upgraded_markers.append(old_marker)
+                    old_marker = c.execute('PRAGMA user_version').fetchone()[0]; assert old_marker in [19,20,21,22]; upgraded_markers.append(old_marker)
                     history_before = c.execute('SELECT * FROM head_observations ORDER BY rowid').fetchall()
                 with database(journal) as c:
                     journal_before = c.execute('SELECT * FROM retained ORDER BY id').fetchall()
