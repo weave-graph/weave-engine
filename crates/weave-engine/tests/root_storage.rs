@@ -193,6 +193,7 @@ fn legacy_corruption_cannot_poison_backfill_and_repaired_fixture_upgrades() {
         .query_row("SELECT data FROM revisions", [], |r| r.get(0))
         .unwrap();
     c.execute("DELETE FROM edge_structures", []).unwrap();
+    c.execute("DROP TABLE head_observations", []).unwrap();
     c.pragma_update(None, "user_version", 5).unwrap();
     let mut bad = data();
     bad.edges[0].predicate = "poison".into();
@@ -224,7 +225,7 @@ fn legacy_corruption_cannot_poison_backfill_and_repaired_fixture_upgrades() {
     assert_eq!(
         c.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        18
+        19
     );
     assert_eq!(
         c.query_row("SELECT COUNT(*) FROM edge_structures", [], |r| r

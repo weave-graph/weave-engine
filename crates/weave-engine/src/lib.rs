@@ -32,6 +32,11 @@ mod authorization;
 #[cfg(feature = "browser-image-experiment")]
 mod image_host;
 mod operation_clock;
+mod recorded_history;
+pub use recorded_history::{
+    ObservationKind, RecordedCut, RecordedHistoryRange, RecordedObservation, RecordedQueryResult,
+};
+pub const STORAGE_VERSION: i64 = 19;
 mod read_budget;
 pub use admission::{Admitted, ProposalReceipt};
 pub use operation_clock::{ManualClock, SystemClock, TrustedClock};
@@ -145,6 +150,15 @@ impl Engine {
             before_commit,
         )
     }
+    /// Recovery host with an explicitly installed test clock, matching its fixture.
+    #[cfg(feature = "recovery-testing")]
+    pub fn open_test_before_schema_commit_with_clock(
+        path: impl AsRef<Path>,
+        clock: Arc<dyn TrustedClock>,
+        before_commit: impl FnOnce(),
+    ) -> Result<Self> {
+        Self::from_connection_boundary(Connection::open(path)?, clock, before_commit)
+    }
     fn from_connection_boundary(
         conn: Connection,
         clock: Arc<dyn TrustedClock>,
@@ -159,7 +173,7 @@ impl Engine {
         single_owner_image: bool,
     ) -> Result<Self> {
         let version = conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?;
-        if !(0..=18).contains(&version) {
+        if !(0..=STORAGE_VERSION).contains(&version) {
             return Err(err(
                 "E_STORAGE_VERSION",
                 "database schema version is unsupported",
@@ -236,7 +250,10 @@ impl Engine {
         engine.initialize_governance_delivery()?;
         engine.initialize_governance_graphs()?;
         engine.initialize_governed_effects()?;
-        engine.conn.pragma_update(None, "user_version", 18)?;
+        engine.initialize_recorded_history(version)?;
+        engine
+            .conn
+            .pragma_update(None, "user_version", STORAGE_VERSION)?;
         before_commit();
         initialization.commit()?;
         Ok(engine)
@@ -662,7 +679,14 @@ impl Engine {
             "INSERT INTO revisions VALUES (?1,?2,?3,?4,?5,?6)",
             params![revision, graph, branch, head, time, json],
         )?;
-        self.conn.execute("INSERT INTO heads VALUES (?1,?2,?3) ON CONFLICT(graph_id,branch_id) DO UPDATE SET revision=excluded.revision",params![graph,branch,revision])?;
+        self.advance_head(
+            &GraphRef {
+                graph_id: graph.into(),
+                revision: revision.clone(),
+            },
+            branch,
+            ObservationKind::Committed,
+        )?;
         self.conn.execute("INSERT INTO events(event_id,graph_id,branch_id,revision,actor) VALUES (?1,?2,?3,?4,?5)",params![event_id,graph,branch,revision,host.principal])?;
         self.validate_required_metadata(data, host)?;
         self.record_structures(graph, data)?;

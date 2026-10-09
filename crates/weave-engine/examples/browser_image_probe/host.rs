@@ -48,7 +48,7 @@ pub extern "C" fn weave_image_open(create: u32) -> *mut c_char {
             }
             .map_err(|e| e.code)?,
         );
-        Ok(json!({"handle":"singleton-fixture","schema":17}))
+        Ok(json!({"handle":"singleton-fixture","schema":weave_engine::STORAGE_VERSION}))
     })())
 }
 

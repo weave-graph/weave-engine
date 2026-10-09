@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import tempfile
+from migration_history import assert_recorded_baselines, recorded_history
 
 
 def invoke(binary, *args, code=0):
@@ -19,7 +20,7 @@ def invoke(binary, *args, code=0):
     return json.loads(result.stdout) if code == 0 else result.stderr
 
 
-def snapshot(path):
+def snapshot(path, ignore=()):
     with closing(sqlite3.connect(path)) as connection:
         tables = connection.execute(
             "SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
@@ -28,7 +29,7 @@ def snapshot(path):
             table: (sql, sorted(connection.execute(
                 'SELECT * FROM "' + table.replace('"', '""') + '"'
             ).fetchall(), key=repr))
-            for table, sql in tables
+            for table, sql in tables if table not in ignore
         }
         return connection.execute('PRAGMA user_version').fetchone()[0], rows
 
@@ -39,7 +40,9 @@ def main():
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--probe', type=Path)
     parser.add_argument('--storage', type=Path)
-    parser.add_argument('--new-marker', type=int, default=18)
+    parser.add_argument('--new-marker', type=int, default=19)
+    parser.add_argument('--old-marker', type=int, default=17, choices=[17,18])
+    parser.add_argument('--old-protocol', default='0.18.0', choices=['0.18.0','0.19.0'])
     parser.add_argument('--prepare-only', action='store_true', help='verify historical population only; no migration claim')
     parser.add_argument('--report', type=Path)
     args = parser.parse_args()
@@ -58,7 +61,7 @@ handler ReferenceRequest revision "1" using Identity {
 }
 ''', encoding='utf-8')
         template = invoke(args.old_compiler, 'handler-plan', source, '--handler', 'ReferenceRequest')
-        assert template['protocol'] == '0.18.0'
+        assert template['protocol'] == args.old_protocol
 
         def call(binary, path, mode, code=0, **values):
             request.write_text(json.dumps({'mode': mode, **values}), encoding='utf-8')
@@ -77,7 +80,7 @@ handler ReferenceRequest revision "1" using Identity {
         assert unknown['state'] == 'unknown' and unknown['attempt_id'] == ticket['attempt_id']
         assert 'E_EFFECT_UNKNOWN' in call(args.old_probe, db, 'begin', code=1, intent=intent)
         before, sink_before = snapshot(db), snapshot(sink)
-        assert before[0] == 17
+        assert before[0] == args.old_marker
         assert len(sink_before[1]['actions'][1]) == 1
         assert len(sink_before[1]['receipts'][1]) == 1
         for table in ('governed_effect_bindings', 'governed_effect_receipts',
@@ -87,20 +90,23 @@ handler ReferenceRequest revision "1" using Identity {
         checks = ['actual historical source compiler and accepted governed occurrence',
                   'unknown immutable effect with one independent committed sink action']
         if not args.prepare_only:
-            invoke(args.storage, db, 'crash', code=82)
+            invoke(args.storage, db, 'crash', 10, code=82)
             assert snapshot(db) == before and snapshot(sink) == sink_before
-            invoke(args.storage, db, 'after_commit', code=83)
+            assert recorded_history(db) is None
+            invoke(args.storage, db, 'after_commit', 10, code=83)
             migrated = (args.new_marker, before[1])
-            assert snapshot(db) == migrated and snapshot(sink) == sink_before
+            added = ('head_observations',) if args.new_marker >= 19 else ()
+            assert snapshot(db, added) == migrated and snapshot(sink) == sink_before
+            history = assert_recorded_baselines(db, 10) if added else None
             replay = call(args.probe, db, 'enqueue', **delivery)
             assert replay == {**original, 'duplicate': True}
             assert call(args.probe, db, 'status', intent=intent) == unknown
             assert 'E_EFFECT_UNKNOWN' in call(args.probe, db, 'begin', code=1, intent=intent)
-            assert snapshot(db) == migrated
+            assert snapshot(db, added) == migrated and recorded_history(db) == history
             assert 'E_STORAGE_VERSION' in call(args.old_probe, db, 'status', code=1, intent=intent)
-            assert snapshot(db) == migrated
+            assert snapshot(db, added) == migrated and recorded_history(db) == history
             checks += ['precommit migration death preserves all historical rows',
-                       'postcommit migration death changes only store marker',
+                       'postcommit migration adds current-time baselines and preserves all historical rows',
                        'exact governed receipt and unknown attempt survive restart',
                        'no second dispatch ticket; old runtime refuses upgraded database']
             reconciliation = dict(intent=intent, attempt=ticket['attempt_id'],
@@ -113,8 +119,8 @@ handler ReferenceRequest revision "1" using Identity {
             checks.append('old sink evidence reconciles once; exact replay leaves both stores unchanged')
         report = {'profile': 'historical-governed-effect-migration',
                   'status': 'historical-fixture-only' if args.prepare_only else 'passed',
-                  'old_marker': 17, 'new_marker': None if args.prepare_only else args.new_marker,
-                  'old_protocol': '0.18.0', 'checks': checks,
+                  'old_marker': args.old_marker, 'new_marker': None if args.prepare_only else args.new_marker,
+                  'old_protocol': args.old_protocol, 'checks': checks,
                   'historical_tables': len(before[1]),
                   'ticket_payload_sha256': hashlib.sha256(bytes(ticket['payload'])).hexdigest()}
         if args.report:

@@ -165,7 +165,14 @@ impl Engine {
                     "INSERT INTO revision_integrity VALUES (?1,?2,?3)",
                     params![member.revision, member.content_digest, manifest_id],
                 )?;
-                self.conn.execute("INSERT INTO heads VALUES (?1,?2,?3) ON CONFLICT(graph_id,branch_id) DO UPDATE SET revision=excluded.revision",params![member.graph_id,member.branch_id,member.revision])?;
+                self.advance_head(
+                    &GraphRef {
+                        graph_id: member.graph_id.clone(),
+                        revision: member.revision.clone(),
+                    },
+                    &member.branch_id,
+                    ObservationKind::Committed,
+                )?;
                 if !unchanged.contains(&member.graph_id) {
                     self.conn.execute("INSERT INTO events(event_id,graph_id,branch_id,revision,actor) VALUES (?1,?2,?3,?4,?5)",params![format!("commit:{}",member.revision),member.graph_id,member.branch_id,member.revision,host.principal])?;
                 }

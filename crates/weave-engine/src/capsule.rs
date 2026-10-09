@@ -635,7 +635,7 @@ impl Engine {
                 self.event_count()?
             ))?)
         );
-        tx.execute("INSERT INTO heads VALUES (?1,?2,?3) ON CONFLICT(graph_id,branch_id) DO UPDATE SET revision=excluded.revision",params![reference.graph_id,branch,reference.revision])?;
+        self.advance_head(reference, branch, ObservationKind::Accepted)?;
         tx.execute("INSERT INTO events(event_id,graph_id,branch_id,revision,actor) VALUES (?1,?2,?3,?4,?5)",params![event_id,reference.graph_id,branch,reference.revision,host.principal])?;
         Ok(())
     }

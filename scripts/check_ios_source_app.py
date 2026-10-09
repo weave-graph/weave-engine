@@ -196,6 +196,7 @@ def main():
                 assert json.loads((data / 'rollback-denial.json').read_bytes())['error']['code'] == 'E_CONFLICT'
                 connection = sqlite3.connect(data / 'engine.sqlite')
                 try:
+                    store_marker = connection.execute('PRAGMA user_version').fetchone()[0]
                     events = connection.execute('SELECT count(*) FROM events').fetchone()[0]
                     assert events == 6
                     assert connection.execute('SELECT count(*) FROM dispatch_pending').fetchone()[0] == 0
@@ -205,7 +206,7 @@ def main():
                     connection.close()
                 for path in data.glob('*.json'):
                     shutil.copy2(path, evidence / path.name)
-                variants.append({'variant': variant, 'definition_digest': template['definition_digest'],
+                variants.append({'store_marker': store_marker, 'variant': variant, 'definition_digest': template['definition_digest'],
                                  'events': events, 'preparation_id': prepared['preparation_id'],
                                  'receipt_sha256': sha((data / 'complete-completion.json').read_bytes()),
                                  'database_bytes': (data / 'engine.sqlite').stat().st_size})
@@ -215,9 +216,10 @@ def main():
                         shutil.copy2(path, evidence / path.name)
                 if installed:
                     run(simctl + ['uninstall', args.simulator, identity])
+    assert len({v['store_marker'] for v in variants}) == 1
     report = {'profile': 'ios-source-app/1', 'status': 'passed', 'runtime': matches[0][0],
               'device': matches[0][1]['name'], 'target': 'aarch64-apple-ios-sim', 'compiler_host': sys.platform,
-              'protocol': '0.19.0', 'store_marker': 18, 'application_processes': len(trace),
+              'protocol': '0.19.0', 'store_marker': variants[0]['store_marker'], 'application_processes': len(trace),
               'compiler_processes': len(compiles), 'lost_responses': sum(t['lost_response'] for t in trace),
               'seconds': round(time.monotonic() - started, 3), 'native_library_sha256': sha(args.library.read_bytes()),
               'application_executable_sha256': executable_digest, 'variants': variants, 'trace': trace, 'compiler_trace': compiles,

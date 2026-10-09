@@ -3,6 +3,7 @@
 import argparse, hashlib, json, sqlite3, subprocess, tempfile
 from pathlib import Path
 from contextlib import closing
+from migration_history import assert_recorded_baselines, recorded_history
 p=argparse.ArgumentParser()
 p.add_argument('--old-view',type=Path,required=True)
 p.add_argument('--old-trace',type=Path,required=True)
@@ -10,9 +11,9 @@ p.add_argument('--view',type=Path,default=Path('target/debug/examples/source_vie
 p.add_argument('--trace',type=Path,default=Path('target/debug/examples/three_peer_trace'))
 p.add_argument('--storage',type=Path,default=Path('target/debug/examples/storage_probe'))
 p.add_argument('--report',type=Path)
-p.add_argument('--old-protocol',default='0.16.0',choices=['0.16.0','0.17.0','0.18.0'])
+p.add_argument('--old-protocol',default='0.16.0',choices=['0.16.0','0.17.0','0.18.0','0.19.0'])
 p.add_argument('--old-marker',default=14,type=int)
-p.add_argument('--new-marker',default=18,type=int)
+p.add_argument('--new-marker',default=19,type=int)
 a=p.parse_args()
 def run(binary,*args,code=0):
  r=subprocess.run([str(binary.resolve()),*map(str,args)],capture_output=True,text=True,timeout=30)
@@ -37,32 +38,39 @@ with tempfile.TemporaryDirectory(prefix='weave-snapshot-migration-') as tmp:
  templatefile.write_text(json.dumps(template))
  registered=run(a.old_view,db,'register',templatefile,'migration-view','fixed')
  before_current=run(a.old_view,db,'current','migration-view',template['definition_digest'],'fixed')
+ with closing(sqlite3.connect(db)) as c:
+  old_tables = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
  def state():
   with closing(sqlite3.connect(db)) as c:
-   tables = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")] if a.old_marker>=17 else ['revisions','events','admission_receipts','live_views','view_sources']
-   return {'marker':c.execute('PRAGMA user_version').fetchone()[0],**{t:sorted(c.execute('SELECT * FROM '+t).fetchall(),key=repr) for t in tables}}
+   return {'marker':c.execute('PRAGMA user_version').fetchone()[0],**{t:(c.execute("SELECT sql FROM sqlite_master WHERE name=?",(t,)).fetchone()[0],sorted(c.execute('SELECT * FROM "'+t.replace('"','""')+'"').fetchall(),key=repr)) for t in old_tables}}
  before=state();assert before['marker']==a.old_marker
  def new_tables():
-  with closing(sqlite3.connect(db)) as c:return {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('compiled_handlers','handler_preparations','governed_effect_bindings','governed_effect_receipts','governed_effect_context')")}
+  with closing(sqlite3.connect(db)) as c:return {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('compiled_handlers','handler_preparations','governed_effect_bindings','governed_effect_receipts','governed_effect_context','head_observations')")}
  if a.old_marker<16:assert not new_tables()
- run(a.storage,db,'crash',code=82);assert state()==before
+ run(a.storage,db,'crash',20,code=82);assert state()==before
+ assert recorded_history(db) is None
  if a.old_marker<16:assert not new_tables()
- run(a.storage,db,'after_commit',code=83)
+ run(a.storage,db,'after_commit',20,code=83)
  committed=state()
  if a.new_marker>=16:
   expected={'compiled_handlers','handler_preparations'}
   if a.new_marker>=17:expected|={'governed_effect_bindings','governed_effect_receipts','governed_effect_context'}
+  if a.new_marker>=19:expected.add('head_observations')
   assert new_tables()==expected
  assert committed['marker']==a.new_marker and {**committed,'marker':a.old_marker}==before
+ history=assert_recorded_baselines(db,20) if a.new_marker>=19 else None
  current=run(a.view,db,'current','migration-view',template['definition_digest'],'fixed')
  assert current==before_current,(current,before_current)
  after=state();assert after['marker']==a.new_marker and {**after,'marker':a.old_marker}==before
+ assert recorded_history(db)==history
  replay=trace(a.trace,'export_signed',**export)
  assert replay['response']['duplicate'] is True
  assert replay['response']['result']==original['response']['result']
  assert state()==after
+ assert recorded_history(db)==history
  error=run(a.old_view,db,'current','migration-view',template['definition_digest'],'fixed',code=1)
  assert 'E_STORAGE_VERSION' in error and state()==after
+ assert recorded_history(db)==history
  report={'old_marker':a.old_marker,'new_marker':a.new_marker,'old_protocol':a.old_protocol,'checks':['populated old template and signed receipt','precommit rollback','postcommit death and exact restart','unchanged persisted template/cache/receipt/rows','exact historical response replay','old binary refusal'], 'template_digest':template['definition_digest']}
  if a.report:a.report.write_text(json.dumps(report,indent=2)+'\n')
  print(json.dumps(report))

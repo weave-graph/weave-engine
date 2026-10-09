@@ -17,6 +17,7 @@ with tempfile.TemporaryDirectory(prefix="weave-migration-") as directory:
         return json.loads(result.stdout) if result.stdout else None
     before=run("seed")
     with sqlite3.connect(db) as c:
+        c.execute("DROP TABLE head_observations")
         c.execute("DELETE FROM edge_structures")
         c.execute("PRAGMA user_version=5")
         c.execute("DROP TABLE admission_epochs")
@@ -29,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix="weave-migration-") as directory:
         assert c.execute("SELECT COUNT(*) FROM events").fetchone()[0]==1
     assert run("open")==before
     with sqlite3.connect(db) as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0]==18
+        assert c.execute("PRAGMA user_version").fetchone()[0]==19
         assert c.execute("SELECT COUNT(*) FROM edge_structures").fetchone()[0]==1
         assert c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='admission_epochs'").fetchone()[0]==1
     assert run("open")==before

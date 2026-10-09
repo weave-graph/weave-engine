@@ -541,6 +541,7 @@ fn old_sql_only_decisions_are_not_backfilled_and_next_publication_is_real() {
     drop(e);
     let db = rusqlite::Connection::open(&path).unwrap();
     // Reconstruct the preceding marker11 storage profile: SQL decisions had no graph.
+    db.execute("DROP TABLE head_observations", []).unwrap();
     for table in [
         "events",
         "heads",
@@ -567,7 +568,7 @@ fn old_sql_only_decisions_are_not_backfilled_and_next_publication_is_real() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        18
+        STORAGE_VERSION
     );
     assert_eq!(
         db.query_row("SELECT count(*) FROM governance_graphs", [], |r| r
@@ -725,11 +726,33 @@ fn current_source_policy_revocation_blocks_decision_and_saved_acceptance_without
     let accepted = e.query_accepted_view(&choose(None), &host()).unwrap();
     let premise = accepted.graph.influence.as_ref().unwrap().assertions[0].clone();
     let saved = save(&mut e, accepted.graph);
+    let recorded = e.recorded_checkpoint_for("saved", "main", &host()).unwrap();
+    let cut = RecordedCut::Checkpoint {
+        observer: recorded.observer,
+        checkpoint: recorded.checkpoint,
+    };
+    let mut historical_query = q(&saved);
+    historical_query.revision = None;
+    assert!(e
+        .query_recorded_for(&historical_query, &cut, &host())
+        .is_ok());
     e.revoke_identity_policy(&identity.reference).unwrap();
     assert!(e.query_accepted_view(&choose(None), &host()).is_err());
     assert!(e.resolve_assertion(&premise, &host()).unwrap().is_none());
     assert!(e.query(&q(&saved), &host()).unwrap().graph.nodes.is_empty());
     assert!(e.export_capsule(&saved, &host()).is_err());
+    assert_eq!(
+        e.query_recorded_for(&historical_query, &cut, &host())
+            .unwrap_err()
+            .code,
+        "E_HISTORY_UNAVAILABLE"
+    );
+    assert_eq!(
+        e.recorded_checkpoint_for("saved", "main", &host())
+            .unwrap_err()
+            .code,
+        "E_HISTORY_UNAVAILABLE"
+    );
 }
 #[test]
 fn historical_approval_expiry_does_not_replace_current_policy_read_authority() {

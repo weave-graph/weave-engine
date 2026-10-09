@@ -181,8 +181,10 @@ fn auxiliary_schema_upgrade_preserves_primary_rows_and_owner_boundary() {
     let pin = e.head("g", "main").unwrap();
     drop(e);
     let c = rusqlite::Connection::open(&path).unwrap();
-    c.execute_batch("DROP TABLE view_selection; PRAGMA user_version=12;")
-        .unwrap();
+    c.execute_batch(
+        "DROP TABLE head_observations; DROP TABLE view_selection; PRAGMA user_version=12;",
+    )
+    .unwrap();
     drop(c);
     let mut e = Engine::open(&path).unwrap();
     assert_eq!(e.head("g", "main").unwrap(), pin);
@@ -195,6 +197,6 @@ fn auxiliary_schema_upgrade_preserves_primary_rows_and_owner_boundary() {
     assert_eq!(
         c.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        18
+        weave_engine::STORAGE_VERSION
     );
 }
