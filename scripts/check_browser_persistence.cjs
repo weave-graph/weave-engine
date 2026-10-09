@@ -68,6 +68,16 @@ async function main() {
   }
   async function reload(page, store) {
     await page.reload();
+    // Navigation/tab closure and the lock manager's worker teardown finish separately.
+    // Observe actual ownership release; do not retry/poison a new worker on E_OWNER_BUSY.
+    await deadline(page.evaluate(async store => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 14000);
+      try {
+        await navigator.locks.request(`weave-image-experiment-${store}`,
+          {mode:'exclusive', signal:controller.signal}, () => {});
+      } finally {clearTimeout(timer);}
+    }, store), 'terminated worker ownership release');
     const opened=await open(page,store,false);assert.equal(opened.ok,true,JSON.stringify(opened));
     const result=await step(page,0);assert.equal(result.ok,true,JSON.stringify(result));return result.value;
   }
