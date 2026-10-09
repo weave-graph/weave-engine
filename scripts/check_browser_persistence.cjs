@@ -6,6 +6,13 @@ const os = require('node:os');
 const assert = require('node:assert/strict');
 const {execFileSync} = require('node:child_process');
 const {chromium} = require('playwright');
+// Compare the real persisted header against the current native format fence.
+// The historical kernel remains pinned independently to store17 below.
+const markerSource = fs.readFileSync(path.resolve(__dirname,
+  '../crates/weave-engine/src/lib.rs'), 'utf8');
+const markerMatch = markerSource.match(/pub const STORAGE_VERSION: i64 = (\d+);/);
+assert.ok(markerMatch, 'current native storage marker is missing');
+const currentMarker = Number(markerMatch[1]);
 
 async function deadline(promise, label, millis=15000) {
   let timer;
@@ -142,8 +149,8 @@ async function main() {
         // Terminate the worker, including any actual open readwrite transaction.
         await page.reload();const afterDeath=await persistedImage(page,store);
         if(fault==='after-sql'||fault==='abort')assert.deepEqual(afterDeath,oldImage);
-        else if(fault==='after-idb')assert.equal(afterDeath.marker,21);
-        else assert.ok([17,21].includes(afterDeath.marker));
+        else if(fault==='after-idb')assert.equal(afterDeath.marker,currentMarker);
+        else assert.ok([17,currentMarker].includes(afterDeath.marker));
         if(afterDeath.marker===17)assert.deepEqual(afterDeath,oldImage);
         else assert.equal(BigInt(afterDeath.generation),BigInt(oldImage.generation)+1n);
         assert.equal((await open(page,store,false)).ok,true);
@@ -155,7 +162,7 @@ async function main() {
         assert.ok(oldValue.result_json.startsWith(oldPrefix));
         assert.ok(migratedValue.result_json.startsWith(newPrefix));
         assert.deepEqual(migratedValue,{...oldValue,result_json:newPrefix+oldValue.result_json.slice(oldPrefix.length)});
-        const upgraded=await persistedImage(page,store);assert.equal(upgraded.marker,21);
+        const upgraded=await persistedImage(page,store);assert.equal(upgraded.marker,currentMarker);
         selectArtifact(oldArtifact);await page.reload();
         assert.equal((await open(page,store,false)).code,'E_STORAGE_VERSION');
         assert.deepEqual(await persistedImage(page,store),upgraded);
