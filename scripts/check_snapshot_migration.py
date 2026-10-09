@@ -13,7 +13,7 @@ p.add_argument('--storage',type=Path,default=Path('target/debug/examples/storage
 p.add_argument('--report',type=Path)
 p.add_argument('--old-protocol',default='0.16.0',choices=['0.16.0','0.17.0','0.18.0','0.19.0'])
 p.add_argument('--old-marker',default=14,type=int)
-p.add_argument('--new-marker',default=19,type=int)
+p.add_argument('--new-marker',default=20,type=int)
 a=p.parse_args()
 def run(binary,*args,code=0):
  r=subprocess.run([str(binary.resolve()),*map(str,args)],capture_output=True,text=True,timeout=30)
@@ -44,11 +44,12 @@ with tempfile.TemporaryDirectory(prefix='weave-snapshot-migration-') as tmp:
   with closing(sqlite3.connect(db)) as c:
    return {'marker':c.execute('PRAGMA user_version').fetchone()[0],**{t:(c.execute("SELECT sql FROM sqlite_master WHERE name=?",(t,)).fetchone()[0],sorted(c.execute('SELECT * FROM "'+t.replace('"','""')+'"').fetchall(),key=repr)) for t in old_tables}}
  before=state();assert before['marker']==a.old_marker
+ old_history=recorded_history(db)
  def new_tables():
   with closing(sqlite3.connect(db)) as c:return {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('compiled_handlers','handler_preparations','governed_effect_bindings','governed_effect_receipts','governed_effect_context','head_observations')")}
  if a.old_marker<16:assert not new_tables()
  run(a.storage,db,'crash',20,code=82);assert state()==before
- assert recorded_history(db) is None
+ assert recorded_history(db)==old_history
  if a.old_marker<16:assert not new_tables()
  run(a.storage,db,'after_commit',20,code=83)
  committed=state()
@@ -58,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix='weave-snapshot-migration-') as tmp:
   if a.new_marker>=19:expected.add('head_observations')
   assert new_tables()==expected
  assert committed['marker']==a.new_marker and {**committed,'marker':a.old_marker}==before
- history=assert_recorded_baselines(db,20) if a.new_marker>=19 else None
+ history=assert_recorded_baselines(db,20) if a.old_marker<19<=a.new_marker else old_history
  current=run(a.view,db,'current','migration-view',template['definition_digest'],'fixed')
  assert current==before_current,(current,before_current)
  after=state();assert after['marker']==a.new_marker and {**after,'marker':a.old_marker}==before

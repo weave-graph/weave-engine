@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix='weave-compiled-migration-') as tmp:
     upgraded = run(a.engine)
     assert upgraded.returncode == 0, upgraded.stderr
     after = state()
-    assert after[:3] == (19,1,1) and after[3:] == before[3:], (before,after)
+    assert after[:3] == (20,1,1) and after[3:] == before[3:], (before,after)
     refused = run(a.older_engine)
     assert refused.returncode != 0 and 'E_STORAGE_VERSION' in refused.stderr, refused.stderr
     assert run(a.engine).returncode == 0 and state() == after

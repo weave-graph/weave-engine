@@ -88,8 +88,47 @@ pub fn golden_profile() -> Vec<u8> {
         "exact_decimal":{"sum":sum,"beyond_binary64":huge,"nonterminating_error":nonterminating.to_string()},
         "nominal_quantity":{"converted":converted,"mismatch_error":mismatch_unit.to_string()},
         "graph_union":union,"four_valued_temporal_support":states,"exact_context":{"selected":default,"reselection_error":mismatch},
-        "authorized_geometry_fixture":geometry,"lazy_clustering":cluster,"typed_context_carrier":typed_context_profile(),"temporal_alternative_carriers":temporal_profile()
+        "authorized_geometry_fixture":geometry,"lazy_clustering":cluster,"typed_context_carrier":typed_context_profile(),"temporal_alternative_carriers":temporal_profile(),"recorded_witness_composition":recorded_profile()
     },"limits":["fixed host-authorized test inputs; no authentication or persistent runtime","binary64 fixture agreement is not general bitwise geometry portability","no browser storage, network, mobile energy or adapter sandbox claim"]})).unwrap()
+}
+fn recorded_profile() -> Value {
+    use weave_contract::{ObservationKind, RecordedObservation};
+    let context = AlgebraContext {
+        principal: "reader".into(),
+        max_objects: 100,
+        max_output_bytes: 1_000_000,
+    };
+    let mut left = fixture("left", "positive", 0, 10);
+    let observation = RecordedObservation {
+        observer: "local".into(),
+        checkpoint: "checkpoint-left".into(),
+        graph: GraphRef {
+            graph_id: "left".into(),
+            revision: "r".into(),
+        },
+        branch_id: "main".into(),
+        recorded_at_ms: 10,
+        kind: ObservationKind::Committed,
+    };
+    left.recorded_observations.push(observation.clone());
+    let mut right = fixture("right", "positive", 0, 10);
+    right.recorded_observations.push(RecordedObservation {
+        checkpoint: "checkpoint-right".into(),
+        graph: GraphRef {
+            graph_id: "right".into(),
+            revision: "r".into(),
+        },
+        ..observation
+    });
+    let union = algebra::union(left.clone(), right, &context).unwrap();
+    assert_eq!(union.recorded_observations.len(), 2);
+    let empty = algebra::project(union.clone(), &[], &[], &context).unwrap();
+    assert_eq!(empty.recorded_observations, union.recorded_observations);
+    let mut conflict = left.clone();
+    conflict.recorded_observations[0].recorded_at_ms = 11;
+    let error = algebra::union(left, conflict, &context).unwrap_err();
+    assert_eq!(error.code, "E_HISTORY_SELECTOR");
+    json!({"union":union,"empty":empty,"conflict":error,"scope":"descriptive witnesses; no registry installation or storage selection"})
 }
 fn temporal_profile() -> Value {
     use weave_contract::{

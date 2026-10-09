@@ -115,7 +115,12 @@ fn tick(text: &str) -> Option<i64> {
     }
 }
 fn run(a: &[String]) -> weave_engine::Result<Value> {
-    let clock = Arc::new(ManualClock::new(if a[2] == "expired" { 10000 } else { 20 }));
+    let clock: Arc<dyn TrustedClock> =
+        if ["recorded_register", "recorded_refresh"].contains(&a[2].as_str()) {
+            Arc::new(SystemClock)
+        } else {
+            Arc::new(ManualClock::new(if a[2] == "expired" { 10000 } else { 20 }))
+        };
     let mut e = Engine::open_with_clock(&a[1], clock)?;
     match a[2].as_str() {
         "seed" => {
@@ -125,7 +130,7 @@ fn run(a: &[String]) -> weave_engine::Result<Value> {
             let empty_accepted = accept(&e, "empty", empty, "empty-initial")?;
             Ok(json!({"accepted":accepted,"empty":empty_accepted,"source":source}))
         }
-        "register" => {
+        "register" | "recorded_register" => {
             let template: CompiledViewTemplate = read_json(&a[3]);
             Ok(serde_json::to_value(e.register_compiled_view(
                 &a[4],
@@ -168,7 +173,7 @@ fn run(a: &[String]) -> weave_engine::Result<Value> {
             };
             Ok(serde_json::to_value(accept(&e, "team", source, "next")?)?)
         }
-        "refresh" => Ok(serde_json::to_value(e.refresh_view(
+        "refresh" | "recorded_refresh" => Ok(serde_json::to_value(e.refresh_view(
             &a[3],
             tick(&a[4]),
             &host(),

@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  CARGO_BUILD_JOBS: '2'
+  CARGO_INCREMENTAL: '0'
 jobs:
   compiler-runtime:
     runs-on: ubuntu-latest
@@ -15,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: weave-graph/weave-language
-          ref: f18d35cf93ce3f45ce4e7b4b3c6971110e9d0ad4
+          ref: 535a50aae16d00f630b8a61a3a9bbc43d714e9a5
           path: weave-language
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify actual compiler and persistent runtime
@@ -90,7 +93,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: weave-graph/weave-language
-          ref: f18d35cf93ce3f45ce4e7b4b3c6971110e9d0ad4
+          ref: 535a50aae16d00f630b8a61a3a9bbc43d714e9a5
           path: weave-language
       - uses: dtolnay/rust-toolchain@stable
       - name: Build actual compiler SDK and native embedding library
@@ -100,11 +103,15 @@ jobs:
       - name: Verify arbitrary source artifacts, installation, ownership and restart
         run: python3 weave-engine/scripts/check_host_facade.py --library weave-engine/target/debug/${{ matrix.runtime }} --compiler-sdk weave-language/target/debug/${{ matrix.compiler }}
       - name: Build compiled offline scenario and signed peer recovery hosts
-        run: cargo build --manifest-path weave-engine/Cargo.toml --locked -p weave-native --example native_scenario -p weave-engine --example three_peer_trace --features recovery-testing
+        run: cargo build --manifest-path weave-engine/Cargo.toml --locked -p weave-native --example native_scenario -p weave-engine --example three_peer_trace --example source_view_fixture --bin weave-engine --features recovery-testing
+      - name: Execute actual SDK recorded pins and sealed historical views
+        run: python3 weave-engine/scripts/check_recorded_source.py --compiler-sdk weave-language/target/debug/${{ matrix.compiler }} --engine weave-engine/target/debug/weave-engine --view-host weave-engine/target/debug/examples/source_view_fixture --report recorded-source.json
       - name: Execute actual source offline reaction, cluster, transfer, acceptance and effect recovery
         run: python3 weave-engine/scripts/check_native_scenario.py --compiler-sdk weave-language/target/debug/${{ matrix.compiler }} --host weave-engine/target/debug/examples/native_scenario --peer-host weave-engine/target/debug/examples/three_peer_trace --fixtures weave-language/examples/native_scenario --report native-scenario-bc.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: native-scenario-${{ matrix.os }}
-          path: native-scenario-bc.json
+          path: |
+            native-scenario-bc.json
+            recorded-source.json

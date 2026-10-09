@@ -5,38 +5,6 @@ use serde::{Deserialize, Serialize};
 pub const MAX_RECORDED_OBSERVATIONS: usize = 100_000;
 pub const MAX_HISTORY_RANGE: usize = 1000;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ObservationKind {
-    Baseline,
-    Committed,
-    Accepted,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct RecordedObservation {
-    pub observer: String,
-    pub checkpoint: String,
-    pub graph: GraphRef,
-    pub branch_id: String,
-    pub recorded_at_ms: i64,
-    pub kind: ObservationKind,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum RecordedCut {
-    Checkpoint {
-        observer: String,
-        checkpoint: String,
-    },
-    AtTime {
-        observer: String,
-        unix_millis: i64,
-    },
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecordedQueryResult {
     pub observation: RecordedObservation,
@@ -95,12 +63,12 @@ const COLUMNS: &str = "substr(id,1,513),substr(graph_id,1,513),substr(branch_id,
 
 impl Engine {
     pub(crate) fn initialize_recorded_history(&self, old_version: i64) -> Result<()> {
-        if old_version == STORAGE_VERSION && !self.conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='head_observations')", [], |r| r.get::<_, bool>(0))? {
+        if old_version >= 19 && !self.conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='head_observations')", [], |r| r.get::<_, bool>(0))? {
             return Err(err("E_INTEGRITY", "recorded history table unavailable"));
         }
         self.conn.execute_batch("CREATE TABLE IF NOT EXISTS head_observations(id TEXT PRIMARY KEY,graph_id TEXT NOT NULL,branch_id TEXT NOT NULL,revision TEXT NOT NULL REFERENCES revisions(revision),parent TEXT REFERENCES head_observations(id),recorded_at_ms INTEGER NOT NULL CHECK(recorded_at_ms>=0),kind TEXT NOT NULL CHECK(kind IN ('baseline','committed','accepted')));
 CREATE INDEX IF NOT EXISTS head_observations_scope ON head_observations(graph_id,branch_id,recorded_at_ms);")?;
-        if old_version < STORAGE_VERSION
+        if old_version < 19
             && self
                 .conn
                 .query_row("SELECT EXISTS(SELECT 1 FROM heads)", [], |r| {
@@ -372,11 +340,64 @@ CREATE INDEX IF NOT EXISTS head_observations_scope ON head_observations(graph_id
         let observation = self.select_observation(&query.graph_id, &query.branch_id, cut, host)?;
         let mut pinned = query.clone();
         pinned.revision = Some(observation.graph.revision.clone());
-        let result = self.query(&pinned, host)?;
+        let mut result = self.query(&pinned, host)?;
+        result.recorded_observations.push(observation.clone());
         Ok(RecordedQueryResult {
             observation,
             result,
         })
+    }
+    pub fn query_recorded_selection_for(
+        &self,
+        query: &QueryPlan,
+        selection: &RecordedSelection,
+        host: &HostContext,
+    ) -> Result<QueryResult> {
+        let _transaction = self.optional_read_transaction()?;
+        let _clock = self.operation_scope()?;
+        weave_contract::recorded_history::validate_selection(selection)
+            .map_err(|d| err(&d.code, &d.message))?;
+        let cut = match selection {
+            RecordedSelection::LocalTime { unix_millis } => RecordedCut::AtTime {
+                observer: self.runtime_source_identity()?,
+                unix_millis: *unix_millis,
+            },
+            RecordedSelection::Checkpoint {
+                observer,
+                checkpoint,
+            } => RecordedCut::Checkpoint {
+                observer: observer.clone(),
+                checkpoint: checkpoint.clone(),
+            },
+        };
+        Ok(self.query_recorded_for(query, &cut, host)?.result)
+    }
+    pub(crate) fn require_recorded_result_authority(
+        &self,
+        value: &QueryResult,
+        host: &HostContext,
+    ) -> Result<()> {
+        if value.recorded_observations.len() > 1000 {
+            return Err(err("E_BUDGET", "recorded selection manifest limit"));
+        }
+        for observation in &value.recorded_observations {
+            if !value.input_snapshots.contains(&observation.graph) {
+                return Err(unavailable());
+            }
+            let actual = self.select_observation(
+                &observation.graph.graph_id,
+                &observation.branch_id,
+                &RecordedCut::Checkpoint {
+                    observer: observation.observer.clone(),
+                    checkpoint: observation.checkpoint.clone(),
+                },
+                host,
+            )?;
+            if &actual != observation {
+                return Err(unavailable());
+            }
+        }
+        Ok(())
     }
     /// Authorized state at start plus every change in a half-open recorded interval.
     pub fn recorded_range_for(

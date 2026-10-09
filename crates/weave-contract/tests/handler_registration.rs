@@ -226,9 +226,12 @@ fn sealed_nested_reason_sources_are_derived_and_cannot_be_spoofed() {
 #[test]
 fn temporal_recipe_requires_new_profile_without_resealing_old_artifacts() {
     let current = seal_handler_template(draft()).unwrap();
-    assert_eq!(current.protocol, "0.19.0");
+    assert_eq!(current.protocol, VERSION);
+    let mut legacy = draft();
+    legacy.protocol = "0.19.0".into();
+    let legacy = seal_handler_template(legacy).unwrap();
     assert_eq!(
-        current.definition_digest,
+        legacy.definition_digest,
         "sha256:b23292b6476c3541b3c53c8a266bc08e82e0dc9ddbf3cb25ac37bccd0a92f91d"
     );
     let mut temporal = draft();
@@ -243,6 +246,8 @@ fn temporal_recipe_requires_new_profile_without_resealing_old_artifacts() {
         },
     });
     temporal.recipe.output = "clipped".into();
+    validate_handler_template(&seal_handler_template(temporal.clone()).unwrap()).unwrap();
+    temporal.protocol = "0.19.0".into();
     validate_handler_template(&seal_handler_template(temporal.clone()).unwrap()).unwrap();
     temporal.protocol = "0.18.0".into();
     assert_eq!(

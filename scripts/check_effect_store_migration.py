@@ -40,8 +40,8 @@ def main():
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--probe', type=Path)
     parser.add_argument('--storage', type=Path)
-    parser.add_argument('--new-marker', type=int, default=19)
-    parser.add_argument('--old-marker', type=int, default=17, choices=[17,18])
+    parser.add_argument('--new-marker', type=int, default=20)
+    parser.add_argument('--old-marker', type=int, default=17, choices=[17,18,19])
     parser.add_argument('--old-protocol', default='0.18.0', choices=['0.18.0','0.19.0'])
     parser.add_argument('--prepare-only', action='store_true', help='verify historical population only; no migration claim')
     parser.add_argument('--report', type=Path)
@@ -80,6 +80,7 @@ handler ReferenceRequest revision "1" using Identity {
         assert unknown['state'] == 'unknown' and unknown['attempt_id'] == ticket['attempt_id']
         assert 'E_EFFECT_UNKNOWN' in call(args.old_probe, db, 'begin', code=1, intent=intent)
         before, sink_before = snapshot(db), snapshot(sink)
+        old_history = recorded_history(db)
         assert before[0] == args.old_marker
         assert len(sink_before[1]['actions'][1]) == 1
         assert len(sink_before[1]['receipts'][1]) == 1
@@ -92,12 +93,12 @@ handler ReferenceRequest revision "1" using Identity {
         if not args.prepare_only:
             invoke(args.storage, db, 'crash', 10, code=82)
             assert snapshot(db) == before and snapshot(sink) == sink_before
-            assert recorded_history(db) is None
+            assert recorded_history(db) == old_history
             invoke(args.storage, db, 'after_commit', 10, code=83)
             migrated = (args.new_marker, before[1])
-            added = ('head_observations',) if args.new_marker >= 19 else ()
+            added = ('head_observations',) if args.old_marker < 19 <= args.new_marker else ()
             assert snapshot(db, added) == migrated and snapshot(sink) == sink_before
-            history = assert_recorded_baselines(db, 10) if added else None
+            history = assert_recorded_baselines(db, 10) if added else old_history
             replay = call(args.probe, db, 'enqueue', **delivery)
             assert replay == {**original, 'duplicate': True}
             assert call(args.probe, db, 'status', intent=intent) == unknown
@@ -106,7 +107,7 @@ handler ReferenceRequest revision "1" using Identity {
             assert 'E_STORAGE_VERSION' in call(args.old_probe, db, 'status', code=1, intent=intent)
             assert snapshot(db, added) == migrated and recorded_history(db) == history
             checks += ['precommit migration death preserves all historical rows',
-                       'postcommit migration adds current-time baselines and preserves all historical rows',
+                       'postcommit migration preserves history and adds baselines only before store19',
                        'exact governed receipt and unknown attempt survive restart',
                        'no second dispatch ticket; old runtime refuses upgraded database']
             reconciliation = dict(intent=intent, attempt=ticket['attempt_id'],

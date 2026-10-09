@@ -97,6 +97,7 @@ fn checked(mut result: QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
 }
 pub(crate) fn preflight(result: &QueryResult, ctx: &AlgebraContext) -> Result<(), Diagnostic> {
     crate::context_typing::validate_result(result)?;
+    crate::recorded_history::validate_result(result)?;
     crate::influence::validate_graph(&result.graph)?;
     if result.graph.profile != GraphProfile::Legacy
         || !result.graph.structural_edges.is_empty()
@@ -147,6 +148,10 @@ pub fn merge_source_revisions(
 }
 fn envelope(left: &QueryResult, right: Option<&QueryResult>) -> Result<QueryResult, Diagnostic> {
     let mut out = left.clone();
+    out.recorded_observations = crate::recorded_history::merge_observations(
+        &left.recorded_observations,
+        right.map_or(&[], |r| r.recorded_observations.as_slice()),
+    )?;
     out.source_revisions = merge_source_revisions(
         &left.source_revisions,
         right.map_or(&[], |r| r.source_revisions.as_slice()),

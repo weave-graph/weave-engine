@@ -736,7 +736,33 @@ fn current_source_policy_revocation_blocks_decision_and_saved_acceptance_without
     assert!(e
         .query_recorded_for(&historical_query, &cut, &host())
         .is_ok());
+    let definition = ViewDefinition {
+        id: "recorded-governance".into(),
+        clock: ViewClock::Fixed,
+        expression: GraphExpression::RecordedQuery {
+            query: historical_query.clone(),
+            selection: match &cut {
+                RecordedCut::Checkpoint {
+                    observer,
+                    checkpoint,
+                } => RecordedSelection::Checkpoint {
+                    observer: observer.clone(),
+                    checkpoint: checkpoint.clone(),
+                },
+                _ => unreachable!(),
+            },
+        },
+    };
+    e.register_view(&definition, None, &host()).unwrap();
     e.revoke_identity_policy(&identity.reference).unwrap();
+    assert!(e
+        .read_view(
+            "recorded-governance",
+            None,
+            ViewFreshness::AllowStale,
+            &host()
+        )
+        .is_err());
     assert!(e.query_accepted_view(&choose(None), &host()).is_err());
     assert!(e.resolve_assertion(&premise, &host()).unwrap().is_none());
     assert!(e.query(&q(&saved), &host()).unwrap().graph.nodes.is_empty());

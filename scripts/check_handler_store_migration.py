@@ -8,7 +8,7 @@ p=argparse.ArgumentParser()
 for name in ['old-compiler','old-handler','handler','storage']:
  p.add_argument('--'+name,type=Path,required=True)
 p.add_argument('--old-marker',type=int,default=16)
-p.add_argument('--new-marker',type=int,default=19)
+p.add_argument('--new-marker',type=int,default=20)
 p.add_argument('--old-protocol',default='0.18.0',choices=['0.18.0','0.19.0'])
 p.add_argument('--report',type=Path)
 a=p.parse_args()
@@ -62,13 +62,14 @@ handler {name} revision "1" using Keep {{
    contents={t:(sql,sorted(c.execute('SELECT * FROM "'+t.replace('"','""')+'"').fetchall(),key=repr)) for t,sql in tables.items() if t not in new_tables}
    return c.execute('PRAGMA user_version').fetchone()[0],set(tables)&new_tables,contents
  before=snapshot();assert before[0]==a.old_marker and not before[1]
+ old_history=recorded_history(db)
  assert len(before[2]['compiled_handlers'][1])==2
  assert len(before[2]['handler_preparations'][1])==2
  assert len(before[2]['handler_receipts'][1])==1
  invoke(a.storage,db,'crash',20,code=82);assert snapshot()==before
  invoke(a.storage,db,'after_commit',20,code=83)
  migrated=snapshot();assert migrated==(a.new_marker,new_tables,before[2])
- history=assert_recorded_baselines(db,20) if 'head_observations' in new_tables else None
+ history=assert_recorded_baselines(db,20) if 'head_observations' in new_tables else old_history
  replay=host(a.handler,'complete',**done)
  assert replay['duplicate'] is True and replay['results']==receipt['results']
  assert snapshot()==migrated

@@ -184,6 +184,7 @@ fn size(value: &(impl Serialize + ?Sized), limit: usize) -> Result<usize, Diagno
 /// policy grants occur. Every alternative remains its own AND group in the graph.
 pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult, Diagnostic> {
     crate::context_typing::validate_result(input)?;
+    crate::recorded_history::validate_result(input)?;
     crate::influence::validate_graph(&input.graph)?;
     if ctx.principal.is_empty() {
         return Err(failure(
@@ -681,6 +682,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     )?;
     let node_origins = nodes.keys().map(|id| (id.clone(), Vec::new())).collect();
     let mut result = QueryResult {
+        recorded_observations: input.recorded_observations.clone(),
         selected_context: input.selected_context.clone(),
         source_revisions: input.source_revisions.clone(),
         version: VERSION.into(),

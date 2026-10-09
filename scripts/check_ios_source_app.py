@@ -219,7 +219,7 @@ def main():
     assert len({v['store_marker'] for v in variants}) == 1
     report = {'profile': 'ios-source-app/1', 'status': 'passed', 'runtime': matches[0][0],
               'device': matches[0][1]['name'], 'target': 'aarch64-apple-ios-sim', 'compiler_host': sys.platform,
-              'protocol': '0.19.0', 'store_marker': variants[0]['store_marker'], 'application_processes': len(trace),
+              'protocol': artifacts['seed']['program']['version'], 'store_marker': variants[0]['store_marker'], 'application_processes': len(trace),
               'compiler_processes': len(compiles), 'lost_responses': sum(t['lost_response'] for t in trace),
               'seconds': round(time.monotonic() - started, 3), 'native_library_sha256': sha(args.library.read_bytes()),
               'application_executable_sha256': executable_digest, 'variants': variants, 'trace': trace, 'compiler_trace': compiles,
