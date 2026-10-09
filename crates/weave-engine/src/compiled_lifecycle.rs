@@ -9,6 +9,7 @@ pub struct CompiledMigrationInputs {
     pub source_adapter: String,
     pub source_binding_digest: String,
     pub epoch: String,
+    pub primary_input: GraphRef,
     pub input_snapshots: Vec<GraphRef>,
     /// Scoped semantic binding; the private checkpoint itself remains inside the transaction.
     pub checkpoint_binding: String,
@@ -83,6 +84,12 @@ fn validate(record: &Migration, digest: &str) -> Result<()> {
         || record.after.output.slot != record.request.output.slot
         || record.after.output.graph_id != record.request.output.graph_id
         || record.after.output.branch_id != record.request.output.branch_id
+        || record.request.inputs.primary_input.graph_id != record.before.template.input.graph_id
+        || !record
+            .request
+            .inputs
+            .input_snapshots
+            .contains(&record.request.inputs.primary_input)
         || record.request.inputs.source_binding_digest != binding(&record.before)?
         || record.request.inputs.checkpoint_binding
             != retention::hash(&(
@@ -90,6 +97,7 @@ fn validate(record: &Migration, digest: &str) -> Result<()> {
                 &record.request.inputs.source_adapter,
                 &record.request.inputs.source_binding_digest,
                 &record.request.inputs.epoch,
+                &record.request.inputs.primary_input,
                 &record.request.inputs.input_snapshots,
             ))?
         || matches!(record.request.disposition, ProjectionMigrationKind::Upgrade)
@@ -161,26 +169,26 @@ impl Engine {
         let revision = self
             .head(&input.graph_id, &input.branch_id)?
             .ok_or_else(|| err("E_HANDLER_INPUT", "handler input unavailable"))?;
-        let (_, snapshots) = self.handler_input_snapshot(
-            &registration,
-            &GraphRef {
-                graph_id: input.graph_id.clone(),
-                revision,
-            },
-            &input.branch_id,
-        )?;
+        let primary_input = GraphRef {
+            graph_id: input.graph_id.clone(),
+            revision,
+        };
+        let (_, snapshots) =
+            self.handler_input_snapshot(&registration, &primary_input, &input.branch_id)?;
         let epoch = self.retention_replay_epoch()?;
         let source_binding_digest = binding(&registration)?;
         Ok(CompiledMigrationInputs {
             source_adapter: source.into(),
             source_binding_digest: source_binding_digest.clone(),
             epoch: epoch.clone(),
+            primary_input: primary_input.clone(),
             input_snapshots: snapshots.clone(),
             checkpoint_binding: retention::hash(&(
                 "weave-compiled-checkpoint/1",
                 source,
                 &source_binding_digest,
                 &epoch,
+                &primary_input,
                 &snapshots,
             ))?,
         })
