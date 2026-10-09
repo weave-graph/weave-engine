@@ -16,7 +16,9 @@ pub mod decimal;
 pub mod quantity;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.19.0";
+pub const VERSION: &str = "0.20.0";
+pub mod recorded_history;
+pub use recorded_history::{ObservationKind, RecordedCut, RecordedObservation, RecordedSelection};
 pub mod carrier_algebra;
 pub mod carrier_profile;
 pub mod influence;
@@ -324,6 +326,10 @@ pub enum GraphExpression {
     Query {
         query: QueryPlan,
     },
+    RecordedQuery {
+        query: QueryPlan,
+        selection: RecordedSelection,
+    },
     Reference {
         name: String,
     },
@@ -376,6 +382,9 @@ pub struct Diagnostic {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct QueryResult {
+    /// Descriptive selection witnesses, revalidated by native runtime on reuse.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recorded_observations: Vec<RecordedObservation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_context: Option<ContextSelection>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

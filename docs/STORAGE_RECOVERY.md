@@ -1,7 +1,7 @@
 # Storage integrity and recovery
 
-Current storage uses schema19; protocol0.19 and capsule0.4 remain unchanged by
-the native recorded-history API. The historical schema14 transition added
+Current storage uses schema20 and protocol0.20; capsule0.4 is unchanged.
+Store20 protects canonical recorded-selection witnesses in cached query results. The historical schema14 transition added
 compiled view identity. Identity policies/receipts, guarded view transitions,
 mount routes/lifecycle, signed integration receipts and local head observations
 are initialized in the same schema transaction. `Engine::open`
@@ -93,3 +93,14 @@ valid time, received versus accepted time, branch isolation, equal-time ordering
 atomic rollback, current permissions, storage loss, both migration death boundaries,
 historical handler/response/effect replay and old-runtime refusal. Canonical/source
 query selectors, retention horizons, GC and explicit expired replay remain open.
+
+## Canonical recorded-selection witnesses (store20)
+
+The 19→20 transition preserves the full observation registry and every existing
+template/cache/receipt table without resealing or adding a baseline. Store19
+runtimes refuse store20 before mutation. A missing registry in a marker19 or newer
+store is corruption, never a request to rebuild local history. Exact checkpoint
+witnesses in cached results are checked against the local registry and current
+whole-snapshot authority before reuse. New selectors require protocol0.20 before
+any Program writes; old0.19 programs, templates and retained cluster receipts keep
+their supported semantics and serialized identities.

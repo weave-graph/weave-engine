@@ -51,3 +51,13 @@ language/contract query selection and source acceptance. Pure results still pin
 the actual selected immutable graph revisions; local observation metadata never
 authenticates remote policy, compiler origin or data truth. Existing trusted host
 APIs and authorization rules remain in force.
+
+## Canonical/source extension
+
+Protocol0.20 moves the descriptive observation types into the canonical contract
+and adds replica-local recorded query criteria. Store20 protects cached witness
+semantics. The engine resolves selectors and validates current authority; a claimed
+witness never installs an observation or grants remote authority. Compiler handles
+perform no read until pin/view evaluation. The 19→20 upgrade preserves the original
+registry exactly. Source range/accepted-view cuts and retention remain separate
+mandatory work.

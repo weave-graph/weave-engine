@@ -225,7 +225,7 @@ fn legacy_corruption_cannot_poison_backfill_and_repaired_fixture_upgrades() {
     assert_eq!(
         c.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        19
+        weave_engine::STORAGE_VERSION
     );
     assert_eq!(
         c.query_row("SELECT COUNT(*) FROM edge_structures", [], |r| r

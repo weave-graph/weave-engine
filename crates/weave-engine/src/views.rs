@@ -646,6 +646,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         value: &QueryResult,
         host: &HostContext,
     ) -> Result<()> {
+        self.require_recorded_result_authority(value, host)?;
         for reference in &value.input_snapshots {
             if !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)? {
                 return Err(err(
@@ -794,7 +795,7 @@ fn clock_expression(
                 "standalone views cannot reference program-local bindings",
             ))
         }
-        GraphExpression::Query { query } => {
+        GraphExpression::Query { query } | GraphExpression::RecordedQuery { query, .. } => {
             if *clock == ViewClock::Tick {
                 query.valid_at = tick
             }
@@ -846,6 +847,11 @@ fn clock_expression(
 }
 fn collect_heads(expression: &GraphExpression, heads: &mut BTreeMap<(String, String), ()>) {
     match expression {
+        GraphExpression::RecordedQuery { query, selection } => {
+            if matches!(selection, RecordedSelection::LocalTime { .. }) {
+                heads.insert((query.graph_id.clone(), query.branch_id.clone()), ());
+            }
+        }
         GraphExpression::Geometry { operation, .. } => {
             for input in operation.inputs() {
                 collect_heads(input, heads);

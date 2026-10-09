@@ -1,15 +1,32 @@
 # Implementation status and evidence
 
+## Coordinated recorded selection (protocol 0.20, store20)
+
+Canonical `RecordedQuery` now selects an actual replica-local checkpoint through
+`LocalTime` or explicit observer/checkpoint criteria. Query results preserve the
+selected observations through empty outputs, graph algebra, temporal selection and
+scalar derivation. Cached values revalidate these exact witnesses and their whole
+input snapshots under current authority. Source `recorded_handle` declarations are
+lazy; `pin` executes once, and view templates preserve the recorded criterion while
+their tick controls valid time. Pure handler recipes cannot hide these reads.
+
+Store20 preserves store19 history without adding baselines, and refuses to
+reconstruct a missing history table. Older stores retain the store19 current-time
+baseline migration. Capsule0.4 and historical0.19 artifacts remain compatible.
+The full original requirements remain mandatory: source ranges/accepted-view cuts,
+retention/GC, lifecycle, incremental execution, transport and broader assurance are
+still open. See [protocol 0.20](contract/v0.20/README.md) and [local verification](VERIFICATION_020.md).
+
 ## Current snapshot
 
-The current implementation uses protocol0.19, SQLite marker19 and capsule0.4. It adds alternative influence on whole values, nodes and attachments, per-branch snapshot premises, and pure Window/Sequence graph operations. The language vendors the exact canonical contract from native freeze `a6adb94`. See [the current contract](contract/v0.19/README.md) and [joint verification](VERIFICATION_019.md).
+The preceding implementation uses protocol0.19, SQLite marker19 and capsule0.4. It adds alternative influence on whole values, nodes and attachments, per-branch snapshot premises, and pure Window/Sequence graph operations. The language vendors the exact canonical contract from native freeze `a6adb94`. See [the current contract](contract/v0.19/README.md) and [joint verification](VERIFICATION_019.md).
 
 Store19 adds atomic replica-local branch observation checkpoints and bounded
 recorded-time query/range APIs. Migration keeps all original rows and establishes
 current-time baselines instead of inventing old acceptance dates. Native history
 selection follows authenticated predecessor records and checks current whole
 snapshot authority. See [ADR 0002](architecture/ADR-0002-recorded-head-observations.md).
-Canonical/source recorded selection, retention horizons and GC remain open.
+Source range/accepted-view selection, retention horizons and GC remain open.
 
 
 Local joint validation covers actual source compilation and persistent execution, native/WASM parity, authorization after detached persistence, six populated historical migration suites and sixteen real browser persistence/upgrade cases. Commit-specific hosted results are tracked separately; local results alone do not establish CI success. E00 is complete; E01–E14 remain in progress. These bounded profiles do not complete either paper. See [workflow gates](workflow.json) and [reconciled requirements](RECONCILIATION.md).

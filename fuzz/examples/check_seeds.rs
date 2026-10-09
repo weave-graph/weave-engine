@@ -15,5 +15,15 @@ fn main() {
     assert_eq!(receiver.receive_capsule(&capsule, &host).unwrap(), 1);
     assert_eq!(receiver.receive_capsule(&capsule, &host).unwrap(), 0);
     assert!(receiver.events().unwrap().is_empty());
-    println!("Valid seeds exercise full geometry execution and idempotent capsule import");
+    let mut recorded = Engine::memory().unwrap();
+    let plan: Program = serde_json::from_str(include_str!(
+        "../seeds/program_atomic/recorded-rollback.json"
+    ))
+    .unwrap();
+    assert!(recorded.execute(&plan, &host).is_err());
+    assert_eq!(recorded.head("fuzz", "main").unwrap(), None);
+    assert!(recorded.events().unwrap().is_empty());
+    println!(
+        "Valid seeds exercise full geometry, idempotent capsule import and recorded-query rollback"
+    );
 }

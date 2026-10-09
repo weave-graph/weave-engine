@@ -70,6 +70,7 @@ def main():
     parser.add_argument('--compiler-sdk', type=Path, required=True)
     parser.add_argument('--host', type=Path, required=True)
     parser.add_argument('--fixtures', type=Path, required=True)
+    parser.add_argument('--upgrade-host', type=Path, help='switch from a real store19/SDK0.19 host to the current host after retaining an empty cluster receipt')
     parser.add_argument('--peer-host', type=Path, help='continue actual source state through signed P/W/T exchange, governance and effect fencing')
     parser.add_argument('--report', type=Path)
     parser.add_argument('--evidence-dir', type=Path)
@@ -85,6 +86,7 @@ def main():
             work = root / variant; work.mkdir()
             evidence = args.evidence_dir / variant if args.evidence_dir else work / 'evidence'
             evidence.mkdir(parents=True, exist_ok=True)
+            active_host = args.host
             db = work / 'phone.db'; journal = db.with_suffix('.host.db')
             runtime_config = work / 'config.json'; runtime_config.write_bytes(encoded(config))
             peer_dbs = {'P':db, 'W':work/'work.db', 'T':work/'team.db'}
@@ -105,7 +107,7 @@ def main():
                 request = {'mode': mode, 'now': now, **data}
                 path = work / 'request.json'; path.write_bytes(encoded(request))
                 before = time.monotonic()
-                result = subprocess.run([str(args.host.resolve()), str(db), str(runtime_config), str(path)], capture_output=True, timeout=30)
+                result = subprocess.run([str(active_host.resolve()), str(db), str(runtime_config), str(path)], capture_output=True, timeout=30)
                 assert result.returncode == expect, (variant, mode, result.returncode, result.stdout[-2000:], result.stderr[-2000:])
                 value = json.loads(result.stdout) if result.stdout.strip() else None
                 trace.append({'variant': variant, 'operation': mode, 'exit': result.returncode, 'seconds': round(time.monotonic()-before, 6), 'response_sha256': sha(result.stdout), 'response_bytes': len(result.stdout)})
@@ -176,7 +178,21 @@ def main():
             empty_event = poll('cluster')
             empty_recipe = compile_source('cluster', {'WARNING_REVISION_JSON':empty_event['graph']['revision']})
             empty_record = invoke('cluster_prepare', adapter=adapters['cluster'], event=empty_event['id'], lease=empty_event['lease'], artifact=str(empty_recipe))['record_id']
-            invoke('cluster_complete', record=empty_record, lease=empty_event['lease'])
+            empty_receipt = invoke('cluster_complete', record=empty_record, lease=empty_event['lease'])
+            if args.upgrade_host:
+                with database(db) as c:
+                    assert c.execute('PRAGMA user_version').fetchone()[0] == 19
+                    history_before = c.execute('SELECT * FROM head_observations ORDER BY rowid').fetchall()
+                with database(journal) as c:
+                    journal_before = c.execute('SELECT * FROM retained ORDER BY id').fetchall()
+                active_host = args.upgrade_host
+                historical = invoke('cluster_complete', record=empty_record, lease='expired-lease')
+                assert historical == {**empty_receipt, 'duplicate':True}
+                with database(db) as c:
+                    assert c.execute('PRAGMA user_version').fetchone()[0] == 20
+                    assert c.execute('SELECT * FROM head_observations ORDER BY rowid').fetchall() == history_before
+                with database(journal) as c:
+                    assert c.execute('SELECT * FROM retained ORDER BY id').fetchall() == journal_before
             offline = compile_source('offline', {'EVIDENCE_REVISION_JSON':old_evidence, 'INSTALLATION_REVISION_JSON':old_installation})
             before = inspect(); invoke('execute_artifact', artifact=str(offline)); changed = inspect()
             assert changed['events'] == before['events'] + 2
@@ -331,7 +347,7 @@ def main():
             variants.append({'store_marker':store_marker,'variant':variant,'definition_digest':definition,'seed_pins':{'evidence':old_evidence,'installation':old_installation},'offline_pins':changed['heads'],'warning_pin':once['heads']['warnings'],'cluster_pin':once['heads']['clusters'],'cluster_record_id':record_id,'retained_bytes':len(body)+len(bundle),'journal_body_sha256':sha(body),'receipt_sha256':sha(encoded(duplicate['results'])),'events':once['events'],'peer_continuation':variants_peer})
     assert len(variants)==2 and variants[0]['definition_digest'] != variants[1]['definition_digest']
     assert variants[0]['store_marker'] == variants[1]['store_marker']
-    report = {'profile':'native-compiled-scenario-bc/1' if args.peer_host else 'native-compiled-scenario-b/1','status':'passed','protocol':'0.19.0','store_marker':variants[0]['store_marker'],'variants':variants,'runtime_processes':len(trace)+sum(v['peer_continuation']['processes'] if v['peer_continuation'] else 0 for v in variants),'facade_processes':len(trace),'peer_processes':sum(v['peer_continuation']['processes'] if v['peer_continuation'] else 0 for v in variants),'compiler_processes':len(compiler_trace),'controlled_deaths':sum(t['exit'] in [92,94] for t in trace)+sum(sum(t['exit'] in [93,95,96] for t in v['peer_continuation']['trace']) if v['peer_continuation'] else 0 for v in variants),'seconds':round(time.monotonic()-started,3),'maximum_child_rss_native_units':resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss if resource else None,'child_rss_units':'bytes' if sys.platform=='darwin' else 'KiB' if resource else None,'child_rss_scope':'controller child processes including compiler; excludes simulator grandchildren','checks':['real complete SDK artifacts with exact integers and changed pinned modules','atomic offline source rebind and immutable old history','compiled negative-evidence handler, raw-bypass rejection and private reader denial','handler and host-journal preparation/completion deaths before and after commit','empty and nonempty retained clusters preserve scoped partial coverage and whole-input gates','immutable exact CAS/body/pins and historical receipts','narrowed/foreign authority, rehashed trimmed closure, missing exact premise and missing journal fail closed'],'limits':['trusted native process and host journal; no untrusted adapter isolation','native signed whole-capsule P/W/T continuation; no network service or selective disclosure' if args.peer_host else 'single offline store; signed transfer/governance/effect continuation remains separate','cluster navigation stays scoped Partial; no global coverage or incremental claim','small deterministic fixture; browser/mobile scenario and resource-scale gates remain open'],'peer_checks':['signed whole-closure export with pre/postcommit death and exact reply reuse','tamper denial, isolated proposal and explicit dependency retention','concurrent workstation organization unchanged','genuine team acceptance and source-backed historical explanation','private annotation omitted, reviewer denied and current policy expiry','one unknown effect fence and explicit destination reconciliation'] if args.peer_host else [],'compiler_trace':compiler_trace,'trace':trace}
+    report = {'profile':'native-compiled-scenario-bc/1' if args.peer_host else 'native-compiled-scenario-b/1','status':'passed','protocol':cluster_value['version'],'source_protocol':compilations['seed']['artifacts']['program']['version'],'upgraded_from_store19':bool(args.upgrade_host),'store_marker':variants[0]['store_marker'],'variants':variants,'runtime_processes':len(trace)+sum(v['peer_continuation']['processes'] if v['peer_continuation'] else 0 for v in variants),'facade_processes':len(trace),'peer_processes':sum(v['peer_continuation']['processes'] if v['peer_continuation'] else 0 for v in variants),'compiler_processes':len(compiler_trace),'controlled_deaths':sum(t['exit'] in [92,94] for t in trace)+sum(sum(t['exit'] in [93,95,96] for t in v['peer_continuation']['trace']) if v['peer_continuation'] else 0 for v in variants),'seconds':round(time.monotonic()-started,3),'maximum_child_rss_native_units':resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss if resource else None,'child_rss_units':'bytes' if sys.platform=='darwin' else 'KiB' if resource else None,'child_rss_scope':'controller child processes including compiler; excludes simulator grandchildren','checks':['real complete SDK artifacts with exact integers and changed pinned modules','atomic offline source rebind and immutable old history','compiled negative-evidence handler, raw-bypass rejection and private reader denial','handler and host-journal preparation/completion deaths before and after commit','empty and nonempty retained clusters preserve scoped partial coverage and whole-input gates','immutable exact CAS/body/pins and historical receipts','narrowed/foreign authority, rehashed trimmed closure, missing exact premise and missing journal fail closed'],'limits':['trusted native process and host journal; no untrusted adapter isolation','native signed whole-capsule P/W/T continuation; no network service or selective disclosure' if args.peer_host else 'single offline store; signed transfer/governance/effect continuation remains separate','cluster navigation stays scoped Partial; no global coverage or incremental claim','small deterministic fixture; browser/mobile scenario and resource-scale gates remain open'],'peer_checks':['signed whole-closure export with pre/postcommit death and exact reply reuse','tamper denial, isolated proposal and explicit dependency retention','concurrent workstation organization unchanged','genuine team acceptance and source-backed historical explanation','private annotation omitted, reviewer denied and current policy expiry','one unknown effect fence and explicit destination reconciliation'] if args.peer_host else [],'compiler_trace':compiler_trace,'trace':trace}
     if args.report: args.report.write_bytes(json.dumps(report,indent=2).encode()+b'\n')
     print(json.dumps({k:v for k,v in report.items() if k not in ['trace','compiler_trace','variants']},indent=2))
 

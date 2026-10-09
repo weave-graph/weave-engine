@@ -317,7 +317,7 @@ impl Engine {
             || preparation.binding_digest
                 != digest("weave-handler-registration-binding/1", registration)?
             || preparation.prepared_at_ms < 0
-            || ![VERSION, "0.18.0"].contains(&preparation.program.version.as_str())
+            || ![VERSION, "0.19.0", "0.18.0"].contains(&preparation.program.version.as_str())
         {
             return Err(invalid());
         }
@@ -345,7 +345,7 @@ impl Engine {
         else {
             return Err(invalid());
         };
-        if preparation.program.version != VERSION
+        if ![VERSION, "0.19.0"].contains(&preparation.program.version.as_str())
             && weave_contract::carrier_profile::requires_v019(data)
         {
             return Err(invalid());
@@ -719,7 +719,8 @@ fn charge_references(
                 charge_references(input, values, used)?;
             }
         }
-        Query { .. }
+        RecordedQuery { .. }
+        | Query { .. }
         | TypedContext { .. }
         | AcceptedGraph { .. }
         | CurrentView { .. }
