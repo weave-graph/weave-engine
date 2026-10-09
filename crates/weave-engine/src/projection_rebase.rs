@@ -115,7 +115,7 @@ impl Engine {
         }
         Ok(manifest)
     }
-    fn projection_inputs(
+    pub(crate) fn projection_inputs(
         &self,
         adapter: &str,
         host: &HostContext,
@@ -211,6 +211,10 @@ impl Engine {
             "UPDATE dispatch_adapters SET checkpoint=?2 WHERE id=?1",
             params![adapter, last],
         )?;
+        self.conn.execute(
+            "DELETE FROM projection_rebuild_requests WHERE adapter=?1",
+            [adapter],
+        )?;
         before_commit();
         tx.commit()?;
         Ok(ProjectionRebaseReceipt {
@@ -266,6 +270,17 @@ impl Engine {
         Ok(())
     }
     pub(crate) fn require_replay_checkpoint(&self, adapter: &str) -> Result<()> {
+        let rebuild: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM projection_rebuild_requests WHERE adapter=?1)",
+            [adapter],
+            |r| r.get(0),
+        )?;
+        if rebuild {
+            return Err(err(
+                "E_CHECKPOINT_EXPIRED",
+                "canceled projection work requires explicit rebuild",
+            ));
+        }
         let (_, policy) = retention::state(&self.conn)?;
         let state = self.projection_state(adapter)?;
         let required: bool = self.conn.query_row(
@@ -424,6 +439,7 @@ impl Engine {
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock = self.operation_write_scope()?;
             let manifest = self.projection_manifest(&request.adapter, host)?;
+            self.require_uncanceled_delivery(&request.adapter, &request.event)?;
             let (graph_id, _, revision, _) = self
                 .scoped_event(&manifest, &request.event)?
                 .ok_or_else(|| err("E_UNAVAILABLE", "delivery unavailable"))?;

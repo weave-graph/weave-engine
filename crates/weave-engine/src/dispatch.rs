@@ -469,6 +469,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                 "handler completion requires transaction",
             ));
         }
+        self.require_uncanceled_delivery(adapter, event)?;
         let stateful: bool = self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM retention_adapter_states WHERE adapter=?1) OR EXISTS(SELECT 1 FROM retention_stateful_adapters WHERE adapter=?1) OR EXISTS(SELECT 1 FROM retention_projection_receipts WHERE adapter=?1)",
             [adapter],

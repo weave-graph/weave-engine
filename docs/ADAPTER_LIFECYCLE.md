@@ -1,0 +1,81 @@
+# Native cancellation, state migration and rollback
+
+This native profile advances R12/R13/R36/R38 and E05/E06/E14. It does not close
+those gates. Protocol0.21 and capsule0.4 stay unchanged; store23 fences older
+runtimes from ignoring cancellation, rebuild requests or migration history.
+Source/portable lifecycle bindings, compiled state upgrades, effectful actor
+reconstruction, causal budgets, resource isolation and broader observability
+remain mandatory work.
+
+## Explicit cancellation
+
+`cancel_handler_delivery_for` requires the fixed principal and every original
+output scope. The request compares the actual pending occurrence and opaque lease,
+including an expired lease. A renewed worker changes the lease and fences obsolete
+cleanup. The cancellation reason and nonce become an immutable audit record.
+Existing preparations are retained, the actual private checkpoint advances, and
+the pending lease disappears in one transaction. No source payload, local offset
+or historical command result is returned, so owner cleanup can remain available
+after current source read authority expires. An exact retry returns the same
+receipt; a changed body or reused nonce fails. Canceled occurrences cannot prepare
+or complete through native, compiled or projection completion paths.
+
+Completed work cannot be canceled. Effect-enabled and governed effect adapters
+are excluded; pending or unknown effects must use their destination/reconciliation
+protocol. Cancellation executes no commands and rewrites no graph head. A native
+projection with bound state is marked for explicit rebuild before any new poll or
+state read. Rebuild commits actual state, pins and matching checkpoint atomically.
+Stateless compiled recipes can continue with later occurrences.
+
+## Upgrade and rollback
+
+`projection_migration_inputs_for` binds actual native projection state, immutable
+manifest, retention epoch and authorized current scoped inputs. Public inputs
+exclude the private event coordinate; unrelated private scan advances leave the
+binding unchanged. The commit reads and transfers the actual private checkpoint.
+Every old state pin and current input must still be wholly readable.
+
+`migrate_projection_for` requires a paused or drained source with no pending
+delivery, unknown effect, or required rebuild. Only pure native projections are
+supported. Event schema0.21, principal, subscription scopes and output scopes must
+match. A changed scope or incompatible schema requires a separately authorized
+fresh rebuild. The destination identity must be new, and registration pins the
+new artifact/configuration. Actual transformed host state, its retained pins,
+private checkpoint, new paused namespace, old removed namespace and immutable
+migration receipt commit together. The kernel binds actual opaque state and
+authorized inputs; it does not prove the trusted host's transformation.
+
+Rollback explicitly names a prior migration's retired source. The requested
+artifact, configuration, state revision and state must exactly match the recorded
+prior pair. It restores that pair and its actual checkpoint into another fresh
+namespace. It never reactivates an old identity or automatically changes any
+materialized graph output. Later polling can replay pure events in the new
+namespace. An expired epoch cannot reuse the old checkpoint and requires a fresh
+rebuild. Historical migration retries validate current owner/output authority,
+actual manifests and state bindings and retained input authority; they never
+restore an older state over later work.
+
+## Storage and bounds
+
+Store23 adds `delivery_cancellations`, `projection_rebuild_requests` and
+`projection_migrations`. Initialization under an older marker rejects these
+modern tables; a current marker requires all three. Upgrading an actual store22
+preserves every original table, row, retention policy/epoch, erased payload anchor,
+projection state, immutable receipt and private checkpoint. No fictitious
+cancellation or migration is created. The retention inventory knows all three
+tables, validates stored bindings, and retains immutable source/state references.
+
+Cancellation requests are at most4KiB; each stored record is at most2MiB, with
+10,000 records and64MiB per adapter. Migration requests are at most2MiB, state
+at most1MiB including its binding, and stored records at most4MiB, with1,000
+records and64MiB per principal. All reads also share the existing operation budget.
+These bounds reject oversized work before commit. Receipt expiry and larger
+incremental collection remain separate requirements.
+
+Independent tests cover actual stale compiled CAS and source-policy expiry,
+lease renewal, immutable retries, state rebuild fencing, real unknown-effect
+exclusion, state/artifact/schema compatibility, rollback of the recorded pair,
+private scan noninterference and valid-JSON storage corruption. The process
+controller uses a real old22 host, a populated compacted store and four pre/post
+commit death pairs; it compares actual SQL rows and schemas and proves old-reader
+refusal. See [verification](VERIFICATION_023.md).

@@ -40,9 +40,18 @@ mod operation_clock;
 mod recorded_history;
 pub use recorded_history::{RecordedHistoryRange, RecordedQueryResult};
 pub use weave_contract::{ObservationKind, RecordedCut, RecordedObservation, RecordedSelection};
-pub const STORAGE_VERSION: i64 = 22;
+pub const STORAGE_VERSION: i64 = 23;
 mod retention;
 pub use retention::{RecordedAvailability, RetentionPlan, RetentionPolicy, RetentionReceipt};
+mod adapter_lifecycle;
+pub use adapter_lifecycle::{
+    DeliveryCancellationReason, DeliveryCancellationReceipt, DeliveryCancellationRequest,
+};
+mod projection_migration;
+pub use projection_migration::{
+    ProjectionMigrationInputs, ProjectionMigrationKind, ProjectionMigrationReceipt,
+    ProjectionMigrationRequest,
+};
 mod projection_rebase;
 pub use projection_rebase::{
     ProjectionCompletionRequest, ProjectionRebaseInputs, ProjectionRebaseReceipt,
@@ -263,6 +272,7 @@ impl Engine {
         engine.initialize_governed_effects()?;
         engine.initialize_recorded_history(version)?;
         engine.initialize_retention(version)?;
+        engine.initialize_adapter_lifecycle(version)?;
         engine
             .conn
             .pragma_update(None, "user_version", STORAGE_VERSION)?;
