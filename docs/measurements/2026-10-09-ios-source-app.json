@@ -1,0 +1,311 @@
+{
+  "profile": "ios-source-app/1",
+  "status": "passed",
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-4",
+  "device": "iPhone 17 Pro",
+  "target": "aarch64-apple-ios-sim",
+  "compiler_host": "darwin",
+  "protocol": "0.19.0",
+  "store_marker": 18,
+  "application_processes": 24,
+  "compiler_processes": 6,
+  "lost_responses": 4,
+  "seconds": 36.334,
+  "native_library_sha256": "609ffedb766403b740861b776329afcf2824fde2ab865693c918c62f37f2aa6a",
+  "application_executable_sha256": "678cc353022a2901bc8a43a9237607390ef92873cbe55c538521187504753cd9",
+  "variants": [
+    {
+      "variant": "base",
+      "definition_digest": "sha256:e511e39d0ee350d1b26b8a17e29c1b143efcd74bbcb205cfe716f88d0d942fb2",
+      "events": 6,
+      "preparation_id": "preparation:97a207b1aa7f5cc730fea5db4e2b05173b03cf60d055bc67",
+      "receipt_sha256": "14ec426f7c6206bdd76760d81d8425c9248d01ab20a9c9e744f96c9d311abed1",
+      "database_bytes": 552960
+    },
+    {
+      "variant": "renamed",
+      "definition_digest": "sha256:6d6c3c4db33cb9ddf38abd62ca015a15cb4b9cbc9e01e86d9238feb6960cb5ca",
+      "events": 6,
+      "preparation_id": "preparation:3006d74cf14fac4bc7b52cfebe7910b818bcb2e435f65ee8",
+      "receipt_sha256": "49288378a080d385e5811596e3fe7d112396e546378c6eafde9567999c89dd6d",
+      "database_bytes": 552960
+    }
+  ],
+  "trace": [
+    {
+      "variant": "base",
+      "stage": "seed",
+      "exit": 0,
+      "seconds": 1.270857,
+      "stdout_sha256": "8cc3c8b9ddc6f4855d56e394af531103731fd5558bd067772ffecb62a9920fc7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "base",
+      "stage": "offline",
+      "exit": 0,
+      "seconds": 1.220136,
+      "stdout_sha256": "9361521a36cba776e896e4c79c7c00d64f29d53aa87ae582d14abaaa2a0abfba",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "base",
+      "stage": "offline-duplicate",
+      "exit": 0,
+      "seconds": 1.247835,
+      "stdout_sha256": "ea8dbe453268f69c803415ebd0bbeadb7512904574ee0c3f6f7ae31eb104215a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "base",
+      "stage": "poll",
+      "exit": 0,
+      "seconds": 1.250389,
+      "stdout_sha256": "0be106561bf20f77868a0c546cf369259d9cb4fe48a394d4edb5ce62dd1f6098",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "base",
+      "stage": "prepare-lost",
+      "exit": 0,
+      "seconds": 1.241077,
+      "stdout_sha256": "d7836b2207bdfcdebe1ba6283286f2a15f125ec708c37c8e81a3ac5aec914027",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": true
+    },
+    {
+      "variant": "base",
+      "stage": "prepare",
+      "exit": 0,
+      "seconds": 1.250531,
+      "stdout_sha256": "c8fce5f27afdbcc4048fd45128dda51f6eb0a39d5627bb91749734a02e1ce146",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "base",
+      "stage": "complete-lost",
+      "exit": 0,
+      "seconds": 1.248327,
+      "stdout_sha256": "913db5bd4962384ab1efda1a74d15bcce22f7874b9e2bb660d1c8d1baa68fa01",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": true
+    },
+    {
+      "variant": "base",
+      "stage": "complete",
+      "exit": 0,
+      "seconds": 1.218711,
+      "stdout_sha256": "db95001385810dd334a66d555f31874f2d909a15c8cdeec4a8460c9d8f122c7c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "base",
+      "stage": "read",
+      "exit": 0,
+      "seconds": 1.242813,
+      "stdout_sha256": "777423b4a83d727c58d5d7dfe478ff439fd63da4e111fcfef2f2668148b4576d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "base",
+      "stage": "reviewer",
+      "exit": 0,
+      "seconds": 1.248183,
+      "stdout_sha256": "cad76e9f0d92b48204b157946b154b848c5a9c6a01d8c0777f733688d57621f7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "base",
+      "stage": "foreign",
+      "exit": 0,
+      "seconds": 1.247698,
+      "stdout_sha256": "e2e6cb7f8f9eeb39ecc9acbb83023560d0767c729d38a05168cecc5bc5fc4ef1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "base",
+      "stage": "rollback",
+      "exit": 0,
+      "seconds": 1.245227,
+      "stdout_sha256": "4f5418d27c87d30fdf98cc03138cf79e887782ce739d88b2e15875dbb7ce11e2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "renamed",
+      "stage": "seed",
+      "exit": 0,
+      "seconds": 1.212369,
+      "stdout_sha256": "fcf9b5c38c86dd1bd5c809e5fd5c496caf705271ca084c1589ee377f0c519e21",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "renamed",
+      "stage": "offline",
+      "exit": 0,
+      "seconds": 1.224234,
+      "stdout_sha256": "8fd11cd8e6d9586448b80161d0a8a9a50aa49e417c60c3365d7715de0552b4f7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "renamed",
+      "stage": "offline-duplicate",
+      "exit": 0,
+      "seconds": 1.226905,
+      "stdout_sha256": "d42214444e4d57f34311fdf82939238e62b964e2b0802cf20b34e11771527de9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "renamed",
+      "stage": "poll",
+      "exit": 0,
+      "seconds": 1.254858,
+      "stdout_sha256": "0047a3bcbbc04243553916b4d07eef6287257a659da26229eed33a1ff26bdab2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "renamed",
+      "stage": "prepare-lost",
+      "exit": 0,
+      "seconds": 1.237477,
+      "stdout_sha256": "1a424a634f41ad208025d8dc144cfa2b9579585f25696a72a34c1a8f3d3b6903",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": true
+    },
+    {
+      "variant": "renamed",
+      "stage": "prepare",
+      "exit": 0,
+      "seconds": 1.243227,
+      "stdout_sha256": "22808d314e7b9ce760b2a702f6a44985c24a10b2f080c1f75afdeed76c77cff9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "renamed",
+      "stage": "complete-lost",
+      "exit": 0,
+      "seconds": 1.251284,
+      "stdout_sha256": "b12c2461b0a60400baa05cd5dc99b9bb3084ab23b7e95a48d00ddddf802f655f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": true
+    },
+    {
+      "variant": "renamed",
+      "stage": "complete",
+      "exit": 0,
+      "seconds": 1.251542,
+      "stdout_sha256": "d5d8814d79bf29040d5e1ffbc7ad2c278e689f0812d6fc78a0b5854a1a884de7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "renamed",
+      "stage": "read",
+      "exit": 0,
+      "seconds": 1.248945,
+      "stdout_sha256": "8e7e29310fbe09074f13e4f1e521e36a28008f5b163101bca82d9d5fd6d1fd3e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "renamed",
+      "stage": "reviewer",
+      "exit": 0,
+      "seconds": 1.252666,
+      "stdout_sha256": "29e052a818d26250bd9bba491d817d9e7c4bcaddacb39eada90c389a96fe237a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "renamed",
+      "stage": "foreign",
+      "exit": 0,
+      "seconds": 1.260671,
+      "stdout_sha256": "9198418860218ed9e2473e2444a4580117263cf099628d9b6e1fecc787faab5a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    },
+    {
+      "variant": "renamed",
+      "stage": "rollback",
+      "exit": 0,
+      "seconds": 1.236438,
+      "stdout_sha256": "8d21def654100c59ead6091b54efa2416dba636b2e9a19d5420ee9e9b6831606",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lost_response": false
+    }
+  ],
+  "compiler_trace": [
+    {
+      "variant": "base",
+      "kind": "seed",
+      "request_sha256": "fe510ea6cda9819a7f7d670d48d707daf61410751c09cf92fba47e19d75c0204",
+      "response_sha256": "513d31128b948218609fa799dea683260eb98c8e00b443ff3560241beed750ae",
+      "response_bytes": 1776
+    },
+    {
+      "variant": "base",
+      "kind": "handler",
+      "request_sha256": "2281694f711634e1af794ac718c93031807da14c068fa2d23238b2ece0a652bb",
+      "response_sha256": "58f77abdbfba5d2900f4bd5fb58a04287d3900887e79d413969d124bd860be56",
+      "response_bytes": 5322
+    },
+    {
+      "variant": "base",
+      "kind": "offline",
+      "request_sha256": "df7b527db138e54f01b0d3d20ac86d3143bed1af098924aaa97e10dd7e52dc3c",
+      "response_sha256": "4938d5505b84ffae3ac84b7cf50fb04101e892f60baa66fbb281b1ab04bd4751",
+      "response_bytes": 2065
+    },
+    {
+      "variant": "renamed",
+      "kind": "seed",
+      "request_sha256": "f896e478094b1cebf3c1846c8a88d18ae32f5f71e6d572d7349d5e0208999798",
+      "response_sha256": "e007f5046686e15622a3ed5bd620c3cc41ca2e7c3b457de5d5ae7761bc3c14ad",
+      "response_bytes": 1797
+    },
+    {
+      "variant": "renamed",
+      "kind": "handler",
+      "request_sha256": "b3437d2e5c76f43874475a5e80d034d7c54b56183d463490961c598b28ccab7f",
+      "response_sha256": "17e7d207d8d58e71973223907b73747c18c30f7dbdea245cdc047dffe58dc1a1",
+      "response_bytes": 5387
+    },
+    {
+      "variant": "renamed",
+      "kind": "offline",
+      "request_sha256": "98c2fb1782cc79dc273aaeacd94f649a14cb07b317787c00f60cf36ee3baba51",
+      "response_sha256": "c159365cdb5c04f2f739fa2de6fae3fef05ab58c300fbc130fcc728c1f68e29b",
+      "response_bytes": 2088
+    }
+  ],
+  "checks": [
+    "actual source-backed offline edits in application-owned SQLite",
+    "atomic logical metadata rebind and original pinned history",
+    "exact integer and complete SDK artifacts across Swift/C",
+    "durable diagnostic prepare/complete after lost app responses",
+    "private reader and foreign adapter denial",
+    "atomic rollback with no ghost event"
+  ],
+  "limits": [
+    "simulator application-container profile; no physical device or OS power-loss/energy evidence",
+    "compiler SDK runs on macOS; no source compilation inside the app",
+    "cluster/signed-peer/governance/effect continuation remains the separate simulator Rust-process profile",
+    "no network used; network connectivity is not disabled",
+    "no app upgrade, eviction or quota-exhaustion matrix"
+  ]
+}

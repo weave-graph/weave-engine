@@ -12,6 +12,25 @@ The current native runtime includes genuine accepted-governance graph reads, a t
 
 Protocol0.16 adds: exact accepted-occurrence expressions, definition-matched RequireCurrent view expressions, and separate canonical host registration artifacts. Source manifests persist through initial/full/incremental/fallback evaluation. SQLite marker14 protects compiled registration identity. The [0.16 contract](contract/v0.16/README.md) records the native boundary; paired compiler acceptance is now executed in integration CI.
 
+## Resumed source-backed native acceptance
+
+The recovered export repair and retained cluster implementation now have a combined
+actual compiler→offline evidence/rebind→sealed diagnostic→retained cluster→signed
+P/W/T exchange→team acceptance→unknown effect/reconciliation process trace. Both
+source variants preserve exact original SDK artifacts, old history and private
+reader gates. The journal preserves scoped Partial cluster coverage and checks
+whole exact inputs separately, before fresh and historical completion.
+See [native compiled acceptance](NATIVE_COMPILED_SCENARIO.md). This is unpublished
+local evidence; broader lifecycle/retention, history, incremental, transport and
+portable application requirements remain open.
+
+The same combined trace now passes in iOS26.4 simulator-target Rust processes.
+A separate [Swift facade app](SWIFT_HOST.md) passes actual source-backed offline
+edits, sealed diagnostic recovery and privacy in its own application container
+across 24 launches. These are distinct profiles; the app does not yet bind the
+cluster/peer/governance/effect services. Exact archived engine/compiler workspaces
+pass 480/191 checks respectively; no full paper gate or hosted result is inferred.
+
 ## Published 0.18 boundaries and historical checkpoints
 
 Sealed pure handler artifacts and native immutable install/prepare/complete are published, with SQLite marker16. Exact event/preloaded input gates survive empty outputs and generated records. Output CAS, current authority and historical receipt replay are checked atomically; caller-built completion cannot bypass a compiled binding. Genuine historical0.16 and0.17 templates and signed receipts retain their original bytes through migration. Source/runtime joint verification and publication are complete for this bounded profile. See [contract](contract/v0.18/README.md) and [native handler profile](proposals/COMPILED_HANDLERS.md). This stage does not close complete reactor/effect semantics or a paper gate.
@@ -31,7 +50,7 @@ Public0.17 introduced exact snapshot and movable-attachment influence, capsule0.
 - Durable principal-scoped views with full recomputation oracle, explicit freshness/ticks and retractions. Opt-in Query/Filter membership maintenance reuses predicate decisions; whole snapshot loading, hashing/index rebuilding and output repinning remain O(input)/O(output). Durable bounded scans coalesce work; failed work rotates fairly and publication/checkpoint commits atomically. No background thread or general incremental operator engine is claimed. See [selection](INCREMENTAL_SELECTION.md) and [scheduling](VIEW_SCHEDULING.md).
 - Hash-verified capsules with whole authorized logical-manifest transport, isolated receive and explicit acceptance, ancestry/equivocation checks, and current authorization on export/reuse. Selective proofs and generic remote authority installation remain unsupported. See [capsules](CAPSULES.md).
 - Portable clustering core, authorized native navigation and historical lineage, with explicit overlapping perspectives and measured synthetic quality/churn boundaries. Incremental clustering/hysteresis and broader recall acceptance remain open. See [cluster service](CLUSTER_SERVICE.md).
-- Transactional migrations, bounded stored reads, integrity checking and SQLite backup/recovery. Native C/Swift hosts execute macOS and iOS-simulator persistence. Eight fixed portable semantic groups execute natively and in WASM with identical bytes. The separately published experimental browser host persists bounded whole-image generations through IndexedDB under one worker and an exclusive Web Lock. Its actual failure/abort/quota/reload matrix passed, but it remains an 8 MiB fixed-scenario host rather than full portable paper acceptance. Facade A adds a generic principal-bound native Rust/C artifact boundary; generic persistent browser/mobile scenario bindings remain unfinished. See [storage](STORAGE_RECOVERY.md), [native host](NATIVE_HOST.md) and [portable parity](PORTABLE_PARITY.md).
+- Transactional migrations, bounded stored reads, integrity checking and SQLite backup/recovery. Native C/Swift hosts execute macOS and iOS-simulator persistence. Nine fixed portable semantic groups execute natively and in WASM with identical bytes at the resumed archive checkpoint. The separately published experimental browser host persists bounded whole-image generations through IndexedDB under one worker and an exclusive Web Lock. Its historical failure/abort/quota/reload matrix passed, but it remains an 8 MiB fixed-scenario host rather than full portable paper acceptance. Facade A and its Swift wrapper add a generic principal-bound Program/diagnostic artifact boundary; complete browser/mobile scenario service bindings remain unfinished. See [storage](STORAGE_RECOVERY.md), [native host](NATIVE_HOST.md), [Swift host](SWIFT_HOST.md) and [portable parity](PORTABLE_PARITY.md).
 
 ## Verification and remaining work
 

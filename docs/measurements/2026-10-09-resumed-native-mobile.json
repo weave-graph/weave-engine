@@ -1,0 +1,210 @@
+{
+  "profile": "weave-resumed-native-mobile-verification/1",
+  "local_date": "2026-10-09",
+  "timezone": "Europe/Tallinn",
+  "engine_public_base": "d5c1c622be4c8feb175090806b0afea85c1e910f",
+  "compiler_public_base": "9dec64937fbd191f1698fa2f1bb568acc6ed7776",
+  "repair_freeze": "0717a1b8fbd7ce9997755fb24d898372fc05aa4d",
+  "native_rust_freeze": "dcc063f7ab3899a027e41dc2a30abacfafb9e783",
+  "mobile_source_freeze": "959bd87b8a9e34fc0e47f4c1a21d1c2cd926f54f",
+  "compiler_source_freeze": "f18d35cf93ce3f45ce4e7b4b3c6971110e9d0ad4",
+  "protocol": "0.19.0",
+  "store_marker": 18,
+  "capsule_version": "0.4",
+  "environment": {
+    "host": "macOS26.6.2 arm64",
+    "rust": "1.94.0",
+    "swift": "6.4",
+    "ios_sdk": "27.0",
+    "ios_runtime": "26.4",
+    "ios_device": "iPhone 17 Pro simulator",
+    "ios_target": "aarch64-apple-ios-sim",
+    "deployment_target": "17.0",
+    "build_jobs": 2,
+    "incremental": false,
+    "builds_concurrent": false
+  },
+  "workspace_checks": {
+    "engine": 480,
+    "compiler": 191
+  },
+  "unchanged_tracked_crate_workspace_files_between_native_and_mobile_freezes": 163,
+  "source_archive_sha256": "c0e1918dcece5eb414dabd6cc142bfe97a423c1159bf3aba9350720cf27f7f8c",
+  "binary_artifacts": {
+    "macos_compiler_sdk": {
+      "sha256": "92d35757642703dcb8200ef45b8b0af0b5f8afba4ed8ba8778e7334cb6e3dbe9",
+      "bytes": 13801320
+    },
+    "macos_engine": {
+      "sha256": "3e86f2c0498f861d255c41b32244ea7f34ca65dd67706721d4f24f5f323ec245",
+      "bytes": 25800384
+    },
+    "macos_native_scenario": {
+      "sha256": "c00871adfdc5a8bbee1aede1ff9e87c99ec5c863180618a0771921cb87c454b7",
+      "bytes": 30509552
+    },
+    "macos_three_peer_trace": {
+      "sha256": "e4b62e77cd1a296e1e5af756c4fffbe8ae6b08dcdd6907345d5128dc81c56e4d",
+      "bytes": 30227504
+    },
+    "ios_native_scenario": {
+      "sha256": "14799cbc846bf9dc89e546ab36a699c67820d945979aa9715343af4fd83c39b4",
+      "bytes": 30486224
+    },
+    "ios_three_peer_trace": {
+      "sha256": "5080de17d015f27bd5d8f73c7eb60ae9d1a04d849e36cf7032194a5b902e23d1",
+      "bytes": 30224880
+    },
+    "ios_native_static_library": {
+      "sha256": "609ffedb766403b740861b776329afcf2824fde2ab865693c918c62f37f2aa6a",
+      "bytes": 172913464
+    },
+    "native_conformance": {
+      "sha256": "82e1ecb234b93133a57ae3e2d46830b5dc8c6302c55d787ebbede73fd2fd5cda",
+      "bytes": 12285056
+    },
+    "wasm_conformance": {
+      "sha256": "6c908a64b2e1a1b818ca9901305edd82fd1e71b6274bb1c07f4bf546d263412e",
+      "bytes": 2705479
+    }
+  },
+  "reports": {
+    "engine-archive-scenario-bc.json": {
+      "sha256": "bd2c8fdd926b3d3091a8f05fbbed6554cd0417e6ce47f62fce1150a85c978d05",
+      "bytes": 53712
+    },
+    "ios-native-scenario-bc.json": {
+      "sha256": "69f65cd2281f09e5a7eefd4e283b83dc5929c85fc96e4b239d15c5a7ea2de872",
+      "bytes": 54475
+    },
+    "ios-source-app-archive.json": {
+      "sha256": "db0d98deff5fd93e4335e38eb482f9064e11258eaa79d0118e57dff5cfa831d4",
+      "bytes": 11545
+    },
+    "portable-archive.json": {
+      "sha256": "438928802dd092ae1dd70d6ad34617f1040fa93421e1dbdef6db5e13a29ac50b",
+      "bytes": 871
+    },
+    "source-fixtures.json": {
+      "sha256": "71e95ceb418ac34968a2536a81dc105c5e8331c5100b0b6a6820ea9138aacc41",
+      "bytes": 3362
+    },
+    "repair/signed.json": {
+      "sha256": "d51e26196f0c566534c377583e4b4cb6451f35c11411b2dbea193163dcf538bb",
+      "bytes": 26589
+    },
+    "repair/unsigned.json": {
+      "sha256": "540de48d610903c5b6d61def9a02a122336e7e1a33bf6023bffc5977a0d80b5e",
+      "bytes": 21386
+    },
+    "repair/temporal.json": {
+      "sha256": "19afb0b51994b1bbb35807e8e18a44300fdfefae916af815ad289477276f87b9",
+      "bytes": 459
+    }
+  },
+  "logs": {
+    "compiler-archive-build.log": {
+      "sha256": "4c1bfcab47c6e7b9c3883d3be0f55c4e5b3d64a86dd8287234f469b02b3ac34e",
+      "bytes": 901
+    },
+    "compiler-archive-tests.log": {
+      "sha256": "d43ac658ecc511622d46570c04eb982682f91d14a4a85c4db7e446f56782d6ba",
+      "bytes": 19757
+    },
+    "engine-archive-build.log": {
+      "sha256": "5a010a08411d6628c332fa532bbe7795777796e62d1f6f41b7aa9517296c6cc3",
+      "bytes": 903
+    },
+    "engine-archive-tests.log": {
+      "sha256": "2f5d2916bdae7ab428867d4bcc0842f46a5055803cc6e276fa586dfddef6e54e",
+      "bytes": 58797
+    },
+    "clippy.log": {
+      "sha256": "337f486fbe7d2eb8541f5a986ba4619da0e3ce4a786215cfee323b6f46967fa9",
+      "bytes": 1042
+    },
+    "ios-build.log": {
+      "sha256": "bda031a0ba51299dab9ac9589849716ba0396a9d7493b4a48bc06218cc8509d8",
+      "bytes": 2587
+    },
+    "ios-archive-library-build.log": {
+      "sha256": "497e7e3afdf2b90560239caaadf2b6478ad4441dd9235a13c83ffa46a0d69428",
+      "bytes": 944
+    },
+    "portable-archive.log": {
+      "sha256": "ea74afde432da7cff7c7bd6cdbd1d66c217c61a469488c8031189c5120fcecf1",
+      "bytes": 872
+    },
+    "public-rust-failure.log": {
+      "sha256": "6fb8892bae992ebb316ad7aba82a880a82c44c49ff22f625cc29802540c5acea",
+      "bytes": 512860
+    }
+  },
+  "source_papers": {
+    "source": "User-supplied original Weave White Papers v0.1 bundle",
+    "paper_date": "2026-09-11",
+    "recovered_on": "2026-09-19",
+    "files": [
+      {
+        "path": "Weave_Engine_White_Paper_v0.1.md",
+        "sha256": "4a917b1b185a1b92e1edadae0e63259c68c94cf177dd231052e9db5bcce6f705",
+        "bytes": 46454
+      },
+      {
+        "path": "Weave_Language_White_Paper_v0.1.md",
+        "sha256": "e9965099f0cedefd7b1e7f02051550e761a9411421c6fab283c9c05cba15247c",
+        "bytes": 36085
+      },
+      {
+        "path": "Weave_Engine_White_Paper_v0.1.pdf",
+        "sha256": "ae7012a78dd8e1bd363d8f3e4c1ab8d3706c5963757abe31958dfa335179d97c",
+        "bytes": 231999
+      },
+      {
+        "path": "Weave_Engine_White_Paper_v0.1.docx",
+        "sha256": "20f8534332b5e658f2dca71b5182e2caf4dd634f138df3a9933bff9d44d11dca",
+        "bytes": 60228
+      }
+    ]
+  },
+  "source_contract_vendor_files_verified": 33,
+  "commands": {
+    "engine_workspace": "CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 cargo test --offline --locked --workspace --all-features",
+    "compiler_workspace": "CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 cargo test --offline --locked --workspace",
+    "strict_lint": "CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+    "native_trace": "python3 scripts/check_native_scenario.py --compiler-sdk COMPILER_SDK --host NATIVE_SCENARIO --peer-host THREE_PEER_TRACE --fixtures LANGUAGE/examples/native_scenario --report REPORT",
+    "ios_rust_trace": "python3 scripts/check_native_scenario_ios.py --simulator EXISTING_BOOTED_SIMULATOR --compiler-sdk COMPILER_SDK --host IOS_NATIVE_SCENARIO --peer-host IOS_THREE_PEER_TRACE --fixtures LANGUAGE/examples/native_scenario --report REPORT",
+    "ios_app": "python3 scripts/check_ios_source_app.py --simulator EXISTING_BOOTED_SIMULATOR --library IOS_STATIC_LIBRARY --compiler-sdk COMPILER_SDK --fixtures LANGUAGE/examples/native_scenario --report REPORT --evidence-dir EVIDENCE",
+    "portable": "CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 python3 scripts/root_portable.py --report REPORT"
+  },
+  "checks": [
+    "exact git source archives and locked offline builds",
+    "480 engine and 191 compiler workspace tests/doctests",
+    "strict Rust workspace/all-target/all-feature Clippy and formatting",
+    "actual complete SDK bytes, pinned modules and two source variants",
+    "202-process macOS combined trace with 12 compiler processes and 22 controlled exits",
+    "202-process iOS simulator Rust trace with the same semantic assertions",
+    "24-launch Swift application-container profile with six compiler processes and four lost responses",
+    "nine native/WASM semantic groups with identical 43746 output bytes",
+    "original engine WIP preserved byte-for-byte; primary checkouts unchanged and clean",
+    "owned simulator apps removed and existing simulator restored to Shutdown"
+  ],
+  "public_ci_snapshot": {
+    "head": "d5c1c622be4c8feb175090806b0afea85c1e910f",
+    "rust_result": "failure",
+    "run": "https://github.com/weave-graph/weave-engine/actions/runs/35530888921",
+    "failure": "P export E_UNAVAILABLE on Linux/macOS/Windows",
+    "candidate_hosted_result": "not_run",
+    "candidate_published": false
+  },
+  "limits": [
+    "no new full R01-R40 or E01-E15 conformance gate is closed",
+    "trusted host code/journals; serialized bounds do not enforce CPU/RSS isolation",
+    "signed whole-capsule fixture transport is not a network service or selective disclosure protocol",
+    "full simulator Rust chain uses host-owned temporary files; separate Swift profile uses app-container SQLite",
+    "full cluster/peer/governance/effect Swift and generic browser bindings remain open",
+    "no physical-device, energy, OS power-loss, app eviction/quota/upgrade acceptance",
+    "retention/rebase, causal loops, stateful upgrades, richer history, incremental clustering and paper assurance remain open",
+    "local evidence is not hosted CI, public branch publication or release acceptance"
+  ]
+}

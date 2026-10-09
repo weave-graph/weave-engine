@@ -1,5 +1,6 @@
 //! Trusted embedding-host ABI. JSON plans never grant authority; each handle has fixed host grants.
 pub mod artifacts;
+pub mod cluster_journal;
 pub mod host;
 mod host_abi;
 mod strict_json;
