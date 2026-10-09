@@ -2,6 +2,7 @@
 """Marker12 -> current atomic auxiliary-state migration using existing binaries (no build)."""
 import argparse
 import json
+from version_profile import store_marker
 import sqlite3
 import subprocess
 import tempfile
@@ -30,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='weave-selection-migration-') as tmp:
     new = run(a.engine)
     assert new.returncode == 0, new.stderr
     with sqlite3.connect(db) as c:
-        assert c.execute('PRAGMA user_version').fetchone()[0] == 20
+        assert c.execute('PRAGMA user_version').fetchone()[0] == store_marker()
         assert c.execute("SELECT count(*) FROM sqlite_master WHERE name IN ('view_selection','view_schedules','view_schedule_cursors')").fetchone()[0] == 3
         assert c.execute('SELECT count(*) FROM events').fetchone()[0] == 0
     old = run(a.older_engine)
