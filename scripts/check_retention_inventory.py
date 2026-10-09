@@ -6,6 +6,7 @@ temporary cleanup, and preserve the original fixture files and plan response.
 Independent destination stores and journals are excluded by their storage marker.
 """
 import argparse
+from contextlib import closing
 import hashlib
 import json
 from pathlib import Path
@@ -18,7 +19,7 @@ import tempfile
 
 
 def snapshot(path):
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         tables = connection.execute(
             "SELECT name,sql FROM sqlite_master WHERE type='table' ORDER BY name"
         ).fetchall()
@@ -50,7 +51,7 @@ def main():
                 with path.open('rb') as source:
                     if source.read(16) != b'SQLite format 3\x00':
                         continue
-                with sqlite3.connect(path) as connection:
+                with closing(sqlite3.connect(path)) as connection:
                     marker = connection.execute('PRAGMA user_version').fetchone()[0]
                 if marker != 22:
                     continue

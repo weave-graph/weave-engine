@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Actual process death around projection, erasure and explicit rebuild commits."""
 import argparse,hashlib,json,sqlite3,subprocess,tempfile
+from contextlib import closing
 from pathlib import Path
 
 def snapshot(path):
-    with sqlite3.connect(path) as c:
+    with closing(sqlite3.connect(path)) as c:
         return {name:c.execute('SELECT * FROM "'+name.replace('"','""')+'" ORDER BY rowid').fetchall()
                 for (name,) in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")}
 
@@ -29,7 +30,7 @@ def main():
         assert invoke('raw')['error']=='E_PROJECTION_STATE';assert snapshot(db)==before
         invoke('compact_crash',82);assert snapshot(db)==before
         invoke('compact_after',83);expired=invoke('inspect');assert expired['state_error']=='E_CHECKPOINT_EXPIRED' and expired['events']==4
-        with sqlite3.connect(db) as c:
+        with closing(sqlite3.connect(db)) as c:
             assert c.execute('SELECT count(*) FROM retention_tombstones').fetchone()[0]==1
             assert c.execute("SELECT data FROM revisions WHERE graph_id='orphan'").fetchone()[0]==''
             assert c.execute("SELECT count(*) FROM revisions WHERE graph_id='input' AND data<>''").fetchone()[0]==2
