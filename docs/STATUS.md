@@ -1,5 +1,23 @@
 # Implementation status and evidence
 
+## Native accepted-view history
+
+Native explicit decision/date/range selection now separates governed acceptance
+from source recording and replica receipt. Signed original ordering links and
+protected occurrence bodies are checked, current whole authority is retained,
+and persistent clock regression cannot publish an acceptance. Six independent
+oracles cover late acceptance, equal time/restart, half-open ranges/overflow,
+foreign/missing/future cuts, lost/corrupt intermediates and expired historical
+approvals versus current policy. See [ADR 0003](architecture/ADR-0003-accepted-view-history.md).
+
+The full workspace checkpoint passes 505 tests and strict lint/format. Aggregate
+range byte bounds are checked separately. The actual source-transfer trace passes
+with 214 runtime processes, 12 compiler processes and 22 controlled deaths. An
+independent eight-process compatibility controller starts with real prior store20
+governance, verifies unchanged original rows and lets the prior runtime read the
+original decision after a new acceptance. Canonical/source accepted-time and range selection, retention and all
+remaining original requirements stay mandatory; this is a native extension.
+
 ## Coordinated recorded selection (protocol 0.20, store20)
 
 Canonical `RecordedQuery` now selects an actual replica-local checkpoint through

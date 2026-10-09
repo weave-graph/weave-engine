@@ -175,6 +175,33 @@ impl Engine {
         }
         Ok(Some((GraphRef { graph_id, revision }, binding)))
     }
+    pub(crate) fn accepted_history_observation(
+        &self,
+        view: &str,
+        decision: &str,
+        time: i64,
+    ) -> Result<AcceptedViewObservation> {
+        let (reference, binding) = self.governance_binding(decision)?.ok_or_else(unavailable)?;
+        if binding.view != view || binding.accepted_at != time || time < 0 {
+            return Err(unavailable());
+        }
+        let expected = decision_data(&binding);
+        let stored = self
+            .load(&reference.graph_id, &reference.revision)?
+            .ok_or_else(unavailable)?;
+        if digest(&expected)? != binding.content_digest || stored != expected {
+            return Err(unavailable());
+        }
+        Ok(AcceptedViewObservation {
+            observer: self.runtime_source_identity()?,
+            view_id: view.into(),
+            decision_id: decision.into(),
+            accepted_at_ms: time,
+            occurrence: reference,
+            source: binding.source,
+            branch_id: binding.branch,
+        })
+    }
     fn authorize_governance_record(
         &self,
         graph: &str,

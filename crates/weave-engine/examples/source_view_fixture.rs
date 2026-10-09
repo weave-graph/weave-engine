@@ -148,6 +148,11 @@ fn run(a: &[String]) -> weave_engine::Result<Value> {
             };
             Ok(serde_json::to_value(e.execute(&plan, &h)?)?)
         }
+        "accepted_history" => Ok(serde_json::to_value(e.query_accepted_history_for(
+            &a[4],
+            &read_json::<AcceptedViewHistoryCut>(&a[3]),
+            &host(),
+        )?)?),
         "accepted" => Ok(serde_json::to_value(e.query_accepted_view(
             &AcceptedViewSelection {
                 view_id: a[3].clone(),

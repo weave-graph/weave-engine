@@ -409,6 +409,15 @@ fn run(e: &mut Engine, peer: &str, v: &Value) -> TestResult<Value> {
             e.cluster_navigation(&serde_json::from_value(v["selection"].clone())?, &host())?,
         )?,
         "govern" => accept(e, v)?,
+        "accepted_history" => serde_json::to_value(e.query_accepted_history_for(
+            field(v, "view")?,
+            &serde_json::from_value(v["cut"].clone())?,
+            &if v["outsider"] == true {
+                HostContext::new("independent-reviewer", Vec::<String>::new())
+            } else {
+                host()
+            },
+        )?)?,
         "accepted" => serde_json::to_value(e.query_accepted_view(
             &AcceptedViewSelection {
                 view_id: field(&v["selection"], "view_id")?.into(),

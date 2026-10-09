@@ -72,9 +72,12 @@ def main():
     parser.add_argument('--fixtures', type=Path, required=True)
     parser.add_argument('--upgrade-host', type=Path, help='switch from a real store19/SDK0.19 host to the current host after retaining an empty cluster receipt')
     parser.add_argument('--peer-host', type=Path, help='continue actual source state through signed P/W/T exchange, governance and effect fencing')
+    parser.add_argument('--accepted-history', action='store_true', help='verify native accepted-time selection over the actual transferred source')
     parser.add_argument('--report', type=Path)
     parser.add_argument('--evidence-dir', type=Path)
     args = parser.parse_args()
+    if args.accepted_history and not args.peer_host:
+        parser.error('--accepted-history requires --peer-host')
     trace, variants, compiler_trace = [], [], []
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix='weave-native-scenario-') as temp:
@@ -91,8 +94,9 @@ def main():
             runtime_config = work / 'config.json'; runtime_config.write_bytes(encoded(config))
             peer_dbs = {'P':db, 'W':work/'work.db', 'T':work/'team.db'}
             peer_trace = []
+            peer_clocks = {'P':20, 'W':20, 'T':20}
             def peer_call(peer, op, expect=0, **data):
-                path = work / 'peer-request.json'; path.write_bytes(encoded({'op':op, **data}))
+                path = work / 'peer-request.json'; path.write_bytes(encoded({'op':op, 'fixture_clock_ms':peer_clocks[peer], **data}))
                 r = subprocess.run([str(args.peer_host.resolve()),str(peer_dbs[peer]),peer,str(path),str(runtime_config)],capture_output=True,timeout=30)
                 assert r.returncode==expect,(peer,op,r.returncode,r.stdout[-1500:],r.stderr[-1500:])
                 peer_trace.append({'peer':peer,'operation':op,'exit':r.returncode,'response_sha256':sha(r.stdout+r.stderr)})
@@ -289,10 +293,31 @@ def main():
                         assert len(tips)==1, (graph,tips)
                         peer_call(receiver,'accept_revision',reference={'graph_id':graph,'revision':tips[0]['revision']},branch=target_branch,expected=None)
                 assert peer_call('W','head',graph=graphs['clusters'],branch='main')['revision']==work_head
+
+                if args.accepted_history:
+                    with database(peer_dbs['T']) as c:
+                        observer_T = c.execute('SELECT source FROM engine_identity WHERE id=1').fetchone()[0]
+                        received_at = c.execute('SELECT recorded_at_ms FROM head_observations WHERE graph_id=? ORDER BY rowid DESC LIMIT 1',(ref['graph_id'],)).fetchone()[0]
+                    peer_call('T','accepted_history',view=variant+'-team',cut={'kind':'at_time','observer':observer_T,'unix_millis':20},expect=1)
+                    peer_clocks['T'] = 30
                 decision = peer_call('T','govern',source=ref,view=variant+'-team',id=variant+'-accept',branch='main')
                 chosen = {'view_id':variant+'-team','decision_id':decision['decision_id']}
                 accepted = peer_call('T','accepted',selection=chosen)
                 assert accepted['graph']['nodes']
+                if args.accepted_history:
+                    with database(peer_dbs['T']) as c:
+                        accepted_at = c.execute('SELECT accepted_at_ms FROM governance_decisions WHERE id=?',(decision['decision_id'],)).fetchone()[0]
+                    assert received_at == 20 and accepted_at == 30
+                    peer_call('T','accepted_history',view=variant+'-team',cut={'kind':'at_time','observer':observer_T,'unix_millis':25},expect=1)
+                    history = peer_call('T','accepted_history',view=variant+'-team',cut={'kind':'at_time','observer':observer_T,'unix_millis':30})
+                    exact = peer_call('T','accepted_history',view=variant+'-team',cut={'kind':'decision','observer':observer_T,'decision_id':decision['decision_id']})
+                    assert history == exact and history['result'] == accepted
+                    assert history['observation']['accepted_at_ms'] == accepted_at and history['observation']['source'] == ref
+                    peer_call('T','accepted_history',view=variant+'-team',cut={'kind':'decision','observer':observer_T,'decision_id':decision['decision_id']},outsider=True,expect=1)
+                    with database(peer_dbs['P']) as c:
+                        observer_P = c.execute('SELECT source FROM engine_identity WHERE id=1').fetchone()[0]
+                    peer_call('T','accepted_history',view=variant+'-team',cut={'kind':'decision','observer':observer_P,'decision_id':decision['decision_id']},expect=1)
+
                 assert peer_call('T','accepted',selection=chosen,outsider=True,expect=1)['code']=='E_GOV_UNAVAILABLE'
                 explanation = peer_call('T','execute',program=program({'op':'evaluate','value':{'kind':'explain','input':{'kind':'accepted_graph','selection':chosen}}}))[0]['result']
                 assert explanation['graph']['nodes'] and {graphs['evidence'],graphs['installation'],graphs['warnings']} <= {p['graph_id'] for p in explanation['input_snapshots']}
@@ -347,7 +372,7 @@ def main():
             variants.append({'store_marker':store_marker,'variant':variant,'definition_digest':definition,'seed_pins':{'evidence':old_evidence,'installation':old_installation},'offline_pins':changed['heads'],'warning_pin':once['heads']['warnings'],'cluster_pin':once['heads']['clusters'],'cluster_record_id':record_id,'retained_bytes':len(body)+len(bundle),'journal_body_sha256':sha(body),'receipt_sha256':sha(encoded(duplicate['results'])),'events':once['events'],'peer_continuation':variants_peer})
     assert len(variants)==2 and variants[0]['definition_digest'] != variants[1]['definition_digest']
     assert variants[0]['store_marker'] == variants[1]['store_marker']
-    report = {'profile':'native-compiled-scenario-bc/1' if args.peer_host else 'native-compiled-scenario-b/1','status':'passed','protocol':cluster_value['version'],'source_protocol':compilations['seed']['artifacts']['program']['version'],'upgraded_from_store19':bool(args.upgrade_host),'store_marker':variants[0]['store_marker'],'variants':variants,'runtime_processes':len(trace)+sum(v['peer_continuation']['processes'] if v['peer_continuation'] else 0 for v in variants),'facade_processes':len(trace),'peer_processes':sum(v['peer_continuation']['processes'] if v['peer_continuation'] else 0 for v in variants),'compiler_processes':len(compiler_trace),'controlled_deaths':sum(t['exit'] in [92,94] for t in trace)+sum(sum(t['exit'] in [93,95,96] for t in v['peer_continuation']['trace']) if v['peer_continuation'] else 0 for v in variants),'seconds':round(time.monotonic()-started,3),'maximum_child_rss_native_units':resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss if resource else None,'child_rss_units':'bytes' if sys.platform=='darwin' else 'KiB' if resource else None,'child_rss_scope':'controller child processes including compiler; excludes simulator grandchildren','checks':['real complete SDK artifacts with exact integers and changed pinned modules','atomic offline source rebind and immutable old history','compiled negative-evidence handler, raw-bypass rejection and private reader denial','handler and host-journal preparation/completion deaths before and after commit','empty and nonempty retained clusters preserve scoped partial coverage and whole-input gates','immutable exact CAS/body/pins and historical receipts','narrowed/foreign authority, rehashed trimmed closure, missing exact premise and missing journal fail closed'],'limits':['trusted native process and host journal; no untrusted adapter isolation','native signed whole-capsule P/W/T continuation; no network service or selective disclosure' if args.peer_host else 'single offline store; signed transfer/governance/effect continuation remains separate','cluster navigation stays scoped Partial; no global coverage or incremental claim','small deterministic fixture; browser/mobile scenario and resource-scale gates remain open'],'peer_checks':['signed whole-closure export with pre/postcommit death and exact reply reuse','tamper denial, isolated proposal and explicit dependency retention','concurrent workstation organization unchanged','genuine team acceptance and source-backed historical explanation','private annotation omitted, reviewer denied and current policy expiry','one unknown effect fence and explicit destination reconciliation'] if args.peer_host else [],'compiler_trace':compiler_trace,'trace':trace}
+    report = {'profile':'native-compiled-scenario-bc/1' if args.peer_host else 'native-compiled-scenario-b/1','status':'passed','protocol':cluster_value['version'],'source_protocol':compilations['seed']['artifacts']['program']['version'],'upgraded_from_store19':bool(args.upgrade_host),'native_accepted_history':bool(args.accepted_history),'store_marker':variants[0]['store_marker'],'variants':variants,'runtime_processes':len(trace)+sum(v['peer_continuation']['processes'] if v['peer_continuation'] else 0 for v in variants),'facade_processes':len(trace),'peer_processes':sum(v['peer_continuation']['processes'] if v['peer_continuation'] else 0 for v in variants),'compiler_processes':len(compiler_trace),'controlled_deaths':sum(t['exit'] in [92,94] for t in trace)+sum(sum(t['exit'] in [93,95,96] for t in v['peer_continuation']['trace']) if v['peer_continuation'] else 0 for v in variants),'seconds':round(time.monotonic()-started,3),'maximum_child_rss_native_units':resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss if resource else None,'child_rss_units':'bytes' if sys.platform=='darwin' else 'KiB' if resource else None,'child_rss_scope':'controller child processes including compiler; excludes simulator grandchildren','checks':['real complete SDK artifacts with exact integers and changed pinned modules','atomic offline source rebind and immutable old history','compiled negative-evidence handler, raw-bypass rejection and private reader denial','handler and host-journal preparation/completion deaths before and after commit','empty and nonempty retained clusters preserve scoped partial coverage and whole-input gates','immutable exact CAS/body/pins and historical receipts','narrowed/foreign authority, rehashed trimmed closure, missing exact premise and missing journal fail closed'],'limits':['trusted native process and host journal; no untrusted adapter isolation','native signed whole-capsule P/W/T continuation; no network service or selective disclosure' if args.peer_host else 'single offline store; signed transfer/governance/effect continuation remains separate','cluster navigation stays scoped Partial; no global coverage or incremental claim','small deterministic fixture; browser/mobile scenario and resource-scale gates remain open'],'peer_checks':['signed whole-closure export with pre/postcommit death and exact reply reuse','tamper denial, isolated proposal and explicit dependency retention','concurrent workstation organization unchanged','genuine team acceptance and source-backed historical explanation','private annotation omitted, reviewer denied and current policy expiry','one unknown effect fence and explicit destination reconciliation'] + (['replica receipt precedes genuine governed acceptance; actual SQL-observed date/decision selection with outsider and foreign observer denial'] if args.accepted_history else []) if args.peer_host else [],'compiler_trace':compiler_trace,'trace':trace}
     if args.report: args.report.write_bytes(json.dumps(report,indent=2).encode()+b'\n')
     print(json.dumps({k:v for k,v in report.items() if k not in ['trace','compiler_trace','variants']},indent=2))
 
