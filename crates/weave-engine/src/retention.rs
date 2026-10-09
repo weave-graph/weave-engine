@@ -14,6 +14,7 @@ const KNOWN_TABLES: &[&str] = &[
     "admission_receipts",
     "assertion_structures",
     "compiled_handlers",
+    "compiled_migrations",
     "deliveries",
     "dispatch_adapters",
     "dispatch_pending",
@@ -593,6 +594,7 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                             | "retention_projection_receipts"
                                             | "delivery_cancellations"
                                             | "projection_migrations"
+                                            | "compiled_migrations"
                                     )
                                 {
                                     let field = |name: &str| -> Result<String> {
@@ -602,12 +604,25 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                             .ok_or_else(failure)?;
                                         Ok(row.get(2 * index + 1)?)
                                     };
-                                    let adapter = if table == "projection_migrations" {
+                                    let adapter = if matches!(
+                                        table.as_str(),
+                                        "projection_migrations" | "compiled_migrations"
+                                    ) {
                                         field("source_adapter")?
                                     } else {
                                         field("adapter")?
                                     };
-                                    if table == "projection_migrations" {
+                                    if table == "compiled_migrations" {
+                                        compiled_lifecycle::validate_retained_migration(
+                                            self,
+                                            &adapter,
+                                            &field("destination_adapter")?,
+                                            &field("principal")?,
+                                            &field("nonce")?,
+                                            &field("digest")?,
+                                            &value,
+                                        )?;
+                                    } else if table == "projection_migrations" {
                                         projection_migration::validate_retained_migration(
                                             &adapter,
                                             &field("destination_adapter")?,

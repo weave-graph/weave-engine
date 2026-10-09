@@ -4,6 +4,7 @@ import argparse, hashlib, json, shutil, sqlite3, subprocess, tempfile
 from contextlib import closing
 from pathlib import Path
 from version_profile import store_marker
+from retention_migration import COMPILED_LIFECYCLE_TABLES
 LIFECYCLE_TABLES=frozenset(('delivery_cancellations','projection_rebuild_requests','projection_migrations'))
 
 def snapshot(path):
@@ -30,10 +31,11 @@ def main():
         assert len(before['tables']['retention_tombstones']['rows'])==1
         assert len(before['tables']['retention_projection_receipts']['rows'])==1
         invoke(host,db,'open_crash',code=82);assert snapshot(db)==before
-        invoke(host,db,'open_after',code=83);after=snapshot(db);assert after['marker']==store_marker()==23
-        assert set(after['tables'])==set(before['tables'])|LIFECYCLE_TABLES
+        invoke(host,db,'open_after',code=83);after=snapshot(db);assert after['marker']==store_marker()
+        new_tables=LIFECYCLE_TABLES|(COMPILED_LIFECYCLE_TABLES if store_marker()>=24 else frozenset())
+        assert set(after['tables'])==set(before['tables'])|new_tables
         assert {n:after['tables'][n] for n in before['tables']}==before['tables']
-        assert all(after['tables'][n]['rows']==[] for n in LIFECYCLE_TABLES)
+        assert all(after['tables'][n]['rows']==[] for n in new_tables)
         current=invoke(host,db,'inspect');assert {**current,'marker':22}==prior
         assert invoke(host,db,'duplicate_completion')['duplicate'];assert snapshot(db)==after
         error=invoke(old,db,'inspect',code=1);assert b'E_STORAGE_VERSION' in error;assert snapshot(db)==after
@@ -64,7 +66,7 @@ def main():
             shutil.copytree(root,a.evidence_dir/'actual-fixtures')
             for name,value in [('store22-before',before),('store23-upgraded',after),('migration-before',before_upgrade),('migration-after',upgraded),('rollback-after',rolled),('cancel-before',before_cancel),('cancel-after',canceled)]:
                 (a.evidence_dir/(name+'.json')).write_text(json.dumps(value,indent=2)+'\n')
-    report={'profile':'native-lifecycle-recovery/1','status':'passed','old_marker':22,'new_marker':23,'processes':len(trace),'controlled_deaths':8,'trace':trace,'checks':['real old22 compacted payload, opaque state, immutable receipt and private checkpoint preserved byte-for-byte','all prior table schemas and rows survive initialization','precommit schema death and postcommit restart','old22 host refuses current23 without writes','exact prior completed occurrence never rewinds rebuilt state','new artifact/state/private checkpoint/retirement/receipt commit together','rollback restores recorded prior artifact/state/checkpoint in fresh namespace','genuine stale-CAS compiled preparation retained and canceled occurrence cannot execute','all four pre/postcommit process-death pairs'],'scope':'fixed trusted native pure adapters; no source migration, effectful rollback or hostile module isolation claim'}
+    report={'profile':'native-lifecycle-recovery/1','status':'passed','old_marker':22,'new_marker':store_marker(),'processes':len(trace),'controlled_deaths':8,'trace':trace,'checks':['real old22 compacted payload, opaque state, immutable receipt and private checkpoint preserved byte-for-byte','all prior table schemas and rows survive initialization','precommit schema death and postcommit restart','old22 host refuses the current store without writes','exact prior completed occurrence never rewinds rebuilt state','new artifact/state/private checkpoint/retirement/receipt commit together','rollback restores recorded prior artifact/state/checkpoint in fresh namespace','genuine stale-CAS compiled preparation retained and canceled occurrence cannot execute','all four pre/postcommit process-death pairs'],'scope':'fixed trusted native pure adapters; no source migration, effectful rollback or hostile module isolation claim'}
     if a.report:a.report.write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report))
 if __name__=='__main__':main()

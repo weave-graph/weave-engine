@@ -1,3 +1,23 @@
+## Source-compiled pure version transfer (protocol0.21 / store24)
+
+Compatible pure stateless source handler versions now transfer an actual private
+checkpoint into a fresh immutable namespace. The kernel captures current whole
+input/metadata authority, actual registered bindings and the replay epoch;
+installation, checkpoint, retirement and audit commit together. Rollback restores
+the recorded prior artifact/configuration/checkpoint pair into another namespace.
+Original outputs, preparations and receipts remain historical; later duplicates
+never rewind newer work. Unknown effects, opaque state and expired replay fail
+closed. Collection validates receipts against actual registrations.
+
+The actual source controller uses two compiler-emitted versions and genuine old23
+stores with completed handlers, non-default retention/state/native migration and
+cancellation audits. It runs61 processes and12 controlled deaths, preserving all
+prior schemas/rows across initialization. See [lifecycle](ADAPTER_LIFECYCLE.md)
+and [verification](VERIFICATION_024.md). Full source/portable lifecycle commands,
+stateful/effectful actors, explicit compiled reconstruction, causal/resource
+controls and every remaining original assurance gate stay required. E01–E14
+remain in progress; E15 stays open. Earlier totals describe their own profiles.
+
 ## Native explicit cancellation and state migration (protocol0.21 / store23)
 
 Fixed owners can cancel an actual pending pure handler occurrence by comparing

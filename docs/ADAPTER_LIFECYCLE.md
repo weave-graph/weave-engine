@@ -79,3 +79,35 @@ private scan noninterference and valid-JSON storage corruption. The process
 controller uses a real old22 host, a populated compacted store and four pre/post
 commit death pairs; it compares actual SQL rows and schemas and proves old-reader
 refusal. See [verification](VERIFICATION_023.md).
+
+## Source-compiled pure stateless version transfer
+
+`compiled_migration_inputs_for` captures the actual registered sealed artifact,
+current authorized input/metadata closure, opaque replay epoch and semantic
+checkpoint binding. Private unrelated scan coordinates never appear in public
+inputs. `migrate_compiled_handler_for` requires current owner/output authority,
+a paused/drained source without pending or unresolved effects, and a current
+input CAS. Event protocol, input/metadata scope, output slot/destination and
+principal/subscriptions must remain compatible. A new sealed pure artifact and
+configuration are installed into a fresh paused namespace; actual private
+checkpoint transfer, old-version retirement and immutable receipt commit together.
+Earlier outputs, preparations and receipts remain historical.
+
+Rollback names an actual prior migration source and restores its recorded
+artifact/configuration/checkpoint pair into another fresh namespace. It never
+reactivates the old identity or changes graph heads automatically. Later pure
+replay can produce new output. Historical retries validate actual stored
+registrations, retained inputs and current authority; they never rewind later
+checkpoint advances. Native opaque projection state and external host journals
+are not stateless compiled state. Effects, scope/schema incompatibility and
+expired replay fail closed until their explicit reconstruction profile exists.
+
+Store24 adds `compiled_migrations`. Older markers containing this table and
+current markers missing it reject before schema commit. Genuine populated
+store23 upgrades preserve every prior schema/row, including native state,
+cancellation/migration audits, erased anchors and original compiled preparations.
+Collection checks typed receipt hashes and cross-bindings against actual
+registrations and retains their real input pins. Requests are bounded to3MiB,
+records to8MiB, and128 records/64MiB per principal, alongside existing registration
+and shared operation limits. These serialization bounds do not provide process
+CPU/RSS isolation. See [source/process verification](VERIFICATION_024.md).

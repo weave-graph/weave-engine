@@ -15,7 +15,7 @@ The companion [Weave language](https://github.com/weave-graph/weave-language) co
 
 See [current evidence and limitations](docs/STATUS.md), [implementation plan](docs/IMPLEMENTATION_PLAN.md), [workflow DAG](docs/WORKFLOW.md), [contract](docs/contract/v0.21/README.md) and [source provenance](docs/SOURCES.md). Broader joins, selective peer synchronization, complete permission/governance semantics, the integrated persistent browser/mobile scenario, broader geometry and incremental clustering remain open. The [original white papers](docs/source/README.md) have been recovered and [reconciled](docs/RECONCILIATION.md). MIT licensed.
 
-Native store23 adds [explicit owner cancellation and pure state/artifact/checkpoint upgrade and rollback](docs/ADAPTER_LIFECYCLE.md), preserving prior retention data and immutable output provenance. Full source/portable lifecycle and actor/effect/resource profiles remain open.
+Native store24 adds compatible source-compiled stateless upgrade and recorded-pair rollback alongside [explicit owner cancellation and pure state/artifact/checkpoint upgrade and rollback](docs/ADAPTER_LIFECYCLE.md), preserving prior retention data and immutable output provenance. Full source/portable lifecycle and actor/effect/resource profiles remain open.
 
 Trusted native store22 administration adds conservative reachability collection, genuine owned pins, verifiable erasure anchors and explicit atomic projection/view rebuild after expired replay. See [retention limits and remaining work](docs/RETENTION.md). Protocol0.21 and capsule0.4 remain unchanged.
 

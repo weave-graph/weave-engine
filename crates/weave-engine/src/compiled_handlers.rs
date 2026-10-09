@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 const REGISTRATION_LIMIT: usize = 2 * 1024 * 1024;
 
 /// Trusted host mapping of an inert artifact slot to one writable destination.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HandlerOutputBinding {
     pub slot: String,
     pub graph_id: String,
@@ -18,17 +19,17 @@ pub struct PreparedHandlerReceipt {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Output {
-    slot: String,
-    graph_id: String,
-    branch_id: String,
+pub(crate) struct Output {
+    pub(crate) slot: String,
+    pub(crate) graph_id: String,
+    pub(crate) branch_id: String,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Registration {
-    template: CompiledHandlerTemplate,
-    output: Output,
-    manifest: AdapterManifest,
+pub(crate) struct Registration {
+    pub(crate) template: CompiledHandlerTemplate,
+    pub(crate) output: Output,
+    pub(crate) manifest: AdapterManifest,
 }
 fn digest(domain: &str, value: &impl Serialize) -> Result<String> {
     Ok(format!(
@@ -90,11 +91,50 @@ CREATE TABLE IF NOT EXISTS handler_preparations(adapter TEXT NOT NULL REFERENCES
         }
         identity_acceptance::require_external_graph(&output.graph_id)?;
         json_size(manifest, 256 * 1024)?;
+        let _budget = self.read_budget.enter();
         let tx = rusqlite::Transaction::new_unchecked(
             &self.conn,
             rusqlite::TransactionBehavior::Immediate,
         )?;
         let _clock = self.operation_write_scope()?;
+        self.install_compiled_handler_in_transaction(manifest, template, output, authority)?;
+        tx.commit()?;
+        Ok(())
+    }
+    pub(crate) fn install_compiled_handler_in_transaction(
+        &self,
+        manifest: &AdapterManifest,
+        template: &CompiledHandlerTemplate,
+        output: &HandlerOutputBinding,
+        authority: &HostContext,
+    ) -> Result<()> {
+        handler_registration::validate_handler_template(template)
+            .map_err(|d| err(&d.code, &d.message))?;
+        if !valid_id(&authority.principal)
+            || !valid_id(&output.graph_id)
+            || !valid_id(&output.branch_id)
+            || output.slot != template.output_slot
+            || manifest.principal != authority.principal
+            || manifest.artifact_digest != template.definition_digest
+            || manifest.subscriptions
+                != [SubscriptionScope {
+                    graph_id: template.input.graph_id.clone(),
+                    branch_id: template.input.branch_id.clone(),
+                }]
+            || manifest.output_graphs != [output.graph_id.clone()]
+            || !manifest.effect_destinations.is_empty()
+            || !manifest.projection_replay
+            || !authority.writable_graphs.contains(&output.graph_id)
+            || (output.graph_id == template.input.graph_id
+                && output.branch_id == template.input.branch_id)
+        {
+            return Err(err(
+                "E_HANDLER_INSTALL",
+                "invalid or unauthorized handler installation",
+            ));
+        }
+        identity_acceptance::require_external_graph(&output.graph_id)?;
+        json_size(manifest, 256 * 1024)?;
         let registration = Registration {
             template: template.clone(),
             output: Output {
@@ -114,7 +154,6 @@ CREATE TABLE IF NOT EXISTS handler_preparations(adapter TEXT NOT NULL REFERENCES
                     "compiled installation is immutable",
                 ));
             }
-            tx.commit()?;
             return Ok(());
         }
         let exists: bool = self.conn.query_row(
@@ -142,10 +181,9 @@ CREATE TABLE IF NOT EXISTS handler_preparations(adapter TEXT NOT NULL REFERENCES
                 digest("weave-handler-registration-binding/1", &registration)?
             ],
         )?;
-        tx.commit()?;
         Ok(())
     }
-    fn handler_registration(&self, adapter: &str) -> Result<Registration> {
+    pub(crate) fn handler_registration(&self, adapter: &str) -> Result<Registration> {
         self.read_budget.request()?;
         let limit = self.read_budget.remaining().min(REGISTRATION_LIMIT);
         let (encoded, expected, principal): (Option<String>, String, String) = self.conn.query_row("SELECT CASE WHEN length(CAST(registration AS BLOB))<=?2 THEN registration END,substr(binding_digest,1,72),substr(principal,1,513) FROM compiled_handlers WHERE adapter=?1", params![adapter,limit as i64], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?.ok_or_else(invalid)?;
@@ -210,17 +248,30 @@ impl Engine {
         event: &str,
     ) -> Result<(QueryResult, Vec<GraphRef>)> {
         let manifest = &registration.manifest;
-        let host = HostContext::new(&manifest.principal, manifest.output_graphs.clone());
         let (graph_id, branch_id, revision, _) = self
             .scoped_event(manifest, event)?
             .ok_or_else(unavailable)?;
+        self.handler_input_snapshot(registration, &GraphRef { graph_id, revision }, &branch_id)
+    }
+    pub(crate) fn handler_input_snapshot(
+        &self,
+        registration: &Registration,
+        reference: &GraphRef,
+        branch: &str,
+    ) -> Result<(QueryResult, Vec<GraphRef>)> {
+        let graph_id = reference.graph_id.clone();
+        let revision = reference.revision.clone();
+        let host = HostContext::new(
+            &registration.manifest.principal,
+            registration.manifest.output_graphs.clone(),
+        );
         let raw = self.load(&graph_id, &revision)?.ok_or_else(unavailable)?;
         no_live(&raw)?; // Never resolve a detectable live root just to reject it later.
         let input = self.query(
             &QueryPlan {
                 graph_id: graph_id.clone(),
                 revision: Some(revision.clone()),
-                branch_id,
+                branch_id: branch.into(),
                 predicate: None,
                 from: None,
                 to: None,
