@@ -1,3 +1,5 @@
+#[path = "support/legacy_storage.rs"]
+mod legacy_storage;
 #[path = "support/clock.rs"]
 mod test_clock;
 use ed25519_dalek::SigningKey;
@@ -563,6 +565,7 @@ fn old_sql_only_decisions_are_not_backfilled_and_next_publication_is_real() {
         [],
     )
     .unwrap();
+    legacy_storage::strip_retention_schema(&db);
     db.pragma_update(None, "user_version", 11).unwrap();
     let e = test_clock::open(&path).unwrap();
     assert_eq!(

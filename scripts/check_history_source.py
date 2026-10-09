@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Real SDK artifacts select actual SQL-observed receipt and acceptance histories."""
+from version_profile import store_marker
 import argparse
 from contextlib import closing
 import hashlib
@@ -90,7 +91,7 @@ accepted_range A view "team" observer {json.dumps(observer)} between {t1} and {t
             forged={'version':'0.20.0','commands':[{'op':'commit','graph_id':'Marker','data':{}},new]}
             invoke(name,'live_run',forged,'E_VERSION')
             with closing(sqlite3.connect(db)) as c:assert not c.execute("SELECT 1 FROM heads WHERE graph_id='Marker'").fetchall()
-        with closing(sqlite3.connect(db)) as c: marker=c.execute('PRAGMA user_version').fetchone()[0]; assert marker==21
+        with closing(sqlite3.connect(db)) as c: marker=c.execute('PRAGMA user_version').fetchone()[0]; assert marker==store_marker()
     report={'profile':'actual-sdk-accepted-history-and-ranges/1','status':'passed','protocol':protocol,'store_marker':marker,'compiler_processes':len(compilers),'runtime_processes':len(runtimes),'seconds':round(time.monotonic()-started,3),'observed':{'observer':observer,'first_recorded':r1[2],'first_accepted':t1,'second_recorded':r2[2],'second_accepted':t2},'checks':['actual full SDK bytes and exact i64','actual SystemClock recording and genuine signed acceptance','source correction and later acceptance preserve fixed old selection','explicit decision replay matches local acceptance-time query','empty valid-time output preserves both protected and source pins','authorized start state and all half-open changes on both axes','foreign observer, outsider and preacceptance fail closed','pure hidden reads denied by actual SDK','old protocol cannot publish earlier writes'],'compiler_trace':compilers,'runtime_trace':runtimes,'scope':'trusted native SystemClock fixture with host-owned SQLite; no universal cut or full portable/lifecycle/retention claim'}
     if args.report:args.report.write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report))

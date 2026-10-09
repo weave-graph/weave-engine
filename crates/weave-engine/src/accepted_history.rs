@@ -189,6 +189,20 @@ impl Engine {
                 "acceptance cut outside observed clock",
             ));
         }
+        if *unix_millis < self.retention_history_floor()? {
+            self.query_accepted_view(
+                &AcceptedViewSelection {
+                    view_id: view.into(),
+                    decision_id: None,
+                },
+                host,
+            )
+            .map_err(|_| unavailable())?;
+            return Err(err(
+                "E_GOV_HISTORY_EXPIRED",
+                "acceptance cut precedes retained history",
+            ));
+        }
         let mut current = Some(tip);
         let mut seen = HashSet::new();
         let mut later = None;
@@ -247,7 +261,13 @@ impl Engine {
                 },
                 host,
             )
-            .map_err(|_| unavailable())?;
+            .map_err(|error| {
+                if error.code == "E_GOV_HISTORY_EXPIRED" {
+                    error
+                } else {
+                    unavailable()
+                }
+            })?;
         let mut current = self.accepted_history_scope(view, observer, host)?;
         let mut remaining_bytes = MATERIALIZED_LIMIT
             .saturating_sub(json_size(&start_state, MATERIALIZED_LIMIT)?)

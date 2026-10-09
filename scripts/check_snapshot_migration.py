@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Populate historical sealed views/signed receipts; verify atomic migration and exact identities."""
+from retention_migration import RETENTION_TABLES,retention_tables,assert_retention_baseline
+from version_profile import store_marker
 import argparse, hashlib, json, sqlite3, subprocess, tempfile
 from pathlib import Path
 from contextlib import closing
@@ -11,9 +13,9 @@ p.add_argument('--view',type=Path,default=Path('target/debug/examples/source_vie
 p.add_argument('--trace',type=Path,default=Path('target/debug/examples/three_peer_trace'))
 p.add_argument('--storage',type=Path,default=Path('target/debug/examples/storage_probe'))
 p.add_argument('--report',type=Path)
-p.add_argument('--old-protocol',default='0.16.0',choices=['0.16.0','0.17.0','0.18.0','0.19.0','0.20.0'])
+p.add_argument('--old-protocol',default='0.16.0',choices=['0.16.0','0.17.0','0.18.0','0.19.0','0.20.0','0.21.0'])
 p.add_argument('--old-marker',default=14,type=int)
-p.add_argument('--new-marker',default=21,type=int)
+p.add_argument('--new-marker',default=store_marker(),type=int)
 a=p.parse_args()
 def run(binary,*args,code=0):
  r=subprocess.run([str(binary.resolve()),*map(str,args)],capture_output=True,text=True,timeout=30)
@@ -48,11 +50,11 @@ with tempfile.TemporaryDirectory(prefix='weave-snapshot-migration-') as tmp:
  def new_tables():
   with closing(sqlite3.connect(db)) as c:return {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('compiled_handlers','handler_preparations','governed_effect_bindings','governed_effect_receipts','governed_effect_context','head_observations')")}
  if a.old_marker<16:assert not new_tables()
- run(a.storage,db,'crash',20,code=82);assert state()==before
+ run(a.storage,db,'crash',20,code=82);assert state()==before;assert not retention_tables(db)
  assert recorded_history(db)==old_history
  if a.old_marker<16:assert not new_tables()
  run(a.storage,db,'after_commit',20,code=83)
- committed=state()
+ committed=state();assert_retention_baseline(db,a.new_marker)
  if a.new_marker>=16:
   expected={'compiled_handlers','handler_preparations'}
   if a.new_marker>=17:expected|={'governed_effect_bindings','governed_effect_receipts','governed_effect_context'}

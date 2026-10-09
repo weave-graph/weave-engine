@@ -1,4 +1,6 @@
 //! Independent history oracles distinguish valid time, branch observation and receipt.
+#[path = "support/legacy_storage.rs"]
+mod legacy_storage;
 use serde_json::json;
 use std::sync::Arc;
 use weave_contract::*;
@@ -330,6 +332,7 @@ fn old_store_migration_baselines_current_heads_without_inventing_past_acceptance
     let head = engine.head("g", "main").unwrap();
     drop(engine);
     let connection = rusqlite::Connection::open(&path).unwrap();
+    legacy_storage::strip_retention_schema(&connection);
     connection
         .execute_batch("DROP TABLE head_observations; PRAGMA user_version=18;")
         .unwrap();

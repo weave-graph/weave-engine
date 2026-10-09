@@ -44,6 +44,7 @@ CREATE INDEX IF NOT EXISTS view_schedule_pending ON view_schedules(principal,pen
         let _read = self.read_budget.enter();
         let tx = self.conn.unchecked_transaction()?;
         let _clock = self.operation_write_scope()?;
+        self.require_view_replay_epoch(host)?;
         let (definition, tick) = self.view_schedule_definition(id, host)?;
         // This is the same current authority required to enroll the cache itself.
         self.read_view(id, tick, ViewFreshness::AllowStale, host)?;
@@ -64,6 +65,10 @@ CREATE INDEX IF NOT EXISTS view_schedule_pending ON view_schedules(principal,pen
                     r.get(0)
                 })?;
         self.conn.execute("INSERT INTO view_schedule_cursors VALUES (?1,?2,NULL,0) ON CONFLICT(principal) DO NOTHING",params![host.principal,sequence])?;
+        self.conn.execute(
+            "INSERT INTO retention_view_epochs VALUES (?1,?2) ON CONFLICT(principal) DO NOTHING",
+            params![host.principal, self.retention_replay_epoch()?],
+        )?;
         let inserted = self.conn.execute("INSERT INTO view_schedules(id,principal,requested_tick,pending,requested_sequence,age,processed_manifest) VALUES (?1,?2,?3,0,?4,0,NULL) ON CONFLICT(id,principal) DO NOTHING",params![id,host.principal,tick,sequence])?;
         // Duplicate enabling is idempotent and does not rewind a newer requested tick.
         let requested: Option<i64> = self.conn.query_row(
@@ -118,6 +123,7 @@ CREATE INDEX IF NOT EXISTS view_schedule_pending ON view_schedules(principal,pen
         let _read = self.read_budget.enter();
         let tx = self.conn.unchecked_transaction()?;
         let _clock = self.operation_write_scope()?;
+        self.require_view_replay_epoch(host)?;
         let (definition, processed) = self.view_schedule_definition(id, host)?;
         if definition.clock != ViewClock::Tick {
             return Err(err("E_CLOCK", "fixed view does not accept a tick"));
@@ -178,6 +184,7 @@ CREATE INDEX IF NOT EXISTS view_schedule_pending ON view_schedules(principal,pen
         let _read = self.read_budget.enter();
         let tx = self.conn.unchecked_transaction()?;
         let _clock = self.operation_write_scope()?;
+        self.require_view_replay_epoch(host)?;
         let cursor:Option<(i64,Option<String>)>=self.conn.query_row("SELECT sequence,substr(page_id,1,513) FROM view_schedule_cursors WHERE principal=?1",[&host.principal],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
         let Some((mut sequence, mut page_id)) = cursor else {
             tx.commit()?;
@@ -318,11 +325,14 @@ CREATE INDEX IF NOT EXISTS view_schedule_pending ON view_schedules(principal,pen
             return Err(err("E_ID", "principal required"));
         }
         let _read = self.read_budget.enter();
-        let tx = self.conn.unchecked_transaction()?;
+        let tx = self.optional_read_transaction()?;
         let _clock = self.operation_write_scope()?;
+        self.require_view_replay_epoch(host)?;
         let pending:Option<(String,Option<i64>)>=self.conn.query_row("SELECT substr(id,1,513),requested_tick FROM view_schedules WHERE principal=?1 AND pending=1 ORDER BY age,id LIMIT 1",[&host.principal],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
         let Some((id, requested_tick)) = pending else {
-            tx.commit()?;
+            if let Some(tx) = tx {
+                tx.commit()?;
+            }
             return Ok(None);
         };
         if !valid_id(&id) {
@@ -391,12 +401,114 @@ CREATE INDEX IF NOT EXISTS view_schedule_pending ON view_schedules(principal,pen
         }
         self.conn.execute("UPDATE view_schedules SET pending=0,requested_tick=?3,processed_manifest=?4,attempts=0,last_error=NULL WHERE id=?1 AND principal=?2",params![id,host.principal,tick,encoded])?;
         before_commit();
-        tx.commit()?;
+        if let Some(tx) = tx {
+            tx.commit()?;
+        }
         Ok(Some(ViewWorkOutcome {
             view_id: id,
             generation: snapshot.generation,
             current: snapshot.current,
             work,
         }))
+    }
+    fn require_view_replay_epoch(&self, host: &HostContext) -> Result<()> {
+        let (_, policy) = retention::state(&self.conn)?;
+        if policy == RetentionPolicy::default() {
+            return Ok(());
+        }
+        let registered: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM view_schedule_cursors WHERE principal=?1)",
+            [&host.principal],
+            |r| r.get(0),
+        )?;
+        if !registered {
+            return Ok(());
+        }
+        let epoch: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT substr(epoch,1,49) FROM retention_view_epochs WHERE principal=?1",
+                [&host.principal],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if epoch.as_deref() != Some(self.retention_replay_epoch()?.as_str()) {
+            return Err(err(
+                "E_CHECKPOINT_EXPIRED",
+                "explicit owned-view snapshot rebuild is required",
+            ));
+        }
+        Ok(())
+    }
+    /// Explicitly rebuild this owner's scheduled pure views before advancing their cursor.
+    pub fn rebase_view_schedule_for(&mut self, host: &HostContext) -> Result<Vec<ViewWorkOutcome>> {
+        self.rebase_view_schedule_boundary(host, || {})
+    }
+    #[cfg(feature = "recovery-testing")]
+    pub fn rebase_view_schedule_test_before_commit(
+        &mut self,
+        host: &HostContext,
+        before_commit: impl FnOnce(),
+    ) -> Result<Vec<ViewWorkOutcome>> {
+        self.rebase_view_schedule_boundary(host, before_commit)
+    }
+    fn rebase_view_schedule_boundary(
+        &self,
+        host: &HostContext,
+        before_commit: impl FnOnce(),
+    ) -> Result<Vec<ViewWorkOutcome>> {
+        let _read = self.read_budget.enter();
+        let tx = self.conn.unchecked_transaction()?;
+        let _clock = self.operation_write_scope()?;
+        if !valid_id(&host.principal) {
+            return Err(err("E_ID", "principal required"));
+        }
+        self.read_budget.request()?;
+        let ids=self.conn.prepare("SELECT substr(id,1,513) FROM view_schedules WHERE principal=?1 ORDER BY id LIMIT 257")?.query_map([&host.principal],|r|r.get::<_,String>(0))?.collect::<std::result::Result<Vec<_>,_>>()?;
+        if ids.len() > 256 {
+            return Err(err("E_BUDGET", "owned-view rebuild limit exceeded"));
+        }
+        self.read_budget.charge(ids.iter().map(String::len).sum())?;
+        let sequence: i64 =
+            self.conn
+                .query_row("SELECT coalesce(max(sequence),0) FROM events", [], |r| {
+                    r.get(0)
+                })?;
+        if ids.is_empty() {
+            tx.commit()?;
+            return Ok(vec![]);
+        }
+        // The new epoch is invisible until every full rebuild and its cursor commit.
+        self.conn.execute("INSERT INTO retention_view_epochs VALUES (?1,?2) ON CONFLICT(principal) DO UPDATE SET epoch=excluded.epoch",params![host.principal,self.retention_replay_epoch()?])?;
+        for id in &ids {
+            if !valid_id(id) {
+                return Err(err("E_INTEGRITY", "invalid scheduled view identifier"));
+            }
+            self.conn.execute(
+                "UPDATE view_selection SET state=NULL,digest=NULL WHERE id=?1 AND principal=?2",
+                params![id, host.principal],
+            )?;
+            self.enqueue_view(id, host, sequence)?;
+        }
+        let mut results = Vec::new();
+        for _ in &ids {
+            let outcome = self
+                .drain_view_work_atomic(host, || {}, &mut None)?
+                .ok_or_else(|| err("E_INTEGRITY", "owned rebuild unavailable"))?;
+            if !outcome.current {
+                return Err(err(
+                    "E_REBASE_INCOMPLETE",
+                    "all owned views require complete current inputs",
+                ));
+            }
+            results.push(outcome);
+        }
+        self.conn.execute(
+            "UPDATE view_schedule_cursors SET sequence=?2,page_id=NULL WHERE principal=?1",
+            params![host.principal, sequence],
+        )?;
+        before_commit();
+        tx.commit()?;
+        Ok(results)
     }
 }

@@ -40,7 +40,14 @@ mod operation_clock;
 mod recorded_history;
 pub use recorded_history::{RecordedHistoryRange, RecordedQueryResult};
 pub use weave_contract::{ObservationKind, RecordedCut, RecordedObservation, RecordedSelection};
-pub const STORAGE_VERSION: i64 = 21;
+pub const STORAGE_VERSION: i64 = 22;
+mod retention;
+pub use retention::{RecordedAvailability, RetentionPlan, RetentionPolicy, RetentionReceipt};
+mod projection_rebase;
+pub use projection_rebase::{
+    ProjectionCompletionRequest, ProjectionRebaseInputs, ProjectionRebaseReceipt,
+    ProjectionRebaseRequest,
+};
 mod read_budget;
 pub use admission::{Admitted, ProposalReceipt};
 pub use operation_clock::{ManualClock, SystemClock, TrustedClock};
@@ -255,6 +262,7 @@ impl Engine {
         engine.initialize_governance_graphs()?;
         engine.initialize_governed_effects()?;
         engine.initialize_recorded_history(version)?;
+        engine.initialize_retention(version)?;
         engine
             .conn
             .pragma_update(None, "user_version", STORAGE_VERSION)?;
@@ -816,6 +824,57 @@ impl Engine {
         self.read_budget.charge(encoded.len())?;
         if !valid_id(&branch) || parent.as_ref().is_some_and(|p| !valid_id(p)) {
             return Err(err("E_INTEGRITY", "stored revision exceeds format bounds"));
+        }
+        if encoded.is_empty() {
+            let tombstone: Option<retention::AnchorRow> = self
+                .conn
+                .query_row(
+                    "SELECT substr(graph_id,1,513),substr(branch_id,1,513),substr(parent,1,513),substr(content_digest,1,129),substr(payload_digest,1,129),erased_at_ms,generation FROM retention_tombstones WHERE revision=?1",
+                    [revision],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?)),
+                )
+                .optional()?;
+            let (
+                anchored_graph,
+                anchored_branch,
+                anchored_parent,
+                content,
+                payload,
+                erased,
+                generation,
+            ) = tombstone.ok_or_else(|| err("E_INTEGRITY", "missing retention anchor"))?;
+            let (latest, policy) = retention::state(&self.conn)?;
+            let recorded: i64 = self.conn.query_row(
+                "SELECT recorded_at FROM revisions WHERE revision=?1",
+                [revision],
+                |r| r.get(0),
+            )?;
+            let expected: String = if revision.starts_with("logical:") {
+                self.conn.query_row(
+                    "SELECT content_digest FROM revision_integrity WHERE revision=?1",
+                    [revision],
+                    |r| r.get(0),
+                )?
+            } else {
+                revision.into()
+            };
+            let digest_valid = |s: &str| {
+                s.len() == 71
+                    && s.starts_with("sha256:")
+                    && s[7..].bytes().all(|b| b.is_ascii_hexdigit())
+            };
+            if (anchored_graph, anchored_branch, anchored_parent) != (graph.into(), branch, parent)
+                || !digest_valid(&content)
+                || !digest_valid(&payload)
+                || content != expected
+                || generation <= 0
+                || generation > latest
+                || erased < recorded
+                || recorded >= policy.history_before_ms
+            {
+                return Err(err("E_INTEGRITY", "invalid retention anchor"));
+            }
+            return Err(err("E_UNAVAILABLE", "snapshot payload unavailable"));
         }
         let data: GraphData = serde_json::from_str(&encoded)
             .map_err(|_| err("E_INTEGRITY", "stored revision is malformed"))?;
@@ -2264,6 +2323,20 @@ impl Engine {
         if let Some((_, status)) = &existing {
             if status == "delivered" || status == "dead_letter" {
                 return Ok(status.clone());
+            }
+        }
+        if existing.is_none() {
+            let (_, policy) = retention::state(&tx)?;
+            let sequence: i64 = tx.query_row(
+                "SELECT sequence FROM events WHERE event_id=?1",
+                [event_id],
+                |r| r.get(0),
+            )?;
+            if sequence <= policy.replay_through_sequence {
+                return Err(err(
+                    "E_CHECKPOINT_EXPIRED",
+                    "reference delivery outside retained replay window",
+                ));
             }
         }
         let attempts = existing.map_or(1, |(n, _)| n + 1);

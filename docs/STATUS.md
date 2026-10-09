@@ -1,3 +1,25 @@
+## Native retention and projection/view rebuild (protocol0.21 / store22)
+
+Trusted native storage administration now previews and atomically rechecks a
+conservative reachability closure before erasing payload columns. Genuine owned
+pins, shared metadata/proofs, atomic batches, current heads, retained-window start
+states, immutable receipts and unresolved work remain roots. Erasure preserves
+verifiable causal anchors. Unknown schemas and malformed encoded cells stop the
+transaction. Default migration preserves original store21 rows and ordinary replay.
+
+Expired consumers require explicit rebuild. Pure native projection completions
+bind actual host state, current whole-input authority, output, receipt and private
+checkpoint in one commit; historical duplicates never rewind newer state.
+Scheduled view rebuilds run a full computation oracle for every owned view and
+commit their results/manifests/cursor together. Private collection under an
+unchanged policy leaves replay epochs unchanged. See [the exact native profile](RETENTION.md)
+and [verification](VERIFICATION_022.md).
+
+This advances R04/R08/R12/R36. Receipt expiry, larger incremental collection,
+compiled/effectful actor reconstruction, lifecycle, source/portable bindings and
+all remaining original requirements stay mandatory. E01–E14 remain in progress;
+E15 is open. Historical verification totals below apply to their original profiles.
+
 ## Coordinated accepted selection and history ranges (0.21 / store21)
 
 Canonical `AcceptedHistory` and named `RecordedRange`/`AcceptedRange` commands

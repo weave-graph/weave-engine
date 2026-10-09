@@ -1,3 +1,5 @@
+#[path = "support/legacy_storage.rs"]
+mod legacy_storage;
 use serde_json::json;
 use weave_contract::*;
 use weave_engine::*;
@@ -181,6 +183,7 @@ fn auxiliary_schema_upgrade_preserves_primary_rows_and_owner_boundary() {
     let pin = e.head("g", "main").unwrap();
     drop(e);
     let c = rusqlite::Connection::open(&path).unwrap();
+    legacy_storage::strip_retention_schema(&c);
     c.execute_batch(
         "DROP TABLE head_observations; DROP TABLE view_selection; PRAGMA user_version=12;",
     )

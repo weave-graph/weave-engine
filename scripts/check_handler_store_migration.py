@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Real historical compiler/handler state survives atomic runtime schema upgrade."""
+from retention_migration import RETENTION_TABLES,retention_tables,assert_retention_baseline
+from version_profile import store_marker
 import argparse, json, sqlite3, subprocess, tempfile
 from pathlib import Path
 from contextlib import closing
@@ -8,8 +10,8 @@ p=argparse.ArgumentParser()
 for name in ['old-compiler','old-handler','handler','storage']:
  p.add_argument('--'+name,type=Path,required=True)
 p.add_argument('--old-marker',type=int,default=16)
-p.add_argument('--new-marker',type=int,default=21)
-p.add_argument('--old-protocol',default='0.18.0',choices=['0.18.0','0.19.0','0.20.0'])
+p.add_argument('--new-marker',type=int,default=store_marker())
+p.add_argument('--old-protocol',default='0.18.0',choices=['0.18.0','0.19.0','0.20.0','0.21.0'])
 p.add_argument('--report',type=Path)
 a=p.parse_args()
 def invoke(binary,*args,code=0):
@@ -56,6 +58,7 @@ handler {name} revision "1" using Keep {{
  pending,_=populate('HistoricalPending','Installation','Warnings',False)
  new_tables=({'governed_effect_bindings','governed_effect_receipts','governed_effect_context'} if a.old_marker<17 else set())
  if a.old_marker<19<=a.new_marker:new_tables.add('head_observations')
+ if a.old_marker<22<=a.new_marker:new_tables|=RETENTION_TABLES
  def snapshot():
   with closing(sqlite3.connect(db)) as c:
    tables={row[0]:row[1] for row in c.execute("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
@@ -68,7 +71,7 @@ handler {name} revision "1" using Keep {{
  assert len(before[2]['handler_receipts'][1])==1
  invoke(a.storage,db,'crash',20,code=82);assert snapshot()==before
  invoke(a.storage,db,'after_commit',20,code=83)
- migrated=snapshot();assert migrated==(a.new_marker,new_tables,before[2])
+ migrated=snapshot();assert_retention_baseline(db,a.new_marker);assert migrated==(a.new_marker,new_tables,before[2])
  history=assert_recorded_baselines(db,20) if 'head_observations' in new_tables else old_history
  replay=host(a.handler,'complete',**done)
  assert replay['duplicate'] is True and replay['results']==receipt['results']
