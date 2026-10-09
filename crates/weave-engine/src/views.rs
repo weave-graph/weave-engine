@@ -647,6 +647,7 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         host: &HostContext,
     ) -> Result<()> {
         self.require_recorded_result_authority(value, host)?;
+        self.require_accepted_result_authority(value, host)?;
         for reference in &value.input_snapshots {
             if !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)? {
                 return Err(err(
@@ -756,7 +757,9 @@ fn clock_expression(
     *budget -= 1;
     let mut value = expression.clone();
     match &mut value {
-        GraphExpression::AcceptedGraph { .. } | GraphExpression::CurrentView { .. } => {
+        GraphExpression::AcceptedHistory { .. }
+        | GraphExpression::AcceptedGraph { .. }
+        | GraphExpression::CurrentView { .. } => {
             return Err(err(
                 "E_VIEW_DEPENDENCY",
                 "governed or cached view reads cannot be registered as view dependencies",
@@ -882,7 +885,8 @@ fn collect_heads(expression: &GraphExpression, heads: &mut BTreeMap<(String, Str
         | GraphExpression::Context { input, .. }
         | GraphExpression::Explain { input }
         | GraphExpression::Counterparts { input, .. } => collect_heads(input, heads),
-        GraphExpression::AcceptedGraph { .. }
+        GraphExpression::AcceptedHistory { .. }
+        | GraphExpression::AcceptedGraph { .. }
         | GraphExpression::CurrentView { .. }
         | GraphExpression::Reference { .. }
         | GraphExpression::ResolveIdentity { .. }

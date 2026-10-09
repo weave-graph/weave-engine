@@ -74,7 +74,7 @@ jobs:
         run: cargo build --locked -p weave-engine --features recovery-testing --example source_view_fixture --example three_peer_trace --example storage_probe
       - name: Verify populated upgrade, both crash boundaries and exact old replay
         working-directory: current
-        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol ${{ matrix.protocol }} --old-marker ${{ matrix.marker }} --new-marker 20
+        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol ${{ matrix.protocol }} --old-marker ${{ matrix.marker }} --new-marker 21
   compiled-handler-migration:
     runs-on: ubuntu-latest
     steps:
@@ -101,7 +101,7 @@ jobs:
         run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example storage_probe
       - name: Preserve actual completed and pending historical handlers across store upgrade
         working-directory: current
-        run: python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --new-marker 20
+        run: python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --new-marker 21
   store18-migration:
     runs-on: ubuntu-latest
     steps:
@@ -129,9 +129,9 @@ jobs:
       - name: Preserve populated store18 across atomic recorded-history upgrade
         working-directory: current
         run: |
-          python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.19.0 --old-marker 18 --new-marker 20
-          python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 18 --new-marker 20
-          python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 18 --new-marker 20
+          python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.19.0 --old-marker 18 --new-marker 21
+          python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 18 --new-marker 21
+          python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 18 --new-marker 21
   store19-migration:
     runs-on: ubuntu-latest
     steps:
@@ -159,9 +159,42 @@ jobs:
       - name: Preserve populated store19 across atomic recorded-history upgrade
         working-directory: current
         run: |
-          python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.19.0 --old-marker 19 --new-marker 20
-          python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 19 --new-marker 20
-          python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 19 --new-marker 20
+          python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.19.0 --old-marker 19 --new-marker 21
+          python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 19 --new-marker 21
+          python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 19 --new-marker 21
+      - name: Preserve real historical retained cluster journal across host upgrade
+        working-directory: current
+        run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
+  store20-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: e6ff50528dcd55f17abdc39313a29d6cbddc898b
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 535a50aae16d00f630b8a61a3a9bbc43d714e9a5
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store20 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked -p weave-language -p weave-compiler-sdk --lib --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe -p weave-native --example native_scenario
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe -p weave-native --example native_scenario
+      - name: Preserve populated store20 across atomic recorded-history upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.20.0 --old-marker 20 --new-marker 21
+          python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.20.0 --old-marker 20 --new-marker 21
+          python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.20.0 --old-marker 20 --new-marker 21
       - name: Preserve real historical retained cluster journal across host upgrade
         working-directory: current
         run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
@@ -193,10 +226,10 @@ jobs:
         run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe
       - name: Preserve store17 views and signed replies exactly
         working-directory: current
-        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.18.0 --old-marker 17 --new-marker 20
+        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.18.0 --old-marker 17 --new-marker 21
       - name: Preserve store17 pending and completed handlers exactly
         working-directory: current
-        run: python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-marker 17 --new-marker 20
+        run: python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-marker 17 --new-marker 21
       - name: Preserve unknown governed effect and independent sink
         working-directory: current
-        run: python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --new-marker 20
+        run: python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --new-marker 21

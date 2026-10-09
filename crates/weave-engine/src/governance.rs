@@ -415,12 +415,13 @@ impl Engine {
         let mut statement = self.conn.prepare(LOAD_APPROVALS)?;
         let rows = statement.query_map([&proposal_id], |r| r.get::<_, Option<String>>(0))?;
         let mut members = BTreeSet::new();
+        let mut seen = BTreeSet::new();
         for row in rows {
             let signed: SignedGovernanceApproval =
                 self.gov_text(row?).map_err(|_| unavailable())?;
             let a = &signed.approval;
-            if members.len() == 32
-                || !members.insert(a.member.clone())
+            if seen.len() == 32
+                || !seen.insert(a.member.clone())
                 || a.proposal_id != proposal_id
                 || a.proposal_digest != hash
                 || a.view_id != view
@@ -430,13 +431,17 @@ impl Engine {
                 || !valid_id(&a.nonce)
                 || a.issued_at_ms > time
                 || a.issued_at_ms < policy.not_before_ms
-                || time >= a.expires_at_ms
                 || a.expires_at_ms > proposal.expires_at_ms
                 || a.issued_at_ms >= a.expires_at_ms
             {
                 return Err(unavailable());
             }
             verify_signature(&signed).map_err(|_| unavailable())?;
+            // Acceptance ignores already-expired approvals. Their immutable bytes and
+            // context still need validation, but they never contributed to this quorum.
+            if time < a.expires_at_ms {
+                members.insert(a.member.clone());
+            }
         }
         if members.len() < policy.threshold {
             return Err(unavailable());

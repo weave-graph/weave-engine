@@ -1,0 +1,1 @@
+{"version":"0.21.0","commands":[{"op":"commit","graph_id":"fuzz","data":{}},{"op":"recorded_range","name":"R","query":{"graph_id":"fuzz"},"observer":"foreign","interval":{"start":0,"end":10},"limit":10}]}

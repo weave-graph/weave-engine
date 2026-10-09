@@ -23,7 +23,18 @@ fn main() {
     assert!(recorded.execute(&plan, &host).is_err());
     assert_eq!(recorded.head("fuzz", "main").unwrap(), None);
     assert!(recorded.events().unwrap().is_empty());
+    for seed in [
+        include_str!("../seeds/program_atomic/accepted-rollback.json"),
+        include_str!("../seeds/program_atomic/range-rollback.json"),
+        include_str!("../seeds/program_atomic/accepted-range-rollback.json"),
+    ] {
+        let mut engine = Engine::memory().unwrap();
+        let plan: Program = serde_json::from_str(seed).unwrap();
+        assert!(engine.execute(&plan, &host).is_err());
+        assert_eq!(engine.head("fuzz", "main").unwrap(), None);
+        assert!(engine.events().unwrap().is_empty());
+    }
     println!(
-        "Valid seeds exercise full geometry, idempotent capsule import and recorded-query rollback"
+        "Valid seeds exercise full geometry, idempotent capsule import and recorded/accepted selection and range rollback"
     );
 }

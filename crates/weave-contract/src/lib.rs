@@ -16,7 +16,12 @@ pub mod decimal;
 pub mod quantity;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub const VERSION: &str = "0.20.0";
+pub const VERSION: &str = "0.21.0";
+pub mod accepted_history;
+pub use accepted_history::{
+    AcceptedSelection, AcceptedViewHistoryCut, AcceptedViewHistoryRange, AcceptedViewHistoryResult,
+    AcceptedViewObservation, HistoryAxis, HistoryRangeValue,
+};
 pub mod recorded_history;
 pub use recorded_history::{ObservationKind, RecordedCut, RecordedObservation, RecordedSelection};
 pub mod carrier_algebra;
@@ -210,6 +215,22 @@ pub struct QueryPlan {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    RecordedRange {
+        name: String,
+        query: QueryPlan,
+        observer: String,
+        interval: Interval,
+        limit: usize,
+    },
+    AcceptedRange {
+        #[serde(default)]
+        valid_at: Option<i64>,
+        name: String,
+        view_id: String,
+        observer: String,
+        interval: Interval,
+        limit: usize,
+    },
     CommitBatch {
         batch_id: String,
         commits: Vec<SnapshotCommit>,
@@ -261,6 +282,10 @@ pub enum GraphExpression {
         window: Interval,
         relation: TemporalRelation,
         match_on: JoinMatch,
+    },
+    AcceptedHistory {
+        view_id: String,
+        selection: AcceptedSelection,
     },
     AcceptedGraph {
         selection: AcceptedGraphSelection,
@@ -385,6 +410,8 @@ pub struct QueryResult {
     /// Descriptive selection witnesses, revalidated by native runtime on reuse.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recorded_observations: Vec<RecordedObservation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accepted_observations: Vec<AcceptedViewObservation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_context: Option<ContextSelection>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -426,6 +453,10 @@ pub struct Event {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CommandResult {
+    HistoryRanged {
+        name: String,
+        range: Box<HistoryRangeValue>,
+    },
     Unchanged {
         revision: String,
     },

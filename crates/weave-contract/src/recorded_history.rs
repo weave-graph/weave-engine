@@ -73,6 +73,7 @@ pub fn validate_selection(value: &RecordedSelection) -> Result<(), Diagnostic> {
 
 /// Check descriptive witnesses before pure computations consume them.
 pub fn validate_result(value: &crate::QueryResult) -> Result<(), Diagnostic> {
+    crate::accepted_history::validate_result(value)?;
     merge_observations(&value.recorded_observations, &[])?;
     if value
         .recorded_observations

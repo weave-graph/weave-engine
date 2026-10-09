@@ -11,9 +11,9 @@ p.add_argument('--view',type=Path,default=Path('target/debug/examples/source_vie
 p.add_argument('--trace',type=Path,default=Path('target/debug/examples/three_peer_trace'))
 p.add_argument('--storage',type=Path,default=Path('target/debug/examples/storage_probe'))
 p.add_argument('--report',type=Path)
-p.add_argument('--old-protocol',default='0.16.0',choices=['0.16.0','0.17.0','0.18.0','0.19.0'])
+p.add_argument('--old-protocol',default='0.16.0',choices=['0.16.0','0.17.0','0.18.0','0.19.0','0.20.0'])
 p.add_argument('--old-marker',default=14,type=int)
-p.add_argument('--new-marker',default=20,type=int)
+p.add_argument('--new-marker',default=21,type=int)
 a=p.parse_args()
 def run(binary,*args,code=0):
  r=subprocess.run([str(binary.resolve()),*map(str,args)],capture_output=True,text=True,timeout=30)

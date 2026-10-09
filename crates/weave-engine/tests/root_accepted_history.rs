@@ -380,3 +380,69 @@ fn expired_historical_approvals_do_not_replace_current_policy_authority() {
         .input_snapshots
         .contains(&old.observation.occurrence));
 }
+
+#[test]
+fn unused_expired_approval_does_not_invalidate_a_genuine_past_quorum() {
+    let clock = Arc::new(ManualClock::new(5));
+    let mut e = Engine::memory_with_clock(clock.clone()).unwrap();
+    let mut p = policy();
+    p.members
+        .push(weave_policy::public_key(&SigningKey::from_bytes(&[74; 32])));
+    e.install_governance_root(&p).unwrap();
+    let source = write(&mut e, 1, false);
+    let observer = observer(&e);
+    clock.set(10);
+    let proposal = GovernanceProposal {
+        id: "first".into(),
+        view_id: "team".into(),
+        policy: p.reference.clone(),
+        expected_head: None,
+        expires_at_ms: 9000,
+        action: GovernanceAction::Publish {
+            source: source.clone(),
+            branch_id: "main".into(),
+        },
+    };
+    let proposed = e.propose_governance(&proposal, &host()).unwrap();
+    for (byte, expiry) in [(73, 15), (74, 8000)] {
+        let key = SigningKey::from_bytes(&[byte; 32]);
+        let signed = sign_governance_approval(
+            GovernanceApproval {
+                proposal_id: proposal.id.clone(),
+                proposal_digest: proposed.digest.clone(),
+                view_id: "team".into(),
+                policy: p.reference.clone(),
+                expected_head: None,
+                member: weave_policy::public_key(&key),
+                issued_at_ms: 5,
+                expires_at_ms: expiry,
+                nonce: format!("first-{byte}"),
+            },
+            &key,
+        )
+        .unwrap();
+        e.record_governance_approval(&signed, &host()).unwrap();
+    }
+    clock.set(20);
+    let receipt = e
+        .accept_governance(
+            &GovernanceDecisionRequest {
+                proposal_id: proposal.id,
+                nonce: "first".into(),
+            },
+            &host(),
+        )
+        .unwrap();
+    clock.set(30);
+    let selected = e
+        .query_accepted_history_for("team", &at(&observer, 20), &host())
+        .unwrap();
+    assert_eq!(selected.observation.decision_id, receipt.decision_id);
+    clock.set(40);
+    accept(&e, "second", source);
+    assert_eq!(
+        e.query_accepted_history_for("team", &at(&observer, 25), &host())
+            .unwrap(),
+        selected
+    );
+}

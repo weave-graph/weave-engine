@@ -8,8 +8,8 @@ p=argparse.ArgumentParser()
 for name in ['old-compiler','old-handler','handler','storage']:
  p.add_argument('--'+name,type=Path,required=True)
 p.add_argument('--old-marker',type=int,default=16)
-p.add_argument('--new-marker',type=int,default=20)
-p.add_argument('--old-protocol',default='0.18.0',choices=['0.18.0','0.19.0'])
+p.add_argument('--new-marker',type=int,default=21)
+p.add_argument('--old-protocol',default='0.18.0',choices=['0.18.0','0.19.0','0.20.0'])
 p.add_argument('--report',type=Path)
 a=p.parse_args()
 def invoke(binary,*args,code=0):

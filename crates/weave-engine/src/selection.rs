@@ -325,6 +325,7 @@ pub(crate) fn evaluate(
     };
     let mut result = QueryResult {
         recorded_observations: vec![],
+        accepted_observations: vec![],
         graph,
         version: VERSION.into(),
         snapshots: BTreeMap::from([(root.graph_id.clone(), root.revision.clone())]),
