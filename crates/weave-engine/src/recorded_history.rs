@@ -224,6 +224,14 @@ CREATE INDEX IF NOT EXISTS head_observations_scope ON head_observations(graph_id
         branch: &str,
         kind: ObservationKind,
     ) -> Result<()> {
+        let retention_ready: bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='retention_retired_branches')",[],|r|r.get(0))?;
+        let retired: bool=retention_ready && self.conn.query_row("SELECT EXISTS(SELECT 1 FROM retention_retired_branches WHERE graph_id=?1 AND branch_id=?2)",params![reference.graph_id,branch],|r|r.get(0))?;
+        if retired {
+            return Err(err(
+                "E_BRANCH_RETIRED",
+                "use a new branch identity after explicit retirement",
+            ));
+        }
         let prior = self.latest_observation(&reference.graph_id, branch)?;
         let head = self.head(&reference.graph_id, branch)?;
         if let Some(prior) = &prior {
@@ -348,6 +356,13 @@ CREATE INDEX IF NOT EXISTS head_observations_scope ON head_observations(graph_id
                     return Err(err(
                         "E_HISTORY_TIME",
                         "recording cut is outside the observed clock",
+                    ));
+                }
+                if *unix_millis < self.retention_history_floor()? {
+                    self.authorize_observation(&tip.value, host)?;
+                    return Err(err(
+                        "E_HISTORY_EXPIRED",
+                        "recorded cut precedes retained history",
                     ));
                 }
                 // Follow the authenticated predecessor path. A date predicate

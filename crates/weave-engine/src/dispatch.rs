@@ -291,6 +291,9 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             return Err(err("E_PAUSED", "adapter is not running"));
         }
         let pending:Option<(String,String,i64,u32,i64,String)>=self.conn.query_row("SELECT event_id,lease,expires,attempts,next_at,status FROM dispatch_pending WHERE adapter=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?))).optional()?;
+        if pending.is_none() {
+            self.require_replay_checkpoint(id)?;
+        }
         let (event_id, attempts) = if let Some((
             event,
             _lease,
@@ -347,10 +350,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                     "adapter backlog requires host review",
                 ));
             }
-            self.conn.execute(
-                "UPDATE dispatch_adapters SET checkpoint=?2 WHERE id=?1",
-                params![id, checkpoint],
-            )?;
+            self.advance_projection_scan_checkpoint(id, checkpoint)?;
             let Some(event) = selected else {
                 tx.commit()?;
                 return Ok(None);
@@ -453,10 +453,31 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         lease: &str,
         program: &Program,
     ) -> Result<HandlerReceipt> {
+        self.complete_handler_with_projection(adapter, event, lease, program, None)
+    }
+    pub(crate) fn complete_handler_with_projection(
+        &mut self,
+        adapter: &str,
+        event: &str,
+        lease: &str,
+        program: &Program,
+        projection: Option<&projection_rebase::CompletionToken>,
+    ) -> Result<HandlerReceipt> {
         if self.conn.is_autocommit() {
             return Err(err(
                 "E_TRANSACTION",
                 "handler completion requires transaction",
+            ));
+        }
+        let stateful: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM retention_adapter_states WHERE adapter=?1) OR EXISTS(SELECT 1 FROM retention_stateful_adapters WHERE adapter=?1) OR EXISTS(SELECT 1 FROM retention_projection_receipts WHERE adapter=?1)",
+            [adapter],
+            |r| r.get(0),
+        )?;
+        if stateful && !projection.is_some_and(|token| token.authorizes(adapter, event)) {
+            return Err(err(
+                "E_PROJECTION_STATE",
+                "complete projection state and checkpoint together",
             ));
         }
         let _clock_scope = self.operation_write_scope()?;

@@ -1,4 +1,6 @@
 //! Independent integrity, migration rollback and SQLite backup acceptance.
+#[path = "support/legacy_storage.rs"]
+mod legacy_storage;
 use rusqlite::{params, Connection};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -194,6 +196,7 @@ fn legacy_corruption_cannot_poison_backfill_and_repaired_fixture_upgrades() {
         .unwrap();
     c.execute("DELETE FROM edge_structures", []).unwrap();
     c.execute("DROP TABLE head_observations", []).unwrap();
+    legacy_storage::strip_retention_schema(&c);
     c.pragma_update(None, "user_version", 5).unwrap();
     let mut bad = data();
     bad.edges[0].predicate = "poison".into();

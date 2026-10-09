@@ -136,7 +136,7 @@ jobs:
           cargo build --manifest-path old-engine/Cargo.toml --locked -p weave-engine --example source_view_fixture
           cargo build --manifest-path weave-engine/Cargo.toml --locked -p weave-engine --example source_view_fixture --example storage_probe --features recovery-testing
       - name: Verify original rows, accepted signatures, equal times and old-reader compatibility
-        run: python3 weave-engine/scripts/check_accepted_history_compat.py --old-host old-engine/target/debug/examples/source_view_fixture --host weave-engine/target/debug/examples/source_view_fixture --storage weave-engine/target/debug/examples/storage_probe --new-marker 21 --report accepted-history-compat.json
+        run: python3 weave-engine/scripts/check_accepted_history_compat.py --old-host old-engine/target/debug/examples/source_view_fixture --host weave-engine/target/debug/examples/source_view_fixture --storage weave-engine/target/debug/examples/storage_probe --new-marker 22 --report accepted-history-compat.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

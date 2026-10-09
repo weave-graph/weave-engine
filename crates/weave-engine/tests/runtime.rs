@@ -1,3 +1,5 @@
+#[path = "support/legacy_storage.rs"]
+mod legacy_storage;
 use std::collections::BTreeMap;
 use weave_contract::*;
 use weave_engine::{Engine, HostContext};
@@ -889,6 +891,7 @@ fn legacy_hash_and_structural_registry_survive_upgrade() {
     assert_eq!(rev, expected);
     drop(engine);
     let conn = rusqlite::Connection::open(&path).unwrap();
+    legacy_storage::strip_retention_schema(&conn);
     conn.execute_batch(
         "DROP TABLE head_observations; DELETE FROM edge_structures; PRAGMA user_version=3;",
     )
