@@ -1,6 +1,10 @@
 # Storage integrity and recovery
 
-Public storage uses schema13; the protocol0.16 candidate advances it to schema14 for compiled view identity. Identity policies/receipts, guarded view transitions, mount routes/lifecycle and signed integration receipts are initialized in the same schema transaction. `Engine::open`
+Current storage uses schema19; protocol0.19 and capsule0.4 remain unchanged by
+the native recorded-history API. The historical schema14 transition added
+compiled view identity. Identity policies/receipts, guarded view transitions,
+mount routes/lifecycle, signed integration receipts and local head observations
+are initialized in the same schema transaction. `Engine::open`
 rejects future versions before creating tables or attempting migration. Schema
 creation, legacy structural-identity backfill, version-marker advancement, and
 dispatcher/view/admission table initialization share one SQLite immediate
@@ -59,3 +63,33 @@ The 0.16 candidate atomically adds `live_views.source_digest` and `view_sources`
 ## Compiled handler boundary (store16)
 
 Store16 atomically creates private compiled handler registrations and immutable preparations. Older store15 (and earlier) binaries must refuse to open it: their raw completion API would otherwise ignore the compiled binding. No legacy adapter is adopted automatically, and a failed migration leaves both new tables absent. The parameterized populated migration script preserves actual0.16 and0.17 templates/caches/signed export responses without rewriting their protocol or digest. Precommit exit82 and postcommit exit83 checks are recorded in the handler migration reports. These marker changes do not alter graph wire fields or capsule formats.
+
+## Local recorded head observations (store19)
+
+Every committed or explicitly accepted branch-head advance appends one immutable,
+replica-bound observation atomically. Receiving a capsule preserves quarantine;
+it adds no branch observation. Logical batch members record their new snapshot
+identities even when unchanged member content suppresses its domain event.
+No-op writes and exact receipt replay append nothing.
+
+Migration from earlier stores adds a baseline for each existing head using the
+installed trusted migration clock, preserving all original tables and rows.
+Earlier acceptance dates are unknown and are not inferred from revision timestamps.
+Pre-baseline date selection is unavailable; direct immutable revision reads still
+work. Current-version stores missing the observation table fail closed. Store18
+binaries refuse store19 before mutation.
+
+Native checkpoint/date/range APIs enforce current whole-snapshot authority,
+including empty influence and revoked source policy. Time/range selection walks
+the authenticated predecessor path within existing read budgets, so missing
+intermediate history cannot cause fallback to an older snapshot. Queries return
+the selected checkpoint for immutable replay. Per-branch recording-clock regression
+rejects the entire head mutation across reopen. There is no hardware anti-rollback,
+distributed-clock or database-administrator integrity claim.
+
+See [ADR 0002](architecture/ADR-0002-recorded-head-observations.md). The independent
+recorded-history tests and populated migration controllers cover correction versus
+valid time, received versus accepted time, branch isolation, equal-time ordering,
+atomic rollback, current permissions, storage loss, both migration death boundaries,
+historical handler/response/effect replay and old-runtime refusal. Canonical/source
+query selectors, retention horizons, GC and explicit expired replay remain open.

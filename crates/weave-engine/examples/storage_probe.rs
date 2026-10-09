@@ -1,17 +1,28 @@
 //! Controlled process-kill host for schema migration acceptance, never activated by environment.
 use serde_json::json;
-use weave_engine::{Engine, HostContext};
+use std::sync::Arc;
+use weave_engine::{Engine, HostContext, ManualClock, SystemClock, TrustedClock};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 3 {
-        return Err("usage: storage_probe DATABASE seed|open|crash|after_commit".into());
+    if !(3..=4).contains(&args.len()) {
+        return Err(
+            "usage: storage_probe DATABASE seed|open|crash|after_commit [TRUSTED_TEST_CLOCK_MS]"
+                .into(),
+        );
     }
+    let clock: Arc<dyn TrustedClock> = if let Some(time) = args.get(3) {
+        Arc::new(ManualClock::new(time.parse()?))
+    } else {
+        Arc::new(SystemClock)
+    };
     #[cfg(feature = "recovery-testing")]
     if args[2] == "crash" {
-        Engine::open_test_before_schema_commit(&args[1], || std::process::exit(82))?;
+        Engine::open_test_before_schema_commit_with_clock(&args[1], clock, || {
+            std::process::exit(82)
+        })?;
         return Err("crash hook not reached".into());
     }
-    let mut e = Engine::open(&args[1])?;
+    let mut e = Engine::open_with_clock(&args[1], clock)?;
     match args[2].as_str() {
         "seed" => {
             let program = serde_json::from_value(

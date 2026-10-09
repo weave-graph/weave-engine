@@ -889,8 +889,10 @@ fn legacy_hash_and_structural_registry_survive_upgrade() {
     assert_eq!(rev, expected);
     drop(engine);
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DELETE FROM edge_structures; PRAGMA user_version=3;")
-        .unwrap();
+    conn.execute_batch(
+        "DROP TABLE head_observations; DELETE FROM edge_structures; PRAGMA user_version=3;",
+    )
+    .unwrap();
     drop(conn);
     let mut engine = Engine::open(&path).unwrap();
     let mut changed = data();

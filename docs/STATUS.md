@@ -2,7 +2,15 @@
 
 ## Current snapshot
 
-The current implementation uses protocol0.19, SQLite marker18 and capsule0.4. It adds alternative influence on whole values, nodes and attachments, per-branch snapshot premises, and pure Window/Sequence graph operations. The language vendors the exact canonical contract from native freeze `a6adb94`. See [the current contract](contract/v0.19/README.md) and [joint verification](VERIFICATION_019.md).
+The current implementation uses protocol0.19, SQLite marker19 and capsule0.4. It adds alternative influence on whole values, nodes and attachments, per-branch snapshot premises, and pure Window/Sequence graph operations. The language vendors the exact canonical contract from native freeze `a6adb94`. See [the current contract](contract/v0.19/README.md) and [joint verification](VERIFICATION_019.md).
+
+Store19 adds atomic replica-local branch observation checkpoints and bounded
+recorded-time query/range APIs. Migration keeps all original rows and establishes
+current-time baselines instead of inventing old acceptance dates. Native history
+selection follows authenticated predecessor records and checks current whole
+snapshot authority. See [ADR 0002](architecture/ADR-0002-recorded-head-observations.md).
+Canonical/source recorded selection, retention horizons and GC remain open.
+
 
 Local joint validation covers actual source compilation and persistent execution, native/WASM parity, authorization after detached persistence, six populated historical migration suites and sixteen real browser persistence/upgrade cases. Commit-specific hosted results are tracked separately; local results alone do not establish CI success. E00 is complete; E01–E14 remain in progress. These bounded profiles do not complete either paper. See [workflow gates](workflow.json) and [reconciled requirements](RECONCILIATION.md).
 
