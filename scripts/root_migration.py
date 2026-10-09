@@ -35,6 +35,7 @@ with tempfile.TemporaryDirectory(prefix="weave-migration-") as directory:
         c.execute("DELETE FROM edge_structures")
         c.execute("PRAGMA user_version=5")
         c.execute("DROP TABLE admission_epochs")
+        c.commit()
     run("crash",82)
     with closing(sqlite3.connect(db)) as c:
         assert c.execute("PRAGMA user_version").fetchone()[0]==5
