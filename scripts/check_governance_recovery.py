@@ -2,6 +2,7 @@
 """Native threshold acceptance across process death; deterministic local test keys only."""
 import argparse
 import json
+from version_profile import store_marker
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -56,5 +57,5 @@ with tempfile.TemporaryDirectory(prefix="weave-governance-") as directory:
         assert connection.execute("SELECT count(*) FROM events").fetchone()[0] == 2
         assert connection.execute("SELECT count(*) FROM revisions WHERE graph_id LIKE 'weave:governance:%'").fetchone()[0] == 1
         assert connection.execute("SELECT count(*) FROM heads WHERE graph_id LIKE 'weave:governance:%'").fetchone()[0] == 1
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 20
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == store_marker()
 print("governance process-death acceptance: 8 checks passed (plus old-binary refusal when supplied)")

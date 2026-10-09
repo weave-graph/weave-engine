@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 pub const HANDLER_TEMPLATE_FORMAT: &str = "weave-handler-registration/1";
-pub const HANDLER_TEMPLATE_PROTOCOL: &str = "0.20.0";
+pub const HANDLER_TEMPLATE_PROTOCOL: &str = "0.21.0";
 pub const HANDLER_EVENT_BINDING: &str = "$event";
 pub const MAX_HANDLER_BYTES: usize = 1024 * 1024;
 
@@ -178,7 +178,8 @@ fn recipe_sources(
                         .into_iter()
                         .map(|input| (input, depth + 1)),
                 ),
-                GraphExpression::RecordedQuery { .. }
+                GraphExpression::AcceptedHistory { .. }
+                | GraphExpression::RecordedQuery { .. }
                 | GraphExpression::Query { .. }
                 | GraphExpression::TypedContext { .. }
                 | GraphExpression::AcceptedGraph { .. }
@@ -205,7 +206,8 @@ fn recipe_sources(
 fn fields(template: &CompiledHandlerTemplate) -> Result<(), Diagnostic> {
     identity::digest("weave-handler-template-bound", template, MAX_HANDLER_BYTES)?;
     if template.format != HANDLER_TEMPLATE_FORMAT
-        || ![HANDLER_TEMPLATE_PROTOCOL, "0.19.0", "0.18.0"].contains(&template.protocol.as_str())
+        || ![HANDLER_TEMPLATE_PROTOCOL, "0.20.0", "0.19.0", "0.18.0"]
+            .contains(&template.protocol.as_str())
     {
         return Err(fail(
             "E_HANDLER_VERSION",
@@ -253,7 +255,7 @@ fn fields(template: &CompiledHandlerTemplate) -> Result<(), Diagnostic> {
     }
     recipe_sources(
         &template.recipe,
-        [HANDLER_TEMPLATE_PROTOCOL, "0.19.0"].contains(&template.protocol.as_str()),
+        [HANDLER_TEMPLATE_PROTOCOL, "0.20.0", "0.19.0"].contains(&template.protocol.as_str()),
     )
     .map(|_| ())
 }
@@ -315,7 +317,7 @@ pub fn seal_handler_template(
     template.event_types.sort();
     let rule_sources = recipe_sources(
         &template.recipe,
-        [HANDLER_TEMPLATE_PROTOCOL, "0.19.0"].contains(&template.protocol.as_str()),
+        [HANDLER_TEMPLATE_PROTOCOL, "0.20.0", "0.19.0"].contains(&template.protocol.as_str()),
     )?;
     template.source_revisions =
         algebra::merge_source_revisions(&template.source_revisions, &rule_sources)?;

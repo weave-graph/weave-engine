@@ -88,8 +88,63 @@ pub fn golden_profile() -> Vec<u8> {
         "exact_decimal":{"sum":sum,"beyond_binary64":huge,"nonterminating_error":nonterminating.to_string()},
         "nominal_quantity":{"converted":converted,"mismatch_error":mismatch_unit.to_string()},
         "graph_union":union,"four_valued_temporal_support":states,"exact_context":{"selected":default,"reselection_error":mismatch},
-        "authorized_geometry_fixture":geometry,"lazy_clustering":cluster,"typed_context_carrier":typed_context_profile(),"temporal_alternative_carriers":temporal_profile(),"recorded_witness_composition":recorded_profile()
+        "authorized_geometry_fixture":geometry,"lazy_clustering":cluster,"typed_context_carrier":typed_context_profile(),"temporal_alternative_carriers":temporal_profile(),"recorded_witness_composition":recorded_profile(),"accepted_witness_composition":accepted_profile()
     },"limits":["fixed host-authorized test inputs; no authentication or persistent runtime","binary64 fixture agreement is not general bitwise geometry portability","no browser storage, network, mobile energy or adapter sandbox claim"]})).unwrap()
+}
+fn accepted_profile() -> Value {
+    use weave_contract::{temporal, AcceptedViewObservation, Interval};
+    let context = AlgebraContext {
+        principal: "reader".into(),
+        max_objects: 100,
+        max_output_bytes: 1_000_000,
+    };
+    let mut left = fixture("left", "positive", 0, 10);
+    let occurrence = GraphRef {
+        graph_id: "protected-occurrence".into(),
+        revision: "exact".into(),
+    };
+    left.input_snapshots.push(occurrence.clone());
+    left.accepted_observations.push(AcceptedViewObservation {
+        observer: "local".into(),
+        view_id: "team".into(),
+        decision_id: "first".into(),
+        accepted_at_ms: 10,
+        occurrence: occurrence.clone(),
+        source: GraphRef {
+            graph_id: "left".into(),
+            revision: "r".into(),
+        },
+        branch_id: "main".into(),
+    });
+    let mut right = fixture("right", "positive", 0, 10);
+    right.input_snapshots.push(occurrence);
+    right.accepted_observations.push(AcceptedViewObservation {
+        decision_id: "second".into(),
+        source: GraphRef {
+            graph_id: "right".into(),
+            revision: "r".into(),
+        },
+        ..left.accepted_observations[0].clone()
+    });
+    let union = algebra::union(left.clone(), right, &context).unwrap();
+    let empty = algebra::project(union.clone(), &[], &[], &context).unwrap();
+    let window = temporal::window(
+        union.clone(),
+        &Interval {
+            start: 10,
+            end: Some(20),
+        },
+        &context,
+    )
+    .unwrap();
+    assert_eq!(union.accepted_observations.len(), 2);
+    assert_eq!(empty.accepted_observations, union.accepted_observations);
+    assert_eq!(window.accepted_observations, union.accepted_observations);
+    let mut conflict = left.clone();
+    conflict.accepted_observations[0].accepted_at_ms = 11;
+    let error = algebra::union(left, conflict, &context).unwrap_err();
+    assert_eq!(error.code, "E_ACCEPTED_SELECTOR");
+    json!({"union":union,"empty":empty,"window":window,"conflict":error,"scope":"descriptive acceptance witnesses; no governance installation"})
 }
 fn recorded_profile() -> Value {
     use weave_contract::{ObservationKind, RecordedObservation};

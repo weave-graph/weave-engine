@@ -205,6 +205,7 @@ fn envelope(
     }
     let mut out = QueryResult {
         recorded_observations: left.recorded_observations.clone(),
+        accepted_observations: left.accepted_observations.clone(),
         version: VERSION.into(),
         graph: GraphData::default(),
         selected_context: left.selected_context.clone(),
@@ -244,6 +245,10 @@ fn envelope(
         out.recorded_observations = crate::recorded_history::merge_observations(
             &left.recorded_observations,
             &right.recorded_observations,
+        )?;
+        out.accepted_observations = crate::accepted_history::merge_observations(
+            &left.accepted_observations,
+            &right.accepted_observations,
         )?;
         out.source_revisions = crate::algebra::merge_source_revisions(
             &left.source_revisions,

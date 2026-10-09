@@ -68,6 +68,16 @@ async function main() {
   }
   async function reload(page, store) {
     await page.reload();
+    // Navigation/tab closure and the lock manager's worker teardown finish separately.
+    // Observe actual ownership release; do not retry/poison a new worker on E_OWNER_BUSY.
+    await deadline(page.evaluate(async store => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 14000);
+      try {
+        await navigator.locks.request(`weave-image-experiment-${store}`,
+          {mode:'exclusive', signal:controller.signal}, () => {});
+      } finally {clearTimeout(timer);}
+    }, store), 'terminated worker ownership release');
     const opened=await open(page,store,false);assert.equal(opened.ok,true,JSON.stringify(opened));
     const result=await step(page,0);assert.equal(result.ok,true,JSON.stringify(result));return result.value;
   }
@@ -132,8 +142,8 @@ async function main() {
         // Terminate the worker, including any actual open readwrite transaction.
         await page.reload();const afterDeath=await persistedImage(page,store);
         if(fault==='after-sql'||fault==='abort')assert.deepEqual(afterDeath,oldImage);
-        else if(fault==='after-idb')assert.equal(afterDeath.marker,20);
-        else assert.ok([17,20].includes(afterDeath.marker));
+        else if(fault==='after-idb')assert.equal(afterDeath.marker,21);
+        else assert.ok([17,21].includes(afterDeath.marker));
         if(afterDeath.marker===17)assert.deepEqual(afterDeath,oldImage);
         else assert.equal(BigInt(afterDeath.generation),BigInt(oldImage.generation)+1n);
         assert.equal((await open(page,store,false)).ok,true);
@@ -141,11 +151,11 @@ async function main() {
         // A fresh query identifies the current protocol. Compare every other
         // byte without parsing/stringifying, which would round exact i64 values.
         const oldPrefix='[{"kind":"queried","result":{"version":"0.18.0",';
-        const newPrefix='[{"kind":"queried","result":{"version":"0.20.0",';
+        const newPrefix='[{"kind":"queried","result":{"version":"0.21.0",';
         assert.ok(oldValue.result_json.startsWith(oldPrefix));
         assert.ok(migratedValue.result_json.startsWith(newPrefix));
         assert.deepEqual(migratedValue,{...oldValue,result_json:newPrefix+oldValue.result_json.slice(oldPrefix.length)});
-        const upgraded=await persistedImage(page,store);assert.equal(upgraded.marker,20);
+        const upgraded=await persistedImage(page,store);assert.equal(upgraded.marker,21);
         selectArtifact(oldArtifact);await page.reload();
         assert.equal((await open(page,store,false)).code,'E_STORAGE_VERSION');
         assert.deepEqual(await persistedImage(page,store),upgraded);

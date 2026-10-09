@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 
 
 def sha(raw):
@@ -26,6 +27,8 @@ def main():
     parser.add_argument('--evidence-dir', type=Path)
     parser.add_argument('--report', type=Path)
     args = parser.parse_args()
+    protocol = tomllib.loads((Path(__file__).parents[1]/"crates/weave-contract/Cargo.toml").read_text())["package"]["version"]
+    store_marker = int(__import__("re").search(r"pub const STORAGE_VERSION: i64 = (\d+);",(Path(__file__).parents[1]/"crates/weave-engine/src/lib.rs").read_text()).group(1))
     compiler_trace, runtime_trace = [], []
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix='weave-recorded-source-') as temporary:
@@ -42,7 +45,7 @@ def main():
             raw = response_path.read_bytes()
             response = json.loads(raw)
             assert response['ok'], response
-            assert response['artifacts']['program']['version'] == '0.20.0'
+            assert response['artifacts']['program']['version'] == protocol
             compiler_trace.append({'source':name,'request_sha256':sha(request_path.read_bytes()),'response_sha256':sha(raw),'response_bytes':len(raw)})
             return response['artifacts']
 
@@ -127,8 +130,8 @@ def main():
         run('old-protocol', forged_old, 'E_VERSION')
         with closing(sqlite3.connect(db)) as connection:
             assert connection.execute("SELECT COUNT(*) FROM heads WHERE graph_id='Other'").fetchone()[0] == 0
-            assert connection.execute('PRAGMA user_version').fetchone()[0] == 20
-    report = {'profile':'actual-sdk-recorded-source/1','status':'passed','protocol':'0.20.0','store_marker':20,'compiler_processes':len(compiler_trace),'runtime_processes':len(runtime_trace),'seconds':round(time.monotonic()-started,3),'checks':['real full SDK responses retain exact integers','durable late correction preserves old recorded knowledge','independent SQL oracle identifies selected checkpoint and local observer','explicit checkpoint replays after correction','valid time stays separate and empty result preserves witness','foreign observer fails closed','actual sealed source view installs, ticks and reopens with the same recorded checkpoint','old protocol fails before earlier write'],'compiler_trace':compiler_trace,'runtime_trace':runtime_trace,'scope':'native durable SystemClock CLI, small fixture; no global recorded cut or source range/accepted-view history claim'}
+            assert connection.execute('PRAGMA user_version').fetchone()[0] == store_marker
+    report = {'profile':'actual-sdk-recorded-source/1','status':'passed','protocol':protocol,'store_marker':store_marker,'compiler_processes':len(compiler_trace),'runtime_processes':len(runtime_trace),'seconds':round(time.monotonic()-started,3),'checks':['real full SDK responses retain exact integers','durable late correction preserves old recorded knowledge','independent SQL oracle identifies selected checkpoint and local observer','explicit checkpoint replays after correction','valid time stays separate and empty result preserves witness','foreign observer fails closed','actual sealed source view installs, ticks and reopens with the same recorded checkpoint','old protocol fails before earlier write'],'compiler_trace':compiler_trace,'runtime_trace':runtime_trace,'scope':'native durable SystemClock CLI, small fixture; no global recorded cut or source range/accepted-view history claim'}
     if args.report:
         args.report.write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report))

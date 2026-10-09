@@ -1,3 +1,24 @@
+## Coordinated accepted selection and history ranges (0.21 / store21)
+
+Canonical `AcceptedHistory` and named `RecordedRange`/`AcceptedRange` commands
+preserve actual local selection witnesses, including empty valid-time outputs.
+Current policy and whole-input authority still apply, and persisted results reject
+forged or missing witnesses. Existing0.20 artifacts remain compatible. Store21
+preserves original history and prevents old runtimes from dropping the new fields.
+
+The actual SDK/SystemClock history controller passes with8 compiler and15 runtime
+processes; the existing recorded pin/view controller passes with8/12. The complete
+source/peer/effect trace passes with214 runtime processes,12 compiler processes and
+22 controlled deaths. Independent composition, range and preflight rollback
+oracles pass. The development engine passes513 tests and strict lint/format;
+compiler passes198. Four populated store20 upgrades and a real old compiler/runtime
+journal upgrade pass. Archive and hosted evidence are recorded separately against
+their exact publication revisions. See [contract0.21](contract/v0.21/README.md).
+
+Accepted historical collection queries do not install a global clock or grant
+remote governance authority. Retention, lifecycle, broader incremental/transport,
+complete portable applications and the original assurance gates remain mandatory.
+
 # Implementation status and evidence
 
 ## Native accepted-view history

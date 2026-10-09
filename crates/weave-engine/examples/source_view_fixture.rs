@@ -46,6 +46,7 @@ fn accept(
     view: &str,
     source: GraphRef,
     id: &str,
+    lifetime_base: i64,
 ) -> weave_engine::Result<GovernanceReceipt> {
     let key = SigningKey::from_bytes(&[73; 32]);
     let reference = GovernancePolicyRef {
@@ -64,8 +65,8 @@ fn accept(
                 graph_id: source.graph_id.clone(),
                 branch_id: "main".into(),
             }],
-            not_before_ms: 0,
-            expires_at_ms: 10000,
+            not_before_ms: lifetime_base,
+            expires_at_ms: lifetime_base + 10000,
         })?;
     }
     let expected_head = e.inspect_governance_head(view, &host())?.decision_id;
@@ -74,7 +75,7 @@ fn accept(
         view_id: view.into(),
         policy: reference.clone(),
         expected_head: expected_head.clone(),
-        expires_at_ms: 9000,
+        expires_at_ms: lifetime_base + 9000,
         action: GovernanceAction::Publish {
             source,
             branch_id: "main".into(),
@@ -89,8 +90,8 @@ fn accept(
             policy: reference,
             expected_head,
             member: weave_policy::public_key(&key),
-            issued_at_ms: 0,
-            expires_at_ms: 9000,
+            issued_at_ms: lifetime_base,
+            expires_at_ms: lifetime_base + 9000,
             nonce: format!("approval-{id}"),
         },
         &key,
@@ -115,19 +116,25 @@ fn tick(text: &str) -> Option<i64> {
     }
 }
 fn run(a: &[String]) -> weave_engine::Result<Value> {
-    let clock: Arc<dyn TrustedClock> =
-        if ["recorded_register", "recorded_refresh"].contains(&a[2].as_str()) {
-            Arc::new(SystemClock)
-        } else {
-            Arc::new(ManualClock::new(if a[2] == "expired" { 10000 } else { 20 }))
-        };
+    let clock: Arc<dyn TrustedClock> = if a[2].starts_with("live_")
+        || ["recorded_register", "recorded_refresh"].contains(&a[2].as_str())
+    {
+        Arc::new(SystemClock)
+    } else {
+        Arc::new(ManualClock::new(if a[2] == "expired" { 10000 } else { 20 }))
+    };
+    let lifetime_base = if a[2].starts_with("live_") {
+        clock.unix_millis()?
+    } else {
+        0
+    };
     let mut e = Engine::open_with_clock(&a[1], clock)?;
     match a[2].as_str() {
-        "seed" => {
+        "seed" | "live_seed" => {
             let source = write(&mut e, "Fleet", graph(0))?;
             let empty = write(&mut e, "Empty", GraphData::default())?;
-            let accepted = accept(&e, "team", source.clone(), "initial")?;
-            let empty_accepted = accept(&e, "empty", empty, "empty-initial")?;
+            let accepted = accept(&e, "team", source.clone(), "initial", lifetime_base)?;
+            let empty_accepted = accept(&e, "empty", empty, "empty-initial", lifetime_base)?;
             Ok(json!({"accepted":accepted,"empty":empty_accepted,"source":source}))
         }
         "register" | "recorded_register" => {
@@ -139,9 +146,9 @@ fn run(a: &[String]) -> weave_engine::Result<Value> {
                 &host(),
             )?)?)
         }
-        "run" | "expired" | "outsider" => {
+        "run" | "expired" | "outsider" | "live_run" | "live_outsider" => {
             let plan: Program = read_json(&a[3]);
-            let h = if a[2] == "outsider" {
+            let h = if a[2] == "outsider" || a[2] == "live_outsider" {
                 HostContext::new("outsider", Vec::<String>::new())
             } else {
                 host()
@@ -170,13 +177,19 @@ fn run(a: &[String]) -> weave_engine::Result<Value> {
             },
             &host(),
         )?)?),
-        "change" => Ok(serde_json::to_value(write(&mut e, "Fleet", graph(1))?)?),
-        "publish" => {
+        "change" | "live_change" => Ok(serde_json::to_value(write(&mut e, "Fleet", graph(1))?)?),
+        "publish" | "live_publish" => {
             let source = GraphRef {
                 graph_id: "Fleet".into(),
                 revision: e.head("Fleet", "main")?.unwrap(),
             };
-            Ok(serde_json::to_value(accept(&e, "team", source, "next")?)?)
+            Ok(serde_json::to_value(accept(
+                &e,
+                "team",
+                source,
+                "next",
+                lifetime_base,
+            )?)?)
         }
         "refresh" | "recorded_refresh" => Ok(serde_json::to_value(e.refresh_view(
             &a[3],

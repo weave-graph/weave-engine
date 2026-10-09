@@ -62,6 +62,64 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ObservationRow> {
 const COLUMNS: &str = "substr(id,1,513),substr(graph_id,1,513),substr(branch_id,1,513),substr(revision,1,513),substr(parent,1,513),recorded_at_ms,substr(kind,1,33)";
 
 impl Engine {
+    pub fn query_recorded_range_for(
+        &self,
+        query: &QueryPlan,
+        observer: &str,
+        interval: &Interval,
+        limit: usize,
+        host: &HostContext,
+    ) -> Result<HistoryRangeValue> {
+        let _transaction = self.optional_read_transaction()?;
+        let _clock = self.operation_scope()?;
+        if query.revision.is_some() {
+            return Err(err("E_HISTORY_RANGE", "unpinned history query required"));
+        }
+        weave_contract::accepted_history::validate_range(interval, limit)
+            .map_err(|d| err(&d.code, &d.message))?;
+        let range = self.recorded_range_for(
+            &query.graph_id,
+            &query.branch_id,
+            observer,
+            interval,
+            limit,
+            host,
+        )?;
+        let evaluate = |observation: &RecordedObservation| -> Result<QueryResult> {
+            Ok(self
+                .query_recorded_for(
+                    query,
+                    &RecordedCut::Checkpoint {
+                        observer: observation.observer.clone(),
+                        checkpoint: observation.checkpoint.clone(),
+                    },
+                    host,
+                )?
+                .result)
+        };
+        let start_state = evaluate(&range.start_state)?;
+        let mut remaining = MATERIALIZED_LIMIT
+            .saturating_sub(json_size(&start_state, MATERIALIZED_LIMIT)?)
+            .saturating_sub(256);
+        let mut changes = Vec::new();
+        for observation in &range.changes {
+            let value = evaluate(observation)?;
+            let bytes = json_size(&value, remaining)?;
+            remaining = remaining
+                .checked_sub(bytes.saturating_add(1))
+                .ok_or_else(unavailable)?;
+            changes.push(value);
+        }
+        let output = HistoryRangeValue {
+            axis: HistoryAxis::Recorded,
+            interval: range.interval,
+            start_state,
+            changes,
+        };
+        json_size(&output, MATERIALIZED_LIMIT)?;
+        Ok(output)
+    }
+
     pub(crate) fn initialize_recorded_history(&self, old_version: i64) -> Result<()> {
         if old_version >= 19 && !self.conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='head_observations')", [], |r| r.get::<_, bool>(0))? {
             return Err(err("E_INTEGRITY", "recorded history table unavailable"));

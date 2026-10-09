@@ -148,6 +148,10 @@ pub fn merge_source_revisions(
 }
 fn envelope(left: &QueryResult, right: Option<&QueryResult>) -> Result<QueryResult, Diagnostic> {
     let mut out = left.clone();
+    out.accepted_observations = crate::accepted_history::merge_observations(
+        &left.accepted_observations,
+        right.map_or(&[], |r| r.accepted_observations.as_slice()),
+    )?;
     out.recorded_observations = crate::recorded_history::merge_observations(
         &left.recorded_observations,
         right.map_or(&[], |r| r.recorded_observations.as_slice()),

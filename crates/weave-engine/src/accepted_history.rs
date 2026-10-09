@@ -1,50 +1,106 @@
 //! Replica-local governed acceptance history, distinct from graph receipt/branch recording.
 use super::*;
-use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum AcceptedViewHistoryCut {
-    Decision {
-        observer: String,
-        decision_id: String,
-    },
-    AtTime {
-        observer: String,
-        unix_millis: i64,
-    },
-}
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AcceptedViewObservation {
-    pub observer: String,
-    pub view_id: String,
-    pub decision_id: String,
-    pub accepted_at_ms: i64,
-    /// The genuine protected governance occurrence, not a caller-authored label.
-    pub occurrence: GraphRef,
-    pub source: GraphRef,
-    pub branch_id: String,
-}
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AcceptedViewHistoryResult {
-    pub observation: AcceptedViewObservation,
-    pub result: QueryResult,
-}
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AcceptedViewHistoryRange {
-    pub interval: Interval,
-    pub start_state: AcceptedViewHistoryResult,
-    /// All accepted occurrences in the half-open interval, in ancestry order.
-    pub changes: Vec<AcceptedViewHistoryResult>,
-}
 fn unavailable() -> Error {
     err("E_GOV_HISTORY_UNAVAILABLE", "accepted history unavailable")
 }
 const MAX_HISTORY: usize = 1000;
 impl Engine {
+    pub fn query_accepted_selection_for(
+        &self,
+        view: &str,
+        selection: &AcceptedSelection,
+        host: &HostContext,
+    ) -> Result<QueryResult> {
+        let _transaction = self.optional_read_transaction()?;
+        let _clock = self.operation_scope()?;
+        weave_contract::accepted_history::validate_selection(selection)
+            .map_err(|d| err(&d.code, &d.message))?;
+        let cut = match selection {
+            AcceptedSelection::LocalTime { unix_millis } => AcceptedViewHistoryCut::AtTime {
+                observer: self.runtime_source_identity()?,
+                unix_millis: *unix_millis,
+            },
+            AcceptedSelection::Decision {
+                observer,
+                decision_id,
+            } => AcceptedViewHistoryCut::Decision {
+                observer: observer.clone(),
+                decision_id: decision_id.clone(),
+            },
+        };
+        let state = self.query_accepted_history_for(view, &cut, host)?;
+        let mut result = state.result;
+        result.accepted_observations.push(state.observation);
+        weave_contract::accepted_history::validate_result(&result)
+            .map_err(|d| err(&d.code, &d.message))?;
+        json_size(&result, MATERIALIZED_LIMIT)?;
+        Ok(result)
+    }
+    pub(crate) fn require_accepted_result_authority(
+        &self,
+        value: &QueryResult,
+        host: &HostContext,
+    ) -> Result<()> {
+        weave_contract::accepted_history::validate_result(value).map_err(|_| unavailable())?;
+        for observation in &value.accepted_observations {
+            let actual = self.query_accepted_history_for(
+                &observation.view_id,
+                &AcceptedViewHistoryCut::Decision {
+                    observer: observation.observer.clone(),
+                    decision_id: observation.decision_id.clone(),
+                },
+                host,
+            )?;
+            if &actual.observation != observation {
+                return Err(unavailable());
+            }
+        }
+        Ok(())
+    }
+    pub fn query_accepted_range_for(
+        &self,
+        view: &str,
+        observer: &str,
+        interval: &Interval,
+        limit: usize,
+        valid_at: Option<i64>,
+        host: &HostContext,
+    ) -> Result<HistoryRangeValue> {
+        let _transaction = self.optional_read_transaction()?;
+        let _clock = self.operation_scope()?;
+        let range = self.accepted_history_range_for(view, observer, interval, limit, host)?;
+        fn value(state: AcceptedViewHistoryResult) -> QueryResult {
+            let mut result = state.result;
+            result.accepted_observations.push(state.observation);
+            result
+        }
+        let mut output = HistoryRangeValue {
+            axis: HistoryAxis::Accepted,
+            interval: range.interval,
+            start_state: value(range.start_state),
+            changes: range.changes.into_iter().map(value).collect(),
+        };
+        if valid_at.is_some() {
+            for value in std::iter::once(&mut output.start_state).chain(output.changes.iter_mut()) {
+                *value = self.expression(
+                    &GraphExpression::Filter {
+                        input: Box::new(GraphExpression::Reference {
+                            name: "state".into(),
+                        }),
+                        predicate: None,
+                        valid_at,
+                    },
+                    &BTreeMap::from([("state".into(), value.clone())]),
+                    host,
+                    0,
+                    &mut 1000,
+                )?;
+            }
+        }
+        json_size(&output, MATERIALIZED_LIMIT)?;
+        Ok(output)
+    }
+
     fn accepted_history_scope(
         &self,
         view: &str,
