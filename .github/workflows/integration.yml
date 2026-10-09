@@ -107,7 +107,7 @@ jobs:
       - name: Execute actual SDK recorded pins and sealed historical views
         run: python3 weave-engine/scripts/check_recorded_source.py --compiler-sdk weave-language/target/debug/${{ matrix.compiler }} --engine weave-engine/target/debug/weave-engine --view-host weave-engine/target/debug/examples/source_view_fixture --report recorded-source.json
       - name: Execute actual source offline reaction, cluster, transfer, acceptance and effect recovery
-        run: python3 weave-engine/scripts/check_native_scenario.py --compiler-sdk weave-language/target/debug/${{ matrix.compiler }} --host weave-engine/target/debug/examples/native_scenario --peer-host weave-engine/target/debug/examples/three_peer_trace --fixtures weave-language/examples/native_scenario --report native-scenario-bc.json
+        run: python3 weave-engine/scripts/check_native_scenario.py --compiler-sdk weave-language/target/debug/${{ matrix.compiler }} --host weave-engine/target/debug/examples/native_scenario --peer-host weave-engine/target/debug/examples/three_peer_trace --fixtures weave-language/examples/native_scenario --accepted-history --report native-scenario-bc.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -115,3 +115,27 @@ jobs:
           path: |
             native-scenario-bc.json
             recorded-source.json
+  accepted-history-compat:
+    name: Accepted history with original populated store20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: weave-engine
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: e6ff50528dcd55f17abdc39313a29d6cbddc898b
+          path: old-engine
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build genuine prior and current hosts sequentially
+        run: |
+          cargo build --manifest-path old-engine/Cargo.toml --locked -p weave-engine --example source_view_fixture
+          cargo build --manifest-path weave-engine/Cargo.toml --locked -p weave-engine --example source_view_fixture
+      - name: Verify original rows, accepted signatures, equal times and old-reader compatibility
+        run: python3 weave-engine/scripts/check_accepted_history_compat.py --old-host old-engine/target/debug/examples/source_view_fixture --host weave-engine/target/debug/examples/source_view_fixture --report accepted-history-compat.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accepted-history-compat
+          path: accepted-history-compat.json

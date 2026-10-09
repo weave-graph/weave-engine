@@ -26,6 +26,15 @@ use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 const LIMIT: usize = 64 * 1024;
+type HistoricalDecisionRow = (
+    String,
+    String,
+    String,
+    Option<String>,
+    i64,
+    Option<String>,
+    String,
+);
 const DOMAIN: &str = "weave-governance-approval-v1";
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -345,6 +354,94 @@ impl Engine {
             return Err(failure("E_INTEGRITY"));
         }
         Ok((record, expected))
+    }
+    /// Verify historical ordering links against the original proposal and accepted approvals.
+    /// Historical approval validity does not grant current read authority.
+    pub(crate) fn governance_history_link(
+        &self,
+        view: &str,
+        decision: &str,
+    ) -> Result<(Option<String>, i64)> {
+        let unavailable = || err("E_GOV_HISTORY_UNAVAILABLE", "accepted history unavailable");
+        self.read_budget.request()?;
+        let row:Option<HistoricalDecisionRow>=self.conn.query_row(
+            "SELECT substr(view_id,1,513),substr(policy_id,1,513),substr(policy_revision,1,513),substr(parent,1,513),accepted_at_ms,CASE WHEN length(CAST(body AS BLOB))<=65536 THEN body END,substr(proposal_id,1,513) FROM governance_decisions WHERE id=?1",
+            [decision],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?))).optional()?;
+        let (actual_view, policy_id, policy_revision, parent, time, body, proposal_id) =
+            row.ok_or_else(unavailable)?;
+        if actual_view != view || time < 0 || parent.as_ref().is_some_and(|id| !valid_id(id)) {
+            return Err(unavailable());
+        }
+        let receipt: GovernanceReceipt = self.gov_text(body).map_err(|_| unavailable())?;
+        let (record, hash) = self.gov_proposal(&proposal_id).map_err(|_| unavailable())?;
+        let proposal = &record.proposal;
+        let expected_policy = match &proposal.action {
+            GovernanceAction::Publish { .. } => &proposal.policy,
+            GovernanceAction::ReplacePolicy { policy } => &policy.reference,
+        };
+        if proposal.view_id != view
+            || proposal.expected_head != parent
+            || proposal.policy.id != policy_id
+            || proposal.policy.revision != policy_revision
+            || time >= proposal.expires_at_ms
+            || receipt.view_id != view
+            || receipt.decision_id != decision
+            || receipt.proposal_id != proposal_id
+            || &receipt.policy != expected_policy
+            || receipt.duplicate
+            || receipt.event_id != digest(&("weave-governance-event-v1", decision))?
+        {
+            return Err(unavailable());
+        }
+        self.read_budget.request()?;
+        let body: Option<Option<String>> = self
+            .conn
+            .query_row(
+                LOAD_POLICY,
+                params![view, policy_id, policy_revision],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let policy: GovernancePolicy = self.gov_text(body.flatten()).map_err(|_| unavailable())?;
+        validate_policy(&policy).map_err(|_| unavailable())?;
+        if policy.view_id != view
+            || policy.reference != proposal.policy
+            || time < policy.not_before_ms
+            || time >= policy.expires_at_ms
+        {
+            return Err(unavailable());
+        }
+        self.read_budget.request()?;
+        let mut statement = self.conn.prepare(LOAD_APPROVALS)?;
+        let rows = statement.query_map([&proposal_id], |r| r.get::<_, Option<String>>(0))?;
+        let mut members = BTreeSet::new();
+        for row in rows {
+            let signed: SignedGovernanceApproval =
+                self.gov_text(row?).map_err(|_| unavailable())?;
+            let a = &signed.approval;
+            if members.len() == 32
+                || !members.insert(a.member.clone())
+                || a.proposal_id != proposal_id
+                || a.proposal_digest != hash
+                || a.view_id != view
+                || a.policy != proposal.policy
+                || a.expected_head != parent
+                || !policy.members.contains(&a.member)
+                || !valid_id(&a.nonce)
+                || a.issued_at_ms > time
+                || a.issued_at_ms < policy.not_before_ms
+                || time >= a.expires_at_ms
+                || a.expires_at_ms > proposal.expires_at_ms
+                || a.issued_at_ms >= a.expires_at_ms
+            {
+                return Err(unavailable());
+            }
+            verify_signature(&signed).map_err(|_| unavailable())?;
+        }
+        if members.len() < policy.threshold {
+            return Err(unavailable());
+        }
+        Ok((parent, time))
     }
     pub(crate) fn gov_source(
         &self,
@@ -696,6 +793,10 @@ impl Engine {
                 [&host.principal], |row| row.get(0))?;
             if count >= 10000 {
                 return Err(failure("E_BUDGET"));
+            }
+            if let Some(previous)=&head.decision_id {
+                let (_,previous_time)=self.governance_history_link(&proposal.view_id,previous)?;
+                if now<previous_time { return Err(failure("E_GOV_HISTORY_TIME")); }
             }
             // Occurrence identity must not be a public dictionary-testable commitment
             // to a private policy roster. The transaction/receipt makes this nonce durable.

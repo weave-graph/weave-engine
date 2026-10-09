@@ -12,8 +12,13 @@ pub use capsule_export::{
 };
 mod whole_visibility;
 use whole_visibility::whole_graph_visible;
+mod accepted_history;
 mod governance;
 mod governance_graph;
+pub use accepted_history::{
+    AcceptedViewHistoryCut, AcceptedViewHistoryRange, AcceptedViewHistoryResult,
+    AcceptedViewObservation,
+};
 pub use governance_graph::AcceptedViewSelection;
 mod governance_delivery;
 mod influence;
