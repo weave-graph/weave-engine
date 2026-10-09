@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""Real process death during legacy schema/backfill upgrade."""
+"""Synthetic legacy backfill fixture; genuine prior binaries have separate controllers."""
+import argparse
 import json
 from version_profile import store_marker
+from retention_migration import RETENTION_TABLES,assert_retention_baseline
 from pathlib import Path
 import sqlite3
 import subprocess
 import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
-subprocess.run(["cargo","build","--locked","-p","weave-engine","--example","storage_probe","--features","recovery-testing"],cwd=ROOT,check=True)
-PROBE=ROOT/"target"/"debug"/"examples"/"storage_probe"
+p=argparse.ArgumentParser(description=__doc__)
+p.add_argument('--probe',type=Path,help='use an existing exact native binary without building')
+a=p.parse_args()
+if a.probe is None:
+    subprocess.run(["cargo","build","--locked","-p","weave-engine","--example","storage_probe","--features","recovery-testing"],cwd=ROOT,check=True)
+PROBE=a.probe.resolve() if a.probe else ROOT/"target"/"debug"/"examples"/"storage_probe"
 with tempfile.TemporaryDirectory(prefix="weave-migration-") as directory:
     db=Path(directory)/"legacy.db"
     def run(operation,expected=0):
@@ -17,7 +23,13 @@ with tempfile.TemporaryDirectory(prefix="weave-migration-") as directory:
         assert result.returncode==expected,(result.returncode,result.stderr)
         return json.loads(result.stdout) if result.stdout else None
     before=run("seed")
+    # This fixture lowers a current seed's marker. It must remove later schema,
+    # after proving the seed has only the genuine default non-erasing state.
+    # Retaining modern tables under marker5 is a downgrade, not a legacy store.
+    assert_retention_baseline(db,store_marker())
     with sqlite3.connect(db) as c:
+        for table in sorted(RETENTION_TABLES):
+            c.execute('DROP TABLE "'+table+'"')
         c.execute("DROP TABLE head_observations")
         c.execute("DELETE FROM edge_structures")
         c.execute("PRAGMA user_version=5")
