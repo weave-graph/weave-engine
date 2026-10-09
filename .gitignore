@@ -10,3 +10,5 @@
 /fuzz/artifacts/
 /fuzz/coverage/
 /fuzz/runlogs/
+
+__pycache__/

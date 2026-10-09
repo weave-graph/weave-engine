@@ -236,6 +236,98 @@ fn old_protocol_or_invalid_range_cannot_publish_earlier_commands() {
 }
 
 #[test]
+fn handler_range_receipts_recheck_empty_start_changes_and_current_policy() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("handler-range.db");
+    let clock = Arc::new(ManualClock::new(5));
+    let mut e = Engine::open_with_clock(&path, clock.clone()).unwrap();
+    e.install_governance_root(&policy()).unwrap();
+    let source = write(&mut e, 1, false);
+    let observer = observer(&e);
+    clock.set(10);
+    accept(&e, "first", source);
+    clock.set(60);
+    e.install_adapter(
+        &AdapterManifest {
+            id: "ranges".into(),
+            version: "1".into(),
+            artifact_digest: format!("sha256:{}", "c".repeat(64)),
+            config_revision: "1".into(),
+            principal: "collector".into(),
+            subscriptions: vec![SubscriptionScope {
+                graph_id: "source".into(),
+                branch_id: "main".into(),
+            }],
+            output_graphs: vec![],
+            effect_destinations: vec![],
+            max_attempts: 3,
+            lease_ms: 1000,
+            max_pending_events: 10,
+            projection_replay: true,
+        },
+        &HostContext::new("collector", []),
+    )
+    .unwrap();
+    e.set_adapter_state("ranges", "running").unwrap();
+    let event = e.poll_adapter("ranges").unwrap().unwrap();
+    let program: Program = serde_json::from_value(json!({"version":VERSION,"commands":[{
+        "op":"accepted_range","name":"History","view_id":"team","observer":observer,"interval":{"start":10,"end":50},"limit":10,"valid_at":8
+    }]})).unwrap();
+    let original = e
+        .complete_handler("ranges", &event.id, &event.lease, &program)
+        .unwrap();
+    let CommandResult::HistoryRanged { range, .. } = &original.results[0] else {
+        panic!("missing range")
+    };
+    assert!(range.start_state.graph.nodes.is_empty() && range.changes[0].graph.nodes.is_empty());
+    assert!(
+        e.complete_handler("ranges", &event.id, &event.lease, &program)
+            .unwrap()
+            .duplicate
+    );
+    let sql = rusqlite::Connection::open(&path).unwrap();
+    for start in [true, false] {
+        let mut changed = serde_json::to_value(&original.results).unwrap();
+        let value = if start {
+            &mut changed[0]["range"]["start_state"]
+        } else {
+            &mut changed[0]["range"]["changes"][0]
+        };
+        value["accepted_observations"][0]["observer"] = json!("foreign");
+        sql.execute(
+            "UPDATE handler_receipts SET results=?1 WHERE adapter='ranges'",
+            [serde_json::to_string(&changed).unwrap()],
+        )
+        .unwrap();
+        assert!(
+            e.complete_handler("ranges", &event.id, &event.lease, &program)
+                .is_err(),
+            "every cached range value must validate its exact witness"
+        );
+    }
+    sql.execute(
+        "UPDATE handler_receipts SET results=?1 WHERE adapter='ranges'",
+        [serde_json::to_string(&original.results).unwrap()],
+    )
+    .unwrap();
+    clock.set(10000);
+    assert!(
+        e.complete_handler("ranges", &event.id, &event.lease, &program)
+            .is_err(),
+        "expired current policy must deny even an empty historical collection"
+    );
+    assert_eq!(
+        sql.query_row(
+            "SELECT count(*) FROM handler_receipts WHERE adapter='ranges'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1
+    );
+}
+
+#[test]
 fn persisted_result_revalidates_exact_accepted_witness_even_when_graph_is_empty() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("store");

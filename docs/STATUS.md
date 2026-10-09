@@ -10,7 +10,7 @@ The actual SDK/SystemClock history controller passes with8 compiler and15 runtim
 processes; the existing recorded pin/view controller passes with8/12. The complete
 source/peer/effect trace passes with214 runtime processes,12 compiler processes and
 22 controlled deaths. Independent composition, range and preflight rollback
-oracles pass. The development engine passes512 tests and strict lint/format;
+oracles pass. The development engine passes513 tests and strict lint/format;
 compiler passes198. Four populated store20 upgrades and a real old compiler/runtime
 journal upgrade pass. Archive and hosted evidence are recorded separately against
 their exact publication revisions. See [contract0.21](contract/v0.21/README.md).

@@ -489,8 +489,17 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             self.read_budget.charge(results.len())?;
             let results: Vec<CommandResult> = serde_json::from_str(&results)?;
             for result in &results {
-                if let CommandResult::Queried { result } = result {
-                    self.require_current_result_authority(result, &host)?;
+                match result {
+                    CommandResult::Queried { result } => {
+                        self.require_current_result_authority(result, &host)?
+                    }
+                    CommandResult::HistoryRanged { range, .. } => {
+                        self.require_current_result_authority(&range.start_state, &host)?;
+                        for value in &range.changes {
+                            self.require_current_result_authority(value, &host)?;
+                        }
+                    }
+                    _ => {}
                 }
             }
             return Ok(HandlerReceipt {

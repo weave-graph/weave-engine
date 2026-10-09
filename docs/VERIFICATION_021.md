@@ -8,7 +8,9 @@ This extension advances R04/E02, R08/E03 and E11 without completing either paper
   rejects changed observer/time/source/occurrence fields and missing pins, and
   rechecks current policy expiry. Historical quorum validation excludes approvals
   already expired at acceptance while preserving their authentic immutable bytes.
-- Development engine:512 tests and strict lint/format, including seven native
+- Cached handler range receipts revalidate the authorized start and every change,
+  including empty values, exact observer witnesses and current policy expiry.
+- Development engine:513 tests and strict lint/format, including seven native
   accepted-history oracles. Development compiler:198 tests and strict lint/format. Actual SDK/SystemClock
   accepted-history/range controller:8 compiler processes and15 runtime processes;
   existing recorded pin/sealed-view controller:8/12. Complete original SDK response
