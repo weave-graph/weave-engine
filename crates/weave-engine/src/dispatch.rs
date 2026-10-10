@@ -463,6 +463,27 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         program: &Program,
         projection: Option<&projection_rebase::CompletionToken>,
     ) -> Result<HandlerReceipt> {
+        self.complete_handler_authorized(adapter, event, lease, program, projection, None)
+    }
+    pub(crate) fn complete_handler_with_actor(
+        &mut self,
+        adapter: &str,
+        event: &str,
+        lease: &str,
+        program: &Program,
+        actor: &recorded_actors::CompletionToken,
+    ) -> Result<HandlerReceipt> {
+        self.complete_handler_authorized(adapter, event, lease, program, None, Some(actor))
+    }
+    fn complete_handler_authorized(
+        &mut self,
+        adapter: &str,
+        event: &str,
+        lease: &str,
+        program: &Program,
+        projection: Option<&projection_rebase::CompletionToken>,
+        actor: Option<&recorded_actors::CompletionToken>,
+    ) -> Result<HandlerReceipt> {
         if self.conn.is_autocommit() {
             return Err(err(
                 "E_TRANSACTION",
@@ -470,6 +491,14 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             ));
         }
         self.require_uncanceled_delivery(adapter, event)?;
+        if self.is_recorded_actor(adapter)?
+            && !actor.is_some_and(|token| token.authorizes(adapter, event))
+        {
+            return Err(err(
+                "E_ACTOR_STATE",
+                "complete recorded actor state and checkpoint together",
+            ));
+        }
         let stateful: bool = self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM retention_adapter_states WHERE adapter=?1) OR EXISTS(SELECT 1 FROM retention_stateful_adapters WHERE adapter=?1) OR EXISTS(SELECT 1 FROM retention_projection_receipts WHERE adapter=?1)",
             [adapter],
@@ -652,6 +681,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             ));
         }
         self.check_lease(adapter, event, lease)?;
+        self.require_recorded_actor_effect(adapter)?;
         if self.scoped_event(&manifest, event)?.is_none() {
             return Err(err("E_UNAVAILABLE", "delivery unavailable"));
         }
@@ -670,6 +700,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             }
             return Ok(old);
         }
+        self.recorded_actor_effect_quota(adapter, event, &payload)?;
         self.conn.execute(
             "INSERT INTO effect_intents VALUES (?1,?2,?3,?4,?5,?6,'pending',NULL)",
             params![
@@ -721,6 +752,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                 "adapter effect authority inactive",
             ));
         }
+        self.require_recorded_actor_effect(&intent.adapter)?;
         if self.scoped_event(&manifest, &intent.event_id)?.is_none() {
             return Err(err("E_UNAVAILABLE", "effect source is unavailable"));
         }

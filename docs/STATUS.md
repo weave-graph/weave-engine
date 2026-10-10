@@ -1,3 +1,29 @@
+## Recorded native actors and effect recovery (protocol0.21 / store26)
+
+Trusted native actors have a separate immutable registration with actual stored
+artifact bytes. Whole primary/metadata inputs, current owner/output authority,
+opaque state and kernel-computed tool artifact digests are bound to actual
+occurrences. Every occurrence effect must have a recorded terminal outcome before
+state, actual graph outputs, immutable receipt and private checkpoint commit.
+Raw handler completion cannot bypass actor state pairing. Historical exact retries
+return their recorded tool/effect/output results without running a tool or
+rewinding later state. Unsubscribed/private scans update only the internal pair.
+
+The process controller uses an independent durable native tool journal and a
+separate idempotent reference sink. It passes72 processes and9 controlled deaths,
+with three actual nondeterministic tool runs and one physical sink receipt. Lost
+acknowledgment reconciles against actual destination evidence. Genuine store25
+completed source handlers and reconstruction records survive migration with all
+prior schemas and rows preserved. See [actor semantics](RECORDED_ACTORS.md) and
+[verification](VERIFICATION_026.md). The ten independent actor tests and strict
+lint pass locally; frozen full-matrix/hosted acceptance is still being completed.
+
+This profile trusts native computation and its submitted state/tool results.
+Artifact hashing is not execution attestation. Actor upgrade/recorded rollback,
+default historical effect observation, source/portable bindings, receipt expiry,
+causal/resource controls and all original assurance remain mandatory. E01–E14
+remain in progress and E15 remains open.
+
 ## Kernel-computed compiled reconstruction (protocol0.21 / store25)
 
 Expired pure stateless compiled handlers now have an explicit reconstruction

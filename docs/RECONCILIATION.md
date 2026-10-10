@@ -45,3 +45,5 @@ The combined trace additionally runs in iOS simulator Rust processes. The separa
 [Swift app profile](SWIFT_HOST.md) verifies source-backed offline edits and sealed
 diagnostic preparation/completion recovery inside application-owned SQLite.
 Neither result closes the full mobile/browser, lifecycle, history or resource gates.
+
+Native store26 implements bounded recorded actors for engine4.1–4.4, R12/R13/R14/R36/R38 and E05/E06/E14. Actual submitted tool results and terminal native broker outcomes are recorded with outputs/state/checkpoint; independent journal/sink process recovery is covered. Trust is explicitly native host computation, not model truth, CPU/RSS isolation or arbitrary remote exactly-once. Complete actor lifecycle/default effect observation and source/portable bindings remain mandatory.

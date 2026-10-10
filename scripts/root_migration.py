@@ -4,7 +4,7 @@ import argparse
 from contextlib import closing
 import json
 from version_profile import store_marker
-from retention_migration import RETENTION_TABLES,LIFECYCLE_TABLES,COMPILED_LIFECYCLE_TABLES,COMPILED_REBUILD_TABLES,assert_retention_baseline
+from retention_migration import RETENTION_TABLES,LIFECYCLE_TABLES,COMPILED_LIFECYCLE_TABLES,COMPILED_REBUILD_TABLES,RECORDED_ACTOR_TABLES,assert_retention_baseline
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix="weave-migration-") as directory:
     # Retaining modern tables under marker5 is a downgrade, not a legacy store.
     assert_retention_baseline(db,store_marker())
     with closing(sqlite3.connect(db)) as c:
-        for table in sorted(RETENTION_TABLES|LIFECYCLE_TABLES|COMPILED_LIFECYCLE_TABLES|COMPILED_REBUILD_TABLES):
+        for table in sorted(RETENTION_TABLES|LIFECYCLE_TABLES|COMPILED_LIFECYCLE_TABLES|COMPILED_REBUILD_TABLES|RECORDED_ACTOR_TABLES):
             c.execute('DROP TABLE "'+table+'"')
         c.execute("DROP TABLE head_observations")
         c.execute("DELETE FROM edge_structures")

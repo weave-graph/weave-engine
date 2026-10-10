@@ -258,6 +258,7 @@ impl Engine {
     ) -> Result<()> {
         let state = self.projection_state(adapter)?;
         self.advance_compiled_replay_checkpoint(adapter, checkpoint)?;
+        self.advance_recorded_actor_checkpoint(adapter, checkpoint)?;
         self.conn.execute(
             "UPDATE dispatch_adapters SET checkpoint=?2 WHERE id=?1",
             params![adapter, checkpoint],
@@ -281,6 +282,9 @@ impl Engine {
                 "E_CHECKPOINT_EXPIRED",
                 "canceled projection work requires explicit rebuild",
             ));
+        }
+        if self.is_recorded_actor(adapter)? {
+            return self.require_recorded_actor_ready(adapter);
         }
         let (_, policy) = retention::state(&self.conn)?;
         if self.is_compiled_handler(adapter)? {
