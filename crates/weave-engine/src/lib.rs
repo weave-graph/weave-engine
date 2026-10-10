@@ -32,6 +32,7 @@ mod identity_acceptance;
 pub use identity_acceptance::{
     IdentityCandidate, IdentityDecisionReceipt, IdentityDecisionRequest, IdentityPolicy,
 };
+mod actor_disposition;
 mod actor_lifecycle;
 mod actor_observation;
 pub use actor_observation::{
@@ -54,7 +55,7 @@ pub use recorded_actors::{
 };
 pub use recorded_history::{RecordedHistoryRange, RecordedQueryResult};
 pub use weave_contract::{ObservationKind, RecordedCut, RecordedObservation, RecordedSelection};
-pub const STORAGE_VERSION: i64 = 27;
+pub const STORAGE_VERSION: i64 = 28;
 mod retention;
 pub use retention::{RecordedAvailability, RetentionPlan, RetentionPolicy, RetentionReceipt};
 mod adapter_lifecycle;
@@ -297,6 +298,7 @@ impl Engine {
         engine.initialize_compiled_rebuild(version)?;
         engine.initialize_recorded_actors(version)?;
         engine.initialize_actor_lifecycle(version)?;
+        engine.initialize_actor_disposition(version)?;
         engine
             .conn
             .pragma_update(None, "user_version", STORAGE_VERSION)?;

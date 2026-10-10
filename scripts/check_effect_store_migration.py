@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Preserve a real historical unknown effect and its separate sink across migration."""
-from retention_migration import ACTOR_LIFECYCLE_TABLES,RETENTION_TABLES,LIFECYCLE_TABLES,COMPILED_LIFECYCLE_TABLES,COMPILED_REBUILD_TABLES,RECORDED_ACTOR_TABLES,retention_tables,assert_retention_baseline
+from retention_migration import ACTOR_DISPOSITION_TABLES,ACTOR_LIFECYCLE_TABLES,RETENTION_TABLES,LIFECYCLE_TABLES,COMPILED_LIFECYCLE_TABLES,COMPILED_REBUILD_TABLES,RECORDED_ACTOR_TABLES,retention_tables,assert_retention_baseline
 from version_profile import store_marker
 import argparse
 from contextlib import closing
@@ -105,6 +105,7 @@ handler ReferenceRequest revision "1" using Identity {
             if args.old_marker<25<=args.new_marker: added+=tuple(COMPILED_REBUILD_TABLES)
             if args.old_marker<26<=args.new_marker: added+=tuple(RECORDED_ACTOR_TABLES)
             if args.old_marker<27<=args.new_marker: added+=tuple(ACTOR_LIFECYCLE_TABLES)
+            if args.old_marker<28<=args.new_marker: added+=tuple(ACTOR_DISPOSITION_TABLES)
             assert_retention_baseline(db,args.new_marker)
             assert snapshot(db, added) == migrated and snapshot(sink) == sink_before
             history = assert_recorded_baselines(db, 10) if 'head_observations' in added else old_history

@@ -64,6 +64,21 @@ fn run() -> std::result::Result<Value, Box<dyn std::error::Error>> {
     })?;
     exit_at(&input, "after-schema", 96);
     match args[2].as_str() {
+        "cancel" => {
+            let request: DeliveryCancellationRequest =
+                serde_json::from_value(input["request"].clone())?;
+            let receipt =
+                e.cancel_recorded_actor_delivery_test_before_commit(&request, &host(), || {
+                    exit_at(&input, "before-cancellation", 108)
+                })?;
+            exit_at(&input, "after-cancellation", 109);
+            Ok(serde_json::to_value(receipt)?)
+        }
+        "receipt" => Ok(serde_json::to_value(e.recorded_actor_receipt_for(
+            id,
+            input["event"].as_str().ok_or("missing event")?,
+            &host(),
+        )?)?),
         "mode" => {
             let event: DispatchEnvelope = serde_json::from_value(input["event"].clone())?;
             Ok(serde_json::to_value(e.recorded_actor_delivery_mode_for(

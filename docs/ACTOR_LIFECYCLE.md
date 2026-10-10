@@ -60,7 +60,7 @@ not provide CPU/RSS isolation.
 
 This is a trusted native host profile with destination-specific reconciliation.
 The acceptance sink uses durable local SQLite idempotency; it does not establish
-exactly-once arbitrary remote I/O or model truth. Source/portable bindings,
-effect-aware cancellation, full graph-output reconstruction, receipt expiry,
+exactly-once arbitrary remote I/O or model truth. [Effect-aware cancellation](ACTOR_DISPOSITION.md) has a store28 native profile.
+Source/portable bindings, full graph-output reconstruction, receipt expiry,
 larger collection, causal/resource controls and every original assurance remain
 mandatory. E01–E14 remain in progress; E15 remains open.

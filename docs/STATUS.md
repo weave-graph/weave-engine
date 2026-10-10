@@ -1,3 +1,20 @@
+## Effect-aware native actor cancellation (protocol0.21 / store28)
+
+Fixed owners can dispose actual pending actor occurrences by event/lease CAS.
+Unknown outcomes block cleanup until destination reconciliation. Pending intents
+become immutable Failed/not-dispatched records; terminal receipts stay unchanged.
+State/private checkpoint, pause/rebuild flag and typed audit commit together
+without physical I/O. Later delivery requires explicit current initialization;
+historical retries never rewind newer work. Compact audit witnesses validate
+actual ledger data and collection roots.
+
+See [semantics and limits](ACTOR_DISPOSITION.md) and
+[verification](VERIFICATION_028.md). Draft local acceptance includes seven new
+independent checks and the real store27 trace with44 processes and7 deaths.
+Frozen/full hosted acceptance remains pending. Source/portable bindings, full
+output reconstruction, receipt expiry, causal/resource isolation and every
+original assurance remain mandatory. No full paper gate is claimed.
+
 ## Native actor version transfer and default observation (protocol0.21 / store27)
 
 Actual opaque state/artifact/private checkpoint pairs transfer into fresh paused
