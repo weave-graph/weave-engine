@@ -6,7 +6,11 @@ contract is [NATIVE_SCIENCE_PLAN.md](NATIVE_SCIENCE_PLAN.md). The original roadm
 below remains the broader project plan; its application gates do not block this
 native experiment release.
 
-Status: implementation in progress; executable foundation described in [STATUS.md](STATUS.md), full scope remains open. Owner: engine agent, coordinated by the parent orchestrator. License target: MIT. Public repository target: `weave-graph/weave-engine`.
+The native experiment profile is delivered; see [current status](STATUS.md).
+The broader roadmap below remains in progress. The engine is published at
+[`weave-graph/weave-engine`](https://github.com/weave-graph/weave-engine)
+under MIT. Repository implementation and parent publication review retain their
+separate ownership.
 
 ## Scope and source authority
 

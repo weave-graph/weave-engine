@@ -1,0 +1,375 @@
+# Historical implementation status
+
+This ledger preserves the milestone notes formerly collected in `STATUS.md`,
+captured on 10 October 2026. Test counts, pending acceptance and scope statements
+below describe their original checkpoints. Later releases may supersede them.
+Use [current status](STATUS.md) for the supported native experiment profile and
+[the documentation index](README.md) to find the corresponding API or evidence.
+
+---
+
+## Native data-science delivery (science0.1 / protocol0.21 / store29)
+
+The active scope is [DS01–DS09](NATIVE_SCIENCE_PLAN.md), following the user's
+request for a functional native engine for experiments and deferral of
+browser/mobile applications. The new Rust science API/CLI and installable Python
+client use the real immutable runtime, authorization and temporal query paths.
+They provide dataset import/correction, graph expressions, native graph/vector
+analytics, table/result export and reproducible experiment records.
+
+Local integration passes 615 Rust checks with no failures or ignored checks,
+strict workspace Clippy and formatting, and 25 installed Python checks, including
+four actual native integration cases. Release installation and the supplied
+example pass: a correction changes connectivity while the original immutable
+experiment replays after reopening. Replay revalidates authority and the full
+selected input, rejects changed live dependencies, and cannot execute mutations
+from a loaded artifact.
+
+The independent optimized-binary acceptance passes 16 grouped cases; deterministic
+1k/10k workloads pass their numerical and visibility invariants. The 10k
+end-to-end query/analysis medians are 172–194 ms on the reported Apple M4 Max host,
+including the complete query/provenance JSON. See [exact evidence and
+limits](SCIENCE_VALIDATION.md), [native API](SCIENCE_INTERFACE.md) and
+[Python guide](PYTHON_SCIENCE.md).
+
+Normal CI checks current native behavior on Linux, macOS and Windows without
+duplicate branch-push runs. Historical compiler/store suites remain preserved
+and run when their implementations change or by manual dispatch. Browser
+persistence is manual. Hosted results must be inspected before claiming platform
+acceptance; local results alone cover the reported Mac host.
+
+The full decentralized white-paper scope remains open as a separate roadmap.
+Source actors, distributed networking, app/device scenarios, approximate indexes
+and the original formal/cryptographic assurance program are deferred; they do
+not block the native experiment completion contract.
+
+## Generic browser host (protocol0.21 / store29)
+
+The shared trusted Rust facade now has a raw UTF-8 browser transport and atomic
+IndexedDB generations containing the complete SQLite image and SDK artifact
+journal. Two actual pure source recipes pass completion/reconstruction/version
+transfer/recorded rollback and lost-response recovery. The development profile
+passes608 workspace checks and28 actual Chromium groups /169 requests, including
+16 staged worker terminations, real quota failure, near-capacity/corruption
+checks and one browser-process crash. The native C65-process/eight-death profile
+also passes after extraction. See [semantics](BROWSER_HOST.md) and
+[verification](VERIFICATION_BROWSER_HOST.md). Exact frozen-source/hosted
+acceptance remains required before publication. Source/portable actors/effects,
+browser/mobile apps/devices and all wider original requirements remain open.
+
+## Native lifecycle host interface (protocol0.21 / store29)
+
+Request2 exposes31 bounded operations through the existing Rust/C host. Current
+durable owner/output authority governs lifecycle, compiled reconstruction/version
+transfer, actor inputs/state/completion/transfer/default observation/cancellation,
+causal policy and scoped lag. Initial installation remains trusted host
+configuration; operational requests cannot fabricate reconciliation evidence.
+
+The development workspace passes605 checks and strict Clippy. The actual C
+controller passes65 subprocesses/eight controlled deaths with genuine old28/27/26
+history, ten recorded tool runs and five physical receipts. Two actual compiler
+recipes pass source-compiled reconstruction, changed-revision upgrade, original
+rollback and reopen recovery. The Swift wrapper typechecks; no new simulator
+application result is claimed. See [semantics](HOST_LIFECYCLE.md) and
+[verification](VERIFICATION_HOST_LIFECYCLE.md). Its frozen605-check/59-controller
+profile and all54 exact-head hosted checks passed before
+[PR31](https://github.com/weave-graph/weave-engine/pull/31) merged at2cfa6c9.
+Full source/portable actor
+execution, broader reconstruction/resource/remote and original assurance remain
+mandatory; E01–E14 remain in progress and E15 remains open.
+
+## Local causal dispatch and scoped lag (protocol0.21 / store29)
+
+Actual handler child events bind their source, registration, root and depth in
+one graph/receipt/checkpoint transaction. Mutual adapter feedback reaches an
+owner-controlled depth limit; durable suspension leaves the blocked source
+unacknowledged. Explicit paused/drained policy changes permit only bounded later
+work. Historical retries, no-ops and old logical batches cannot generate a new
+chain. Owner diagnostics count only current authorized subscribed occurrences
+and report bounded lower bounds without global offsets.
+
+See [semantics and limits](CAUSAL_DISPATCH.md) and
+[verification](VERIFICATION_029.md). Ten independent causal checks, strict lint,
+599 frozen workspace checks, twelve native hosts and56 controllers pass,
+including36 populated store20–28 inventories, nine actual old SDK journals and
+every prior source/native recovery trace. The actual46-process/10-death causal
+trace passes. [PR30](https://github.com/weave-graph/weave-engine/pull/30) merged
+after all54 hosted checks succeeded on its exact head6ea26c4.
+The controller preserves genuine store28 actor/effect/cancellation history,
+store27 version/observation history and independent tool/sink journals. Genuine
+old events become explicit legacy boundaries. Full taxonomy, cross-peer causal
+identity, source/portable bindings, CPU/RSS isolation and all original assurance
+remain mandatory; no full paper gate is claimed.
+
+The following older sections retain their original development context; later
+published verification and the current profiles above supersede pending notes.
+
+## Effect-aware native actor cancellation (protocol0.21 / store28)
+
+Fixed owners can dispose actual pending actor occurrences by event/lease CAS.
+Unknown outcomes block cleanup until destination reconciliation. Pending intents
+become immutable Failed/not-dispatched records; terminal receipts stay unchanged.
+State/private checkpoint, pause/rebuild flag and typed audit commit together
+without physical I/O. Later delivery requires explicit current initialization;
+historical retries never rewind newer work. Compact audit witnesses validate
+actual ledger data and collection roots.
+
+See [semantics and limits](ACTOR_DISPOSITION.md) and
+[verification](VERIFICATION_028.md). Draft local acceptance includes seven new
+independent checks and the real store27 trace with44 processes and7 deaths.
+Frozen/full hosted acceptance remains pending. Source/portable bindings, full
+output reconstruction, receipt expiry, causal/resource isolation and every
+original assurance remain mandatory. No full paper gate is claimed.
+
+## Native actor version transfer and default observation (protocol0.21 / store27)
+
+Actual opaque state/artifact/private checkpoint pairs transfer into fresh paused
+namespaces. Rollback selects a validated archived pair and fences historical
+computation/effects. The default delivery mode requires observation within this
+fence; actual recorded outcomes, original tool/effect provenance and an empty
+acknowledgment commit with observer state/checkpoint. Missing history is unavailable.
+Exact retired completion/migration/observation retries never rewind newer work.
+Current whole authority and typed actual lineage govern reads and collection.
+
+The draft [verification](VERIFICATION_027.md) uses distinct actual native tool
+versions and independent journal/sink process deaths, with genuine populated
+store26 rows preserved. [Semantics and limits](ACTOR_LIFECYCLE.md) describe this
+trusted native host profile. Frozen/full hosted acceptance is still pending.
+Effect-aware cancellation, source/portable bindings, full output reconstruction,
+receipt expiry, causal/resource isolation and all original assurance remain
+mandatory; no complete paper gate is claimed.
+
+## Recorded native actors and effect recovery (protocol0.21 / store26)
+
+Trusted native actors have a separate immutable registration with actual stored
+artifact bytes. Whole primary/metadata inputs, current owner/output authority,
+opaque state and kernel-computed tool artifact digests are bound to actual
+occurrences. Every occurrence effect must have a recorded terminal outcome before
+state, actual graph outputs, immutable receipt and private checkpoint commit.
+Raw handler completion cannot bypass actor state pairing. Historical exact retries
+return their recorded tool/effect/output results without running a tool or
+rewinding later state. Unsubscribed/private scans update only the internal pair.
+
+The process controller uses an independent durable native tool journal and a
+separate idempotent reference sink. It passes72 processes and9 controlled deaths,
+with three actual nondeterministic tool runs and one physical sink receipt. Lost
+acknowledgment reconciles against actual destination evidence. Genuine store25
+completed source handlers and reconstruction records survive migration with all
+prior schemas and rows preserved. See [actor semantics](RECORDED_ACTORS.md) and
+[verification](VERIFICATION_026.md). The ten independent actor tests and strict
+lint pass locally; frozen full-matrix/hosted acceptance is still being completed.
+
+This profile trusts native computation and its submitted state/tool results.
+Artifact hashing is not execution attestation. Actor upgrade/recorded rollback,
+default historical effect observation, source/portable bindings, receipt expiry,
+causal/resource controls and all original assurance remain mandatory. E01–E14
+remain in progress and E15 remains open.
+
+## Kernel-computed compiled reconstruction (protocol0.21 / store25)
+
+Expired pure stateless compiled handlers now have an explicit reconstruction
+path. The kernel executes the actual registered recipe on current whole
+input/metadata authority and expected output CAS. Output, immutable receipt,
+replay-ready state and private checkpoint commit together. Later event completion
+and private scans update the paired private state; compatible upgrades preserve
+readiness. Historical retries never replace newer output or rewind checkpoints.
+Actual state-bound stale-work cancellation fences delivery until another rebuild.
+
+The actual source controller preserves genuine store24 completed output,
+preparation, receipt, upgrade and rollback records; it runs66 processes and8
+controlled deaths, including real orphan erasure, replay expiry, two actual
+reconstructions and later upgraded completion. The native tests cover current
+CAS/authority/pending work, privacy pairs, historical retries, corruption and
+rollback. See [lifecycle](ADAPTER_LIFECYCLE.md) and [verification](VERIFICATION_025.md).
+Opaque/effectful actors, external journals, complete source/portable lifecycle
+commands, causal/resource controls, receipt expiry/larger collection and all
+remaining original assurance gates stay mandatory. E01–E14 remain in progress;
+E15 remains open. Earlier totals describe their own exact profiles.
+
+## Source-compiled pure version transfer (protocol0.21 / store24)
+
+Compatible pure stateless source handler versions now transfer an actual private
+checkpoint into a fresh immutable namespace. The kernel captures current whole
+input/metadata authority, actual registered bindings and the replay epoch;
+installation, checkpoint, retirement and audit commit together. Rollback restores
+the recorded prior artifact/configuration/checkpoint pair into another namespace.
+Original outputs, preparations and receipts remain historical; later duplicates
+never rewind newer work. Unknown effects, opaque state and expired replay fail
+closed. Collection validates receipts against actual registrations.
+
+The actual source controller uses two compiler-emitted versions and genuine old23
+stores with completed handlers, non-default retention/state/native migration and
+cancellation audits. It runs61 processes and12 controlled deaths, preserving all
+prior schemas/rows across initialization. See [lifecycle](ADAPTER_LIFECYCLE.md)
+and [verification](VERIFICATION_024.md). Full source/portable lifecycle commands,
+stateful/effectful actors, explicit compiled reconstruction, causal/resource
+controls and every remaining original assurance gate stay required. E01–E14
+remain in progress; E15 stays open. Earlier totals describe their own profiles.
+
+## Native explicit cancellation and state migration (protocol0.21 / store23)
+
+Fixed owners can cancel an actual pending pure handler occurrence by comparing
+its lease. The immutable audit/preparation survives; canceled work cannot execute,
+and native bound state requires an explicit rebuild. Cleanup returns no source
+payload and remains possible after source-policy expiry. Actual unknown effects
+are excluded. Pure native upgrades and rollback atomically bind a fresh immutable
+artifact namespace, actual host state, compatible private checkpoint and retained
+inputs. Old namespaces remain removed, historical duplicate receipts never
+rewind state, and private unrelated scans leave public transfer inputs unchanged.
+
+A genuine populated compacted store22 upgrades without changing any original
+row or schema. The lifecycle process controller exercises24 processes and8
+controlled deaths. See [the bounded native profile](ADAPTER_LIFECYCLE.md) and
+[verification](VERIFICATION_023.md). Source/portable bindings, compiled/effectful
+upgrades, complete actor/resource/causal controls and remaining original assurance
+stay mandatory. E01–E14 remain in progress; E15 remains open.
+
+## Native retention and projection/view rebuild (protocol0.21 / store22)
+
+Trusted native storage administration now previews and atomically rechecks a
+conservative reachability closure before erasing payload columns. Genuine owned
+pins, shared metadata/proofs, atomic batches, current heads, retained-window start
+states, immutable receipts and unresolved work remain roots. Erasure preserves
+verifiable causal anchors. Unknown schemas and malformed encoded cells stop the
+transaction. Default migration preserves original store21 rows and ordinary replay.
+
+Expired consumers require explicit rebuild. Pure native projection completions
+bind actual host state, current whole-input authority, output, receipt and private
+checkpoint in one commit; historical duplicates never rewind newer state.
+Scheduled view rebuilds run a full computation oracle for every owned view and
+commit their results/manifests/cursor together. Private collection under an
+unchanged policy leaves replay epochs unchanged. See [the exact native profile](RETENTION.md)
+and [verification](VERIFICATION_022.md).
+
+This advances R04/R08/R12/R36. Receipt expiry, larger incremental collection,
+compiled/effectful actor reconstruction, lifecycle, source/portable bindings and
+all remaining original requirements stay mandatory. E01–E14 remain in progress;
+E15 is open. Historical verification totals below apply to their original profiles.
+
+## Coordinated accepted selection and history ranges (0.21 / store21)
+
+Canonical `AcceptedHistory` and named `RecordedRange`/`AcceptedRange` commands
+preserve actual local selection witnesses, including empty valid-time outputs.
+Current policy and whole-input authority still apply, and persisted results reject
+forged or missing witnesses. Existing0.20 artifacts remain compatible. Store21
+preserves original history and prevents old runtimes from dropping the new fields.
+
+The actual SDK/SystemClock history controller passes with8 compiler and15 runtime
+processes; the existing recorded pin/view controller passes with8/12. The complete
+source/peer/effect trace passes with214 runtime processes,12 compiler processes and
+22 controlled deaths. Independent composition, range and preflight rollback
+oracles pass. The development engine passes513 tests and strict lint/format;
+compiler passes198. Four populated store20 upgrades and a real old compiler/runtime
+journal upgrade pass. Archive and hosted evidence are recorded separately against
+their exact publication revisions. See [contract0.21](contract/v0.21/README.md).
+
+Accepted historical collection queries do not install a global clock or grant
+remote governance authority. Retention, lifecycle, broader incremental/transport,
+complete portable applications and the original assurance gates remain mandatory.
+
+# Implementation status and evidence
+
+## Native accepted-view history
+
+Native explicit decision/date/range selection now separates governed acceptance
+from source recording and replica receipt. Signed original ordering links and
+protected occurrence bodies are checked, current whole authority is retained,
+and persistent clock regression cannot publish an acceptance. Six independent
+oracles cover late acceptance, equal time/restart, half-open ranges/overflow,
+foreign/missing/future cuts, lost/corrupt intermediates and expired historical
+approvals versus current policy. See [ADR 0003](architecture/ADR-0003-accepted-view-history.md).
+
+The full workspace checkpoint passes 505 tests and strict lint/format. Aggregate
+range byte bounds are checked separately. The actual source-transfer trace passes
+with 214 runtime processes, 12 compiler processes and 22 controlled deaths. An
+independent eight-process compatibility controller starts with real prior store20
+governance, verifies unchanged original rows and lets the prior runtime read the
+original decision after a new acceptance. Canonical/source accepted-time and range selection, retention and all
+remaining original requirements stay mandatory; this is a native extension.
+
+## Coordinated recorded selection (protocol 0.20, store20)
+
+Canonical `RecordedQuery` now selects an actual replica-local checkpoint through
+`LocalTime` or explicit observer/checkpoint criteria. Query results preserve the
+selected observations through empty outputs, graph algebra, temporal selection and
+scalar derivation. Cached values revalidate these exact witnesses and their whole
+input snapshots under current authority. Source `recorded_handle` declarations are
+lazy; `pin` executes once, and view templates preserve the recorded criterion while
+their tick controls valid time. Pure handler recipes cannot hide these reads.
+
+Store20 preserves store19 history without adding baselines, and refuses to
+reconstruct a missing history table. Older stores retain the store19 current-time
+baseline migration. Capsule0.4 and historical0.19 artifacts remain compatible.
+The full original requirements remain mandatory: source ranges/accepted-view cuts,
+retention/GC, lifecycle, incremental execution, transport and broader assurance are
+still open. See [protocol 0.20](contract/v0.20/README.md) and [local verification](VERIFICATION_020.md).
+
+## Current snapshot
+
+The preceding implementation uses protocol0.19, SQLite marker19 and capsule0.4. It adds alternative influence on whole values, nodes and attachments, per-branch snapshot premises, and pure Window/Sequence graph operations. The language vendors the exact canonical contract from native freeze `a6adb94`. See [the current contract](contract/v0.19/README.md) and [joint verification](VERIFICATION_019.md).
+
+Store19 adds atomic replica-local branch observation checkpoints and bounded
+recorded-time query/range APIs. Migration keeps all original rows and establishes
+current-time baselines instead of inventing old acceptance dates. Native history
+selection follows authenticated predecessor records and checks current whole
+snapshot authority. See [ADR 0002](architecture/ADR-0002-recorded-head-observations.md).
+Source range/accepted-view selection, retention horizons and GC remain open.
+
+
+Local joint validation covers actual source compilation and persistent execution, native/WASM parity, authorization after detached persistence, six populated historical migration suites and sixteen real browser persistence/upgrade cases. Commit-specific hosted results are tracked separately; local results alone do not establish CI success. E00 is complete; E01–E14 remain in progress. These bounded profiles do not complete either paper. See [workflow gates](workflow.json) and [reconciled requirements](RECONCILIATION.md).
+
+The preceding public pair, engine `21c2728` and compiler `82a45f6`, passed all hosted checks at protocol0.18/store17. Those results describe that historical revision.
+
+The current native runtime includes genuine accepted-governance graph reads, a trusted operation clock, exact Query/Filter membership maintenance, and durable coalesced view scheduling. Earlier notes describing accepted graphs as unavailable or scheduling as unpublished apply only to their historical checkpoints.
+
+Protocol0.16 adds: exact accepted-occurrence expressions, definition-matched RequireCurrent view expressions, and separate canonical host registration artifacts. Source manifests persist through initial/full/incremental/fallback evaluation. SQLite marker14 protects compiled registration identity. The [0.16 contract](contract/v0.16/README.md) records the native boundary; paired compiler acceptance is now executed in integration CI.
+
+## Resumed source-backed native acceptance
+
+The recovered export repair and retained cluster implementation now have a combined
+actual compiler→offline evidence/rebind→sealed diagnostic→retained cluster→signed
+P/W/T exchange→team acceptance→unknown effect/reconciliation process trace. Both
+source variants preserve exact original SDK artifacts, old history and private
+reader gates. The journal preserves scoped Partial cluster coverage and checks
+whole exact inputs separately, before fresh and historical completion.
+See [native compiled acceptance](NATIVE_COMPILED_SCENARIO.md). This is unpublished
+local evidence; broader lifecycle/retention, history, incremental, transport and
+portable application requirements remain open.
+
+The same combined trace now passes in iOS26.4 simulator-target Rust processes.
+A separate [Swift facade app](SWIFT_HOST.md) passes actual source-backed offline
+edits, sealed diagnostic recovery and privacy in its own application container
+across 24 launches. These are distinct profiles; the app does not yet bind the
+cluster/peer/governance/effect services. Exact archived engine/compiler workspaces
+pass 480/191 checks respectively; no full paper gate or hosted result is inferred.
+
+## Published 0.18 boundaries and historical checkpoints
+
+Sealed pure handler artifacts and native immutable install/prepare/complete are published, with SQLite marker16. Exact event/preloaded input gates survive empty outputs and generated records. Output CAS, current authority and historical receipt replay are checked atomically; caller-built completion cannot bypass a compiled binding. Genuine historical0.16 and0.17 templates and signed receipts retain their original bytes through migration. Source/runtime joint verification and publication are complete for this bounded profile. See [contract](contract/v0.18/README.md) and [native handler profile](proposals/COMPILED_HANDLERS.md). This stage does not close complete reactor/effect semantics or a paper gate.
+
+The governed canonical graph effect bridge is published with SQLite marker17 and unchanged protocol0.18. Owner and independent authorization tests, the actual source-handler→governance→reference-sink trace and populated historical recovery passed, including hosted acceptance. No remote Execute capability, arbitrary destination, declassification or general exactly-once effect claim is made. See [the native bridge profile](proposals/GOVERNED_EFFECT_BRIDGE.md).
+
+Public0.17 introduced exact snapshot and movable-attachment influence, capsule0.3, and bounded shared mixed-proof traversal. Its native383-check historical full-suite checkpoint, independent populated migration, exact compiler vendoring and hosted CI are evidence for that revision, not a claim about the current0.18 candidate.
+
+## Implemented boundaries
+
+- Immutable SQLite snapshots/CAS, atomic logical batches, schema and structural identity, explicit assertion records, half-open fact time, principal-filtered pinned reads, graph-valued named metadata and provenance. Live handles pin explicitly; contextual traversal and metadata wrappers preserve source restrictions.
+- Portable graph algebra, four-valued time-specific support, finite range-restricted rules, exact context selection and typed axis witnesses, explanation graphs, canonical exact Decimal/nominal Quantity values, finite Float, and assertion-backed geometry. Richer semantics remain partial; see [contract history](contract/).
+- Persistent whole-value, node and assertion influence, alternative proof groups, current-policy checks on stored and generated values, and generic partial denial. Clearing reader lists does not remove retained source gates. See [influence](INFLUENCE.md).
+- Signed bounded native Query/Publish/Propose and exact whole-capsule export admission with durable replay receipts and isolated proposal quarantine. Mount lifecycle and explicit signed integration preserve separate acceptance and retention boundaries. No remote arbitrary-Program authority is implied. See [admission](ADMISSION.md), [signed export](SIGNED_CAPSULE_EXPORT.md) and [mounts](MOUNTS_AND_INTEGRATION.md).
+- Native accepted identity mappings and owner/threshold governance with signed approvals, predecessor-policy transitions, atomic CAS/receipts, genuine protected decision assertions and reusable acceptance influence. Current policy/source authority uses one trusted clock sample per storage operation, including historical decisions. See [governance graphs](GOVERNANCE_GRAPHS.md) and [operation clock](OPERATION_CLOCK.md).
+- Scoped durable adapter dispatch and typed governance delivery, leases/lifecycle/dead letters, atomic writes/receipts/checkpoints, and an explicit unknown external-effect fence. Historical duplicate receipts recheck authority; they are not new reads. See [dispatch](DISPATCH.md) and [governance delivery](GOVERNANCE_DELIVERY.md).
+- Durable principal-scoped views with full recomputation oracle, explicit freshness/ticks and retractions. Opt-in Query/Filter membership maintenance reuses predicate decisions; whole snapshot loading, hashing/index rebuilding and output repinning remain O(input)/O(output). Durable bounded scans coalesce work; failed work rotates fairly and publication/checkpoint commits atomically. No background thread or general incremental operator engine is claimed. See [selection](INCREMENTAL_SELECTION.md) and [scheduling](VIEW_SCHEDULING.md).
+- Hash-verified capsules with whole authorized logical-manifest transport, isolated receive and explicit acceptance, ancestry/equivocation checks, and current authorization on export/reuse. Selective proofs and generic remote authority installation remain unsupported. See [capsules](CAPSULES.md).
+- Portable clustering core, authorized native navigation and historical lineage, with explicit overlapping perspectives and measured synthetic quality/churn boundaries. Incremental clustering/hysteresis and broader recall acceptance remain open. See [cluster service](CLUSTER_SERVICE.md).
+- Transactional migrations, bounded stored reads, integrity checking and SQLite backup/recovery. Native C/Swift hosts execute macOS and iOS-simulator persistence. Nine fixed portable semantic groups execute natively and in WASM with identical bytes at the resumed archive checkpoint. The separately published experimental browser host persists bounded whole-image generations through IndexedDB under one worker and an exclusive Web Lock. Its historical failure/abort/quota/reload matrix passed, but it remains an 8 MiB fixed-scenario host rather than full portable paper acceptance. Facade A and its Swift wrapper add a generic principal-bound Program/diagnostic artifact boundary; complete browser/mobile scenario service bindings remain unfinished. See [storage](STORAGE_RECOVERY.md), [native host](NATIVE_HOST.md), [Swift host](SWIFT_HOST.md) and [portable parity](PORTABLE_PARITY.md).
+
+## Verification and remaining work
+
+The public marker13 checkpoint includes focused independent selection/scheduler oracle tests, queued-tick freshness regressions, actual scheduler process-death recovery, and marker12→13 death/restart/old-binary refusal. Native workspace tests, strict lint, compiler integration and fuzz CI passed at public `7de6839`. Historical suite totals in linked milestone reports apply to those exact revisions; they are not current cumulative verification counts. Small local measurements separate membership counters from end-to-end costs and make no speedup or production SLO claim.
+
+Required work remains across broader structural/assertion typing and algebra, graph-backed numeric conversions, richer context compatibility, full governance and permission topology semantics, authenticated peer synchronization and selective transport, complete reactor/source effects, generalized incremental evaluation, clustering quality/incremental maintenance, generic persistent browser scenario bindings, mobile/platform breadth and complete integrated multi-peer paper acceptance. The existing native three-process trace now covers offline evidence/reaction/conflict/governance/effect fencing, including signed whole-capsule exchange; it leaves broader transport, release and reactor semantics open. Local administration APIs remain trusted embedding-host operations. System history selects exact revisions; general system-time range queries remain open. Serialized budgets are not measured RSS isolation.
+
+N-ary relations and reward-based traversal learning are optional in the papers. NAT/rendezvous services are optional operational infrastructure; their absence alone does not prevent a direct reference peer transport from satisfying its scoped acceptance.
+
+Protocol0.16 native8d359df passed344 workspace test/doctest checks, strict all-target/all-feature lint/fmt and contract WASM compilation. Root independently passed seven compiled-view/binding tests, actual compiler-to-host acceptance, schema13-to14 process-death rollback/restart/refusal, exact26-file canonical vendor equality and source native/WASM parity. The compiler freeze25b1da8 passed134 tests and a locked/offline source-archive build; its21 historical example plans/source identities remain unchanged except the declared protocol version. Hosted results are recorded in the public issues after completion. No full gate is closed by this bounded checkpoint.

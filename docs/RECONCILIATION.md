@@ -1,5 +1,10 @@
 # Original paper reconciliation
 
+This document tracks the broader original requirements and historical bounded
+profiles. The delivered [native experiment profile](NATIVE_SCIENCE_PLAN.md) has a
+separate completion contract. Use [STATUS.md](STATUS.md) for current versions and
+evidence; references to "next" work below retain their original roadmap context.
+
 Original source-recovery baseline: engine `283d4fb`; papers dated11 September2026, supplied19 September2026. The current native causal dispatch extension uses protocol0.21 and store29; historical evidence remains tied to its stated revision. `docs/source/manifest.json` authenticates copied paper bytes, not scientific validity. All source sections below remain requirements unless the papers explicitly label them optional/research. Implemented subsets do not close full gates.
 
 | Paper section | Requirement | Current bounded evidence and remaining gap | Gate |
@@ -31,7 +36,7 @@ Original source-recovery baseline: engine `283d4fb`; papers dated11 September202
 | Engine 13.2 | Reward-based traversal learning | Explicit optional experimental extension, outside core completion | optional |
 | Language 2 | N-ary relation form | Explicitly optional; ordinary first-class edges are required, n-ary syntax is not a core blocker | optional |
 
-## Next reviewed work
+## Historical reviewed work
 
 The published native [governed effect bridge](proposals/GOVERNED_EFFECT_BRIDGE.md) implements an explicit execution grant, real governance-delivery input, atomic intent/acknowledgment and guarded reference-sink dispatch while preserving unknown outcomes. Its source-backed trace runs one compiler process and36 native processes, including actual process deaths; the separate native-template mode does not attest compiler integration. Protocol0.18 is unchanged; store17 protects the new guard registry. General lifecycle cancellation/retention, isolation, remote capabilities and complete paper conformance remain separate requirements.
 

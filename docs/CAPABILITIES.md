@@ -1,6 +1,10 @@
 # Signed capability admission foundation
 
-`crates/weave-policy` is a portable verifier. It is not yet wired into engine reads, metadata traversal, adapter installation, capsule receipt, or graph mutation. The existing `HostContext` remains a trusted local embedding API. This milestone does not make it a remote authentication boundary or close E04/E09.
+`crates/weave-policy` is a portable verifier. This document describes its initial
+foundation; the later [signed per-operation admission bridge](ADMISSION.md)
+connects it to bounded native query, publish and proposal operations. Generic
+Programs, science requests and `HostContext` remain trusted local APIs. Neither
+profile supplies a remote authentication service or closes E04/E09.
 
 A host installs scoped root authorities, an audience, current policy revisions, a policy epoch, a trusted clock and revocation state out of band. Neither a graph, a signed token nor an executable plan can install these values. Actions are distinct: discover, read, traverse, propose, publish and delegate. Scope is an exact graph/branch pair; there are no wildcard expansions. All action and time constraints are checked again at admission.
 

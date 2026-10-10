@@ -1,259 +1,353 @@
-# Python experiments with the native engine
+# Python experiments with Weave
 
-The `weave_science` package gives notebooks and scripts access to the existing
-Weave engine and the native science algorithms. It needs no Python dependencies
-for import, query, analysis or export. The native process owns persistence,
-revision assignment, temporal semantics, authorization and computation.
+Use `weave_science` from scripts or notebooks to import datasets, query immutable
+revisions, compare temporal graphs and run native graph/vector analyses. The
+Python package has no required runtime dependencies. Rust performs persistence,
+authorization, temporal selection and analysis.
 
-## Install and run
+For identity, time and policy terminology, see [Science concepts](SCIENCE_CONCEPTS.md).
+For the JSON protocol and algorithm output schemas, see [Native science interface](SCIENCE_INTERFACE.md).
 
-From a clean repository checkout with a Rust toolchain and Python 3.10 or newer:
+## Install
+
+Run these commands from the repository root. Building from source requires a Rust
+and native compiler toolchain; Python requires version 3.10 or newer. Use a virtual
+environment so installation also works with externally managed system Python.
+
+macOS or Linux:
 
 ```sh
-cargo build --release -p weave-science
+cargo build --release --locked -p weave-science
 python3 -m venv .venv
 .venv/bin/python -m pip install ./python
 export WEAVE_SCIENCE_BINARY="$PWD/target/release/weave-science"
 .venv/bin/python examples/science/temporal_vectors.py --output experiment-output
 ```
 
-On Windows, use `py -m venv .venv`, `.venv\Scripts\python.exe`, and
-`$env:WEAVE_SCIENCE_BINARY = "$PWD\target\release\weave-science.exe"` in PowerShell.
-An already built native binary needs no Rust toolchain to run. Pass its path as
-`Engine(..., binary="...")` or put `weave-science` on `PATH`. Editable source
-installs also discover an existing repository `target/release` or `target/debug`
-binary. The client never builds the engine implicitly.
+Windows PowerShell:
 
-The example creates a persistent database, imports four vector-bearing nodes,
-compares temporal connectivity before and after a late correction, retrieves
-exact cosine neighbors, computes PageRank, exports tables, and replays the old
-experiment after reopening the database. Its vectors are fixed toy coordinates
-in a named space. Supply vectors from your own model for an embedding experiment.
-Use a new output directory on each run.
+```powershell
+cargo build --release --locked -p weave-science
+py -3 -m venv .venv
+.venv\Scripts\python.exe -m pip install ./python
+$env:WEAVE_SCIENCE_BINARY = "$PWD\target\release\weave-science.exe"
+.venv\Scripts\python.exe examples/science/temporal_vectors.py --output experiment-output
+```
 
-## Import, correct and read a dataset
+Use a fresh output directory for each example run. The script creates a SQLite
+database, corrects a temporal graph, searches fixed toy vectors, computes
+PageRank, exports tables and replays an earlier experiment. Inspect its
+`report.json`, `before.json` and `after.json` files.
+
+With an already built binary, omit the Cargo step and set `WEAVE_SCIENCE_BINARY`
+to its executable path. Alternatively pass `binary=...` to `Engine` or put
+`weave-science` on `PATH`. Editable source installs can discover a repository
+`target/release` or `target/debug` binary. The client never builds it implicitly.
+No compiler, network service or browser is required during an experiment.
+
+## A complete experiment
+
+Run the following Python blocks in order, as notebook cells or one script. The
+first block creates a new temporary workspace, so restarting the experiment does
+not overwrite an existing database. To keep your own datasets, replace `work`
+with an existing project directory.
 
 ```python
+import tempfile
+import time
+from pathlib import Path
 from weave_science import Engine, node, edge, query
 
-engine = Engine("experiment.sqlite", actor="scientist", write_graphs=["observations"])
+work = Path(tempfile.mkdtemp(prefix="weave-experiment-"))
+engine = Engine(work / "experiment.sqlite", actor="scientist",
+                write_graphs=["observations"])
 nodes = [
-    node("a", entity_id="person-A", space_id="semantic-model-v1", vector=[1.0, 0.0]),
-    node("b", entity_id="person-B", space_id="semantic-model-v1", vector=[0.8, 0.2]),
-    node("c", entity_id="person-C", space_id="semantic-model-v1", vector=[0.0, 1.0]),
+    node("a", entity_id="person-A", space_id="model-v1", vector=[1.0, 0.0]),
+    node("b", entity_id="person-B", space_id="model-v1", vector=[0.8, 0.2]),
+    node("c", entity_id="person-C", space_id="model-v1", vector=[0.0, 1.0]),
+    node("d", entity_id="person-D", space_id="model-v1", vector=[-1.0, 0.0]),
 ]
-edges = [edge("ab", "a", "b", predicate="collaborates", valid_from=0, valid_to=10)]
+edges = [
+    edge("ab", "a", "b", predicate="links", valid_from=0, valid_to=10),
+    edge("bc", "b", "c", predicate="links", valid_from=0, valid_to=20),
+]
 first = engine.import_graph("observations", nodes=nodes, edges=edges)
 old = engine.query("observations", revision=first.revision)
+recorded = engine.recorded_query("observations",
+                                 recorded_at_ms=time.time_ns() // 1_000_000)
+print(work)
+print(first.revision)
+```
 
-# This is a full replacement snapshot under compare-and-swap revision control.
+Node `id` names a manifestation; `entity_id` names the entity and `space_id` names
+its space. Distinct manifestations can share an entity ID. Vector similarity does
+not merge identities. The example's vectors are supplied coordinates in one named
+space; Weave does not generate embeddings. `write_graphs` grants this trusted local
+host write access only to `observations`; request JSON does not add grants.
+
+Valid time describes when a relationship holds in your dataset. These intervals
+are half-open: `ab` holds at time 9 and expires at time 10. The contract uses signed
+64-bit Unix-epoch milliseconds; these are small toy millisecond values, and
+`valid_to=None` means unbounded. The engine compares integers without inferring
+units or parsing dates. See [time conventions](SCIENCE_CONCEPTS.md#valid-time-and-recorded-knowledge)
+for abstract experimental axes. Recorded time describes what this replica knew
+at a system-assigned observation, also in Unix milliseconds. It is a separate axis.
+
+Now make a late correction and measure its effect at valid time 8:
+
+```python
+before = engine.analyze(old, algorithm="components", mode="weak", valid_at=8)
 edges[0]["valid_time"]["end"] = 6
 second = engine.import_graph("observations", nodes=nodes, edges=edges,
                              expected_head=first.revision)
-new = engine.query("observations", revision=second.revision)
-assert old.snapshots != new.snapshots
+current = engine.query("observations", revision=second.revision)
+after = engine.analyze(current, algorithm="components", mode="weak", valid_at=8)
+assert before.analysis["components"] == [["a", "b", "c"], ["d"]]
+assert after.analysis["components"] == [["a"], ["b", "c"], ["d"]]
 assert engine.query("observations", revision=first.revision).graph == old.graph
 ```
 
-`expected_head=None` creates a new branch. Updating requires the current revision;
-a stale revision rejects instead of overwriting concurrent work. A successful
-import returns `CommitReceipt(revision, event_id, changed, raw)`. Reimporting an
-unchanged snapshot with the correct expected head returns an unchanged receipt.
-The previous immutable snapshot remains available.
+Import commits a **full replacement snapshot**, not a row append or partial patch.
+`expected_head=None` creates a new branch; updating an existing branch requires
+its current revision. This compare-and-swap (CAS) check rejects stale writes with
+`NativeError`, preserving concurrent changes. An unchanged snapshot with the
+correct head returns `changed=False`. The old immutable revision remains queryable.
+Node/edge helpers copy their inputs; editing `edges` above does not edit `old`.
 
-Node `id` is a manifestation ID; `entity_id` is stable semantic identity and
-`space_id` names the space. Supply different manifestation IDs for the same entity
-in different spaces. Equal vectors do not merge entities. Edge IDs remain stable
-assertion IDs. Metadata references, reader restrictions and other existing
-contract fields can be passed through `node`, `edge` and `graph_data`, or supplied
-as an ordinary `GraphData` dictionary to `import_graph(graph_id, data)`.
-
-Time is a signed 64-bit integer in the dataset's declared unit. Edge intervals are
-half-open `[start, end)`; `end=None` is unbounded. Valid time is supplied by the
-dataset. Recorded time and revisions are assigned by the engine. The database
-parent directory must exist. The SDK requires a persistent path because each
-operation opens a native process; `:memory:` would lose state between calls.
-
-## Native analyses
+Run additional analyses against the old snapshot:
 
 ```python
-connected = engine.analyze(old, algorithm="components", mode="weak", valid_at=8)
 degree = engine.analyze(old, algorithm="degree", valid_at=8)
-paths = engine.analyze(old, algorithm="shortest_paths", source="a", directed=True,
-                       valid_at=8)
-rank = engine.analyze(old, algorithm="pagerank", damping=0.85, tolerance=1e-10,
-                      max_iterations=200, valid_at=8)
-neighbors = engine.nearest(old, [1.0, 0.0], space_id="semantic-model-v1",
-                           property="vector", metric="cosine", k=3)
-print(connected.analysis)
-print(neighbors.analysis)
-print(rank.semantics)
+paths = engine.analyze(old, algorithm="shortest_paths", source="a", valid_at=8)
+rank = engine.analyze(old, algorithm="pagerank", valid_at=8,
+                      damping=0.85, tolerance=1e-10, max_iterations=200)
+neighbors = engine.nearest(old, [1.0, 0.0], space_id="model-v1",
+                           metric="cosine", k=3)
+assert [row["id"] for row in neighbors.analysis["neighbors"]] == ["a", "b", "c"]
+assert rank.analysis["converged"]
+print(degree.analysis)
+print(paths.analysis)
 ```
 
-`analyze` accepts a graph ID, existing graph expression, read-only Program or
-`QueryResult`. A result is re-read through the engine with exact pinned inputs
-and current authorization. An analysis returns `AnalysisResult.input` (the full
-authorized `QueryResult`), `.analysis` (the computed output), and `.semantics`.
-`Engine.capabilities()` reports supported algorithms, versions, conventions and
-finite resource budgets. Pass `limits={...}` to analysis for lower workload budgets.
+Analyses use positive directed multigraph topology: parallel assertions count
+separately and self-loops remain. Shortest paths count hops; PageRank weights
+transitions by edge multiplicity and reports convergence. Negative assertions
+remain in the query envelope but are excluded from positive topology. Exact
+vector search uses one explicit space and consistent numeric dimensions, with
+cosine or Euclidean distance. Undefined cosine vectors reject.
 
-Degree, weak/strong components, unweighted shortest paths and PageRank use positive
-directed multigraph topology. Parallel assertions and self-loops are retained.
-PageRank counts edge multiplicity and reports convergence; it does not claim that
-an unconverged iterate is a converged answer. Negative assertions remain in the
-input envelope and are excluded from positive topology. Nearest-neighbor search
-is exhaustive in one explicitly named space, using cosine or Euclidean distance.
-It requires consistent numeric dimensions and rejects undefined cosine vectors.
-It does not generate embeddings or infer a cross-space mapping.
-
-Use an unfiltered query plus `analysis.valid_at` for a fixed-time topology
-experiment that retains isolated nodes. A core `query(..., valid_at=8)` returns
+For topology statistics that retain isolated nodes, query the unfiltered graph
+and set **analysis** `valid_at`, as above. `engine.query(..., valid_at=8)` selects
 matching edge endpoints and can omit isolates. Without analysis time, topology
-uses the interval union; relationships from different times may coexist in that
-union. This is useful for historical connectivity but is not simultaneous state.
+uses the interval union, which can combine relationships from different times.
+Partial inputs reject unless you deliberately set `allow_partial=True`; this
+preserves partial coverage and diagnostics in the input envelope.
 
-Partial coverage rejects by default. Set `allow_partial=True` deliberately to
-compute from available inputs; `.input.coverage` and diagnostics remain partial.
-An empty graph, denied topology and an unavailable dependency have different
-engine meanings.
+## Temporal joins and recorded history
 
-## Temporal joins and the existing engine algebra
-
-The SDK exposes the existing engine contract directly, so graph-valued metadata,
-temporal joins, history, rule evaluation, clustering and geometry do not need a
-new Python implementation. Convenience builders create JSON expressions:
+Join the two-hop path in the same pinned graph, then recover the observation
+captured before the correction:
 
 ```python
-from weave_science import join, union, diff, window, explain, recorded_query
+from weave_science import join, diff, window, explain
 
-# Both inputs are pinned; join uses entity-and-space endpoint matching.
-derived = engine.evaluate(join(query("left", revision="LEFT_REVISION"),
-                               query("right", revision="RIGHT_REVISION"),
-                               output_predicate="connected_through"))
+pinned = query("observations", revision=first.revision, predicate="links")
+derived = engine.evaluate(join(pinned, pinned, output_predicate="two_hops"))
+assert len(derived.edges) == 1
+assert {n["entity_id"] for n in derived.nodes} == {"person-A", "person-C"}
+
+witness = recorded.raw["recorded_observations"][0]
+known_before = engine.recorded_query("observations", observer=witness["observer"],
+                                     checkpoint=witness["checkpoint"], valid_at=8)
+assert known_before.snapshots["observations"] == first.revision
+assert len(known_before.edges) == 2
+
 change = engine.evaluate(diff(query("observations", revision=first.revision),
                               query("observations", revision=second.revision)))
-interval = engine.evaluate(window(query("observations", revision=first.revision), 2, 9))
-proof = engine.evaluate(explain(query("observations", revision=first.revision)))
-
-# Recorded time is a replica-local history cut, distinct from edge valid time.
-historical = engine.evaluate(recorded_query("observations", recorded_at_ms=RECORDED_MILLIS))
+interval = engine.evaluate(window(pinned, 2, 9))
+proof = engine.evaluate(explain(pinned))
 ```
 
-Pass any existing graph-expression dictionary to `evaluate`, or any existing
-versioned Program to `execute`. `execute` returns `{"results": [...]}` in native
-command order. `evaluate` accepts read-only Programs and selects a query result by
-`result_index`; use `execute` for commits. For a full Program, analysis also selects
-the result by `result_index`. Service expressions such as accepted history,
-clustering and geometry use their existing native installed-state and selector
-requirements; passing a JSON reference grants no authority. See the contract
-types and [native interface](SCIENCE_INTERFACE.md) for those schemas.
+Joins match entity-and-space endpoints and enforce temporal compatibility. Derived
+manifestations have new IDs; inspect their `entity_id` and provenance to identify
+source entities. `diff` produces a source-aware graph difference with membership
+metadata, rather than a table-cell patch. Different source revisions can give
+otherwise equal records different provenance-bearing carriers.
 
-## Tables, CSV and optional packages
+`evaluate` accepts an existing graph-expression dictionary or read-only Program
+and returns its query result. `execute` accepts the full versioned JSON Program,
+including authorized commits, and returns ordered `{"results": [...]}`. Select
+query/analysis outputs with `result_index` when a Program has several results.
+Rule, metadata, accepted-history, clustering and geometry expressions retain their
+existing native selector and installed-state requirements; see the
+[native interface](SCIENCE_INTERFACE.md).
 
-`import_graph(..., nodes=records, edges=records)` accepts ordinary dictionaries or
-engine-shaped pandas frames. The schema is explicit: nodes need `id`, `entity_id`
-and `space_id`; edges need `id`, `predicate`, `from`, `to` and `valid_time`.
-Nested `properties`, `metadata` and `readers` retain their JSON types.
+## Results, exports and replay
 
-For an arbitrary CSV table, choose conversion types and map its columns explicitly:
+A `QueryResult` returned by `Engine` carries both the native envelope and the SDK
+request context needed for reuse. These are the main inspection fields:
 
-```python
-from weave_science import read_csv
+| Field | Meaning |
+|---|---|
+| `graph`, `nodes`, `edges` | Copies of the selected authorized records |
+| `coverage`, `diagnostics` | Complete/partial status and structured explanations |
+| `provenance` | Source assertion references |
+| `snapshots` | Graph-ID-to-revision map; use `raw["input_snapshots"]` for all pins, including several revisions of one graph |
+| `raw` | Full native result, including metadata graphs and history witnesses |
+| `pinned_program` | Source Program with unambiguous query inputs pinned to their observed revisions |
 
-rows = read_csv("measurements.csv", json_columns=["vector"], integer_columns=["sample_time"])
-manifestations = [node(row["id"], entity_id=row["entity"], space_id="model-v2",
-                      vector=row["vector"], properties={"sample_time": row["sample_time"]})
-                  for row in rows]
-engine.import_graph("measurements", nodes=manifestations)  # grant this graph at Engine construction
-```
-
-`Engine.import_csv(graph_id, nodes_path, edges_path, node_options=..., edge_options=...)`
-imports engine-shaped CSVs using the same typed reader. JSON columns must be
-declared, for example `node_options={"json_columns": ["properties", "readers"]}`
-and `edge_options={"json_columns": ["valid_time", "properties", "readers"]}`.
-Empty typed cells become `None`. Unspecified columns remain strings; the reader
-rejects duplicate headers, inconsistent row widths and non-finite numbers.
-
-```python
-old.export_json("authorized-result.json")                # full envelope
-old.export_json("snapshot.json", graph_only=True)        # importable GraphData
-node_csv, edge_csv = old.export_csv("authorized-tables")  # nested cells contain JSON
-```
-
-CSV exports contain node/edge records. Keep the JSON envelope beside them for
-provenance, coverage, metadata graphs, snapshots and lossless scalar types. CSV
-requires an explicit schema; null and empty text share a blank cell. For notebook conversion,
-install `pip install './python[tables]'` and call `old.to_pandas()`. For an
-independent graph oracle, install `pip install './python[networkx]'` and call
-`old.to_networkx()`. The NetworkX export is a `MultiDiGraph` keyed by manifestation
-and edge IDs, excluding negative assertions by default. These optional exports
-operate on already authorized data.
-
-## Reproducible records and replay
+`AnalysisResult` provides `.input` (the selected `QueryResult`), `.analysis` (metrics)
+and `.semantics` (algorithm conventions). Analyzing a prior result re-reads its
+pinned Program through current authorization and checks that the selected input
+has not changed.
 
 ```python
 from weave_science import Experiment
 
-record = connected.save_experiment("trial.json", label="connectivity at t=8",
-                                    parameters={"dataset": "measurements-v2", "seed": 17})
-reopened = Engine("experiment.sqlite", actor="scientist")
-replayed = Experiment.load("trial.json").replay(reopened)
-assert replayed.analysis == connected.analysis
+old.export_json(work / "authorized-result.json")
+old.export_json(work / "snapshot.json", graph_only=True)
+node_csv, edge_csv = old.export_csv(work / "tables")
+record = before.save_experiment(work / "trial.json", label="connectivity at t=8",
+                                parameters={"dataset": "toy-model-v1", "seed": 17})
+reopened = Engine(work / "experiment.sqlite", actor="scientist")
+replayed = Experiment.load(work / "trial.json").replay(reopened)
+assert replayed.analysis == before.analysis
 ```
 
-Artifacts include the original request, exact selected snapshot vector, full
-authorized result, algorithm configuration/semantics, caller parameters, actor,
-SDK/science/contract versions and the native executable's SHA-256. The JSON record
-has its own integrity hash. Saving fixes unambiguous live query inputs to the
-revisions observed by that successful result. Recorded-time reads pin their actual
-checkpoint witness. A later head change cannot silently change those inputs.
+The result JSON preserves the native envelope; graph-only JSON is an importable
+`GraphData` snapshot. Neither contains the complete SDK request context. For
+replay, use `save_experiment` and `Experiment.load`, rather than constructing a
+new `QueryResult` from exported JSON. Artifacts store the original request,
+algorithm configuration/semantics, exact input pins, full result, actor, versions,
+executable SHA-256 and caller parameters. The example's seed is a recorded caller
+parameter; these native algorithms do not consume a random seed.
 
-Exact replay requires the same actor, protocol versions and native executable by
-default. To compare native builds deliberately, use
-`record.replay(engine, require_same_binary=False)`; retain a new experiment record
-for the comparison. The same database must still retain the referenced revisions
-and dependencies. Current policy is rechecked; artifacts never restore authority.
-Binary replacement during an `Engine` session rejects; create a new session after
-a rebuild so its executable identity is accurate.
+Replay requires the same actor, supported protocol versions and binary by default,
+and retained revisions/dependencies in the database. It verifies the full current
+authorized input against the record. A different returned input raises
+`ReproducibilityError`; current policy may instead reject the read with a native
+error before comparison. Pinning a root revision cannot freeze a live metadata
+attachment. Use pinned metadata references when later changes must not affect
+your experiment.
 
-Pinning a root revision cannot freeze a live metadata attachment. Replay compares
-the complete current authorized input envelope with the recorded input, including
-graph values, dependencies, provenance and coverage. A changed live metadata head
-or changed current policy raises `ReproducibilityError` instead of claiming an
-exact reproduction. Analysis of a prior `QueryResult` performs the same check.
-Use pinned metadata references for experiments that must survive later head changes.
+For a deliberate build comparison, call `record.replay(engine,
+require_same_binary=False)` and save a new result record. This relaxes the binary
+check, not the protocol or input checks. Replay verifies the selected input; compare
+returned metrics explicitly, as the assertion above does. Floating-point results
+from different platforms/builds should be compared with suitable tolerances.
 
-Ambiguous unpinned revisions, mutating Programs and runtime service/view expressions
-whose complete immutable selection is not verified remain recordable but have
-`replay_request=None` with an explicit reason. They are never advertised as exact
-replays. Raw graph exports and scalar analysis outputs do not themselves carry
-write/read grants or establish a distributed atomic snapshot.
+Ambiguous unpinned inputs and service/view expressions whose complete immutable
+selection is not verified are saved with `replay_request=None` and an explicit
+reason. Such records cannot be replayed automatically. Mutating replay requests
+reject before execution, even in externally supplied artifacts with recomputed
+hashes. The artifact hash detects edits; it is not an authorship signature or an
+access grant. Rebuilding/replacing the binary requires a new `Engine` instance.
 
-## Errors and verification
+## CSV and optional notebook libraries
 
-`NativeError.code`, `.message` and `.envelope` preserve native rejection details.
-`QueryResult.diagnostics`, `.coverage` and `.provenance` preserve the result's
-semantic evidence. `ProtocolError` identifies malformed or unsupported protocol
-responses. `ReproducibilityError` reports input drift. Replays reject mutating
-Programs before launching the engine, including externally supplied artifacts
-with recomputed hashes. The client supports native science0.1.0/contract0.21.0 explicitly.
+The SDK accepts engine-shaped dictionaries or pandas frames through
+`import_graph(..., nodes=..., edges=...)`. For an arbitrary source table, specify
+CSV types and map its columns to the graph schema. This example is self-contained:
 
-The subprocess timeout is finite and configurable with `Engine(..., timeout=60)`.
-On `OperationTimeout`, a mutating operation's `.commit_status` is `"unknown"`;
-no automatic retry occurs. Check durable graph state before retrying. Native
-execution can also report an output budget failure after committing; preserve
-that distinction when processing `NativeError`. Each call checks the native
-response against `max_response_bytes` after reception; native resource/output
-budgets govern computation.
+```python
+import csv
+import tempfile
+from pathlib import Path
+from weave_science import Engine, read_csv, node
 
-Run the dependency-free Python tests against the installed package and binary:
+csv_work = Path(tempfile.mkdtemp(prefix="weave-csv-"))
+source = csv_work / "measurements.csv"
+with source.open("w", newline="", encoding="utf-8") as stream:
+    writer = csv.writer(stream)
+    writer.writerow(["id", "entity", "vector", "sample_time"])
+    writer.writerow(["m1", "sensor-A", "[1.0, 2.0]", 5])
+rows = read_csv(source, json_columns=["vector"], integer_columns=["sample_time"])
+manifestations = [node(row["id"], entity_id=row["entity"], space_id="model-v2",
+                      vector=row["vector"], properties={"sample_time": row["sample_time"]})
+                  for row in rows]
+csv_engine = Engine(csv_work / "measurements.sqlite", actor="scientist",
+                    write_graphs=["measurements"])
+csv_engine.import_graph("measurements", nodes=manifestations)
+assert csv_engine.query("measurements").nodes[0]["properties"]["sample_time"] == 5
+```
+
+Engine-shaped CSVs can use `Engine.import_csv(graph_id, nodes_path, edges_path,
+node_options=..., edge_options=...)`. Declare every JSON-valued column, such as
+node `properties`/`readers` and edge `valid_time`/`properties`/`readers`, in
+`{"json_columns": [...]}`. Nodes require `id`, `entity_id`, `space_id`; edges require
+`id`, `predicate`, `from`, `to`, `valid_time`. Unspecified CSV columns remain strings;
+empty typed cells become `None`. CSV exports need an explicit column schema and
+cannot distinguish null from empty text. Keep the full JSON for lossless types,
+metadata, provenance and coverage. Duplicate headers, malformed rows and
+non-finite numeric conversions reject.
+
+For optional pandas/NetworkX interop, install `./python[tables,networkx]` using your
+virtual environment's `python -m pip`. `result.to_pandas()` returns node and edge
+frames. `result.to_networkx()` returns an authorized `MultiDiGraph` with manifestation
+and edge IDs; it excludes negative assertions by default. Supply engine-shaped
+records on reimport, including nested JSON fields; flattening a frame is not an
+implicit schema conversion.
+
+## Notebook setup
+
+Use the same virtual environment for the SDK and notebook kernel. From the
+repository root on macOS/Linux:
 
 ```sh
-WEAVE_SCIENCE_BINARY="$PWD/target/release/weave-science" .venv/bin/python -m unittest discover -s python/tests -v
+.venv/bin/python -m pip install ipykernel
+.venv/bin/python -m ipykernel install --user --name weave-science --display-name "Weave Science"
 ```
 
-The native integration cases verify import/correction/CAS, old snapshots after
-reopen, exact artifact replay and hidden vector/topology boundaries. SDK tests
-also exercise protocol errors, uncertain timeouts, typed CSV ingestion, stable
-input objects and replay pinning. The independent scientific acceptance suite is
-described in [SCIENCE_VALIDATION.md](SCIENCE_VALIDATION.md).
+On Windows replace `.venv/bin/python` with `.venv\Scripts\python.exe`. Select
+**Weave Science** as the notebook kernel. Set `WEAVE_SCIENCE_BINARY` before launching
+your notebook process, or pass an absolute `binary=` path to `Engine`. A notebook
+launched from an existing app may not inherit your terminal's environment.
+
+Check the active interpreter, then run the complete experiment's Python cells:
+
+```python
+import sys
+import weave_science
+print(sys.executable)
+print(weave_science.__file__)
+```
+
+Notebook cells share variables. Rerun the first experiment cell to get a new
+database; rerunning only its import line against an existing branch will fail CAS.
+The database parent must exist. Each call opens a native subprocess, so the SDK
+requires a persistent database path and rejects `:memory:`.
+
+## API, errors and verification
+
+| Operation | Typical use |
+|---|---|
+| `import_graph(graph_id, data, expected_head=...)` | Commit a full native `GraphData`; alternatively provide `nodes` and `edges` |
+| `query(graph_id, revision=..., valid_at=..., predicate=...)` | Select graph records; `from_id`, `to_id`, metadata depth and branch selectors are also supported |
+| `recorded_query(graph_id, recorded_at_ms=...)` | Select a replica-local recorded-time cut, or use `observer` plus `checkpoint` |
+| `analyze(value, algorithm=..., **parameters)` | Analyze a graph ID, expression, read-only Program or returned `QueryResult` |
+| `nearest(value, vector, space_id=..., metric=..., k=...)` | Exact vector search, using property `vector` by default |
+| `capabilities()` | Inspect supported algorithms, semantics and native budgets |
+
+`NativeError` preserves `.code`, `.message` and `.envelope`; use the code rather
+than parsing error text. `ProtocolError` rejects malformed/unsupported responses.
+The client supports science0.1.0 and contract0.21.0 explicitly. `ValueError` covers
+invalid helper inputs and unavailable replay selections; `FileNotFoundError`
+identifies a missing native executable.
+
+The default subprocess timeout is 30 seconds; configure `Engine(..., timeout=60)`
+for longer workloads. `OperationTimeout.commit_status` is `"unknown"` for imports
+and arbitrary execution. It is `"read_only"` for analysis. No retry occurs: inspect
+durable state before retrying a mutation. Native output-budget errors can also
+occur after a commit. `limits={...}` sets finite native analysis budgets;
+`max_response_bytes` checks the response size after reception rather than isolating
+native memory usage. See the [native interface](SCIENCE_INTERFACE.md) for these boundaries.
+
+Run installed-client tests with the configured binary:
+
+```sh
+.venv/bin/python -m unittest discover -s python/tests -v
+```
+
+Set `WEAVE_SCIENCE_BINARY` to enable native integration cases; otherwise those
+cases are skipped. See [Scientific validation](SCIENCE_VALIDATION.md) for independent
+algorithm oracles and measured workloads.
