@@ -83,7 +83,7 @@ refusal. See [verification](VERIFICATION_023.md).
 ## Source-compiled pure stateless version transfer
 
 `compiled_migration_inputs_for` captures the actual registered sealed artifact,
-current authorized input/metadata closure, opaque replay epoch and semantic
+explicit primary input revision and current authorized metadata closure, opaque replay epoch and semantic
 checkpoint binding. Private unrelated scan coordinates never appear in public
 inputs. `migrate_compiled_handler_for` requires current owner/output authority,
 a paused/drained source without pending or unresolved effects, and a current

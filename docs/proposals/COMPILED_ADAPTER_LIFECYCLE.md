@@ -13,7 +13,7 @@ owner/output authority are explicit. Installation, private checkpoint transfer,
 old-version retirement and immutable audit receipt commit together. Existing
 outputs, preparations and completed receipts remain byte-for-byte historical.
 
-The transfer captures actual current authorized input/metadata closure and actual
+The transfer captures actual explicit primary input revision and current authorized metadata closure and actual
 registered artifact identity, not a caller's claim about either. Public bindings
 exclude private event coordinates. A later duplicate returns its original receipt
 without resetting a checkpoint advanced by new work. Rollback restores the prior
