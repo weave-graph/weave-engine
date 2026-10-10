@@ -1,6 +1,6 @@
 # Original paper reconciliation
 
-Original source-recovery baseline: engine `283d4fb`; papers dated11 September2026, supplied19 September2026. The current native lifecycle extension uses protocol0.21 and store25; historical evidence remains tied to its stated revision. `docs/source/manifest.json` authenticates copied paper bytes, not scientific validity. All source sections below remain requirements unless the papers explicitly label them optional/research. Implemented subsets do not close full gates.
+Original source-recovery baseline: engine `283d4fb`; papers dated11 September2026, supplied19 September2026. The current native lifecycle extension uses protocol0.21 and store27; historical evidence remains tied to its stated revision. `docs/source/manifest.json` authenticates copied paper bytes, not scientific validity. All source sections below remain requirements unless the papers explicitly label them optional/research. Implemented subsets do not close full gates.
 
 | Paper section | Requirement | Current bounded evidence and remaining gap | Gate |
 |---|---|---|---|
@@ -47,3 +47,5 @@ diagnostic preparation/completion recovery inside application-owned SQLite.
 Neither result closes the full mobile/browser, lifecycle, history or resource gates.
 
 Native store26 implements bounded recorded actors for engine4.1–4.4, R12/R13/R14/R36/R38 and E05/E06/E14. Actual submitted tool results and terminal native broker outcomes are recorded with outputs/state/checkpoint; independent journal/sink process recovery is covered. Trust is explicitly native host computation, not model truth, CPU/RSS isolation or arbitrary remote exactly-once. Complete actor lifecycle/default effect observation and source/portable bindings remain mandatory.
+
+Native store27 adds bounded actual actor state/artifact/checkpoint upgrade, recorded-pair rollback and default historical receipt observation. Typed lineage, current whole authority, unknown-effect fences and independent actual tool/sink recovery are checked. This is a trusted native ABI profile; effect-aware cancellation, source/portable bindings, full output reconstruction, retention expiry, causal/resource controls and all original assurance remain mandatory. See [actor lifecycle](ACTOR_LIFECYCLE.md) and [draft verification](VERIFICATION_027.md).

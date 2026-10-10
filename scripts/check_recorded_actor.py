@@ -10,7 +10,7 @@ import sqlite3
 import subprocess
 import tempfile
 from check_compiled_lifecycle import snapshot
-from retention_migration import RECORDED_ACTOR_TABLES
+from retention_migration import ACTOR_LIFECYCLE_TABLES,RECORDED_ACTOR_TABLES
 from version_profile import store_marker
 
 
@@ -19,7 +19,7 @@ def main():
     for name in ['compiler','old-handler','handler','actor']:p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--report',type=Path);p.add_argument('--evidence-dir',type=Path)
     a=p.parse_args();trace=[];deaths=0
-    assert store_marker()==26
+    assert store_marker()>=26
     if a.evidence_dir:a.evidence_dir.mkdir(parents=True,exist_ok=False)
     with tempfile.TemporaryDirectory(prefix='weave-recorded-actor-') as temporary:
         root=Path(temporary);db=root/'store.sqlite';request=root/'request.json'
@@ -62,9 +62,9 @@ handler KeepActual revision "1" using Keep {
         assert len(before['tables']['compiled_replay_states']['rows'])==1
         actor('open',crash='before-schema',code=95);assert snapshot(db)==before
         actor('open',crash='after-schema',code=96);after=snapshot(db)
-        assert after['marker']==26 and set(after['tables'])==set(before['tables'])|RECORDED_ACTOR_TABLES
+        assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|RECORDED_ACTOR_TABLES|(ACTOR_LIFECYCLE_TABLES if store_marker()>=27 else frozenset())
         assert {n:after['tables'][n] for n in before['tables']}==before['tables']
-        assert all(after['tables'][n]['rows']==[] for n in RECORDED_ACTOR_TABLES)
+        assert all(after['tables'][n]['rows']==[] for n in RECORDED_ACTOR_TABLES|(ACTOR_LIFECYCLE_TABLES if store_marker()>=27 else frozenset()))
         refused=compiled(a.old_handler,'head',graph='Quality',code=1);assert b'E_STORAGE_VERSION' in refused and snapshot(db)==after
         replay=compiled(a.handler,'rebuild',request=reconstruction,now=20);assert replay['duplicate'] and {**replay,'duplicate':False}==old_rebuild and snapshot(db)==after
         compiled(a.handler,'state',id='old25',state='running',now=20)
@@ -133,7 +133,7 @@ handler KeepActual revision "1" using Keep {
                 if f.is_file():shutil.copyfile(f,a.evidence_dir/f.name)
             for name,value in [('old-before',before),('old-after',after),('first-committed',committed),('later-completed',expected_db),('final',snapshot(db))]:
                 (a.evidence_dir/(name+'.json')).write_text(json.dumps(value,indent=2)+'\n')
-        report={'profile':'native-recorded-actor-journals/1','store_marker':26,'processes':len(trace),'controlled_deaths':deaths,'tool_runs':3,'physical_receipts':1,'checks':['actual source-compiled old25 completion and snapshot reconstruction state preserved byte for byte','schema/bootstrap/actor-completion pre/post commit deaths','actual native nondeterministic tool outputs in an independent durable host journal','unknown before I/O has verified reference sink absence and never retries automatically','physical sink commit with lost acknowledgment reconciles from actual destination evidence','recorded terminal effect and tool artifacts commit with outputs/state/private checkpoint','exact historical retries never rerun tools, repeat physical actions or rewind later state','private/nonmatching event scans preserve public state and input identities','retention epoch requires explicit reconstruction before new delivery','later new computation remains possible after reconstruction'],'trace':trace,'result':'passed','limits':['trusted native actor/host journal with fixed owner and local SQLite idempotent sink','actual fixture source bytes are stored and hashed; hashing is not execution attestation','no arbitrary remote exactly-once, model quality, CPU/RSS isolation or portable actor claim','actor artifact upgrade/rollback, source bindings and broader original assurance remain required']}
+        report={'profile':'native-recorded-actor-journals/1','store_marker':store_marker(),'processes':len(trace),'controlled_deaths':deaths,'tool_runs':3,'physical_receipts':1,'checks':['actual source-compiled old25 completion and snapshot reconstruction state preserved byte for byte','schema/bootstrap/actor-completion pre/post commit deaths','actual native nondeterministic tool outputs in an independent durable host journal','unknown before I/O has verified reference sink absence and never retries automatically','physical sink commit with lost acknowledgment reconciles from actual destination evidence','recorded terminal effect and tool artifacts commit with outputs/state/private checkpoint','exact historical retries never rerun tools, repeat physical actions or rewind later state','private/nonmatching event scans preserve public state and input identities','retention epoch requires explicit reconstruction before new delivery','later new computation remains possible after reconstruction'],'trace':trace,'result':'passed','limits':['trusted native actor/host journal with fixed owner and local SQLite idempotent sink','actual fixture source bytes are stored and hashed; hashing is not execution attestation','no arbitrary remote exactly-once, model quality, CPU/RSS isolation or portable actor claim','actor artifact upgrade/rollback, source bindings and broader original assurance remain required']}
         encoded=json.dumps(report,indent=2)+'\n'
         if a.report:a.report.write_text(encoded)
         print(encoded)

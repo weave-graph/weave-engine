@@ -17,7 +17,8 @@ fn definition() -> RecordedActorDefinition {
     let artifact = b"native recorded actor test artifact v1".to_vec();
     RecordedActorDefinition {
         manifest: serde_json::from_value(json!({"id":"actor","version":"1","artifact_digest":format!("sha256:{:x}",Sha256::digest(&artifact)),"config_revision":"1","principal":"owner","subscriptions":[{"graph_id":"input","branch_id":"main"}],"output_graphs":["output"],"effect_destinations":["sink"],"max_attempts":3,"lease_ms":1000,"max_pending_events":100,"projection_replay":false})).unwrap(),
-        event_schema: VERSION.into(), metadata_depth: 2, artifact,
+        event_schema: VERSION.into(),
+        state_protocol:"weave-recorded-opaque-state/1".into(), metadata_depth: 2, artifact,
     }
 }
 fn hash(value: &impl serde::Serialize) -> String {
