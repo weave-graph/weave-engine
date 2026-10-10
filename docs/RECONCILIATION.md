@@ -60,3 +60,14 @@ deaths. Old events are explicit legacy boundaries; hashes do not attest native
 execution. Full taxonomy/cross-peer controls, source/portable integration,
 CPU/RSS isolation and every original assurance remain mandatory. See
 [causal semantics](CAUSAL_DISPATCH.md) and [verification](VERIFICATION_029.md).
+
+The native request2 host interface now exposes bounded owner lifecycle,
+compiled reconstruction/version transfer, recorded actor operations and scoped
+lag through Rust/C/Swift bytes. Actual current owner/output checks and original
+kernel transactions govern every operation. Genuine old actor/effect histories,
+independent tool/sink outcomes and two actual-source compiled recipes have
+separate [verification](VERIFICATION_HOST_LIFECYCLE.md). Initial installation and
+destination reconciliation remain trusted native host responsibilities. The
+Swift wrapper typecheck is distinct from application acceptance; source actor
+compilation, actual browser/mobile lifecycle apps and every original wider
+semantic/resource/assurance requirement remain mandatory.

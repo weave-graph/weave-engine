@@ -1,11 +1,15 @@
-# Trusted host facade: step A
+# Trusted host facade
 
 The safe Rust `weave_native::host::HostSession` accepts bounded runtime-supplied
 operations under an immutable `HostContext`. This local embedding format is
-independent of Program protocol 0.18 and store17; neither version changes. The
+independent of Program protocol0.21 and store29; neither version changes here. The
 existing `weave_native_*` C ABI remains compatible.
 
-This checkpoint implements Program execution and compiled handler operation. The
+Request1 implements Program execution and compiled handler operation. Request2
+adds bounded owner lifecycle, reconstruction, version transfer, recorded actor
+completion/observation/cancellation and scoped lag. See the
+[operation shapes, authority and recovery rules](HOST_LIFECYCLE.md) and
+[actual native/source verification](VERIFICATION_HOST_LIFECYCLE.md). The
 [retained native cluster journal and source-backed peer trace](NATIVE_COMPILED_SCENARIO.md)
 now extend the trusted Rust embedding profile. It does not yet implement the generic
 combined cluster/transport/governance/effect facade,
@@ -30,17 +34,22 @@ let reply = session.call(request_bytes);
 Strict request example:
 
 ```json
-{"format":"weave-host-request/1","operation":{"kind":"execute","program":{"version":"0.18.0","commands":[]}}}
+{"format":"weave-host-request/1","operation":{"kind":"execute","program":{"version":"0.21.0","commands":[]}}}
 ```
 
-The only operational kinds are `execute {program}`, `poll {adapter}`,
+The request1 operational kinds are `execute {program}`, `poll {adapter}`,
 `prepare {adapter,event,lease}` and `complete {adapter,event,lease,preparation}`.
 Unknown fields, unknown kinds and recursively duplicated decoded JSON keys reject
-before invoking Engine. There is no operational actor, clock, write grant,
-installation, raw completion, signing-key or registry opcode.
+before invoking Engine. Request1 rejects new request2 kinds with `E_HOST_VERSION`
+before Engine work. Request2 capabilities list all31 supported kinds. There is no
+operational clock, write grant, initial installation, broker reconciliation,
+signing-key or registry opcode. Actor completion submits trusted native results
+to the same recorded-actor kernel; it does not attest their execution or truth.
 
 Trusted code separately calls `install_compiled_handler(bundle,name,manifest,output)`
-and `set_adapter_state(adapter,state)`. These typed methods retain Engine's
+and `install_recorded_actor(definition)`. Initial installation stays privileged.
+`set_adapter_state(adapter,state)` remains available; request2 also exposes it
+under current durable owner/output checks. These methods retain Engine's
 installation checks; even trusted configuration cannot widen a session's output
 scope. A handle is not authority for another principal's adapter. The new Engine
 `*_for` methods validate the durable adapter ID, principal and output grants within
@@ -119,15 +128,17 @@ never reused within the process, and closed handles fail. The existing numeric
 legacy handles are separate and unchanged.
 
 New thin exports are `weave_host_open`, `weave_host_call`, `weave_host_close`,
-`weave_host_artifact_select`, `weave_host_install_handler` and
+`weave_host_artifact_select`, `weave_host_install_handler`, `weave_host_install_actor` and
 `weave_host_set_adapter_state`. Open takes a trusted path and config separately;
-install/state are privileged entry points, not remote methods. The selector takes
+initial installation is privileged host configuration; both lifecycle entry
+points require actual current durable ownership. The selector takes
 an SDK buffer plus strict `{kind:original|program|view|handler,name?}` selection,
 and returns complete inventory plus exact selected JSON. Caller retains its original
 SDK response. The current C opener uses ordinary native SQLite; arbitrary browser
 image open/export and iOS bindings are not claimed by this checkpoint.
 
-Config is bounded to 128 KiB/128 writable graphs, installation config to 256 KiB,
+Config is bounded to 128 KiB/128 writable graphs, handler installation to 256 KiB,
+actor definition installation to 2 MiB,
 lifecycle config to 2 KiB, selector config to 1 KiB and registry to 128 live sessions.
 One call owns a session; C calls serialize internally. Byte/work limits do not
 constitute a total transient-heap, allocator or process-RSS ceiling. Source compiler
@@ -164,3 +175,12 @@ historical receipt replay after reopen through the C ABI. Optional
 reconstructing their artifact bodies. The local report is
 [2026-09-20-host-facade.json](measurements/2026-09-20-host-facade.json).
 These native results do not claim new browser or mobile execution evidence.
+
+`--lifecycle` additionally executes request2 reconstruction, compatible migration
+using a genuinely newly compiled function/handler revision, recorded-pair rollback
+and duplicate recovery after reopen. Its two recipes produce an identity result
+and an explanation graph; each checks its own output semantics and exact external
+premise provenance. Reconstruction creates new owned occurrence IDs while keeping
+entity identity and values. The separate C process controller uses genuine old
+actor history, an independent nondeterministic tool journal and physical sink;
+see [verification](VERIFICATION_HOST_LIFECYCLE.md).

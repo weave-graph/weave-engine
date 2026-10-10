@@ -17,6 +17,12 @@ See [current evidence and limitations](docs/STATUS.md), [implementation plan](do
 
 Native store29 adds [local causal dispatch and scoped lag](docs/CAUSAL_DISPATCH.md). Kernel-bound ancestry suspends actual mutual adapter feedback before leasing the blocked source. Explicit owner policy changes preserve history; bounded diagnostics recheck current visibility. Full remote/taxonomy/resource and original assurance requirements remain open.
 
+The native [request2 host interface](docs/HOST_LIFECYCLE.md) exposes owner lifecycle,
+compiled reconstruction/version transfer, recorded actors and scoped diagnostics
+through the existing Rust/C/Swift embedding. Genuine old actor histories and two
+actual compiler sources have separate [recovery evidence](docs/VERIFICATION_HOST_LIFECYCLE.md).
+Protocol0.21, store29 and the original request1/legacy C entry points remain compatible.
+
 Native store28 adds [effect-aware recorded actor cancellation](docs/ACTOR_DISPOSITION.md). Unknown outcomes require actual reconciliation; undispatched intents can be retired atomically with state/checkpoint, pause/rebuild and audit. Exact old retries preserve later work. Future delivery requires explicit owner initialization.
 
 Native store27 adds [recorded actor version transfer and historical observation](docs/ACTOR_LIFECYCLE.md). Rollback restores an actual recorded pair and defaults historical deliveries to original receipt observation without new tool calls, graph writes or external actions. Source/portable and broader lifecycle/assurance requirements remain open.

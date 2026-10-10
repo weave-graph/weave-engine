@@ -5,18 +5,22 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-/* Trusted local embedding ABI, host format 1; does not replace the legacy Program ABI.
+/* Trusted local embedding ABI, request formats 1/2 and response format 1;
+ * does not replace the legacy Program ABI. Request2 capabilities reports operations.
  * Each input range must remain readable until return. Return is owned UTF-8 JSON;
  * release exactly once with weave_native_free. Handles are opaque ASCII tokens.
  * No Number conversion of graph/artifact data. Retain complete compiler bytes.
  * These wrappers open native SQLite. Browser image persistence must fence every
  * requires_fence outcome; poisoned means discard/reopen/inspect, never replay.
- * open/install/state are privileged host configuration, never remote request verbs. */
+ * open/initial installation are privileged host configuration. Request2 lifecycle
+ * and migrations remain constrained by actual durable owner/output scopes.
+ * Broker reconciliation and physical I/O are trusted host responsibilities. */
 char *weave_host_open(const uint8_t *, size_t, const uint8_t *, size_t);
 char *weave_host_call(const uint8_t *, size_t, const uint8_t *, size_t);
 char *weave_host_close(const uint8_t *, size_t);
 char *weave_host_artifact_select(const uint8_t *, size_t, const uint8_t *, size_t);
 char *weave_host_install_handler(const uint8_t *, size_t, const uint8_t *, size_t, const uint8_t *, size_t);
+char *weave_host_install_actor(const uint8_t *, size_t, const uint8_t *, size_t);
 char *weave_host_set_adapter_state(const uint8_t *, size_t, const uint8_t *, size_t);
 void weave_native_free(char *);
 #ifdef __cplusplus

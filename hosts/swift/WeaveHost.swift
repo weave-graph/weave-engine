@@ -107,6 +107,16 @@ final class WeaveHost {
             }
         }
     }
+    // Trusted initial actor configuration. This checks stored artifact bytes;
+    // it does not execute a tool or grant authority from a user request.
+    func installActor(_ definition: Data) throws -> WeaveHostReply {
+        guard definition.count <= 2 * 1024 * 1024 else { throw WeaveHostFailure.budget }
+        return try invoke { token, length in
+            definition.withUnsafeBytes { definition in
+                weave_host_install_actor(token, length, definition.bindMemory(to: UInt8.self).baseAddress, definition.count)
+            }
+        }
+    }
     static func selectArtifact(sdk: Data, selection: Data) throws -> WeaveHostReply {
         guard sdk.count <= artifactLimit, selection.count <= 1024 else { throw WeaveHostFailure.budget }
         return try sdk.withUnsafeBytes { sdk in

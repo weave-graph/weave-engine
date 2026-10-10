@@ -234,6 +234,28 @@ pub unsafe extern "C" fn weave_host_install_handler(
             .bytes)
     })
 }
+/// Privileged initial actor installation, separate from operational request JSON.
+/// No artifact executes here; actual scope and artifact bytes are checked by the kernel.
+/// # Safety
+/// Each pointer must name a readable allocation of its stated length until return.
+#[no_mangle]
+pub unsafe extern "C" fn weave_host_install_actor(
+    token: *const u8,
+    token_len: usize,
+    config: *const u8,
+    config_len: usize,
+) -> *mut c_char {
+    boundary(|| {
+        let id = handle(unsafe { input(token, token_len, 32)? })?;
+        let config = unsafe { input(config, config_len, 2 * 1024 * 1024)? };
+        strict_json::check(config, 2 * 1024 * 1024)?;
+        let definition: weave_engine::RecordedActorDefinition =
+            serde_json::from_slice(config).map_err(|_| "E_HOST_CONFIG")?;
+        let mut all = sessions().lock().map_err(|_| "E_HOST_UNCERTAIN")?;
+        let session = all.sessions.get_mut(&id).ok_or("E_HOST_HANDLE")?;
+        Ok(session.install_recorded_actor(&definition).bytes)
+    })
+}
 /// Privileged explicit lifecycle control, constrained by session ownership on every call.
 /// # Safety
 /// Each pointer must name a readable allocation of its stated length until return.
