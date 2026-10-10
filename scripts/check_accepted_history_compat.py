@@ -24,8 +24,8 @@ def main():
     parser.add_argument('--old-host',type=Path,required=True)
     parser.add_argument('--host',type=Path,required=True)
     parser.add_argument('--report',type=Path)
-    parser.add_argument('--old-marker',type=int,default=20,choices=[20,21,22,23])
-    parser.add_argument('--new-marker',type=int,default=20,choices=[20,21,22,23,24])
+    parser.add_argument('--old-marker',type=int,default=20,choices=[20,21,22,23,24])
+    parser.add_argument('--new-marker',type=int,default=20,choices=[20,21,22,23,24,25])
     parser.add_argument('--storage',type=Path)
     args=parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='weave-accepted-history-compat-') as temporary:

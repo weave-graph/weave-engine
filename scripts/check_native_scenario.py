@@ -187,7 +187,7 @@ def main():
             empty_receipt = invoke('cluster_complete', record=empty_record, lease=empty_event['lease'])
             if args.upgrade_host:
                 with database(db) as c:
-                    old_marker = c.execute('PRAGMA user_version').fetchone()[0]; assert old_marker in [19,20,21,22,23]; upgraded_markers.append(old_marker)
+                    old_marker = c.execute('PRAGMA user_version').fetchone()[0]; assert old_marker in [19,20,21,22,23,24]; upgraded_markers.append(old_marker)
                     history_before = c.execute('SELECT * FROM head_observations ORDER BY rowid').fetchall()
                 with database(journal) as c:
                     journal_before = c.execute('SELECT * FROM retained ORDER BY id').fetchall()

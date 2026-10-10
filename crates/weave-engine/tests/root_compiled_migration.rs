@@ -597,7 +597,7 @@ fn missing_current_migration_registry_cannot_be_recreated_as_empty_history() {
     assert_eq!(
         sql.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        24
+        STORAGE_VERSION
     );
     assert_eq!(
         sql.query_row(
@@ -612,5 +612,80 @@ fn missing_current_migration_registry_cannot_be_recreated_as_empty_history() {
         sql.query_row("SELECT count(*) FROM events", [], |r| r.get::<_, i64>(0))
             .unwrap(),
         count
+    );
+}
+
+#[test]
+fn a_member_of_the_authorized_metadata_closure_cannot_replace_the_primary_input_binding() {
+    let mut engine = Engine::memory_with_clock(Arc::new(ManualClock::new(10))).unwrap();
+    let host = HostContext::new("owner", ["input".into(), "meta".into(), "output".into()]);
+    let seed: Program = serde_json::from_value(
+        json!({"version":VERSION,"commands":[{"op":"commit","graph_id":"meta","data":{}}]}),
+    )
+    .unwrap();
+    engine.execute(&seed, &host).unwrap();
+    let meta = GraphRef {
+        graph_id: "meta".into(),
+        revision: engine.head("meta", "main").unwrap().unwrap(),
+    };
+    let seed: Program = serde_json::from_value(json!({"version":VERSION,"commands":[{"op":"commit","graph_id":"input","data":{"attachments":[{"id":"m","host":{"kind":"graph"},"key":"detail","value":{"kind":"graph","reference":meta},"valid_time":{"start":0}}]}}]})).unwrap();
+    engine.execute(&seed, &host).unwrap();
+    let mut original = template("1");
+    original.input.metadata_depth = 1;
+    original.source_revisions.clear();
+    original = handler_registration::seal_handler_template(original).unwrap();
+    engine
+        .install_compiled_handler(
+            &manifest("worker1", "1", &original),
+            &original,
+            &output(),
+            &host,
+        )
+        .unwrap();
+    engine
+        .set_adapter_state_for("worker1", "paused", &host)
+        .unwrap();
+    let actual = engine
+        .compiled_migration_inputs_for("worker1", &host)
+        .unwrap();
+    assert_eq!(
+        actual.primary_input,
+        GraphRef {
+            graph_id: "input".into(),
+            revision: engine.head("input", "main").unwrap().unwrap()
+        }
+    );
+    assert!(actual.input_snapshots.contains(&meta));
+    let mut next = template("2");
+    next.input.metadata_depth = 1;
+    next.source_revisions.clear();
+    next = handler_registration::seal_handler_template(next).unwrap();
+    let mut changed = CompiledMigrationRequest {
+        inputs: actual.clone(),
+        destination: manifest("worker2", "2", &next),
+        template: next,
+        output: output(),
+        nonce: "primary".into(),
+        disposition: ProjectionMigrationKind::Upgrade,
+    };
+    changed.inputs.primary_input = meta;
+    let events = engine.event_count().unwrap();
+    assert_eq!(
+        engine
+            .migrate_compiled_handler_for(&changed, &host)
+            .unwrap_err()
+            .code,
+        "E_CONFLICT"
+    );
+    assert_eq!(engine.event_count().unwrap(), events);
+    assert!(engine
+        .set_adapter_state_for("worker2", "running", &host)
+        .is_err());
+    changed.inputs = actual;
+    assert!(
+        !engine
+            .migrate_compiled_handler_for(&changed, &host)
+            .unwrap()
+            .duplicate
     );
 }

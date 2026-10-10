@@ -487,7 +487,7 @@ impl Engine {
                 });
             }
             self.check_lease(adapter, event, lease)?;
-            let (mut input, closure) = self.handler_input(&registration, event)?;
+            let (input, closure) = self.handler_input(&registration, event)?;
             let source = GraphRef {
                 graph_id: registration.template.input.graph_id.clone(),
                 revision: input
@@ -496,68 +496,12 @@ impl Engine {
                     .cloned()
                     .ok_or_else(invalid)?,
             };
-            let gate = GraphInfluence {
-                derivations: Vec::new(),
-                snapshots: closure.clone(),
-                ..Default::default()
-            };
-            let inherited = weave_contract::influence::input_influence(&input.graph)
-                .map_err(|d| err(&d.code, &d.message))?;
-            input.graph.influence =
-                weave_contract::influence::merge(inherited.as_ref(), Some(&gate))
-                    .map_err(|d| err(&d.code, &d.message))?;
-            merge_sources(
-                &mut input.source_revisions,
-                &registration.template.source_revisions,
-            )?;
-            let mut materialized = json_size(&input, MATERIALIZED_LIMIT)?;
-            let mut object_count =
-                input.graph.nodes.len() + input.graph.edges.len() + input.graph.attachments.len();
-            let mut values = BTreeMap::from([(
-                handler_registration::HANDLER_EVENT_BINDING.to_string(),
-                input,
-            )]);
+            let (data, coverage, diagnostics) =
+                self.compiled_materialization(&registration, input, &closure, event)?;
             let host = HostContext::new(
                 &registration.manifest.principal,
                 registration.manifest.output_graphs.clone(),
             );
-            let mut work = 1000;
-            for binding in &registration.template.recipe.bindings {
-                charge_references(&binding.value, &values, &mut materialized)?;
-                let mut result = self.expression(&binding.value, &values, &host, 0, &mut work)?;
-                merge_sources(
-                    &mut result.source_revisions,
-                    &registration.template.source_revisions,
-                )?;
-                materialized +=
-                    json_size(&result, MATERIALIZED_LIMIT.saturating_sub(materialized))?;
-                object_count += result.graph.nodes.len()
-                    + result.graph.edges.len()
-                    + result.graph.attachments.len();
-                if object_count > 200_000 {
-                    return Err(err("E_BUDGET", "handler bound-object budget exceeded"));
-                }
-                values.insert(binding.name.clone(), result);
-            }
-            let mut result = values
-                .remove(&registration.template.recipe.output)
-                .ok_or_else(invalid)?;
-            result.graph.influence =
-                weave_contract::influence::merge(result.graph.influence.as_ref(), Some(&gate))
-                    .map_err(|d| err(&d.code, &d.message))?;
-            result.source_revisions =
-                algebra::merge_source_revisions(&result.source_revisions, &[])
-                    .map_err(|d| err(&d.code, &d.message))?;
-            if result.source_revisions != registration.template.source_revisions {
-                return Err(invalid());
-            }
-            if result.diagnostics.len() > 256 {
-                return Err(err("E_BUDGET", "handler diagnostic count exceeded"));
-            }
-            json_size(&result.diagnostics, 64 * 1024)?;
-            let coverage = result.coverage.clone();
-            let diagnostics = result.diagnostics.clone();
-            let data = owned_output(result, &registration, event)?;
             let expected_head = self.head(
                 &registration.output.graph_id,
                 &registration.output.branch_id,
@@ -645,6 +589,74 @@ impl Engine {
                 Err(error)
             }
         }
+    }
+    pub(crate) fn compiled_materialization(
+        &self,
+        registration: &Registration,
+        mut input: QueryResult,
+        closure: &[GraphRef],
+        namespace: &str,
+    ) -> Result<(GraphData, Coverage, Vec<Diagnostic>)> {
+        let gate = GraphInfluence {
+            derivations: Vec::new(),
+            snapshots: closure.to_vec(),
+            ..Default::default()
+        };
+        let inherited = weave_contract::influence::input_influence(&input.graph)
+            .map_err(|d| err(&d.code, &d.message))?;
+        input.graph.influence = weave_contract::influence::merge(inherited.as_ref(), Some(&gate))
+            .map_err(|d| err(&d.code, &d.message))?;
+        merge_sources(
+            &mut input.source_revisions,
+            &registration.template.source_revisions,
+        )?;
+        let mut materialized = json_size(&input, MATERIALIZED_LIMIT)?;
+        let mut object_count =
+            input.graph.nodes.len() + input.graph.edges.len() + input.graph.attachments.len();
+        let mut values = BTreeMap::from([(
+            handler_registration::HANDLER_EVENT_BINDING.to_string(),
+            input,
+        )]);
+        let host = HostContext::new(
+            &registration.manifest.principal,
+            registration.manifest.output_graphs.clone(),
+        );
+        let mut work = 1000;
+        for binding in &registration.template.recipe.bindings {
+            charge_references(&binding.value, &values, &mut materialized)?;
+            let mut result = self.expression(&binding.value, &values, &host, 0, &mut work)?;
+            merge_sources(
+                &mut result.source_revisions,
+                &registration.template.source_revisions,
+            )?;
+            materialized += json_size(&result, MATERIALIZED_LIMIT.saturating_sub(materialized))?;
+            object_count += result.graph.nodes.len()
+                + result.graph.edges.len()
+                + result.graph.attachments.len();
+            if object_count > 200_000 {
+                return Err(err("E_BUDGET", "handler bound-object budget exceeded"));
+            }
+            values.insert(binding.name.clone(), result);
+        }
+        let mut result = values
+            .remove(&registration.template.recipe.output)
+            .ok_or_else(invalid)?;
+        result.graph.influence =
+            weave_contract::influence::merge(result.graph.influence.as_ref(), Some(&gate))
+                .map_err(|d| err(&d.code, &d.message))?;
+        result.source_revisions = algebra::merge_source_revisions(&result.source_revisions, &[])
+            .map_err(|d| err(&d.code, &d.message))?;
+        if result.source_revisions != registration.template.source_revisions {
+            return Err(invalid());
+        }
+        if result.diagnostics.len() > 256 {
+            return Err(err("E_BUDGET", "handler diagnostic count exceeded"));
+        }
+        json_size(&result.diagnostics, 64 * 1024)?;
+        let coverage = result.coverage.clone();
+        let diagnostics = result.diagnostics.clone();
+        let data = owned_output(result, registration, namespace)?;
+        Ok((data, coverage, diagnostics))
     }
     pub fn complete_prepared_handler(
         &mut self,

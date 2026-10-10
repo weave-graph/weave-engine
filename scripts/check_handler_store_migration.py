@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Real historical compiler/handler state survives atomic runtime schema upgrade."""
-from retention_migration import RETENTION_TABLES,LIFECYCLE_TABLES,COMPILED_LIFECYCLE_TABLES,retention_tables,assert_retention_baseline
+from retention_migration import RETENTION_TABLES,LIFECYCLE_TABLES,COMPILED_LIFECYCLE_TABLES,COMPILED_REBUILD_TABLES,retention_tables,assert_retention_baseline
 from version_profile import store_marker
 import argparse, json, sqlite3, subprocess, tempfile
 from pathlib import Path
@@ -61,6 +61,7 @@ handler {name} revision "1" using Keep {{
  if a.old_marker<22<=a.new_marker:new_tables|=RETENTION_TABLES
  if a.old_marker<23<=a.new_marker:new_tables|=LIFECYCLE_TABLES
  if a.old_marker<24<=a.new_marker:new_tables|=COMPILED_LIFECYCLE_TABLES
+ if a.old_marker<25<=a.new_marker:new_tables|=COMPILED_REBUILD_TABLES
  def snapshot():
   with closing(sqlite3.connect(db)) as c:
    tables={row[0]:row[1] for row in c.execute("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}

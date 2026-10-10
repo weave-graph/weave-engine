@@ -572,10 +572,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             "INSERT INTO handler_receipts VALUES (?1,?2,?3,?4)",
             params![adapter, event, hash, json],
         )?;
-        self.conn.execute(
-            "UPDATE dispatch_adapters SET checkpoint=?2 WHERE id=?1",
-            params![adapter, sequence],
-        )?;
+        self.advance_projection_scan_checkpoint(adapter, sequence)?;
         self.conn
             .execute("DELETE FROM dispatch_pending WHERE adapter=?1", [adapter])?;
         Ok(HandlerReceipt {

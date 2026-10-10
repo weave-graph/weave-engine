@@ -15,6 +15,8 @@ const KNOWN_TABLES: &[&str] = &[
     "assertion_structures",
     "compiled_handlers",
     "compiled_migrations",
+    "compiled_rebuild_receipts",
+    "compiled_replay_states",
     "deliveries",
     "dispatch_adapters",
     "dispatch_pending",
@@ -595,6 +597,8 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                             | "delivery_cancellations"
                                             | "projection_migrations"
                                             | "compiled_migrations"
+                                            | "compiled_rebuild_receipts"
+                                            | "compiled_replay_states"
                                     )
                                 {
                                     let field = |name: &str| -> Result<String> {
@@ -612,7 +616,23 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                     } else {
                                         field("adapter")?
                                     };
-                                    if table == "compiled_migrations" {
+                                    if matches!(
+                                        table.as_str(),
+                                        "compiled_rebuild_receipts" | "compiled_replay_states"
+                                    ) {
+                                        compiled_rebuild::validate_retained_rebuild(
+                                            self,
+                                            &table,
+                                            &adapter,
+                                            &if table == "compiled_rebuild_receipts" {
+                                                field("nonce")?
+                                            } else {
+                                                String::new()
+                                            },
+                                            &field("digest")?,
+                                            &value,
+                                        )?;
+                                    } else if table == "compiled_migrations" {
                                         compiled_lifecycle::validate_retained_migration(
                                             self,
                                             &adapter,

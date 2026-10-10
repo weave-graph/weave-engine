@@ -1,3 +1,24 @@
+## Kernel-computed compiled reconstruction (protocol0.21 / store25)
+
+Expired pure stateless compiled handlers now have an explicit reconstruction
+path. The kernel executes the actual registered recipe on current whole
+input/metadata authority and expected output CAS. Output, immutable receipt,
+replay-ready state and private checkpoint commit together. Later event completion
+and private scans update the paired private state; compatible upgrades preserve
+readiness. Historical retries never replace newer output or rewind checkpoints.
+Actual state-bound stale-work cancellation fences delivery until another rebuild.
+
+The actual source controller preserves genuine store24 completed output,
+preparation, receipt, upgrade and rollback records; it runs66 processes and8
+controlled deaths, including real orphan erasure, replay expiry, two actual
+reconstructions and later upgraded completion. The native tests cover current
+CAS/authority/pending work, privacy pairs, historical retries, corruption and
+rollback. See [lifecycle](ADAPTER_LIFECYCLE.md) and [verification](VERIFICATION_025.md).
+Opaque/effectful actors, external journals, complete source/portable lifecycle
+commands, causal/resource controls, receipt expiry/larger collection and all
+remaining original assurance gates stay mandatory. E01–E14 remain in progress;
+E15 remains open. Earlier totals describe their own exact profiles.
+
 ## Source-compiled pure version transfer (protocol0.21 / store24)
 
 Compatible pure stateless source handler versions now transfer an actual private

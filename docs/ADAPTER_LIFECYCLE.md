@@ -111,3 +111,36 @@ registrations and retains their real input pins. Requests are bounded to3MiB,
 records to8MiB, and128 records/64MiB per principal, alongside existing registration
 and shared operation limits. These serialization bounds do not provide process
 CPU/RSS isolation. See [source/process verification](VERIFICATION_024.md).
+
+## Explicit compiled snapshot reconstruction
+
+`compiled_rebuild_inputs_for` binds the actual sealed registration, explicit
+primary revision, whole authorized metadata closure, current replay epoch and
+expected output head. `rebuild_compiled_handler_for` requires the current owner
+and output authority, a paused/drained source and no pending or unresolved effects.
+It executes the registered pure recipe on those actual inputs. It accepts no
+caller result or opaque state. Current output, coverage/diagnostics, immutable
+receipt, replay-ready state and actual private checkpoint commit together. This
+explicit reconstruction supersedes earlier delivery history; it is not silent
+checkpoint advancement. Unavailable or restricted input cannot become a complete
+empty materialization.
+
+Historical retries recheck current authority, actual registration, retained inputs
+and prior output and never overwrite later work. Subsequent event completion and
+private nonmatching scans advance paired replay/checkpoint state atomically.
+Compatible version transfer retains this actual proof; expired epochs still need
+fresh reconstruction. Canceling an actual state-bound compiled occurrence records
+the existing preparation, advances its private coordinate and fences delivery
+until another real reconstruction. Original native23/24 cancellation body hashes
+remain exact when their new compiled-state flag is absent.
+
+Store25 adds `compiled_rebuild_receipts` and `compiled_replay_states`. Older markers
+containing either and current markers missing either reject before schema commit.
+Collection checks typed body hashes, actual registrations, original receipt,
+epoch/input/output bindings and actual paired checkpoints before erasure. Real
+store24 migration preserves every previous schema/row and creates no fabricated
+receipt/state. Requests are at most2MiB, records/states at most4MiB, and each
+adapter keeps at most128 reconstruction receipts/64MiB. Existing operation,
+recipe, object and materialization bounds also apply. Native opaque state,
+effectful actors and external journals remain separate requirements. See
+[source/process and privacy evidence](VERIFICATION_025.md).
