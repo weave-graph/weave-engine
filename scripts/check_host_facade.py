@@ -14,6 +14,7 @@ parser.add_argument('--library', type=Path, required=True)
 parser.add_argument('--compiler-sdk', type=Path, required=True)
 parser.add_argument('--report', type=Path)
 parser.add_argument('--sdk-fixture-dir', type=Path)
+parser.add_argument('--lifecycle', action='store_true', help='execute request2 source-compiled reconstruction and version transfer')
 a = parser.parse_args()
 runtime = ctypes.CDLL(str(a.library.resolve()))
 compiler = ctypes.CDLL(str(a.compiler_sdk.resolve()))
@@ -74,8 +75,8 @@ def call(name, *parts):
     finally:
         free(pointer)
 
-def operation(token, value):
-    return call('call', token, encode({'format': 'weave-host-request/1', 'operation': value}))[0]
+def operation(token, value, format='weave-host-request/1'):
+    return call('call', token, encode({'format': format, 'operation': value}))[0]
 
 def open_store(path, principal='owner', graphs=('Input', 'Output')):
     result, _ = call('open', str(path).encode(), encode({'principal': principal, 'writable_graphs': list(graphs)}))
@@ -157,14 +158,98 @@ view_template Visible revision "1" from Head clock fixed {{}}
                     return [x for v in value for x in integers(v)]
                 return [value] if isinstance(value, int) else []
             assert 9007199254740994 + index in integers(result)
+            if a.lifecycle:
+                output_query = {'kind':'execute','program':{'version':'0.21.0','commands':[{'op':'query','query':{'graph_id':'Output'}}]}}
+                original_output = operation(token, output_query)
+                assert original_output['ok'], original_output
+                original_graph = original_output['value'][0]['result']['graph']
+                def owner(value):
+                    result = operation(token, value, 'weave-host-request/2')
+                    assert result['ok'] and result['requires_fence'] and not result['poisoned'], result
+                    return result['value']
+                capability = owner({'kind':'capabilities'})
+                assert capability['store_marker'] == 29 and len(capability['operations']) == 31
+                owner({'kind':'lifecycle','adapter':'projection','state':'paused'})
+                inputs = owner({'kind':'compiled_rebuild_inputs','adapter':'projection'})
+                reconstruction = {'kind':'compiled_rebuild','request':{'inputs':inputs,'nonce':'source-rebuild'}}
+                rebuilt = owner(reconstruction)
+                assert owner(reconstruction)['duplicate']
+                # Compile a genuinely different revision; the kernel receives the actual
+                # sealed compiler template, not a hand-reconstructed fingerprint.
+                upgraded_source = source.replace('function Transform revision "1"', 'function Transform revision "2"').replace('handler Chosen revision "1"', 'handler Chosen revision "2"')
+                upgraded_sdk = compile_source(upgraded_source, [{'id':'helpers','revision':'1','source':module}])
+                selected, _ = call('artifact_select', upgraded_sdk, encode({'kind':'original'}))
+                assert selected['ok'] and selected['value']['inventory']['values'] == ['Exact']
+                upgraded_template = selected['value']['selected']['artifacts']['handler_templates']['Chosen']
+                assert upgraded_template['definition_digest'] != template['definition_digest']
+                destination = {**manifest,'id':'projection-v2','version':'2','config_revision':'2','artifact_digest':upgraded_template['definition_digest']}
+                inputs = owner({'kind':'compiled_migration_inputs','adapter':'projection'})
+                upgrade = {'kind':'compiled_migrate','request':{'inputs':inputs,'destination':destination,'template':upgraded_template,'output':config['output'],'nonce':'source-upgrade','disposition':{'kind':'upgrade'}}}
+                owner(upgrade); assert owner(upgrade)['duplicate']
+                owner({'kind':'lifecycle','adapter':'projection-v2','state':'paused'})
+                inputs = owner({'kind':'compiled_migration_inputs','adapter':'projection-v2'})
+                restored = {**manifest,'id':'projection-restored'}
+                rollback = {'kind':'compiled_migrate','request':{'inputs':inputs,'destination':restored,'template':template,'output':config['output'],'nonce':'source-rollback','disposition':{'kind':'rollback','restore_from':'projection'}}}
+                owner(rollback)
+                assert call('close', token)[0]['ok']; handles.remove(token)
+                token = open_store(path); handles.append(token)
+                assert owner(rollback)['duplicate']
+                assert owner(reconstruction)['duplicate']
+                owner({'kind':'lifecycle','adapter':'projection-restored','state':'running'})
+                assert owner({'kind':'poll','adapter':'projection-restored'}) is None
+                assert owner({'kind':'lag','adapter':'projection-restored'})['visible_backlog_lower_bound'] == 0
+                query = operation(token, output_query)
+                # Reconstruction creates a new owned occurrence namespace. Entity
+                # identity, content and external premises stay stable in this profile;
+                # manifestation/attribution IDs and the output occurrence are new.
+                def content(graph, revision):
+                    def visit(value):
+                        if isinstance(value, list):
+                            return [visit(item) for item in value]
+                        if not isinstance(value, dict):
+                            return value
+                        result = {}
+                        for key, item in value.items():
+                            if key in ('derived_nodes','derived_edges','derived_attachments'):
+                                for origin in item:
+                                    if origin['graph_id'] == 'Output':
+                                        assert origin['revision'] == revision
+                                item = [origin for origin in item if origin['graph_id'] != 'Output']
+                                if not item:
+                                    continue
+                            result[key] = visit(item)
+                        return result
+                    return visit(graph)
+                assert query['ok'], query
+                original_revision = original_output['value'][0]['result']['snapshots']['Output']
+                current_revision = query['value'][0]['result']['snapshots']['Output']
+                original_content = content(original_graph, original_revision)
+                current_content = content(query['value'][0]['result']['graph'], current_revision)
+                assert len(original_content['nodes']) == len(current_content['nodes']) == 1
+                assert len(original_content['attachments']) == len(current_content['attachments']) == 1
+                assert original_content['edges'] == current_content['edges'] == []
+                for collection in ('nodes','attachments'):
+                    old_id = original_content[collection][0].pop('id')
+                    new_id = current_content[collection][0].pop('id')
+                    assert old_id != new_id and old_id.startswith('handler:') and new_id.startswith('handler:')
+                assert current_content == original_content, (original_content,current_content)
+                assert query['value'][0]['result']['snapshots']['Output'] == rebuilt['output']['revision']
+                if index == 0:
+                    assert 9007199254740994 in integers(query)
+                else:
+                    graph = query['value'][0]['result']['graph']
+                    assert graph['schema']['id'] == 'weave:explanation'
+                    assert len(graph['nodes']) == 1 and graph['nodes'][0]['type_id'] == 'Snapshot'
+                    assert graph['nodes'][0]['properties']['graph_id'] == 'Input'
             reports.append({'source_sha256': hashlib.sha256(source.encode()).hexdigest(), 'artifact_fingerprint': inventory['artifact_fingerprint'],
                             'handler_digest': template['definition_digest'], 'sdk_bytes': len(sdk), 'exact_integer': str(9007199254740994 + index),
-                            'reopen_duplicate': True, 'foreign_completion_denied': True, 'complete_inventory_retained': True})
+                            'reopen_duplicate': True, 'foreign_completion_denied': True, 'complete_inventory_retained': True,
+                            'request2_source_rebuild_upgrade_rollback': a.lifecycle})
         finally:
             for handle in handles:
                 call('close', handle)
 assert reports[0]['handler_digest'] != reports[1]['handler_digest']
-report = {'profile': 'native-trusted-host-facade-A', 'source_compiler_sdk_sha256': hashlib.sha256(a.compiler_sdk.read_bytes()).hexdigest(),
+report = {'profile': 'native-trusted-host-source-lifecycle/2' if a.lifecycle else 'native-trusted-host-facade-A', 'source_compiler_sdk_sha256': hashlib.sha256(a.compiler_sdk.read_bytes()).hexdigest(),
           'native_library_sha256': hashlib.sha256(a.library.read_bytes()).hexdigest(), 'cases': reports, 'independent_sdk_fixtures': external_fixtures,
           'browser_durability_tested': False, 'mobile_execution_tested': False}
 if a.report:

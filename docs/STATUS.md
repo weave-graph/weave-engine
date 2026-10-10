@@ -1,3 +1,22 @@
+## Native lifecycle host interface (protocol0.21 / store29)
+
+Request2 exposes31 bounded operations through the existing Rust/C host. Current
+durable owner/output authority governs lifecycle, compiled reconstruction/version
+transfer, actor inputs/state/completion/transfer/default observation/cancellation,
+causal policy and scoped lag. Initial installation remains trusted host
+configuration; operational requests cannot fabricate reconciliation evidence.
+
+The development workspace passes605 checks and strict Clippy. The actual C
+controller passes65 subprocesses/eight controlled deaths with genuine old28/27/26
+history, ten recorded tool runs and five physical receipts. Two actual compiler
+recipes pass source-compiled reconstruction, changed-revision upgrade, original
+rollback and reopen recovery. The Swift wrapper typechecks; no new simulator
+application result is claimed. See [semantics](HOST_LIFECYCLE.md) and
+[verification](VERIFICATION_HOST_LIFECYCLE.md). Frozen full-matrix and hosted
+acceptance remain required before publication. Full source/portable actor
+execution, broader reconstruction/resource/remote and original assurance remain
+mandatory; E01–E14 remain in progress and E15 remains open.
+
 ## Local causal dispatch and scoped lag (protocol0.21 / store29)
 
 Actual handler child events bind their source, registration, root and depth in
@@ -10,13 +29,19 @@ and report bounded lower bounds without global offsets.
 
 See [semantics and limits](CAUSAL_DISPATCH.md) and
 [verification](VERIFICATION_029.md). Ten independent causal checks, strict lint,
-597 earlier workspace checks and the actual46-process/10-death development trace
-pass. Final frozen workspace/host/migration and hosted acceptance are pending.
+599 frozen workspace checks, twelve native hosts and56 controllers pass,
+including36 populated store20–28 inventories, nine actual old SDK journals and
+every prior source/native recovery trace. The actual46-process/10-death causal
+trace passes. [PR30](https://github.com/weave-graph/weave-engine/pull/30) merged
+after all54 hosted checks succeeded on its exact head6ea26c4.
 The controller preserves genuine store28 actor/effect/cancellation history,
 store27 version/observation history and independent tool/sink journals. Genuine
 old events become explicit legacy boundaries. Full taxonomy, cross-peer causal
 identity, source/portable bindings, CPU/RSS isolation and all original assurance
 remain mandatory; no full paper gate is claimed.
+
+The following older sections retain their original development context; later
+published verification and the current profiles above supersede pending notes.
 
 ## Effect-aware native actor cancellation (protocol0.21 / store28)
 

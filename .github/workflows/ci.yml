@@ -124,6 +124,31 @@ jobs:
         run: |
           cargo build --locked -p weave-engine --features recovery-testing --example causal_dispatch_fixture
           python3 scripts/check_causal_dispatch.py --old-disposition-controller previous-store28/scripts/check_actor_disposition.py --old-lifecycle-controller previous-store27/scripts/check_actor_lifecycle.py --old26-actor previous-store26/target/debug/examples/recorded_actor_fixture --old27-actor previous-store27/target/debug/examples/actor_lifecycle_fixture --old28-actor previous-store28/target/debug/examples/actor_lifecycle_fixture --host target/debug/examples/causal_dispatch_fixture --report causal-dispatch-recovery.json
+      - name: Verify C lifecycle interface and eight independent process deaths
+        env:
+          WEAVE_HOST_LIBRARY: ${{ runner.os == 'Windows' && 'target/debug/weave_native.dll' || runner.os == 'macOS' && 'target/debug/libweave_native.dylib' || 'target/debug/libweave_native.so' }}
+        run: |
+          cargo build --locked -p weave-native --all-features --lib
+          python3 scripts/check_host_lifecycle.py --library "${{ env.WEAVE_HOST_LIBRARY }}" --actor target/debug/examples/actor_lifecycle_fixture --old-disposition-controller previous-store28/scripts/check_actor_disposition.py --old-lifecycle-controller previous-store27/scripts/check_actor_lifecycle.py --old26-actor previous-store26/target/debug/examples/recorded_actor_fixture --old27-actor previous-store27/target/debug/examples/actor_lifecycle_fixture --old28-actor previous-store28/target/debug/examples/actor_lifecycle_fixture --report host-lifecycle-recovery.json
+      - name: Verify actual compiler source through C reconstruction and version transfer
+        env:
+          WEAVE_HOST_LIBRARY: ${{ runner.os == 'Windows' && 'target/debug/weave_native.dll' || runner.os == 'macOS' && 'target/debug/libweave_native.dylib' || 'target/debug/libweave_native.so' }}
+          WEAVE_COMPILER_LIBRARY: ${{ runner.os == 'Windows' && 'lifecycle-compiler/target/debug/weave_compiler_sdk.dll' || runner.os == 'macOS' && 'lifecycle-compiler/target/debug/libweave_compiler_sdk.dylib' || 'lifecycle-compiler/target/debug/libweave_compiler_sdk.so' }}
+        run: |
+          cargo build --manifest-path lifecycle-compiler/Cargo.toml --locked -p weave-compiler-sdk --lib
+          python3 scripts/check_host_facade.py --library "${{ env.WEAVE_HOST_LIBRARY }}" --compiler-sdk "${{ env.WEAVE_COMPILER_LIBRARY }}" --lifecycle --report host-source-lifecycle.json
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 6ea26c4e7f0353f0307ebe0933ea541993c76f7e
+          path: previous-store29
+      - name: Verify genuine store29 journal compatibility without a schema change
+        env:
+          WEAVE_COMPILER_LIBRARY: ${{ runner.os == 'Windows' && 'lifecycle-compiler/target/debug/weave_compiler_sdk.dll' || runner.os == 'macOS' && 'lifecycle-compiler/target/debug/libweave_compiler_sdk.dylib' || 'lifecycle-compiler/target/debug/libweave_compiler_sdk.so' }}
+        run: |
+          cargo build --manifest-path previous-store29/Cargo.toml --locked -p weave-native --all-features --example native_scenario
+          cargo build --locked -p weave-native --all-features --example native_scenario
+          python3 scripts/check_native_scenario.py --compiler-sdk "${{ env.WEAVE_COMPILER_LIBRARY }}" --host previous-store29/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures lifecycle-compiler/examples/native_scenario --report host-store29-compatibility.json
 
       - run: cargo run --locked -p weave-cluster --example measure_quality
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings

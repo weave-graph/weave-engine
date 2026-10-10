@@ -60,8 +60,95 @@ enum Operation {
         lease: String,
         preparation: String,
     },
+    Capabilities,
+    Lifecycle {
+        adapter: String,
+        state: String,
+    },
+    Lag {
+        adapter: String,
+    },
+    CausalPolicy {
+        adapter: String,
+        policy: weave_engine::CausalDispatchPolicy,
+    },
+    ProjectionInputs {
+        adapter: String,
+    },
+    ProjectionState {
+        adapter: String,
+    },
+    ProjectionMigrationInputs {
+        adapter: String,
+    },
+    CompiledMigrationInputs {
+        adapter: String,
+    },
+    CompiledRebuildInputs {
+        adapter: String,
+    },
+    ActorInputs {
+        adapter: String,
+    },
+    ActorState {
+        adapter: String,
+    },
+    ActorMigrationInputs {
+        adapter: String,
+    },
+    CancelHandler {
+        request: Box<weave_engine::DeliveryCancellationRequest>,
+    },
+    ProjectionRebase {
+        request: Box<weave_engine::ProjectionRebaseRequest>,
+    },
+    ProjectionComplete {
+        request: Box<weave_engine::ProjectionCompletionRequest>,
+    },
+    ProjectionMigrate {
+        request: Box<weave_engine::ProjectionMigrationRequest>,
+    },
+    CompiledMigrate {
+        request: Box<weave_engine::CompiledMigrationRequest>,
+    },
+    CompiledRebuild {
+        request: Box<weave_engine::CompiledRebuildRequest>,
+    },
+    ActorBootstrap {
+        request: Box<weave_engine::RecordedActorBootstrap>,
+    },
+    ActorComplete {
+        request: Box<weave_engine::RecordedActorCompletion>,
+    },
+    ActorMigrate {
+        request: Box<weave_engine::RecordedActorMigration>,
+    },
+    ActorObserve {
+        request: Box<weave_engine::RecordedActorObservation>,
+    },
+    ActorCancel {
+        request: Box<weave_engine::DeliveryCancellationRequest>,
+    },
+    ActorRunInputs {
+        adapter: String,
+        event: String,
+        lease: String,
+    },
+    ActorDeliveryMode {
+        adapter: String,
+        event: String,
+        lease: String,
+    },
+    ActorReceipt {
+        adapter: String,
+        event: String,
+    },
+    ActorObservation {
+        adapter: String,
+        event: String,
+    },
 }
-/// Owns one Engine and immutable authority. It never runs source code or installs config from JSON.
+/// Owns one Engine and immutable authority. It never runs source code. Initial installation stays in trusted embedding configuration; owner migrations preserve actual installed scopes.
 pub struct HostSession {
     pub(crate) engine: Engine,
     pub(crate) authority: HostContext,
@@ -106,14 +193,62 @@ impl HostSession {
             Ok(r) => r,
             Err(_) => return self.rejected("E_HOST_INPUT", "invalid host request"),
         };
-        if request.format != "weave-host-request/1" {
+        let legacy = matches!(
+            &request.operation,
+            Operation::Execute { .. }
+                | Operation::Poll { .. }
+                | Operation::Prepare { .. }
+                | Operation::Complete { .. }
+        );
+        if request.format != "weave-host-request/2"
+            && (request.format != "weave-host-request/1" || !legacy)
+        {
             return self.rejected("E_HOST_VERSION", "unsupported local host format");
         }
-        if matches!(&request.operation, Operation::Execute { program } if program.commands.len() > 16)
-        {
+        let command_count = match &request.operation {
+            Operation::Execute { program } => program.commands.len(),
+            Operation::ProjectionComplete { request } => request.program.commands.len(),
+            Operation::ActorComplete { request } => request.program.commands.len(),
+            _ => 0,
+        };
+        if command_count > 16 {
             return self.rejected("E_HOST_BUDGET", "program command limit exceeded");
         }
         self.invoke(|engine, host| match request.operation {
+            Operation::Capabilities => encode_value(&serde_json::json!({
+                "format":"weave-host-capabilities/1", "request_formats":["weave-host-request/1","weave-host-request/2"],
+                "protocol":weave_contract::VERSION, "store_marker":weave_engine::STORAGE_VERSION,
+                "operations":["execute","poll","prepare","complete","lifecycle","lag","causal_policy","projection_inputs","projection_state","projection_migration_inputs","compiled_migration_inputs","compiled_rebuild_inputs","actor_inputs","actor_state","actor_migration_inputs","cancel_handler","projection_rebase","projection_complete","projection_migrate","compiled_migrate","compiled_rebuild","actor_bootstrap","actor_complete","actor_migrate","actor_observe","actor_cancel","actor_run_inputs","actor_delivery_mode","actor_receipt","actor_observation","capabilities"],
+                "initial_installation":"trusted_embedding_host", "broker_reconciliation":"trusted_embedding_host",
+                "request_limit":REQUEST_LIMIT,"response_limit":RESPONSE_LIMIT,"program_commands":16,
+                "execution_trust":"native_host", "durability":"embedding_host_fence"
+            })),
+            Operation::Lifecycle { adapter, state } => { engine.set_adapter_state_for(&adapter, &state, host)?; encode_value(&true) },
+            Operation::Lag { adapter } => { encode_value(&engine.adapter_lag_status_for(&adapter, host)?) },
+            Operation::CausalPolicy { adapter, policy } => { engine.set_causal_dispatch_policy_for(&adapter, &policy, host)?; encode_value(&true) },
+            Operation::ProjectionInputs { adapter } => { encode_value(&engine.projection_rebase_inputs_for(&adapter, host)?) },
+            Operation::ProjectionState { adapter } => { encode_value(&engine.projection_state_for(&adapter, host)?) },
+            Operation::ProjectionMigrationInputs { adapter } => { encode_value(&engine.projection_migration_inputs_for(&adapter, host)?) },
+            Operation::CompiledMigrationInputs { adapter } => { encode_value(&engine.compiled_migration_inputs_for(&adapter, host)?) },
+            Operation::CompiledRebuildInputs { adapter } => { encode_value(&engine.compiled_rebuild_inputs_for(&adapter, host)?) },
+            Operation::ActorInputs { adapter } => { encode_value(&engine.recorded_actor_inputs_for(&adapter, host)?) },
+            Operation::ActorState { adapter } => { encode_value(&engine.recorded_actor_state_for(&adapter, host)?) },
+            Operation::ActorMigrationInputs { adapter } => { encode_value(&engine.recorded_actor_migration_inputs_for(&adapter, host)?) },
+            Operation::CancelHandler { request } => { encode_value(&engine.cancel_handler_delivery_for(&request, host)?) },
+            Operation::ProjectionRebase { request } => { encode_value(&engine.rebase_projection_for(&request, host)?) },
+            Operation::ProjectionComplete { request } => { encode_value(&engine.complete_projection_for(&request, host)?) },
+            Operation::ProjectionMigrate { request } => { encode_value(&engine.migrate_projection_for(&request, host)?) },
+            Operation::CompiledMigrate { request } => { encode_value(&engine.migrate_compiled_handler_for(&request, host)?) },
+            Operation::CompiledRebuild { request } => { encode_value(&engine.rebuild_compiled_handler_for(&request, host)?) },
+            Operation::ActorBootstrap { request } => { encode_value(&engine.bootstrap_recorded_actor_for(&request, host)?) },
+            Operation::ActorComplete { request } => { encode_value(&engine.complete_recorded_actor_for(&request, host)?) },
+            Operation::ActorMigrate { request } => { encode_value(&engine.migrate_recorded_actor_for(&request, host)?) },
+            Operation::ActorObserve { request } => { encode_value(&engine.observe_recorded_actor_for(&request, host)?) },
+            Operation::ActorCancel { request } => { encode_value(&engine.cancel_recorded_actor_delivery_for(&request, host)?) },
+            Operation::ActorRunInputs { adapter, event, lease } => { encode_value(&engine.recorded_actor_run_inputs_for(&adapter, &event, &lease, host)?) },
+            Operation::ActorDeliveryMode { adapter, event, lease } => { encode_value(&engine.recorded_actor_delivery_mode_for(&adapter, &event, &lease, host)?) },
+            Operation::ActorReceipt { adapter, event } => { encode_value(&engine.recorded_actor_receipt_for(&adapter, &event, host)?) },
+            Operation::ActorObservation { adapter, event } => { encode_value(&engine.recorded_actor_observation_for(&adapter, &event, host)?) },
             Operation::Execute { program } => encode_value(&engine.execute(&program, host)?),
             Operation::Poll { adapter } => encode_value(&engine.poll_adapter_for(&adapter, host)?),
             Operation::Prepare {
@@ -158,6 +293,17 @@ impl HostSession {
         };
         self.invoke(|engine, host| {
             engine.install_compiled_handler(manifest, &template, output, host)?;
+            encode_value(&true)
+        })
+    }
+    /// Initial actor registration is trusted embedding configuration, never an operational opcode.
+    /// Artifact hashing binds bytes; this method does not run a tool or attest its execution.
+    pub fn install_recorded_actor(
+        &mut self,
+        definition: &weave_engine::RecordedActorDefinition,
+    ) -> HostReply {
+        self.invoke(|engine, host| {
+            engine.install_recorded_actor_for(definition, host)?;
             encode_value(&true)
         })
     }

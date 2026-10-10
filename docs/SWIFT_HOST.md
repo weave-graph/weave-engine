@@ -8,9 +8,13 @@ artifact payloads are returned as `Data`, never reconstructed through NSNumber.
 
 The caller owns one executor and the host authority. `call` does not install
 configuration, change the principal, or automatically retry an error. Explicit
-`installHandler` and `setAdapterState` use the privileged C entry points and retain
+`installHandler`, `installActor` and `setAdapterState` use explicit C entry points and retain
 the native durable-owner checks. `selectArtifact` is pure and preserves the full
 SDK response and unused artifacts. The input/output bounds match the native host.
+Raw `call` bytes can carry request2 lifecycle operations under current durable
+owner/output authority. The updated wrapper typechecks on macOS. The earlier
+simulator application trace below exercised request1; it does not verify the new
+actor entry point or request2 lifecycle behavior inside an iOS application.
 
 Every invoked Engine outcome carries `requiresFence`, including ordinary errors.
 For this file-backed native host, SQLite provides the Engine transaction boundary;

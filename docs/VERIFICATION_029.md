@@ -28,13 +28,16 @@ child. Independent SQL verifies ancestry, actual output receipts, scoped lag,
 checkpoint frontiers, old journals and retention. Raw requests/responses, driver
 output, stores and sidecars are retained with `--evidence-dir`.
 
-The latest development source passes597 workspace checks and strict Clippy, and
-the actual46-process/10-death controller passes. These are development results;
-the final clean-source archive, full store20–28 inventories, nine actual old SDK
-journals, every prior source/native recovery trace, all current native hosts and
-exact publication hosted checks remain required before merging. Ubuntu/macOS/
-Windows run the same causal trace. Earlier evidence remains tied to its original
-revision. Frozen and hosted acceptance are pending.
+Frozen head6ea26c4 passes599 workspace checks and strict Clippy/format, twelve
+native hosts and56 independent controllers. These include36 populated store20–28
+inventories, nine actual old SDK journals, every prior native recovery controller
+and the actual214-runtime/12-compiler/22-death source/peer/effect scenario.
+The437-file clean source archive and207 Rust/Cargo inputs were independently
+hashed against the compiled baseline. The actual46-process/10-death controller
+passes. [PR30](https://github.com/weave-graph/weave-engine/pull/30) merged after
+all54 checks succeeded on that exact head; Ubuntu/macOS/Windows executed the same
+causal trace. The merge commit is48a5659. Earlier evidence remains tied to its
+original revision; later host lifecycle evidence has its own profile.
 
 Trust is native host computation and a local graph-handler ancestry profile.
 No arbitrary remote exactly-once, portable causal execution, complete taxonomy,
