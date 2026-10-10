@@ -11,6 +11,12 @@ const DEFINITION_LIMIT: usize = 2 * STATE_LIMIT;
 pub struct RecordedActorDefinition {
     pub manifest: AdapterManifest,
     pub event_schema: String,
+    /// Declared compatible opaque host-state ABI. Default omission preserves store26 hashes.
+    #[serde(
+        default = "default_state_protocol",
+        skip_serializing_if = "is_default_state_protocol"
+    )]
+    pub state_protocol: String,
     pub metadata_depth: u32,
     /// Actual stored artifact bytes. Hash verification is not execution attestation.
     pub artifact: Vec<u8>,
@@ -93,23 +99,35 @@ pub struct RecordedActorReceipt {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Record {
-    definition: RecordedActorDefinition,
-    request_digest: String,
-    program_digest: String,
-    before: RecordedActorState,
-    after: RecordedActorState,
-    receipt: RecordedActorReceipt,
-    checkpoint: i64,
+pub(crate) struct Record {
+    pub(crate) definition: RecordedActorDefinition,
+    pub(crate) request_digest: String,
+    pub(crate) program_digest: String,
+    pub(crate) before: RecordedActorState,
+    pub(crate) after: RecordedActorState,
+    pub(crate) receipt: RecordedActorReceipt,
+    pub(crate) checkpoint: i64,
 }
 pub(crate) struct CompletionToken {
     adapter: String,
     event: String,
 }
 impl CompletionToken {
+    pub(crate) fn observed(adapter: &str, event: &str) -> Self {
+        Self {
+            adapter: adapter.into(),
+            event: event.into(),
+        }
+    }
     pub(crate) fn authorizes(&self, adapter: &str, event: &str) -> bool {
         self.adapter == adapter && self.event == event
     }
+}
+pub(crate) fn default_state_protocol() -> String {
+    "weave-recorded-opaque-state/1".into()
+}
+fn is_default_state_protocol(value: &str) -> bool {
+    value == "weave-recorded-opaque-state/1"
 }
 fn integrity() -> Error {
     err("E_ACTOR_INTEGRITY", "recorded actor binding unavailable")
@@ -118,8 +136,9 @@ fn canonical_pins(pins: &mut Vec<GraphRef>) {
     pins.sort_by(|a, b| (&a.graph_id, &a.revision).cmp(&(&b.graph_id, &b.revision)));
     pins.dedup();
 }
-fn validate_definition(definition: &RecordedActorDefinition) -> Result<()> {
+pub(crate) fn validate_definition(definition: &RecordedActorDefinition) -> Result<()> {
     if definition.event_schema != VERSION
+        || !valid_id(&definition.state_protocol)
         || definition.manifest.projection_replay
         || definition.metadata_depth > 8
         || definition.artifact.is_empty()
@@ -172,7 +191,10 @@ fn completion_digest(request: &RecordedActorCompletion) -> Result<String> {
         &request.program,
     ))
 }
-fn validate_state(state: &RecordedActorState, definition: &RecordedActorDefinition) -> Result<()> {
+pub(crate) fn validate_state(
+    state: &RecordedActorState,
+    definition: &RecordedActorDefinition,
+) -> Result<()> {
     if state.inputs.adapter != definition.manifest.id
         || state.inputs.registration_digest != retention::hash(definition)?
         || !valid_id(&state.state_revision)
@@ -310,7 +332,7 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
         })
         .transpose()
     }
-    fn actor_definition(&self, adapter: &str) -> Result<RecordedActorDefinition> {
+    pub(crate) fn actor_definition(&self, adapter: &str) -> Result<RecordedActorDefinition> {
         let (body, digest) = self
             .actor_cell(
                 "recorded_actor_definitions",
@@ -334,7 +356,7 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
         }
         Ok(definition)
     }
-    fn actor_definition_for(
+    pub(crate) fn actor_definition_for(
         &self,
         adapter: &str,
         host: &HostContext,
@@ -354,9 +376,24 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
         host: &HostContext,
     ) -> Result<()> {
         let _budget = self.read_budget.enter();
-        validate_definition(definition)?;
         let tx = self.conn.unchecked_transaction()?;
         let _clock = self.operation_write_scope()?;
+        self.install_recorded_actor_in_transaction(definition, host)?;
+        tx.commit()?;
+        Ok(())
+    }
+    pub(crate) fn install_recorded_actor_in_transaction(
+        &self,
+        definition: &RecordedActorDefinition,
+        host: &HostContext,
+    ) -> Result<()> {
+        if self.conn.is_autocommit() {
+            return Err(err(
+                "E_TRANSACTION",
+                "actor installation requires transaction",
+            ));
+        }
+        validate_definition(definition)?;
         let id = &definition.manifest.id;
         let exists: bool = self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM dispatch_adapters WHERE id=?1)",
@@ -371,7 +408,6 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
                     "use a new identity for recorded actor installation",
                 ));
             }
-            tx.commit()?;
             return Ok(());
         }
         let count: i64 =
@@ -394,10 +430,9 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
                 retention::hash(definition)?
             ],
         )?;
-        tx.commit()?;
         Ok(())
     }
-    fn actor_closure(
+    pub(crate) fn actor_closure(
         &self,
         definition: &RecordedActorDefinition,
         reference: &GraphRef,
@@ -459,7 +494,11 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
         }
         Ok(pins)
     }
-    fn actor_inputs(&self, adapter: &str, host: &HostContext) -> Result<RecordedActorInputs> {
+    pub(crate) fn actor_inputs(
+        &self,
+        adapter: &str,
+        host: &HostContext,
+    ) -> Result<RecordedActorInputs> {
         let definition = self.actor_definition_for(adapter, host)?;
         let mut primary_inputs = Vec::new();
         let mut input_snapshots = Vec::new();
@@ -532,7 +571,11 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
         }
         Ok(Some(state))
     }
-    fn put_actor_state(&self, state: &RecordedActorState, checkpoint: i64) -> Result<()> {
+    pub(crate) fn put_actor_state(
+        &self,
+        state: &RecordedActorState,
+        checkpoint: i64,
+    ) -> Result<()> {
         validate_state(state, &self.actor_definition(&state.inputs.adapter)?)?;
         self.conn.execute("INSERT INTO recorded_actor_states VALUES (?1,?2,?3,?4) ON CONFLICT(adapter) DO UPDATE SET body=excluded.body,digest=excluded.digest,checkpoint=excluded.checkpoint", params![state.inputs.adapter, serde_json::to_string(state)?, retention::hash(&(state, checkpoint))?, checkpoint])?;
         Ok(())
@@ -547,9 +590,10 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
         }
         Ok(())
     }
-    pub(crate) fn require_recorded_actor_effect(&self, adapter: &str) -> Result<()> {
+    pub(crate) fn require_recorded_actor_effect(&self, adapter: &str, event: &str) -> Result<()> {
         if self.is_recorded_actor(adapter)? {
             self.require_recorded_actor_ready(adapter)?;
+            self.require_actor_new_computation(adapter, event)?;
         }
         Ok(())
     }
@@ -693,6 +737,7 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
         self.require_recorded_actor_ready(adapter)?;
         self.check_lease(adapter, event, lease)?;
         self.require_uncanceled_delivery(adapter, event)?;
+        self.require_actor_new_computation(adapter, event)?;
         let (graph_id, branch_id, revision, _) = self
             .scoped_event(&definition.manifest, event)?
             .ok_or_else(|| err("E_UNAVAILABLE", "actor occurrence unavailable"))?;
@@ -707,7 +752,38 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
             input_snapshots,
         })
     }
-    fn actor_record(&self, adapter: &str, event: &str) -> Result<Option<Record>> {
+    /// Read an actual historical completion under current whole authority, including retired actors.
+    /// This never executes a tool, effect or graph command and does not require replay readiness.
+    pub fn recorded_actor_receipt_for(
+        &self,
+        adapter: &str,
+        event: &str,
+        host: &HostContext,
+    ) -> Result<RecordedActorReceipt> {
+        let _budget = self.read_budget.enter();
+        let _tx = self.optional_read_transaction()?;
+        let _clock = self.operation_scope()?;
+        self.require_adapter_host(adapter, host)?;
+        self.reject_governed_effect_adapter(adapter)?;
+        let definition = self.actor_definition(adapter)?;
+        self.scoped_event(&definition.manifest, event)?
+            .ok_or_else(|| err("E_UNAVAILABLE", "recorded actor occurrence unavailable"))?;
+        let current = self.actor_state(adapter)?.ok_or_else(integrity)?;
+        let record = self
+            .actor_record(adapter, event)?
+            .ok_or_else(|| err("E_UNAVAILABLE", "recorded actor receipt unavailable"))?;
+        for pin in current
+            .inputs
+            .input_snapshots
+            .iter()
+            .chain(record.before.inputs.input_snapshots.iter())
+            .chain(record.after.inputs.input_snapshots.iter())
+        {
+            self.retention_whole(pin, host)?;
+        }
+        Ok(record.receipt)
+    }
+    pub(crate) fn actor_record(&self, adapter: &str, event: &str) -> Result<Option<Record>> {
         let Some((body, digest)) = self.actor_cell(
             "recorded_actor_receipts",
             adapter,
@@ -731,12 +807,12 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
             results.ok_or_else(|| err("E_BUDGET", "actor handler receipt exceeds limit"))?;
         self.read_budget.charge(results.len())?;
         let actual: Vec<CommandResult> = serde_json::from_str(&results).map_err(|_| integrity())?;
-        let (graph_id, branch_id, revision): (String, String, String) = self
+        let (graph_id, branch_id, revision, sequence): (String, String, String, i64) = self
             .conn
             .query_row(
-                "SELECT graph_id,branch_id,revision FROM events WHERE event_id=?1",
+                "SELECT graph_id,branch_id,revision,sequence FROM events WHERE event_id=?1",
                 [event],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .optional()?
             .ok_or_else(integrity)?;
@@ -753,6 +829,7 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
                 .inputs
                 .input_snapshots
                 .contains(&GraphRef { graph_id, revision })
+            || record.checkpoint != sequence
             || program_digest != record.program_digest
             || actual != record.receipt.handler.results
             || self.actor_effects(adapter, event)? != record.receipt.effects
@@ -940,7 +1017,9 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock = self.operation_write_scope()?;
-            let definition = self.actor_definition_for(&request.adapter, host)?;
+            self.require_adapter_host(&request.adapter, host)?;
+            self.reject_governed_effect_adapter(&request.adapter)?;
+            let definition = self.actor_definition(&request.adapter)?;
             self.require_uncanceled_delivery(&request.adapter, &request.event)?;
             let (graph_id, branch_id, revision, _) = self
                 .scoped_event(&definition.manifest, &request.event)?
@@ -983,15 +1062,15 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
                 if self.actor_effects(&request.adapter, &request.event)? != record.receipt.effects {
                     return Err(integrity());
                 }
-                let handler = self.complete_handler_with_actor(
-                    &request.adapter,
-                    &request.event,
-                    &request.lease,
-                    &request.program,
-                    &token,
-                )?;
-                if !handler.duplicate
-                    || handler.results != record.receipt.handler.results
+                // The typed loader already bound the actual handler journal and terminal
+                // effects. Historical exact retries remain readable after retirement.
+                let mut handler = record.receipt.handler.clone();
+                handler.duplicate = true;
+                if record.program_digest
+                    != format!(
+                        "{:x}",
+                        Sha256::digest(serde_json::to_vec(&request.program)?)
+                    )
                     || self.actor_after(
                         request,
                         &record.before,
@@ -1007,7 +1086,10 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
                 before_commit();
                 return Ok(receipt);
             }
+            self.actor_definition_for(&request.adapter, host)?;
+            self.require_recorded_actor_ready(&request.adapter)?;
             self.check_lease(&request.adapter, &request.event, &request.lease)?;
+            self.require_actor_new_computation(&request.adapter, &request.event)?;
             if retention::hash(&current)? != request.prior_state_digest {
                 return Err(err("E_CONFLICT", "actor state changed"));
             }

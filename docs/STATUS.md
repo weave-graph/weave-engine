@@ -1,3 +1,21 @@
+## Native actor version transfer and default observation (protocol0.21 / store27)
+
+Actual opaque state/artifact/private checkpoint pairs transfer into fresh paused
+namespaces. Rollback selects a validated archived pair and fences historical
+computation/effects. The default delivery mode requires observation within this
+fence; actual recorded outcomes, original tool/effect provenance and an empty
+acknowledgment commit with observer state/checkpoint. Missing history is unavailable.
+Exact retired completion/migration/observation retries never rewind newer work.
+Current whole authority and typed actual lineage govern reads and collection.
+
+The draft [verification](VERIFICATION_027.md) uses distinct actual native tool
+versions and independent journal/sink process deaths, with genuine populated
+store26 rows preserved. [Semantics and limits](ACTOR_LIFECYCLE.md) describe this
+trusted native host profile. Frozen/full hosted acceptance is still pending.
+Effect-aware cancellation, source/portable bindings, full output reconstruction,
+receipt expiry, causal/resource isolation and all original assurance remain
+mandatory; no complete paper gate is claimed.
+
 ## Recorded native actors and effect recovery (protocol0.21 / store26)
 
 Trusted native actors have a separate immutable registration with actual stored

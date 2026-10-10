@@ -58,6 +58,9 @@ const KNOWN_TABLES: &[&str] = &[
     "mount_events",
     "mount_receipts",
     "mounts",
+    "recorded_actor_migrations",
+    "recorded_actor_replay_fences",
+    "recorded_actor_observations",
     "recorded_actor_definitions",
     "recorded_actor_states",
     "recorded_actor_receipts",
@@ -596,6 +599,9 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                     && matches!(
                                         table.as_str(),
                                         "retention_adapter_states"
+                                            | "recorded_actor_observations"
+                                            | "recorded_actor_migrations"
+                                            | "recorded_actor_replay_fences"
                                             | "recorded_actor_definitions"
                                             | "recorded_actor_states"
                                             | "recorded_actor_receipts"
@@ -622,7 +628,27 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                     } else {
                                         field("adapter")?
                                     };
-                                    if matches!(
+                                    if table == "recorded_actor_observations" {
+                                        actor_observation::validate_retained_observation(
+                                            self,
+                                            &adapter,
+                                            &field("event_id")?,
+                                            &field("digest")?,
+                                            &value,
+                                        )?;
+                                    } else if matches!(
+                                        table.as_str(),
+                                        "recorded_actor_migrations"
+                                            | "recorded_actor_replay_fences"
+                                    ) {
+                                        actor_lifecycle::validate_retained_actor_lifecycle(
+                                            self,
+                                            &table,
+                                            &adapter,
+                                            &field("digest")?,
+                                            &value,
+                                        )?;
+                                    } else if matches!(
                                         table.as_str(),
                                         "recorded_actor_definitions"
                                             | "recorded_actor_states"

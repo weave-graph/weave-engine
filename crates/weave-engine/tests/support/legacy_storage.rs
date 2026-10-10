@@ -3,7 +3,10 @@
 pub fn strip_retention_schema(connection: &rusqlite::Connection) {
     connection
         .execute_batch(
-            "DROP TABLE recorded_actor_receipts;
+            "DROP TABLE recorded_actor_observations;
+DROP TABLE recorded_actor_replay_fences;
+DROP TABLE recorded_actor_migrations;
+DROP TABLE recorded_actor_receipts;
 DROP TABLE recorded_actor_states;
 DROP TABLE recorded_actor_definitions;
 DROP TABLE compiled_replay_states;

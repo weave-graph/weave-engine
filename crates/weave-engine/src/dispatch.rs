@@ -681,7 +681,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             ));
         }
         self.check_lease(adapter, event, lease)?;
-        self.require_recorded_actor_effect(adapter)?;
+        self.require_recorded_actor_effect(adapter, event)?;
         if self.scoped_event(&manifest, event)?.is_none() {
             return Err(err("E_UNAVAILABLE", "delivery unavailable"));
         }
@@ -752,7 +752,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                 "adapter effect authority inactive",
             ));
         }
-        self.require_recorded_actor_effect(&intent.adapter)?;
+        self.require_recorded_actor_effect(&intent.adapter, &intent.event_id)?;
         if self.scoped_event(&manifest, &intent.event_id)?.is_none() {
             return Err(err("E_UNAVAILABLE", "effect source is unavailable"));
         }

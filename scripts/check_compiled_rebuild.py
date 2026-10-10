@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 from check_compiled_lifecycle import snapshot
 from version_profile import store_marker
-from retention_migration import RECORDED_ACTOR_TABLES
+from retention_migration import ACTOR_LIFECYCLE_TABLES,RECORDED_ACTOR_TABLES
 
 
 def main():
@@ -68,7 +68,7 @@ handler Reconstruct revision "{revision}" using Keep {{
         transfer(a.old_handler,'source1','source2',artifacts[1],{'kind':'upgrade'},'old-upgrade',20)
         transfer(a.old_handler,'source2','source3',artifacts[0],{'kind':'rollback','restore_from':'source1'},'old-rollback',20)
         before=snapshot(db);assert before['marker']==24 and len(before['tables']['compiled_migrations']['rows'])==2
-        new_tables={'compiled_rebuild_receipts','compiled_replay_states'} | (RECORDED_ACTOR_TABLES if store_marker()>=26 else frozenset());assert not new_tables.intersection(before['tables'])
+        new_tables={'compiled_rebuild_receipts','compiled_replay_states'} | (RECORDED_ACTOR_TABLES if store_marker()>=26 else frozenset())|(ACTOR_LIFECYCLE_TABLES if store_marker()>=27 else frozenset());assert not new_tables.intersection(before['tables'])
         invoke(a.storage,db,'crash',30,code=82);assert snapshot(db)==before
         invoke(a.storage,db,'after_commit',30,code=83);after=snapshot(db)
         assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|new_tables
