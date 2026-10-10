@@ -659,6 +659,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "weave-browser-host"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "weave-host",
+]
+
+[[package]]
 name = "weave-cluster"
 version = "0.1.0"
 dependencies = [
@@ -704,6 +713,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "weave-host"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "weave-contract",
+ "weave-engine",
+]
+
+[[package]]
 name = "weave-native"
 version = "0.1.0"
 dependencies = [
@@ -714,6 +736,7 @@ dependencies = [
  "tempfile",
  "weave-contract",
  "weave-engine",
+ "weave-host",
 ]
 
 [[package]]

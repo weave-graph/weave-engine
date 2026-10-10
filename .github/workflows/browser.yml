@@ -48,3 +48,24 @@ jobs:
         run: |
           node scripts/check_browser_image_smoke.cjs
           node scripts/check_browser_persistence.cjs target/wasm32-unknown-emscripten/debug/examples/browser_image_probe.js "$RUNNER_TEMP/store17-browser/browser_image_probe.js"
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 15e8c8f8ec92939e3422b33553b393bda469c61f
+          path: .ci-host-compiler
+      - name: Compile actual independent sources and retain complete SDK inventories
+        run: |
+          cargo build --manifest-path .ci-host-compiler/Cargo.toml --locked -p weave-compiler-sdk --lib
+          python3 scripts/prepare_browser_host_sources.py --compiler-sdk .ci-host-compiler/target/debug/libweave_compiler_sdk.so --output "$RUNNER_TEMP/browser-host-sources"
+      - name: Build shared generic host with checked bounded Rust stack
+        run: sh scripts/build_browser_host.sh
+      - name: Verify raw source lifecycle, whole journals and actual browser recovery
+        run: node scripts/check_browser_host.cjs target/wasm32-unknown-emscripten/debug/examples/browser_host.js "$RUNNER_TEMP/browser-host-sources" "$RUNNER_TEMP/browser-host-evidence"
+      - name: Preserve browser host raw requests, responses, images and measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generic-browser-host-evidence
+          path: |
+            ${{ runner.temp }}/browser-host-sources
+            ${{ runner.temp }}/browser-host-evidence

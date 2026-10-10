@@ -1,3 +1,17 @@
+## Generic browser host (protocol0.21 / store29)
+
+The shared trusted Rust facade now has a raw UTF-8 browser transport and atomic
+IndexedDB generations containing the complete SQLite image and SDK artifact
+journal. Two actual pure source recipes pass completion/reconstruction/version
+transfer/recorded rollback and lost-response recovery. The development profile
+passes608 workspace checks and28 actual Chromium groups /169 requests, including
+16 staged worker terminations, real quota failure, near-capacity/corruption
+checks and one browser-process crash. The native C65-process/eight-death profile
+also passes after extraction. See [semantics](BROWSER_HOST.md) and
+[verification](VERIFICATION_BROWSER_HOST.md). Exact frozen-source/hosted
+acceptance remains required before publication. Source/portable actors/effects,
+browser/mobile apps/devices and all wider original requirements remain open.
+
 ## Native lifecycle host interface (protocol0.21 / store29)
 
 Request2 exposes31 bounded operations through the existing Rust/C host. Current
@@ -12,8 +26,10 @@ history, ten recorded tool runs and five physical receipts. Two actual compiler
 recipes pass source-compiled reconstruction, changed-revision upgrade, original
 rollback and reopen recovery. The Swift wrapper typechecks; no new simulator
 application result is claimed. See [semantics](HOST_LIFECYCLE.md) and
-[verification](VERIFICATION_HOST_LIFECYCLE.md). Frozen full-matrix and hosted
-acceptance remain required before publication. Full source/portable actor
+[verification](VERIFICATION_HOST_LIFECYCLE.md). Its frozen605-check/59-controller
+profile and all54 exact-head hosted checks passed before
+[PR31](https://github.com/weave-graph/weave-engine/pull/31) merged at2cfa6c9.
+Full source/portable actor
 execution, broader reconstruction/resource/remote and original assurance remain
 mandatory; E01–E14 remain in progress and E15 remains open.
 
