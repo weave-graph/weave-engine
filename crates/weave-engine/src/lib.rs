@@ -32,6 +32,8 @@ mod identity_acceptance;
 pub use identity_acceptance::{
     IdentityCandidate, IdentityDecisionReceipt, IdentityDecisionRequest, IdentityPolicy,
 };
+mod causal_dispatch;
+pub use causal_dispatch::{AdapterLagStatus, CausalDispatchPolicy, PendingDispatchStatus};
 mod actor_disposition;
 mod actor_lifecycle;
 mod actor_observation;
@@ -55,7 +57,7 @@ pub use recorded_actors::{
 };
 pub use recorded_history::{RecordedHistoryRange, RecordedQueryResult};
 pub use weave_contract::{ObservationKind, RecordedCut, RecordedObservation, RecordedSelection};
-pub const STORAGE_VERSION: i64 = 28;
+pub const STORAGE_VERSION: i64 = 29;
 mod retention;
 pub use retention::{RecordedAvailability, RetentionPlan, RetentionPolicy, RetentionReceipt};
 mod adapter_lifecycle;
@@ -299,6 +301,7 @@ impl Engine {
         engine.initialize_recorded_actors(version)?;
         engine.initialize_actor_lifecycle(version)?;
         engine.initialize_actor_disposition(version)?;
+        engine.initialize_causal_dispatch(version)?;
         engine
             .conn
             .pragma_update(None, "user_version", STORAGE_VERSION)?;
@@ -816,6 +819,7 @@ impl Engine {
             ObservationKind::Committed,
         )?;
         self.conn.execute("INSERT INTO events(event_id,graph_id,branch_id,revision,actor) VALUES (?1,?2,?3,?4,?5)",params![event_id,graph,branch,revision,host.principal])?;
+        self.record_local_causal_root(&event_id)?;
         self.validate_required_metadata(data, host)?;
         self.record_structures(graph, data)?;
         Ok((revision, Some(event_id)))

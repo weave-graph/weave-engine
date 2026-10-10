@@ -54,3 +54,7 @@ required-features = ["recovery-testing"]
 [[example]]
 name = "actor_lifecycle_fixture"
 required-features = ["recovery-testing"]
+
+[[example]]
+name = "causal_dispatch_fixture"
+required-features = ["recovery-testing"]

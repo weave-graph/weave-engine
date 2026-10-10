@@ -175,6 +175,7 @@ impl Engine {
                 )?;
                 if !unchanged.contains(&member.graph_id) {
                     self.conn.execute("INSERT INTO events(event_id,graph_id,branch_id,revision,actor) VALUES (?1,?2,?3,?4,?5)",params![format!("commit:{}",member.revision),member.graph_id,member.branch_id,member.revision,host.principal])?;
+                    self.record_local_causal_root(&format!("commit:{}", member.revision))?;
                 }
                 self.record_structures(&member.graph_id, data)?;
             }

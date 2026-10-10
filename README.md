@@ -15,6 +15,8 @@ The companion [Weave language](https://github.com/weave-graph/weave-language) co
 
 See [current evidence and limitations](docs/STATUS.md), [implementation plan](docs/IMPLEMENTATION_PLAN.md), [workflow DAG](docs/WORKFLOW.md), [contract](docs/contract/v0.21/README.md) and [source provenance](docs/SOURCES.md). Broader joins, selective peer synchronization, complete permission/governance semantics, the integrated persistent browser/mobile scenario, broader geometry and incremental clustering remain open. The [original white papers](docs/source/README.md) have been recovered and [reconciled](docs/RECONCILIATION.md). MIT licensed.
 
+Native store29 adds [local causal dispatch and scoped lag](docs/CAUSAL_DISPATCH.md). Kernel-bound ancestry suspends actual mutual adapter feedback before leasing the blocked source. Explicit owner policy changes preserve history; bounded diagnostics recheck current visibility. Full remote/taxonomy/resource and original assurance requirements remain open.
+
 Native store28 adds [effect-aware recorded actor cancellation](docs/ACTOR_DISPOSITION.md). Unknown outcomes require actual reconciliation; undispatched intents can be retired atomically with state/checkpoint, pause/rebuild and audit. Exact old retries preserve later work. Future delivery requires explicit owner initialization.
 
 Native store27 adds [recorded actor version transfer and historical observation](docs/ACTOR_LIFECYCLE.md). Rollback restores an actual recorded pair and defaults historical deliveries to original receipt observation without new tool calls, graph writes or external actions. Source/portable and broader lifecycle/assurance requirements remain open.

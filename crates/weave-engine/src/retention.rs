@@ -19,6 +19,9 @@ const KNOWN_TABLES: &[&str] = &[
     "compiled_replay_states",
     "deliveries",
     "dispatch_adapters",
+    "event_causation",
+    "dispatch_causal_policies",
+    "dispatch_circuits",
     "dispatch_pending",
     "edge_structures",
     "effect_intents",
@@ -521,7 +524,14 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
             roots,
             work: MAX_VALUES,
         };
-        let tables = self.conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")?.query_map([],|r|r.get::<_,String>(0))?.collect::<std::result::Result<Vec<_>,_>>()?;
+        let mut tables = self.conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")?.query_map([],|r|r.get::<_,String>(0))?.collect::<std::result::Result<Vec<_>,_>>()?;
+        // Validate original computation journals before their causal header indexes.
+        tables.sort_by_key(|table| {
+            matches!(
+                table.as_str(),
+                "event_causation" | "dispatch_causal_policies" | "dispatch_circuits"
+            )
+        });
         let mut row_budget = MAX_ROWS;
         for table in tables {
             if !KNOWN_TABLES.contains(&table.as_str()) {
@@ -596,6 +606,33 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                             if encoded {
                                 let value: serde_json::Value =
                                     serde_json::from_str(text).map_err(|_| failure())?;
+                                if column == "body"
+                                    && matches!(
+                                        table.as_str(),
+                                        "event_causation"
+                                            | "dispatch_causal_policies"
+                                            | "dispatch_circuits"
+                                    )
+                                {
+                                    let field = |name: &str| -> Result<String> {
+                                        let index = columns
+                                            .iter()
+                                            .position(|c| c == name)
+                                            .ok_or_else(failure)?;
+                                        Ok(row.get(2 * index + 1)?)
+                                    };
+                                    causal_dispatch::validate_retained_causality(
+                                        self,
+                                        &table,
+                                        &field(if table == "event_causation" {
+                                            "event_id"
+                                        } else {
+                                            "adapter"
+                                        })?,
+                                        &field("digest")?,
+                                        &value,
+                                    )?;
+                                }
                                 if column == "body"
                                     && matches!(
                                         table.as_str(),
@@ -740,9 +777,21 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                         )?;
                                     }
                                 }
-                                references.value(&value, 1)?;
+                                // Causal headers retain metadata, not every old payload.
+                                // Actual handler receipts and unresolved circuits retain their inputs.
+                                if !matches!(
+                                    table.as_str(),
+                                    "event_causation" | "dispatch_causal_policies"
+                                ) {
+                                    references.value(&value, 1)?;
+                                }
                             } else {
-                                references.string(text, 1)?;
+                                if !matches!(
+                                    table.as_str(),
+                                    "event_causation" | "dispatch_causal_policies"
+                                ) {
+                                    references.string(text, 1)?;
+                                }
                             }
                         }
                         ValueRef::Null if kind != "null" => {

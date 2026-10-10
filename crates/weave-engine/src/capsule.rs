@@ -637,6 +637,7 @@ impl Engine {
         );
         self.advance_head(reference, branch, ObservationKind::Accepted)?;
         tx.execute("INSERT INTO events(event_id,graph_id,branch_id,revision,actor) VALUES (?1,?2,?3,?4,?5)",params![event_id,reference.graph_id,branch,reference.revision,host.principal])?;
+        self.record_local_causal_root(&event_id)?;
         Ok(())
     }
     /// Create an independent branch at an immutable revision. Existing branches reject.

@@ -10,7 +10,7 @@ import sqlite3
 import subprocess
 import tempfile
 from version_profile import store_marker
-from retention_migration import ACTOR_DISPOSITION_TABLES,ACTOR_LIFECYCLE_TABLES,COMPILED_REBUILD_TABLES,RECORDED_ACTOR_TABLES
+from retention_migration import CAUSAL_DISPATCH_TABLES,ACTOR_DISPOSITION_TABLES,ACTOR_LIFECYCLE_TABLES,COMPILED_REBUILD_TABLES,RECORDED_ACTOR_TABLES
 
 
 def snapshot(path):
@@ -50,10 +50,10 @@ def main():
             invoke(a.storage,database,'crash',60,code=82);assert snapshot(database)==before
             invoke(a.storage,database,'after_commit',60,code=83);after=snapshot(database)
             assert after['marker']==new_marker
-            added={'compiled_migrations'}|(COMPILED_REBUILD_TABLES if new_marker>=25 else frozenset())|(RECORDED_ACTOR_TABLES if new_marker>=26 else frozenset())|(ACTOR_LIFECYCLE_TABLES if new_marker>=27 else frozenset())|(ACTOR_DISPOSITION_TABLES if new_marker>=28 else frozenset())
+            added={'compiled_migrations'}|(COMPILED_REBUILD_TABLES if new_marker>=25 else frozenset())|(RECORDED_ACTOR_TABLES if new_marker>=26 else frozenset())|(ACTOR_LIFECYCLE_TABLES if new_marker>=27 else frozenset())|(ACTOR_DISPOSITION_TABLES if new_marker>=28 else frozenset())|(CAUSAL_DISPATCH_TABLES if new_marker>=29 else frozenset())
             assert set(after['tables'])==set(before['tables'])|added
             assert {n:after['tables'][n] for n in before['tables']}==before['tables']
-            assert all(after['tables'][name]['rows']==[] for name in added)
+            assert all(after['tables'][name]['rows']==[] for name in added-CAUSAL_DISPATCH_TABLES)
             return before,after
         artifacts=[]
         for revision in ['1','2']:

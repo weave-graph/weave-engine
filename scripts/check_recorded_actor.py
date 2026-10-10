@@ -10,7 +10,7 @@ import sqlite3
 import subprocess
 import tempfile
 from check_compiled_lifecycle import snapshot
-from retention_migration import ACTOR_DISPOSITION_TABLES,ACTOR_LIFECYCLE_TABLES,RECORDED_ACTOR_TABLES
+from retention_migration import CAUSAL_DISPATCH_TABLES,ACTOR_DISPOSITION_TABLES,ACTOR_LIFECYCLE_TABLES,RECORDED_ACTOR_TABLES
 from version_profile import store_marker
 
 
@@ -62,7 +62,7 @@ handler KeepActual revision "1" using Keep {
         assert len(before['tables']['compiled_replay_states']['rows'])==1
         actor('open',crash='before-schema',code=95);assert snapshot(db)==before
         actor('open',crash='after-schema',code=96);after=snapshot(db)
-        assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|RECORDED_ACTOR_TABLES|(ACTOR_LIFECYCLE_TABLES if store_marker()>=27 else frozenset())|(ACTOR_DISPOSITION_TABLES if store_marker()>=28 else frozenset())
+        assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|RECORDED_ACTOR_TABLES|(ACTOR_LIFECYCLE_TABLES if store_marker()>=27 else frozenset())|(ACTOR_DISPOSITION_TABLES if store_marker()>=28 else frozenset())|(CAUSAL_DISPATCH_TABLES if store_marker()>=29 else frozenset())
         assert {n:after['tables'][n] for n in before['tables']}==before['tables']
         assert all(after['tables'][n]['rows']==[] for n in RECORDED_ACTOR_TABLES|(ACTOR_LIFECYCLE_TABLES if store_marker()>=27 else frozenset())|(ACTOR_DISPOSITION_TABLES if store_marker()>=28 else frozenset()))
         refused=compiled(a.old_handler,'head',graph='Quality',code=1);assert b'E_STORAGE_VERSION' in refused and snapshot(db)==after

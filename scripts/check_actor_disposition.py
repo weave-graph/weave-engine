@@ -5,12 +5,13 @@ from contextlib import closing
 from pathlib import Path
 from check_compiled_lifecycle import snapshot
 from version_profile import store_marker
+from retention_migration import CAUSAL_DISPATCH_TABLES
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for name in ['old-controller','old26-actor','old-actor','actor']:p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--report',type=Path);p.add_argument('--evidence-dir',type=Path)
-    a=p.parse_args();assert store_marker()==28;trace=[];deaths=0
+    a=p.parse_args();assert store_marker()>=28;trace=[];deaths=0
     if a.evidence_dir:a.evidence_dir.mkdir(parents=True,exist_ok=False)
     with tempfile.TemporaryDirectory(prefix='weave-actor-disposition-')as temporary:
         root=Path(temporary);generated=root/'genuine-store27';old_report=root/'genuine-store27.json';request_file=root/'request.json'
@@ -37,7 +38,7 @@ def main():
         for table in ['recorded_actor_migrations','recorded_actor_observations','recorded_actor_receipts']:assert before['tables'][table]['rows']
         tools=db.with_suffix('.lifecycle.tools.sqlite');sink=db.with_suffix('.lifecycle.sink.sqlite');original26_tools=rows(db.with_suffix('.tools.sqlite'),'tool_runs');original26_sink=rows(db.with_suffix('.sink.sqlite'),'physical_receipts');old_tools=rows(tools,'tool_runs');old_physical=rows(sink,'physical_receipts');assert len(old_tools)==3 and len(old_physical)==3
         actor('open',crash='before-schema',code=95);assert snapshot(db)==before
-        actor('open',crash='after-schema',code=96);after=snapshot(db);assert after['marker']==28 and set(after['tables'])==set(before['tables'])|{'recorded_actor_cancellations'}
+        actor('open',crash='after-schema',code=96);after=snapshot(db);assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|{'recorded_actor_cancellations'}|(CAUSAL_DISPATCH_TABLES if store_marker()>=29 else frozenset())
         assert {n:after['tables'][n]for n in before['tables']}==before['tables'] and after['tables']['recorded_actor_cancellations']['rows']==[]
         error=invoke(a.old_actor,'open',code=1);assert b'E_STORAGE_VERSION'in error and snapshot(db)==after
         with closing(sqlite3.connect(db))as c:event3=c.execute("SELECT event_id FROM recorded_actor_observations WHERE adapter='restored'").fetchone()[0]
@@ -76,7 +77,7 @@ def main():
         assert len(rows(tools,'tool_runs'))==6 and len(rows(sink,'physical_receipts'))==4
         if a.evidence_dir:
             for path in root.glob('*.sqlite'):shutil.copy2(path,a.evidence_dir/path.name)
-    report={'profile':'native-actor-disposition/1','store_marker':28,'result':'passed','processes':len(trace),'controlled_deaths':deaths,'genuine_store27_processes':88,'genuine_store27_deaths':12,'old_tool_runs':3,'total_tool_runs':6,'old_physical_receipts':3,'total_physical_receipts':4,'trace':trace,'checks':['actual old27 version/state/effect/observation journals preserved with every original schema/row across interrupted upgrade','actual new physical action loses acknowledgment and blocks cleanup until destination receipt reconciliation','before/after cancellation deaths preserve terminal receipts and pair state/checkpoint/paused/rebuild/audit','genuine pending intent becomes immutable failed/not-dispatched without a physical action','completion/new delivery/dispatch are fenced after cancellation','explicit owner initialization precedes future native computation','both old cancellation retries preserve newer state/output/checkpoint','original observation, tool journal, physical receipts and typed roots survive collection'],'limits':['trusted native owner/host and local SQLite destination-specific evidence','cleanup is not graph-output reconstruction or new model truth','source/portable commands, expiry, causal/resource controls and every original assurance remain required']}
+    report={'profile':'native-actor-disposition/1','store_marker':store_marker(),'result':'passed','processes':len(trace),'controlled_deaths':deaths,'genuine_store27_processes':88,'genuine_store27_deaths':12,'old_tool_runs':3,'total_tool_runs':6,'old_physical_receipts':3,'total_physical_receipts':4,'trace':trace,'checks':['actual old27 version/state/effect/observation journals preserved with every original schema/row across interrupted upgrade','actual new physical action loses acknowledgment and blocks cleanup until destination receipt reconciliation','before/after cancellation deaths preserve terminal receipts and pair state/checkpoint/paused/rebuild/audit','genuine pending intent becomes immutable failed/not-dispatched without a physical action','completion/new delivery/dispatch are fenced after cancellation','explicit owner initialization precedes future native computation','both old cancellation retries preserve newer state/output/checkpoint','original observation, tool journal, physical receipts and typed roots survive collection'],'limits':['trusted native owner/host and local SQLite destination-specific evidence','cleanup is not graph-output reconstruction or new model truth','source/portable commands, expiry, causal/resource controls and every original assurance remain required']}
     if a.report:a.report.write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report))
 if __name__=='__main__':main()
