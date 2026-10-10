@@ -130,6 +130,30 @@ fn run(db: &str, request: Value) -> weave_engine::Result<Value> {
             engine.set_adapter_state(text(&request, "id"), text(&request, "state"))?;
             Ok(json!({"updated":true}))
         }
+        "migration_inputs" => Ok(serde_json::to_value(
+            engine.compiled_migration_inputs_for(text(&request, "id"), &host())?,
+        )?),
+        "migrate" => {
+            let actual: CompiledMigrationRequest =
+                serde_json::from_value(request["request"].clone())?;
+            let h = if request["outsider"] == true {
+                HostContext::new("outsider", Vec::<String>::new())
+            } else {
+                host()
+            };
+            #[cfg(feature = "recovery-testing")]
+            if request["kill_before_commit"] == true {
+                engine.migrate_compiled_handler_test_before_commit(&actual, &h, || {
+                    std::process::exit(94)
+                })?;
+                panic!("migration hook not reached");
+            }
+            let receipt = engine.migrate_compiled_handler_for(&actual, &h)?;
+            if request["kill_after_commit"] == true {
+                std::process::exit(92);
+            }
+            Ok(serde_json::to_value(receipt)?)
+        }
         "head" => Ok(json!({"head":engine.head(text(&request,"graph"),"main")?})),
         _ => panic!("unknown fixture mode"),
     }

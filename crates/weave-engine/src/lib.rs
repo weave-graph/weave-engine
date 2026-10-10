@@ -40,7 +40,7 @@ mod operation_clock;
 mod recorded_history;
 pub use recorded_history::{RecordedHistoryRange, RecordedQueryResult};
 pub use weave_contract::{ObservationKind, RecordedCut, RecordedObservation, RecordedSelection};
-pub const STORAGE_VERSION: i64 = 23;
+pub const STORAGE_VERSION: i64 = 24;
 mod retention;
 pub use retention::{RecordedAvailability, RetentionPlan, RetentionPolicy, RetentionReceipt};
 mod adapter_lifecycle;
@@ -64,6 +64,10 @@ use std::sync::Arc;
 mod capsule;
 use assertions::{assertion_edge, materialize, validate_explicit};
 mod compiled_handlers;
+mod compiled_lifecycle;
+pub use compiled_lifecycle::{
+    CompiledMigrationInputs, CompiledMigrationReceipt, CompiledMigrationRequest,
+};
 mod governed_effects;
 pub use governed_effects::{
     governed_effect_grant_digest, EffectEncoder, EffectStart, GovernedEffectDispatch,
@@ -273,6 +277,7 @@ impl Engine {
         engine.initialize_recorded_history(version)?;
         engine.initialize_retention(version)?;
         engine.initialize_adapter_lifecycle(version)?;
+        engine.initialize_compiled_lifecycle(version)?;
         engine
             .conn
             .pragma_update(None, "user_version", STORAGE_VERSION)?;

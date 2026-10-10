@@ -7,6 +7,7 @@ def retention_tables(path):
         return {n for (n,) in c.execute("SELECT name FROM sqlite_master WHERE type='table'") if n in RETENTION_TABLES}
 def assert_retention_baseline(path,marker):
     assert_lifecycle_baseline(path,marker)
+    assert_compiled_lifecycle_baseline(path,marker)
     if marker<22:
         assert not retention_tables(path);return
     assert retention_tables(path)==RETENTION_TABLES
@@ -29,3 +30,12 @@ def assert_lifecycle_baseline(path,marker):
             assert not present;return
         assert present==LIFECYCLE_TABLES
         for name in LIFECYCLE_TABLES:assert c.execute("SELECT count(*) FROM "+name).fetchone()[0]==0,name
+
+COMPILED_LIFECYCLE_TABLES=frozenset(("compiled_migrations",))
+def assert_compiled_lifecycle_baseline(path,marker):
+    with closing(sqlite3.connect(path)) as c:
+        present={n for (n,) in c.execute("SELECT name FROM sqlite_master WHERE type='table'") if n in COMPILED_LIFECYCLE_TABLES}
+        if marker<24:
+            assert not present;return
+        assert present==COMPILED_LIFECYCLE_TABLES
+        for name in COMPILED_LIFECYCLE_TABLES:assert c.execute("SELECT count(*) FROM "+name).fetchone()[0]==0,name
