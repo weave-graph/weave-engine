@@ -108,6 +108,15 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         }
         json_size(manifest, 256 * 1024)?;
         let json = serde_json::to_string(manifest)?;
+        let _budget = self.read_budget.enter();
+        let transaction = if self.conn.is_autocommit() {
+            Some(rusqlite::Transaction::new_unchecked(
+                &self.conn,
+                rusqlite::TransactionBehavior::Immediate,
+            )?)
+        } else {
+            None
+        };
         let existing: Option<String> = self
             .conn
             .query_row(
@@ -120,12 +129,17 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             if existing != json {
                 return Err(err("E_ADAPTER_VERSION","use a new adapter identity for changed artifact/configuration; checkpoints cannot be reused"));
             }
+            self.verify_installed_causal_policy(&manifest.id)?;
             return Ok(());
         }
         self.conn.execute(
             "INSERT INTO dispatch_adapters(id,manifest,state) VALUES (?1,?2,'installed')",
             params![manifest.id, json],
         )?;
+        self.install_default_causal_policy(&manifest.id)?;
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
         Ok(())
     }
     pub(crate) fn dispatch_manifest(&self, id: &str) -> Result<(AdapterManifest, String, i64)> {
@@ -260,7 +274,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
     /// let _ = engine.poll_adapter("adapter", 123);
     /// ```
     pub fn poll_adapter(&mut self, id: &str) -> Result<Option<DispatchEnvelope>> {
-        self.poll_adapter_boundary(id, None)
+        self.poll_adapter_boundary(id, None, || {})
     }
     /// Polls only durable adapters owned by the fixed host principal and write scope.
     pub fn poll_adapter_for(
@@ -268,13 +282,24 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         id: &str,
         host: &HostContext,
     ) -> Result<Option<DispatchEnvelope>> {
-        self.poll_adapter_boundary(id, Some(host))
+        self.poll_adapter_boundary(id, Some(host), || {})
+    }
+    #[cfg(feature = "recovery-testing")]
+    pub fn poll_adapter_test_before_circuit_commit_for(
+        &mut self,
+        id: &str,
+        host: &HostContext,
+        before_commit: impl FnOnce(),
+    ) -> Result<Option<DispatchEnvelope>> {
+        self.poll_adapter_boundary(id, Some(host), before_commit)
     }
     fn poll_adapter_boundary(
         &mut self,
         id: &str,
         host: Option<&HostContext>,
+        before_circuit_commit: impl FnOnce(),
     ) -> Result<Option<DispatchEnvelope>> {
+        let _budget = self.read_budget.enter();
         if host.is_none() {
             // Preserve the legacy trusted API's rejection before clock/transaction work.
             self.reject_governed_effect_adapter(id)?;
@@ -360,6 +385,14 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         let Some((graph, branch, revision, _)) = self.scoped_event(&manifest, &event_id)? else {
             return Err(err("E_UNAVAILABLE", "delivery is unavailable"));
         };
+        if self.suspend_causal_delivery(id, &event_id)? {
+            before_circuit_commit();
+            tx.commit()?;
+            return Err(err(
+                "E_CIRCUIT_OPEN",
+                "causal delivery requires owner review",
+            ));
+        }
         let lease: String = self
             .conn
             .query_row("SELECT lower(hex(randomblob(24)))", [], |r| r.get(0))?;
@@ -420,6 +453,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         program: &Program,
         before_commit: impl FnOnce(),
     ) -> Result<HandlerReceipt> {
+        let _budget = self.read_budget.enter();
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _clock_scope = self.operation_write_scope()?;
@@ -559,6 +593,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
             });
         }
         self.check_lease(adapter, event, lease)?;
+        self.require_causal_work(adapter, event)?;
         // Until declassification exists, derived handler output stays within the installed principal.
         for command in &program.commands {
             let datas: Vec<&GraphData> = match command {
@@ -595,12 +630,18 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                 }
             }
         }
+        let causal_frontier: i64 =
+            self.conn
+                .query_row("SELECT coalesce(max(sequence),0) FROM events", [], |r| {
+                    r.get(0)
+                })?;
         let results = self.execute(program, &host)?;
         let json = serde_json::to_string(&results)?;
         self.conn.execute(
             "INSERT INTO handler_receipts VALUES (?1,?2,?3,?4)",
             params![adapter, event, hash, json],
         )?;
+        self.bind_handler_causation(adapter, event, causal_frontier, &results)?;
         self.advance_projection_scan_checkpoint(adapter, sequence)?;
         self.conn
             .execute("DELETE FROM dispatch_pending WHERE adapter=?1", [adapter])?;
@@ -663,6 +704,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         key: &str,
         payload: serde_json::Value,
     ) -> Result<EffectIntent> {
+        let _budget = self.read_budget.enter();
         self.reject_governed_effect_adapter(adapter)?;
         let tx = self.conn.unchecked_transaction()?;
         let _clock_scope = self.operation_write_scope()?;
@@ -685,6 +727,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         if self.scoped_event(&manifest, event)?.is_none() {
             return Err(err("E_UNAVAILABLE", "delivery unavailable"));
         }
+        self.require_causal_work(adapter, event)?;
         json_size(&payload, 1024 * 1024)?;
         let id = format!(
             "effect:{:x}",
@@ -737,6 +780,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
     }
     /// Persist unknown BEFORE the caller attempts I/O. Unknown never automatically retries.
     pub fn begin_effect_dispatch(&self, id: &str) -> Result<EffectIntent> {
+        let _budget = self.read_budget.enter();
         let tx = self.conn.unchecked_transaction()?;
         let _clock_scope = self.operation_write_scope()?;
         let intent = self
@@ -756,6 +800,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         if self.scoped_event(&manifest, &intent.event_id)?.is_none() {
             return Err(err("E_UNAVAILABLE", "effect source is unavailable"));
         }
+        self.require_causal_work(&intent.adapter, &intent.event_id)?;
         if intent.state != "pending" {
             return Err(err(
                 "E_EFFECT_UNKNOWN",

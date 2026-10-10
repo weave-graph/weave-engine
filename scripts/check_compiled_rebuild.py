@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 from check_compiled_lifecycle import snapshot
 from version_profile import store_marker
-from retention_migration import ACTOR_DISPOSITION_TABLES,ACTOR_LIFECYCLE_TABLES,RECORDED_ACTOR_TABLES
+from retention_migration import CAUSAL_DISPATCH_TABLES,ACTOR_DISPOSITION_TABLES,ACTOR_LIFECYCLE_TABLES,RECORDED_ACTOR_TABLES
 
 
 def main():
@@ -68,12 +68,12 @@ handler Reconstruct revision "{revision}" using Keep {{
         transfer(a.old_handler,'source1','source2',artifacts[1],{'kind':'upgrade'},'old-upgrade',20)
         transfer(a.old_handler,'source2','source3',artifacts[0],{'kind':'rollback','restore_from':'source1'},'old-rollback',20)
         before=snapshot(db);assert before['marker']==24 and len(before['tables']['compiled_migrations']['rows'])==2
-        new_tables={'compiled_rebuild_receipts','compiled_replay_states'} | (RECORDED_ACTOR_TABLES if store_marker()>=26 else frozenset())|(ACTOR_LIFECYCLE_TABLES if store_marker()>=27 else frozenset())|(ACTOR_DISPOSITION_TABLES if store_marker()>=28 else frozenset());assert not new_tables.intersection(before['tables'])
+        new_tables={'compiled_rebuild_receipts','compiled_replay_states'} | (RECORDED_ACTOR_TABLES if store_marker()>=26 else frozenset())|(ACTOR_LIFECYCLE_TABLES if store_marker()>=27 else frozenset())|(ACTOR_DISPOSITION_TABLES if store_marker()>=28 else frozenset())|(CAUSAL_DISPATCH_TABLES if store_marker()>=29 else frozenset());assert not new_tables.intersection(before['tables'])
         invoke(a.storage,db,'crash',30,code=82);assert snapshot(db)==before
         invoke(a.storage,db,'after_commit',30,code=83);after=snapshot(db)
         assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|new_tables
         assert {n:after['tables'][n] for n in before['tables']}==before['tables']
-        assert all(after['tables'][n]['rows']==[] for n in new_tables)
+        assert all(after['tables'][n]['rows']==[] for n in new_tables-CAUSAL_DISPATCH_TABLES)
         error=host(a.old_handler,'head',code=1,graph='Quality');assert b'E_STORAGE_VERSION' in error and snapshot(db)==after
         host(a.handler,'compact',policy={'history_before_ms':30,'replay_through_sequence':3},now=30)
         compacted=snapshot(db);assert len(compacted['tables']['retention_tombstones']['rows'])==1

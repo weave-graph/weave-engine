@@ -544,6 +544,7 @@ fn old_sql_only_decisions_are_not_backfilled_and_next_publication_is_real() {
     let db = rusqlite::Connection::open(&path).unwrap();
     // Reconstruct the preceding marker11 storage profile: SQL decisions had no graph.
     db.execute("DROP TABLE head_observations", []).unwrap();
+    legacy_storage::strip_retention_schema(&db);
     for table in [
         "events",
         "heads",
@@ -565,7 +566,6 @@ fn old_sql_only_decisions_are_not_backfilled_and_next_publication_is_real() {
         [],
     )
     .unwrap();
-    legacy_storage::strip_retention_schema(&db);
     db.pragma_update(None, "user_version", 11).unwrap();
     let e = test_clock::open(&path).unwrap();
     assert_eq!(

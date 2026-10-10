@@ -741,6 +741,7 @@ CREATE TABLE IF NOT EXISTS recorded_actor_receipts(adapter TEXT NOT NULL REFEREN
         let (graph_id, branch_id, revision, _) = self
             .scoped_event(&definition.manifest, event)?
             .ok_or_else(|| err("E_UNAVAILABLE", "actor occurrence unavailable"))?;
+        self.require_causal_work(adapter, event)?;
         let primary_input = GraphRef { graph_id, revision };
         let input_snapshots = self.actor_closure(&definition, &primary_input, &branch_id, host)?;
         let state = self.actor_state(adapter)?.ok_or_else(integrity)?;

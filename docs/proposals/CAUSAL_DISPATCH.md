@@ -1,0 +1,15 @@
+# Native causal dispatch and scoped lag
+
+Mandatory engine3.2–3.4/4.4/11; R10/R12/R13/R38, E05/E06/E14. This proposal closes another runtime gap; full paper acceptance remains open.
+
+Actual local handler output events acquire kernel-written parent-event/adapter/root/depth bindings in the same graph/output/handler-receipt/checkpoint transaction. Caller supplied origin labels never establish causality. External commits start local roots and genuine older events become explicit legacy boundaries; no past causal chain is invented. No-op writes have no child occurrence. This first profile covers the trusted native durable graph handler path, including compiled handlers and recorded actors; separate governance/mount/remote taxonomies still require broader integration.
+
+A default bounded causal depth and fixed-owner paused/drained policy bind work to actual persisted ancestry. The dispatcher checks the next actual scoped event before leasing or exposing computation inputs. Reaching a limit records a durable circuit suspension and pauses that consumer without acknowledging the source. This catches two or more mutually triggering adapter namespaces as well as direct self-feedback. Completion and effect-intent/dispatch entry points recheck fresh work, while exact historical receipts remain read-only and cannot regenerate a chain. Missing/corrupt ancestry is an explicit integrity failure.
+
+An owner may inspect only authorized scoped backlog/pending/retry/dead-letter/circuit/unknown counts. A bounded page reports a lower bound when more occurrences remain; no global sequence offset or private occurrence count is returned. Diagnostic fields must remain independent of hidden/unsubscribed events, except a documented availability/resource failure. Current payload/revision authority is rechecked before counting. Circuit records do not imply an external action was canceled or reconciled.
+
+Policy changes require fixed current owner/output authority, paused/drained state and no pending delivery or unresolved broker intent. They never erase lineage or replay checkpoints. Explicit rebuild/lifecycle disposition remains the way to establish a different computation frontier; no automatic skip or retry of physical effects is introduced. Trusted host graph writes outside handler completion are roots and remain an expanded-trust boundary, not a sandbox escape defense.
+
+Acceptance uses genuine two-adapter feedback, no-op/duplicate oracles, actor/compiled/effect entry points, foreign and hidden topology negatives, bounded lag against independent SQL snapshots, reopen/retention/corruption, pre/postcommit deaths for child graph/receipt/lineage and circuit suspension, and genuine old-store data preservation. Native host trust, finite native-only ancestry, no cross-peer total order, no CPU/RSS isolation, source/portable bindings and all original assurance remain explicit.
+
+Implemented bounded semantics are documented in [CAUSAL_DISPATCH](../CAUSAL_DISPATCH.md); exact acceptance remains in [VERIFICATION_029](../VERIFICATION_029.md).

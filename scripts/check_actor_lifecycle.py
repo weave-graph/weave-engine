@@ -4,7 +4,7 @@ import argparse,hashlib,json,shutil,sqlite3,subprocess,tempfile
 from contextlib import closing
 from pathlib import Path
 from check_compiled_lifecycle import snapshot
-from retention_migration import ACTOR_DISPOSITION_TABLES,ACTOR_LIFECYCLE_TABLES
+from retention_migration import CAUSAL_DISPATCH_TABLES,ACTOR_DISPOSITION_TABLES,ACTOR_LIFECYCLE_TABLES
 from version_profile import store_marker
 
 def main():
@@ -37,7 +37,7 @@ def main():
         old_tools=rows(db.with_suffix('.tools.sqlite'),'tool_runs');old_sink=rows(db.with_suffix('.sink.sqlite'),'physical_receipts')
         actor('open',crash='before-schema',code=95);assert snapshot(db)==before
         actor('open',crash='after-schema',code=96);after=snapshot(db)
-        assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|ACTOR_LIFECYCLE_TABLES|(ACTOR_DISPOSITION_TABLES if store_marker()>=28 else frozenset())
+        assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|ACTOR_LIFECYCLE_TABLES|(ACTOR_DISPOSITION_TABLES if store_marker()>=28 else frozenset())|(CAUSAL_DISPATCH_TABLES if store_marker()>=29 else frozenset())
         assert {n:after['tables'][n]for n in before['tables']}==before['tables']
         assert all(after['tables'][n]['rows']==[]for n in ACTOR_LIFECYCLE_TABLES|(ACTOR_DISPOSITION_TABLES if store_marker()>=28 else frozenset()))
         error=old('open',code=1);assert b'E_STORAGE_VERSION'in error and snapshot(db)==after

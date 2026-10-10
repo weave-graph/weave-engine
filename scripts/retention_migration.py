@@ -12,6 +12,7 @@ def assert_retention_baseline(path,marker):
     assert_recorded_actor_baseline(path,marker)
     assert_actor_lifecycle_baseline(path,marker)
     assert_actor_disposition_baseline(path,marker)
+    assert_causal_dispatch_baseline(path,marker)
     if marker<22:
         assert not retention_tables(path);return
     assert retention_tables(path)==RETENTION_TABLES
@@ -79,3 +80,24 @@ def assert_actor_disposition_baseline(path,marker):
             assert not present;return
         assert present==ACTOR_DISPOSITION_TABLES
         for name in ACTOR_DISPOSITION_TABLES:assert c.execute("SELECT count(*) FROM "+name).fetchone()[0]==0,name
+
+CAUSAL_DISPATCH_TABLES=frozenset(("event_causation","dispatch_causal_policies","dispatch_circuits"))
+def assert_causal_dispatch_baseline(path,marker):
+    with closing(sqlite3.connect(path))as c:
+        present={n for(n,)in c.execute("SELECT name FROM sqlite_master WHERE type='table'")if n in CAUSAL_DISPATCH_TABLES}
+        if marker<29:
+            assert not present;return
+        assert present==CAUSAL_DISPATCH_TABLES
+        events=dict(c.execute('SELECT event_id,sequence FROM events'))
+        records=list(c.execute('SELECT event_id,body,digest FROM event_causation'));assert {event for event,_,_ in records}==set(events)
+        for event,body,digest in records:
+            record=json.loads(body);assert record['event']==event and record['sequence']==events[event]
+            encoded=json.dumps(record,ensure_ascii=False,separators=(',',':')).encode();assert digest=='sha256:'+hashlib.sha256(encoded).hexdigest()
+            assert record['origin']in ['local_root','legacy_boundary','handler']
+            if record['origin']=='handler':assert record['parent']in events and events[record['parent']]<events[event] and 1<=record['depth']<=64
+            else:assert record['depth']==0 and record['parent']is None and record['root']==event and record['adapter']is None and record['registration_digest']is None
+        policies=list(c.execute('SELECT adapter,body,digest FROM dispatch_causal_policies'));assert {adapter for adapter,_,_ in policies}=={id for(id,)in c.execute('SELECT id FROM dispatch_adapters')}
+        for adapter,body,digest in policies:
+            policy=json.loads(body);assert policy=={'max_depth':16}
+            assert digest=='sha256:'+hashlib.sha256(json.dumps([adapter,policy],ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+        assert c.execute('SELECT count(*) FROM dispatch_circuits').fetchone()[0]==0

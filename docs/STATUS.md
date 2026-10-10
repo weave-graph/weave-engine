@@ -1,3 +1,23 @@
+## Local causal dispatch and scoped lag (protocol0.21 / store29)
+
+Actual handler child events bind their source, registration, root and depth in
+one graph/receipt/checkpoint transaction. Mutual adapter feedback reaches an
+owner-controlled depth limit; durable suspension leaves the blocked source
+unacknowledged. Explicit paused/drained policy changes permit only bounded later
+work. Historical retries, no-ops and old logical batches cannot generate a new
+chain. Owner diagnostics count only current authorized subscribed occurrences
+and report bounded lower bounds without global offsets.
+
+See [semantics and limits](CAUSAL_DISPATCH.md) and
+[verification](VERIFICATION_029.md). Ten independent causal checks, strict lint,
+597 earlier workspace checks and the actual46-process/10-death development trace
+pass. Final frozen workspace/host/migration and hosted acceptance are pending.
+The controller preserves genuine store28 actor/effect/cancellation history,
+store27 version/observation history and independent tool/sink journals. Genuine
+old events become explicit legacy boundaries. Full taxonomy, cross-peer causal
+identity, source/portable bindings, CPU/RSS isolation and all original assurance
+remain mandatory; no full paper gate is claimed.
+
 ## Effect-aware native actor cancellation (protocol0.21 / store28)
 
 Fixed owners can dispose actual pending actor occurrences by event/lease CAS.

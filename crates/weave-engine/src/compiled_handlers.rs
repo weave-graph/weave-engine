@@ -487,6 +487,7 @@ impl Engine {
                 });
             }
             self.check_lease(adapter, event, lease)?;
+            self.require_causal_work(adapter, event)?;
             let (input, closure) = self.handler_input(&registration, event)?;
             let source = GraphRef {
                 graph_id: registration.template.input.graph_id.clone(),
