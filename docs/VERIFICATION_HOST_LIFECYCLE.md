@@ -69,3 +69,10 @@ inputs, full prior migration/source/recovery acceptance and exact hosted checks
 are required before publication; development evidence does not substitute for
 that final verification. Browser/mobile lifecycle application integration, native
 execution trust, resource isolation and all original paper assurance remain open.
+
+The additional genuine store29 binary-compatibility trace reuses actual earlier
+source/cluster journals through the new native binary without changing the schema
+marker. It runs114 native processes,12 compiler processes and16 controlled deaths.
+It records29 as a compatible marker; earlier19–28 migrations retain their separate
+upgrade markers. The controller never labels a same-marker reopen as a schema
+migration or expects an older compatible binary to reject that unchanged marker.
