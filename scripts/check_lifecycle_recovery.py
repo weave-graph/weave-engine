@@ -4,7 +4,7 @@ import argparse, hashlib, json, shutil, sqlite3, subprocess, tempfile
 from contextlib import closing
 from pathlib import Path
 from version_profile import store_marker
-from retention_migration import COMPILED_LIFECYCLE_TABLES
+from retention_migration import COMPILED_LIFECYCLE_TABLES,COMPILED_REBUILD_TABLES
 LIFECYCLE_TABLES=frozenset(('delivery_cancellations','projection_rebuild_requests','projection_migrations'))
 
 def snapshot(path):
@@ -32,7 +32,7 @@ def main():
         assert len(before['tables']['retention_projection_receipts']['rows'])==1
         invoke(host,db,'open_crash',code=82);assert snapshot(db)==before
         invoke(host,db,'open_after',code=83);after=snapshot(db);assert after['marker']==store_marker()
-        new_tables=LIFECYCLE_TABLES|(COMPILED_LIFECYCLE_TABLES if store_marker()>=24 else frozenset())
+        new_tables=LIFECYCLE_TABLES|(COMPILED_LIFECYCLE_TABLES if store_marker()>=24 else frozenset())|(COMPILED_REBUILD_TABLES if store_marker()>=25 else frozenset())
         assert set(after['tables'])==set(before['tables'])|new_tables
         assert {n:after['tables'][n] for n in before['tables']}==before['tables']
         assert all(after['tables'][n]['rows']==[] for n in new_tables)

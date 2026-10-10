@@ -597,7 +597,7 @@ fn missing_current_migration_registry_cannot_be_recreated_as_empty_history() {
     assert_eq!(
         sql.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        24
+        STORAGE_VERSION
     );
     assert_eq!(
         sql.query_row(

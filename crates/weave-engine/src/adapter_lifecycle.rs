@@ -37,7 +37,12 @@ struct Cancellation {
     manifest_digest: String,
     source: GraphRef,
     prior_state: Option<ProjectionRebaseRequest>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    compiled_rebuild: bool,
     receipt: DeliveryCancellationReceipt,
+}
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 fn integrity() -> Error {
     err("E_LIFECYCLE_INTEGRITY", "lifecycle record unavailable")
@@ -59,7 +64,8 @@ pub(crate) fn validate_retained_cancellation(
         || record.receipt.adapter != adapter
         || record.receipt.event != event
         || record.receipt.duplicate
-        || record.receipt.rebuild_required != record.prior_state.is_some()
+        || record.receipt.rebuild_required
+            != (record.prior_state.is_some() || record.compiled_rebuild)
         || record.receipt.receipt_id
             != retention::hash(&(
                 "weave-delivery-cancellation/1",
@@ -215,6 +221,7 @@ CREATE TABLE IF NOT EXISTS projection_migrations(source_adapter TEXT PRIMARY KEY
             return Err(integrity());
         }
         let prior_state = self.projection_state(&request.adapter)?;
+        let compiled_rebuild = self.has_compiled_replay_state(&request.adapter)?;
         let required: bool = self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM retention_stateful_adapters WHERE adapter=?1)",
             [&request.adapter],
@@ -231,7 +238,7 @@ CREATE TABLE IF NOT EXISTS projection_migrations(source_adapter TEXT PRIMARY KEY
                 &host.principal,
                 request,
             ))?,
-            rebuild_required: prior_state.is_some(),
+            rebuild_required: prior_state.is_some() || compiled_rebuild,
             duplicate: false,
         };
         let record = Cancellation {
@@ -243,6 +250,7 @@ CREATE TABLE IF NOT EXISTS projection_migrations(source_adapter TEXT PRIMARY KEY
                 revision,
             },
             prior_state,
+            compiled_rebuild,
             receipt: receipt.clone(),
         };
         let bytes = json_size(&record, RECORD_LIMIT)?;

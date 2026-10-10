@@ -50,7 +50,7 @@ fn integrity() -> Error {
         "compiled migration binding unavailable",
     )
 }
-fn binding(registration: &Registration) -> Result<String> {
+pub(crate) fn binding(registration: &Registration) -> Result<String> {
     retention::hash(&("weave-handler-registration-binding/1", registration))
 }
 fn request_id(request: &CompiledMigrationRequest, principal: &str) -> Result<String> {
@@ -157,6 +157,15 @@ impl Engine {
         self.require_adapter_host(source, host)?;
         self.reject_governed_effect_adapter(source)?;
         self.require_replay_checkpoint(source)?;
+        self.compiled_bound_inputs(source, host)
+    }
+    pub(crate) fn compiled_bound_inputs(
+        &self,
+        source: &str,
+        host: &HostContext,
+    ) -> Result<CompiledMigrationInputs> {
+        self.require_adapter_host(source, host)?;
+        self.reject_governed_effect_adapter(source)?;
         let state: i64=self.conn.query_row("SELECT (SELECT count(*) FROM retention_stateful_adapters WHERE adapter=?1)+(SELECT count(*) FROM retention_adapter_states WHERE adapter=?1)+(SELECT count(*) FROM retention_projection_receipts WHERE adapter=?1)",[source],|r|r.get(0))?;
         if state != 0 {
             return Err(err(
@@ -402,6 +411,7 @@ impl Engine {
             "UPDATE dispatch_adapters SET state='removed' WHERE id=?1",
             [source],
         )?;
+        self.transfer_compiled_replay_state(source, &record.after, after_checkpoint)?;
         self.conn.execute(
             "INSERT INTO compiled_migrations VALUES (?1,?2,?3,?4,?5,?6)",
             params![

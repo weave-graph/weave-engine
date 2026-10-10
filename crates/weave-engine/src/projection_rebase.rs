@@ -257,6 +257,7 @@ impl Engine {
         checkpoint: i64,
     ) -> Result<()> {
         let state = self.projection_state(adapter)?;
+        self.advance_compiled_replay_checkpoint(adapter, checkpoint)?;
         self.conn.execute(
             "UPDATE dispatch_adapters SET checkpoint=?2 WHERE id=?1",
             params![adapter, checkpoint],
@@ -282,6 +283,16 @@ impl Engine {
             ));
         }
         let (_, policy) = retention::state(&self.conn)?;
+        if self.is_compiled_handler(adapter)? {
+            let ready = self.compiled_replay_ready(adapter)?;
+            if policy == RetentionPolicy::default() || ready {
+                return Ok(());
+            }
+            return Err(err(
+                "E_CHECKPOINT_EXPIRED",
+                "explicit compiled snapshot reconstruction is required",
+            ));
+        }
         let state = self.projection_state(adapter)?;
         let required: bool = self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM retention_stateful_adapters WHERE adapter=?1)",

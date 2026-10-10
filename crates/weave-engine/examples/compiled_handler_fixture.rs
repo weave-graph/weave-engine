@@ -133,6 +133,51 @@ fn run(db: &str, request: Value) -> weave_engine::Result<Value> {
         "migration_inputs" => Ok(serde_json::to_value(
             engine.compiled_migration_inputs_for(text(&request, "id"), &host())?,
         )?),
+        "rebuild_inputs" => Ok(serde_json::to_value(
+            engine.compiled_rebuild_inputs_for(text(&request, "id"), &host())?,
+        )?),
+        "rebuild" => {
+            let actual: CompiledRebuildRequest =
+                serde_json::from_value(request["request"].clone())?;
+            #[cfg(feature = "recovery-testing")]
+            if request["kill_before_commit"] == true {
+                engine.rebuild_compiled_handler_test_before_commit(&actual, &host(), || {
+                    std::process::exit(94)
+                })?;
+                panic!("rebuild hook not reached");
+            }
+            let receipt = engine.rebuild_compiled_handler_for(&actual, &host())?;
+            if request["kill_after_commit"] == true {
+                std::process::exit(92);
+            }
+            Ok(serde_json::to_value(receipt)?)
+        }
+        "cancel" => {
+            let actual: DeliveryCancellationRequest =
+                serde_json::from_value(request["request"].clone())?;
+            #[cfg(feature = "recovery-testing")]
+            if request["kill_before_commit"] == true {
+                engine.cancel_handler_delivery_test_before_commit(&actual, &host(), || {
+                    std::process::exit(94)
+                })?;
+                panic!("cancel hook not reached");
+            }
+            let receipt = engine.cancel_handler_delivery_for(&actual, &host())?;
+            if request["kill_after_commit"] == true {
+                std::process::exit(92);
+            }
+            Ok(serde_json::to_value(receipt)?)
+        }
+        "compact" => {
+            let policy: RetentionPolicy = serde_json::from_value(request["policy"].clone())?;
+            let plan = engine.plan_retention(&policy)?;
+            engine.compact_retention(&plan)?;
+            Ok(json!({"compacted":true}))
+        }
+        "query" => {
+            let query: QueryPlan = serde_json::from_value(request["query"].clone())?;
+            Ok(serde_json::to_value(engine.query(&query, &host())?)?)
+        }
         "migrate" => {
             let actual: CompiledMigrationRequest =
                 serde_json::from_value(request["request"].clone())?;

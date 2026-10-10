@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import tempfile
 from version_profile import store_marker
+from retention_migration import COMPILED_REBUILD_TABLES
 
 
 def snapshot(path):
@@ -49,9 +50,10 @@ def main():
             invoke(a.storage,database,'crash',60,code=82);assert snapshot(database)==before
             invoke(a.storage,database,'after_commit',60,code=83);after=snapshot(database)
             assert after['marker']==new_marker
-            assert set(after['tables'])==set(before['tables'])|{'compiled_migrations'}
+            added={'compiled_migrations'}|(COMPILED_REBUILD_TABLES if new_marker>=25 else frozenset())
+            assert set(after['tables'])==set(before['tables'])|added
             assert {n:after['tables'][n] for n in before['tables']}==before['tables']
-            assert after['tables']['compiled_migrations']['rows']==[]
+            assert all(after['tables'][name]['rows']==[] for name in added)
             return before,after
         artifacts=[]
         for revision in ['1','2']:
