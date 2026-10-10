@@ -1,7 +1,11 @@
 # Storage integrity and recovery
 
-Current storage uses schema20 and protocol0.20; capsule0.4 is unchanged.
-Store20 protects canonical recorded-selection witnesses in cached query results. The historical schema14 transition added
+The current native profile uses **store 29 / contract 0.21.0**; see
+[STATUS.md](STATUS.md). This document collects storage integrity and recovery
+profiles through store20, with later history, retention, lifecycle and causal
+extensions documented in their own references and verification records.
+Capsule0.4 is unchanged. Store20 protects canonical recorded-selection witnesses
+in cached query results. The historical schema14 transition added
 compiled view identity. Identity policies/receipts, guarded view transitions,
 mount routes/lifecycle, signed integration receipts and local head observations
 are initialized in the same schema transaction. `Engine::open`

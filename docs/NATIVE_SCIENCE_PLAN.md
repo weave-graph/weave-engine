@@ -6,6 +6,11 @@ mobile applications. This document is the completion contract for that delivery.
 It supersedes the application prerequisites in the original roadmap for this
 release; it does not claim completion of the full decentralized white paper.
 
+The delivery is implemented and merged in
+[PR #33](https://github.com/weave-graph/weave-engine/pull/33). Read
+[current status](STATUS.md) for supported versions and exact hosted evidence,
+and [scientific validation](SCIENCE_VALIDATION.md) for reproducible checks.
+
 The published protocol0.21/store29 Rust engine remains the semantic and storage
 authority. The experiment interface uses its real commits, reads, graph values,
 authorization, temporal selections and provenance. The language remains an
@@ -17,15 +22,15 @@ delivery.
 
 | ID | Required observable behavior | Evidence |
 |---|---|---|
-| DS01 | Import node/edge tables and vectors into durable immutable graph revisions; stale writes fail | Native and Python checks |
-| DS02 | Select valid time and exact historical revisions; reopen the database and reproduce a pinned result after later corrections | Independent scientific acceptance |
-| DS03 | Execute existing parameterized JSON plans, temporal joins, graph metadata and graph-valued queries | Existing core suite and experiment interface checks |
-| DS04 | Analyze only engine-authorized results; denied topology never enters statistics, paths, clustering or vector candidates | Policy noninterference checks |
-| DS05 | Deterministic degrees, weak/strong components, shortest paths and PageRank with declared multigraph/self-loop semantics | Independent reference answers |
-| DS06 | Exact cosine/Euclidean vector neighbors retain stable manifestation/entity/space identity and deterministic ties | Independent numerical answers and invalid-input checks |
-| DS07 | Python experiments work without mandatory scientific dependencies; export tables/results and record parameters, versions and exact snapshots | Installed client tests and runnable example |
-| DS08 | Invalid inputs, missing snapshots, partial knowledge and exhausted resource limits are explicit; mutations cannot hide in analysis plans | Negative and bounded-work checks |
-| DS09 | Publish build/install instructions, measured deterministic workloads, and a supported native validation profile | Native CI, benchmark report and clean installation |
+| DS01 | Import node/edge tables and vectors into durable immutable graph revisions; stale writes fail | [Native API tests](../crates/weave-science/tests/science.rs), [Python integration tests](../python/tests/test_native.py) |
+| DS02 | Select valid time and exact historical revisions; reopen the database and reproduce a pinned result after later corrections | [Independent acceptance](../scripts/check_science.py), [Python integration tests](../python/tests/test_native.py) |
+| DS03 | Execute existing parameterized JSON plans, temporal joins, graph metadata and graph-valued queries | [Core tests](../crates/weave-engine/tests), [independent acceptance](../scripts/check_science.py) |
+| DS04 | Analyze only engine-authorized results; denied topology never enters statistics, paths, clustering or vector candidates | [Hidden-input comparisons](../scripts/check_science.py), [native authorization tests](../crates/weave-engine/tests) |
+| DS05 | Deterministic degrees, weak/strong components, shortest paths and PageRank with declared multigraph/self-loop semantics | [Independent reference answers](SCIENCE_VALIDATION.md#independent-references-and-acceptance-cases) |
+| DS06 | Exact cosine/Euclidean vector neighbors retain stable manifestation/entity/space identity and deterministic ties | [Independent vector answers](../scripts/check_science.py), [invalid-input tests](../crates/weave-science/tests/science.rs) |
+| DS07 | Python experiments work without mandatory scientific dependencies; export tables/results and record parameters, versions and exact snapshots | [Client tests](../python/tests), [runnable example](../examples/science/temporal_vectors.py) |
+| DS08 | Invalid inputs, missing snapshots, partial knowledge and exhausted resource limits are explicit; mutations cannot hide in analysis plans | [Native rejection tests](../crates/weave-science/tests/science.rs), [independent acceptance](../scripts/check_science.py) |
+| DS09 | Publish build/install instructions, measured deterministic workloads, and a supported native validation profile | [Installation](../README.md#run-your-first-experiment), [reports](benchmarks/README.md), [native CI](../.github/workflows/ci.yml) |
 
 Clustering, geometry, reusable graph values, recorded/accepted history and
 provenance remain available through the existing engine plan operators. Exact

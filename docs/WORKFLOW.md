@@ -1,9 +1,10 @@
 # Engine workflow and dependency graph
 
-The current delivery follows [DS01–DS09](NATIVE_SCIENCE_PLAN.md), with native
-algorithms, Python usability and independent validation developed in parallel.
-Browser/mobile application acceptance is deferred by the user. The original
-white-paper gates below remain a separate future completion boundary.
+The delivered native experiment profile follows [DS01–DS09](NATIVE_SCIENCE_PLAN.md).
+Its native algorithms, Python client and independent validation were developed
+in parallel; [current status](STATUS.md) links the merged evidence. Browser/mobile
+application acceptance is deferred. The original white-paper gates below remain
+a separate future completion boundary.
 
 The machine-readable source is [workflow.json](workflow.json). Nodes are acceptance gates, not promises that features are already implemented. Parent orchestration owns publication and cross-project acceptance; the engine agent owns this repository. A blocked gate does not mark the entire project complete.
 

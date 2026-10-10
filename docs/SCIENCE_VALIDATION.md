@@ -1,35 +1,91 @@
 # Native scientific validation
 
-This acceptance profile checks the [native experiment completion contract](NATIVE_SCIENCE_PLAN.md)
-DS01–DS09. It uses the real native binary and SQLite store, without a browser,
-mobile application, network service or mandatory Python scientific packages.
-The full original white-paper roadmap remains separately tracked.
+This page explains how to check a native installation, reproduce the measured
+workloads and interpret the stored evidence. The [native experiment completion
+contract](NATIVE_SCIENCE_PLAN.md) defines DS01–DS09. Its evidence combines runtime
+tests, Python client tests, independent scientific acceptance and installation
+checks; one controller does not establish every requirement by itself.
 
-## Run the independent checks
+For request fields and result semantics, read the [native interface](SCIENCE_INTERFACE.md).
+For notebooks, imports, exports and saved experiments, use the [Python guide](PYTHON_SCIENCE.md).
+The [benchmark index](benchmarks/README.md) separates the current science baseline
+from historical engine measurements.
 
-From the repository root:
+## Choose a validation profile
+
+| Profile | What it establishes | Where it runs |
+|---|---|---|
+| Current native Rust suite | Runtime/storage behavior, authorization, graph algebra, geometry, clustering and science API checks | `cargo test --workspace --all-features --locked` and native CI |
+| Installed Python client checks | Client transport, imports/exports, experiment records and actual native replay scenarios | [Python client workflow](../.github/workflows/ci.yml), using the installed package and selected binary |
+| Independent science acceptance | Observable graph/vector answers, temporal revisions, metadata, authorization and rejection cases | `scripts/check_science.py`, locally and in native CI |
+| Science workload benchmark | End-to-end timing and memory for the declared dataset shape, with numerical/visibility invariants | `scripts/benchmark_science.py`, separately from correctness CI |
+
+The [Native science workflow](../.github/workflows/ci.yml) is configured for
+Linux, macOS and Windows. Its acceptance artifact belongs to the exact workflow
+run and commit; inspect [that run's checks](https://github.com/weave-graph/weave-engine/actions/workflows/ci.yml)
+when assessing a platform. The stored performance reports below were measured
+locally on the stated Mac host. They contain no Linux or Windows timing result.
+Historical compiler/store compatibility and application scenarios have separate
+profiles. Browser/mobile applications and the full decentralized white-paper
+roadmap are outside this native experiment completion contract.
+
+## Reproduce the independent checks
+
+Use a stable Rust toolchain and Python 3.10 or later. Run these commands from the
+repository root. The controllers require only Python's standard library; installing
+the Python client is not necessary for these two controllers. Reports are written
+outside the checkout so they do not change its source-tree fingerprint.
 
 ```sh
 cargo build --release --locked -p weave-science
-python3 scripts/check_science.py --engine target/release/weave-science --report science-acceptance.json
-python3 scripts/benchmark_science.py --engine target/release/weave-science --report science-benchmark.json
+python3 scripts/check_science.py \
+  --engine target/release/weave-science \
+  --report ../weave-validation/science-acceptance.json \
+  --seed 1337 --random-cases 6 --timeout 60
+python3 scripts/benchmark_science.py \
+  --engine target/release/weave-science \
+  --report ../weave-validation/science-benchmark.json \
+  --sizes 1000 10000 --samples 3 --dimensions 8 --seed 1337 --timeout 120
 ```
 
-Use `weave-science.exe` on Windows. The acceptance controller also works with
-the debug executable used in native CI. `--revision COMMIT` records the source
-revision the caller verified when building; when omitted, the report labels the
-current checkout and records its dirty status. Every report records the exact
-binary SHA-256, protocol/science versions, current source tree digest, host,
-request and response digests, snapshots, parameters and deterministic seed.
-The binary digest is authoritative when a source-to-binary mapping has not
-been verified.
+On Windows PowerShell, use `python` and the `.exe` binary; the report parent
+directory is created automatically:
 
-The acceptance controller makes each request in a fresh native process. The
-database survives these process boundaries. Default seed `1337` and six small
-generated graphs produce 16 grouped cases; native subprocess calls are counted
-separately, rather than presented as independent test cases. The controller
-uses Python's standard library. If NetworkX and its PageRank dependencies are
-already installed, add `--networkx` for an additional reference comparison.
+```powershell
+cargo build --release --locked -p weave-science
+python scripts/check_science.py --engine target/release/weave-science.exe --report ../weave-validation/science-acceptance.json --seed 1337 --random-cases 6 --timeout 60
+python scripts/benchmark_science.py --engine target/release/weave-science.exe --report ../weave-validation/science-benchmark.json --sizes 1000 10000 --samples 3 --dimensions 8 --seed 1337 --timeout 120
+```
+
+The acceptance controller also supports the debug executable used in native CI.
+Build with `cargo build --locked -p weave-science` and use `target/debug` for that
+profile. Debug and optimized timing results should be labeled separately.
+
+Both reports contain `status`, protocol/science versions, exact binary SHA-256,
+source identity, host information and individual case results. For acceptance,
+`status: "passed"` means the declared grouped cases passed, including expected
+error responses. The benchmark records budget rejection as `status: "rejected"`
+with per-sample diagnostics. Its process can finish successfully while recording
+rejection, so automation must inspect the report's status as well as its exit code.
+An assertion, timeout or transport failure produces a failed report and a nonzero
+controller exit.
+
+Keep the executable unchanged while a controller runs. On a clean checkout, a
+fresh locked build followed by the controller provides a clear source context.
+Optional `--revision COMMIT` records a caller-verified build revision; it is a
+label, not a verification performed by the harness. When omitted, the harness
+records the current checkout, dirty status, tracked diff digest and a digest of
+tracked plus nonignored working files. Those fingerprints describe the files at
+controller startup. The binary digest is authoritative when its exact mapping
+to a clean source commit has not been established.
+
+The acceptance controller uses temporary databases and a fresh native process
+for each request. The database survives these process boundaries during the run
+and is removed afterward. Default seed `1337` and six small generated graphs
+produce 16 grouped cases. Native subprocess operations are counted separately;
+158 process operations are not 158 independent test cases. If NetworkX and its
+PageRank dependencies are installed, add `--networkx` for an additional reference
+comparison. That optional comparison was not used in the stored baseline.
 
 ## Independent references and acceptance cases
 
@@ -84,28 +140,45 @@ paths, PageRank and exact nearest vectors. It verifies visible node/edge counts,
 degree conservation, component partitioning, source distance, PageRank
 normalization/convergence and neighbors against exhaustive distances.
 
-Latency includes a fresh native process, SQLite reopening, authorization,
-query materialization, analytics, complete provenance-bearing JSON serialization
-and output transfer. Fixture generation, builds and Python JSON decoding are
-excluded. These are end-to-end native experiment timings, not isolated kernel
-timings. Reported memory uses per-child `wait4` high-water RSS on POSIX hosts;
-it is explicitly unavailable on hosts without that API and excludes the harness.
+Each dataset is imported once into a temporary SQLite store. Each subsequent
+sample starts a fresh native process and reopens that same store. Filesystem
+caches are not flushed, and the harness does not discard warmup samples.
+Metadata setup is separate from the dataset import sample.
+
+Individual operation latency includes process startup, SQLite reopening,
+authorization, query materialization, analytics, full provenance-bearing JSON
+serialization and file output. Fixture generation, builds and Python JSON
+decoding are excluded from those operation timers. The report's overall elapsed
+time includes fixture/store setup and verification. These are
+end-to-end native experiment timings, not isolated kernel timings. On POSIX,
+the controller polls completion every 5 ms, so timing also includes the completion
+observation delay.
+
+Memory is per-child `wait4` high-water RSS on POSIX hosts; it is explicitly
+unavailable on hosts without that API. It excludes the Python harness and is
+not an algorithm allocation measurement. The units in the table are MiB
+(`1 MiB = 1,048,576 bytes`); raw reports store bytes.
 
 Three samples report median and maximum. A nearest-rank p95 is included only
 when `--samples` is at least five. Request size, response size, workload density,
 visibility, metadata shape and exact snapshot appear alongside each sample.
-Budget rejection is recorded as rejection and never presented as demonstrated
-capacity. Increase scales with `--sizes` only within the declared native input,
-output and work limits. These synthetic workloads establish a baseline on the
-reported host and do not create a production performance promise.
+Budget rejection is never presented as demonstrated capacity. `--sizes` counts
+input nodes, not total graph objects or authorized result nodes. The native
+request limit is 16 MiB; runtime materialization and science output/work limits
+also apply. A nominal algorithm node limit does not guarantee a dataset will fit:
+vectors, metadata and repeated provenance can exhaust byte budgets first. See
+[interface limits](SCIENCE_INTERFACE.md) and [cumulative runtime reads](READ_BUDGETS.md).
+Larger `--sizes` values are explicit experiments, not previously verified capacity.
+These synthetic workloads establish a baseline on the reported host and do not
+create a production performance promise.
 
 For a quick harness check:
 
 ```sh
-python3 scripts/benchmark_science.py --engine target/debug/weave-science --report science-benchmark-smoke.json --sizes 1000 --samples 1
+python3 scripts/benchmark_science.py --engine target/release/weave-science --report ../weave-validation/science-benchmark-smoke.json --sizes 1000 --samples 1
 ```
 
-## Verified release baseline
+## Recorded optimized baseline: 10 October 2026
 
 On 10 October 2026, the optimized native binary passed all 16 grouped acceptance
 cases in 0.93 seconds, using 158 native process operations. Both benchmark sizes
@@ -132,17 +205,24 @@ provenance; these timings include that output. The evidence describes a build
 from the recorded dirty integration checkout, with full source-tree and binary
 digests. It does not assert an exact clean release-commit mapping.
 
-Recorded SHA-256 identities:
-
 The [acceptance report](benchmarks/science-acceptance-2026-10-10.json) and
 [benchmark report](benchmarks/science-benchmark-2026-10-10.json) preserve the
 raw measurements, workload definitions, source-tree identities and operation
 digests for this baseline.
 
+Both record science API `0.1.0`, engine contract `0.21.0`, seed `1337` and base
+commit `7cc0c96d5e80d9e0c6f09cf0b5c0cbe15ba406ae` with uncommitted integration
+changes. That base commit alone does not identify the new science implementation.
+Their source-tree digests differ because files changed between controller starts;
+their native binary digests are identical. The saved evidence is preserved as
+measured rather than relabeled as a later clean source build.
+
+Recorded SHA-256 identities:
+
 ```text
 native binary: d111a9b263d2a52ab01400e52c3e4bfd8c3e30f407bf6ea2317f72d98b7a7fda
-science-acceptance.json: a025cb2b8b3fbd42cb31d6cc5d26ae6e78b32583d3f8e9a662d1acc504e7337d
-science-benchmark.json: 042549d0fe28a2b4c92317a299159703f9b6a83906258cb9658824e70de57155
+science-acceptance-2026-10-10.json: a025cb2b8b3fbd42cb31d6cc5d26ae6e78b32583d3f8e9a662d1acc504e7337d
+science-benchmark-2026-10-10.json: 042549d0fe28a2b4c92317a299159703f9b6a83906258cb9658824e70de57155
 ```
 
 CPU model and physical RAM were read on the same host immediately after these
