@@ -1,6 +1,35 @@
 # Weave Engine
 
-A local-first runtime for multidimensional temporal knowledge graphs. This repository contains an executable Rust foundation and a full implementation roadmap; it is not yet the complete white-paper runtime.
+A native runtime for reproducible experiments with multidimensional temporal knowledge graphs. It combines durable immutable graph revisions, temporal queries and provenance with a Rust analysis interface and an installable Python client. The current delivery scope is [native data science](docs/NATIVE_SCIENCE_PLAN.md); the broader decentralized white-paper roadmap remains open.
+
+## Data-science experiments
+
+Build the experiment engine and install the dependency-free Python client:
+
+```sh
+cargo build --release --locked -p weave-science
+python3 -m venv .venv
+.venv/bin/python -m pip install ./python
+WEAVE_SCIENCE_BINARY="$PWD/target/release/weave-science" .venv/bin/python examples/science/temporal_vectors.py --output experiment-output
+```
+
+The example imports a temporal graph with vectors, analyzes selected times,
+compares an immutable revision with a later correction, and saves a reproducible
+experiment. The [Python guide](docs/PYTHON_SCIENCE.md) covers notebooks, CSV/table
+imports, graph expressions, result export and exact replay. The native JSON CLI
+also works without Python; its request schema and semantics are documented in
+[the science interface](docs/SCIENCE_INTERFACE.md).
+
+Native analytics include degree statistics, weak/strong components, unweighted
+shortest paths, PageRank and exact cosine/Euclidean vector neighbors. Existing
+engine plans provide temporal joins, graph-valued metadata, provenance,
+clustering and geometry. Every analysis reads through the engine's current
+authorization rules and records its selected snapshots. Algorithms use bounded
+in-memory inputs; [validation and measurements](docs/SCIENCE_VALIDATION.md)
+describe tested behavior and practical limits.
+
+Browser/mobile applications are deferred. No app, compiler, server or network
+service is required to run native JSON/Python experiments.
 
 Implemented: immutable SQLite graph snapshots with optimistic concurrency, distinct entity/space/manifestation IDs, first-class edges, graph-valued node and edge metadata, pinned temporal queries, reusable graph values and exact identity-space temporal path joins, transitive provenance visibility, atomic graph commits and durable events, unsigned hash-verified capsules with explicit reception/acceptance and offline branches, schema-safe graph algebra with four-valued support, named cyclic metadata, durable scoped dispatch and effect receipts, and principal-scoped live views with explicit ticks and freshness.
 
@@ -13,7 +42,7 @@ The CLI is a **trusted local host**: `--actor` selects a principal and `--write`
 
 The companion [Weave language](https://github.com/weave-graph/weave-language) compiles into the shared versioned contract. The engine owns the canonical I/O-free [`weave-contract`](crates/weave-contract/src/lib.rs) crate; the language vendors an exact copy for independent builds.
 
-See [current evidence and limitations](docs/STATUS.md), [implementation plan](docs/IMPLEMENTATION_PLAN.md), [workflow DAG](docs/WORKFLOW.md), [contract](docs/contract/v0.21/README.md) and [source provenance](docs/SOURCES.md). Broader joins, selective peer synchronization, complete permission/governance semantics, the integrated persistent browser/mobile scenario, broader geometry and incremental clustering remain open. The [original white papers](docs/source/README.md) have been recovered and [reconciled](docs/RECONCILIATION.md). MIT licensed.
+See [current evidence and limitations](docs/STATUS.md), [implementation plan](docs/IMPLEMENTATION_PLAN.md), [workflow DAG](docs/WORKFLOW.md), [contract](docs/contract/v0.21/README.md) and [source provenance](docs/SOURCES.md). Broader joins, selective peer synchronization, complete permission/governance semantics, broader geometry and incremental clustering remain future work. Browser/mobile application acceptance is outside the current delivery scope. The [original white papers](docs/source/README.md) have been recovered and [reconciled](docs/RECONCILIATION.md). MIT licensed.
 
 Native store29 adds [local causal dispatch and scoped lag](docs/CAUSAL_DISPATCH.md). Kernel-bound ancestry suspends actual mutual adapter feedback before leasing the blocked source. Explicit owner policy changes preserve history; bounded diagnostics recheck current visibility. Full remote/taxonomy/resource and original assurance requirements remain open.
 

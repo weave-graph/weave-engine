@@ -1,0 +1,665 @@
+name: Historical compatibility
+# Full prior-version recovery and portable-host suite stays available for release review.
+# Science-only changes do not rebuild every historical engine/compiler pair.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'crates/weave-engine/**'
+      - 'crates/weave-contract/**'
+      - 'crates/weave-host/**'
+      - 'crates/weave-native/**'
+  push:
+    branches: [main]
+    paths:
+      - 'crates/weave-engine/**'
+      - 'crates/weave-contract/**'
+      - 'crates/weave-host/**'
+      - 'crates/weave-native/**'
+concurrency:
+  group: compatibility-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  CARGO_BUILD_JOBS: '2'
+  CARGO_INCREMENTAL: '0'
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: cargo fmt --all -- --check
+      - run: cargo test --workspace --all-features --locked
+      - name: Build native three-peer recovery fixture
+        run: cargo build --locked -p weave-engine --example three_peer_trace --features recovery-testing
+      - name: Execute isolated three-peer offline and recovery trace
+        run: python3 scripts/check_three_peer_trace.py
+      - name: Execute paired signed export and recovery trace
+        run: python3 scripts/check_three_peer_trace.py --signed-export
+      - name: Build governed effect recovery fixture
+        run: cargo build --locked -p weave-engine --features recovery-testing --example governed_effect_probe
+      - name: Execute governed effect and independent sink recovery
+        run: python3 scripts/check_governed_effects.py
+      - name: Verify state, erasure and rebuild process-crash boundaries
+        run: |
+          cargo build --locked -p weave-engine --features recovery-testing --example retention_probe
+          python3 scripts/check_retention_recovery.py --host target/debug/examples/retention_probe --report retention-recovery.json
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 67ecc70708e15962c9f850ce826c90fb9c145ca0
+          path: previous-store22
+      - name: Build exact previous store22 retention host
+        working-directory: previous-store22
+        run: cargo build --locked -p weave-engine --features recovery-testing --example retention_probe
+      - name: Verify genuine store22 lifecycle upgrade and four process-death pairs
+        run: |
+          cargo build --locked -p weave-engine --features recovery-testing --example lifecycle_probe
+          python3 scripts/check_lifecycle_recovery.py --old-host previous-store22/target/debug/examples/retention_probe --host target/debug/examples/lifecycle_probe --report lifecycle-recovery.json
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 6cff9b389451c93664f639eeb4c7555fa0f046f9
+          path: previous-store23
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 15e8c8f8ec92939e3422b33553b393bda469c61f
+          path: lifecycle-compiler
+      - name: Build exact store23 lifecycle and source compiler baselines
+        run: |
+          cargo build --manifest-path previous-store23/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example lifecycle_probe
+          cargo build --manifest-path lifecycle-compiler/Cargo.toml --locked -p weave-language --bin weave
+      - name: Verify source compiled upgrade, rollback and populated store23 process recovery
+        run: |
+          cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example lifecycle_probe --example storage_probe
+          python3 scripts/check_compiled_lifecycle.py --compiler lifecycle-compiler/target/debug/weave --old-handler previous-store23/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --old-retention previous-store22/target/debug/examples/retention_probe --old-lifecycle previous-store23/target/debug/examples/lifecycle_probe --lifecycle target/debug/examples/lifecycle_probe --storage target/debug/examples/storage_probe --report compiled-lifecycle-recovery.json
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 4d57dfabe6345b0c4a9de1155aff617a739970da
+          path: previous-store24
+      - name: Build exact store24 source lifecycle baseline
+        working-directory: previous-store24
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture
+      - name: Verify actual source snapshot reconstruction and four process-death pairs
+        run: python3 scripts/check_compiled_rebuild.py --compiler lifecycle-compiler/target/debug/weave --old-handler previous-store24/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --report compiled-rebuild-recovery.json
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 6f98d559bfa7964c2e11ea604b3cd537bbd1e42d
+          path: previous-store25
+      - name: Build exact store25 reconstruction baseline
+        working-directory: previous-store25
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture
+      - name: Verify actual recorded actor, independent tool/sink journals and nine process deaths
+        run: |
+          cargo build --locked -p weave-engine --features recovery-testing --example recorded_actor_fixture
+          python3 scripts/check_recorded_actor.py --compiler lifecycle-compiler/target/debug/weave --old-handler previous-store25/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --actor target/debug/examples/recorded_actor_fixture --report recorded-actor-recovery.json
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 70f5871d9b32b8618800bc47a471d3e4e2f7aba6
+          path: previous-store26
+      - name: Build exact store26 actor journal baseline
+        working-directory: previous-store26
+        run: cargo build --locked -p weave-engine --features recovery-testing --example recorded_actor_fixture
+      - name: Verify versioned native actor transfer and default historical observation
+        run: |
+          cargo build --locked -p weave-engine --features recovery-testing --example actor_lifecycle_fixture
+          python3 scripts/check_actor_lifecycle.py --old-actor previous-store26/target/debug/examples/recorded_actor_fixture --actor target/debug/examples/actor_lifecycle_fixture --report actor-lifecycle-recovery.json
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 71e34a1ea6dbdda5f88a40d13a08278b3a2c3788
+          path: previous-store27
+      - name: Build exact store27 lifecycle and observation baseline
+        working-directory: previous-store27
+        run: cargo build --locked -p weave-engine --features recovery-testing --example actor_lifecycle_fixture
+      - name: Verify actual unknown outcomes, pending disposition and cancellation deaths
+        run: python3 scripts/check_actor_disposition.py --old-controller previous-store27/scripts/check_actor_lifecycle.py --old26-actor previous-store26/target/debug/examples/recorded_actor_fixture --old-actor previous-store27/target/debug/examples/actor_lifecycle_fixture --actor target/debug/examples/actor_lifecycle_fixture --report actor-disposition-recovery.json
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: fcabc7d94b87b38a3c9d595c58a37aecea9db3ce
+          path: previous-store28
+      - name: Build exact store28 actor disposition baseline
+        working-directory: previous-store28
+        run: cargo build --locked -p weave-engine --features recovery-testing --example actor_lifecycle_fixture
+      - name: Verify actual causal feedback, scoped lag and ten process deaths
+        shell: bash
+        run: |
+          cargo build --locked -p weave-engine --features recovery-testing --example causal_dispatch_fixture
+          python3 scripts/check_causal_dispatch.py --old-disposition-controller previous-store28/scripts/check_actor_disposition.py --old-lifecycle-controller previous-store27/scripts/check_actor_lifecycle.py --old26-actor previous-store26/target/debug/examples/recorded_actor_fixture --old27-actor previous-store27/target/debug/examples/actor_lifecycle_fixture --old28-actor previous-store28/target/debug/examples/actor_lifecycle_fixture --host target/debug/examples/causal_dispatch_fixture --report causal-dispatch-recovery.json
+      - name: Verify C lifecycle interface and eight independent process deaths
+        env:
+          WEAVE_HOST_LIBRARY: ${{ runner.os == 'Windows' && 'target/debug/weave_native.dll' || runner.os == 'macOS' && 'target/debug/libweave_native.dylib' || 'target/debug/libweave_native.so' }}
+        run: |
+          cargo build --locked -p weave-native --all-features --lib
+          python3 scripts/check_host_lifecycle.py --library "${{ env.WEAVE_HOST_LIBRARY }}" --actor target/debug/examples/actor_lifecycle_fixture --old-disposition-controller previous-store28/scripts/check_actor_disposition.py --old-lifecycle-controller previous-store27/scripts/check_actor_lifecycle.py --old26-actor previous-store26/target/debug/examples/recorded_actor_fixture --old27-actor previous-store27/target/debug/examples/actor_lifecycle_fixture --old28-actor previous-store28/target/debug/examples/actor_lifecycle_fixture --report host-lifecycle-recovery.json
+      - name: Verify actual compiler source through C reconstruction and version transfer
+        env:
+          WEAVE_HOST_LIBRARY: ${{ runner.os == 'Windows' && 'target/debug/weave_native.dll' || runner.os == 'macOS' && 'target/debug/libweave_native.dylib' || 'target/debug/libweave_native.so' }}
+          WEAVE_COMPILER_LIBRARY: ${{ runner.os == 'Windows' && 'lifecycle-compiler/target/debug/weave_compiler_sdk.dll' || runner.os == 'macOS' && 'lifecycle-compiler/target/debug/libweave_compiler_sdk.dylib' || 'lifecycle-compiler/target/debug/libweave_compiler_sdk.so' }}
+        run: |
+          cargo build --manifest-path lifecycle-compiler/Cargo.toml --locked -p weave-compiler-sdk --lib
+          python3 scripts/check_host_facade.py --library "${{ env.WEAVE_HOST_LIBRARY }}" --compiler-sdk "${{ env.WEAVE_COMPILER_LIBRARY }}" --lifecycle --report host-source-lifecycle.json
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 6ea26c4e7f0353f0307ebe0933ea541993c76f7e
+          path: previous-store29
+      - name: Verify genuine store29 journal compatibility without a schema change
+        env:
+          WEAVE_COMPILER_LIBRARY: ${{ runner.os == 'Windows' && 'lifecycle-compiler/target/debug/weave_compiler_sdk.dll' || runner.os == 'macOS' && 'lifecycle-compiler/target/debug/libweave_compiler_sdk.dylib' || 'lifecycle-compiler/target/debug/libweave_compiler_sdk.so' }}
+        run: |
+          cargo build --manifest-path previous-store29/Cargo.toml --locked -p weave-native --all-features --example native_scenario
+          cargo build --locked -p weave-native --all-features --example native_scenario
+          python3 scripts/check_native_scenario.py --compiler-sdk "${{ env.WEAVE_COMPILER_LIBRARY }}" --host previous-store29/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures lifecycle-compiler/examples/native_scenario --report host-store29-compatibility.json
+
+      - run: cargo run --locked -p weave-cluster --example measure_quality
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: cargo check -p weave-contract --target wasm32-unknown-unknown --locked
+      - run: cargo check -p weave-policy --target wasm32-unknown-unknown --locked
+      - run: cargo check -p weave-spaces --target wasm32-unknown-unknown --locked
+      - run: cargo check -p weave-cluster --target wasm32-unknown-unknown --locked
+      - name: Execute portable native and WebAssembly semantic parity
+        run: python3 scripts/root_portable.py
+      - name: Swift native host restart acceptance
+        if: runner.os == 'macOS'
+        run: python3 scripts/root_native.py
+  snapshot-migration:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ref: c209d49d33a8b4369a853673958bd9cec2765a96
+            protocol: 0.16.0
+            marker: 14
+          - ref: 5e4e20699550ecede86e88296c9147392386b436
+            protocol: 0.17.0
+            marker: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: ${{ matrix.ref }}
+          path: previous
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact prior protocol ${{ matrix.protocol }} fixtures
+        working-directory: previous
+        run: cargo build --locked -p weave-engine --features recovery-testing --example source_view_fixture --example three_peer_trace
+      - name: Build current migration and replay fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example source_view_fixture --example three_peer_trace --example storage_probe
+      - name: Verify populated upgrade, both crash boundaries and exact old replay
+        working-directory: current
+        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol ${{ matrix.protocol }} --old-marker ${{ matrix.marker }} --new-marker 29
+  compiled-handler-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: edd58fdb0cbdc5f9299c2e55ba2765c37a2bca90
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: e18608b842ad6efc14f977e30ed428513c5900a5
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact historical compiler and handler fixture
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example storage_probe
+      - name: Preserve actual completed and pending historical handlers across store upgrade
+        working-directory: current
+        run: python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --new-marker 29
+  store18-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: ec65c636ccc86f617afdf93301168c98c11e7744
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: f18d35cf93ce3f45ce4e7b4b3c6971110e9d0ad4
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store18 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe
+      - name: Preserve populated store18 across atomic recorded-history upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.19.0 --old-marker 18 --new-marker 29
+          python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 18 --new-marker 29
+          python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 18 --new-marker 29
+  store19-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 708a7b08a3aa3c60ac61de518a6e3f2ee2191856
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: f18d35cf93ce3f45ce4e7b4b3c6971110e9d0ad4
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store19 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked -p weave-language -p weave-compiler-sdk --lib --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe -p weave-native --example native_scenario
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe -p weave-native --example native_scenario
+      - name: Preserve populated store19 across atomic recorded-history upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.19.0 --old-marker 19 --new-marker 29
+          python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 19 --new-marker 29
+          python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.19.0 --old-marker 19 --new-marker 29
+      - name: Preserve real historical retained cluster journal across host upgrade
+        working-directory: current
+        run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
+  store20-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: e6ff50528dcd55f17abdc39313a29d6cbddc898b
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 535a50aae16d00f630b8a61a3a9bbc43d714e9a5
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store20 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked -p weave-language -p weave-compiler-sdk --lib --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe -p weave-native --example native_scenario
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe -p weave-native --example native_scenario
+      - name: Preserve populated store20 across atomic recorded-history upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.20.0 --old-marker 20 --new-marker 29
+          python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.20.0 --old-marker 20 --new-marker 29
+          python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.20.0 --old-marker 20 --new-marker 29
+      - name: Preserve real historical retained cluster journal across host upgrade
+        working-directory: current
+        run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
+  store17-migration:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 21c27286749dcfa8833f903b631ea74537692647
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 82a45f6391696b77e25710bde7276b40faf68d6f
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store17 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe
+      - name: Preserve store17 views and signed replies exactly
+        working-directory: current
+        run: python3 scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.18.0 --old-marker 17 --new-marker 29
+      - name: Preserve store17 pending and completed handlers exactly
+        working-directory: current
+        run: python3 scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-marker 17 --new-marker 29
+      - name: Preserve unknown governed effect and independent sink
+        working-directory: current
+        run: python3 scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --new-marker 29
+  store21-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 3e09f61ed110854348362efe5d90d317988bc15e
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 15e8c8f8ec92939e3422b33553b393bda469c61f
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store21 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked -p weave-language -p weave-compiler-sdk --lib --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe -p weave-native --example native_scenario
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe --example retention_probe -p weave-native --example native_scenario
+      - name: Preserve populated store21 across atomic retention upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-snapshot-inventory scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.21.0 --old-marker 21 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-handler-inventory scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 21 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-effect-inventory scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 21 --new-marker 29
+      - name: Preserve real historical retained cluster journal across host upgrade
+        working-directory: current
+        run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
+      - name: Preserve genuine accepted-time history through the retention upgrade
+        working-directory: current
+        run: python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-accepted-inventory scripts/check_accepted_history_compat.py --old-host ../previous/target/debug/examples/source_view_fixture --host target/debug/examples/source_view_fixture --storage target/debug/examples/storage_probe --old-marker 21 --new-marker 29 --report accepted-history-retention.json
+  store22-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 67ecc70708e15962c9f850ce826c90fb9c145ca0
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 15e8c8f8ec92939e3422b33553b393bda469c61f
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store22 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked -p weave-language -p weave-compiler-sdk --lib --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe -p weave-native --example native_scenario
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe --example retention_probe -p weave-native --example native_scenario
+      - name: Preserve populated store22 across atomic lifecycle upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-snapshot-inventory scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.21.0 --old-marker 22 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-handler-inventory scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 22 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-effect-inventory scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 22 --new-marker 29
+      - name: Preserve real historical retained cluster journal across host upgrade
+        working-directory: current
+        run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
+      - name: Preserve genuine accepted-time history through the lifecycle upgrade
+        working-directory: current
+        run: python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-accepted-inventory scripts/check_accepted_history_compat.py --old-host ../previous/target/debug/examples/source_view_fixture --host target/debug/examples/source_view_fixture --storage target/debug/examples/storage_probe --old-marker 22 --new-marker 29 --report accepted-history-retention.json
+
+  store23-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 6cff9b389451c93664f639eeb4c7555fa0f046f9
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 15e8c8f8ec92939e3422b33553b393bda469c61f
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store23 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked -p weave-language -p weave-compiler-sdk --lib --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe -p weave-native --example native_scenario
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe --example retention_probe -p weave-native --example native_scenario
+      - name: Preserve populated store23 across atomic lifecycle upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-snapshot-inventory scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.21.0 --old-marker 23 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-handler-inventory scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 23 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-effect-inventory scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 23 --new-marker 29
+      - name: Preserve real historical retained cluster journal across host upgrade
+        working-directory: current
+        run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
+      - name: Preserve genuine accepted-time history through the lifecycle upgrade
+        working-directory: current
+        run: python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-accepted-inventory scripts/check_accepted_history_compat.py --old-host ../previous/target/debug/examples/source_view_fixture --host target/debug/examples/source_view_fixture --storage target/debug/examples/storage_probe --old-marker 23 --new-marker 29 --report accepted-history-retention.json
+
+  store24-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 4d57dfabe6345b0c4a9de1155aff617a739970da
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 15e8c8f8ec92939e3422b33553b393bda469c61f
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store24 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked -p weave-language -p weave-compiler-sdk --lib --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe -p weave-native --example native_scenario
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe --example retention_probe -p weave-native --example native_scenario
+      - name: Preserve populated store24 across atomic lifecycle upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-snapshot-inventory scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.21.0 --old-marker 24 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-handler-inventory scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 24 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-effect-inventory scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 24 --new-marker 29
+      - name: Preserve real historical retained cluster journal across host upgrade
+        working-directory: current
+        run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
+      - name: Preserve genuine accepted-time history through the lifecycle upgrade
+        working-directory: current
+        run: python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-accepted-inventory scripts/check_accepted_history_compat.py --old-host ../previous/target/debug/examples/source_view_fixture --host target/debug/examples/source_view_fixture --storage target/debug/examples/storage_probe --old-marker 24 --new-marker 29 --report accepted-history-retention.json
+
+  store25-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 6f98d559bfa7964c2e11ea604b3cd537bbd1e42d
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 15e8c8f8ec92939e3422b33553b393bda469c61f
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store25 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked -p weave-language -p weave-compiler-sdk --lib --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe -p weave-native --example native_scenario
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe --example retention_probe -p weave-native --example native_scenario
+      - name: Preserve populated store25 across atomic lifecycle upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-snapshot-inventory scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.21.0 --old-marker 25 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-handler-inventory scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 25 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-effect-inventory scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 25 --new-marker 29
+      - name: Preserve real historical retained cluster journal across host upgrade
+        working-directory: current
+        run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
+      - name: Preserve genuine accepted-time history through the lifecycle upgrade
+        working-directory: current
+        run: python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-accepted-inventory scripts/check_accepted_history_compat.py --old-host ../previous/target/debug/examples/source_view_fixture --host target/debug/examples/source_view_fixture --storage target/debug/examples/storage_probe --old-marker 25 --new-marker 29 --report accepted-history-retention.json
+
+  store26-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 70f5871d9b32b8618800bc47a471d3e4e2f7aba6
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 15e8c8f8ec92939e3422b33553b393bda469c61f
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store26 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked -p weave-language -p weave-compiler-sdk --lib --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe -p weave-native --example native_scenario
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe --example retention_probe -p weave-native --example native_scenario
+      - name: Preserve populated store26 across atomic lifecycle upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-snapshot-inventory scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.21.0 --old-marker 26 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-handler-inventory scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 26 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-effect-inventory scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 26 --new-marker 29
+      - name: Preserve real historical retained cluster journal across host upgrade
+        working-directory: current
+        run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
+      - name: Preserve genuine accepted-time history through the lifecycle upgrade
+        working-directory: current
+        run: python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-accepted-inventory scripts/check_accepted_history_compat.py --old-host ../previous/target/debug/examples/source_view_fixture --host target/debug/examples/source_view_fixture --storage target/debug/examples/storage_probe --old-marker 26 --new-marker 29 --report accepted-history-retention.json
+
+  store27-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 71e34a1ea6dbdda5f88a40d13a08278b3a2c3788
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 15e8c8f8ec92939e3422b33553b393bda469c61f
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store27 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked -p weave-language -p weave-compiler-sdk --lib --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe -p weave-native --example native_scenario
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe --example retention_probe -p weave-native --example native_scenario
+      - name: Preserve populated store27 across atomic lifecycle upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-snapshot-inventory scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.21.0 --old-marker 27 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-handler-inventory scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 27 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-effect-inventory scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 27 --new-marker 29
+      - name: Preserve real historical retained cluster journal across host upgrade
+        working-directory: current
+        run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
+      - name: Preserve genuine accepted-time history through the lifecycle upgrade
+        working-directory: current
+        run: python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-accepted-inventory scripts/check_accepted_history_compat.py --old-host ../previous/target/debug/examples/source_view_fixture --host target/debug/examples/source_view_fixture --storage target/debug/examples/storage_probe --old-marker 27 --new-marker 29 --report accepted-history-retention.json
+
+  store28-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: fcabc7d94b87b38a3c9d595c58a37aecea9db3ce
+          path: previous
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-language
+          ref: 15e8c8f8ec92939e3422b33553b393bda469c61f
+          path: previous-language
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store28 and compiler baselines
+        run: |
+          cargo build --manifest-path previous-language/Cargo.toml --locked -p weave-language -p weave-compiler-sdk --lib --bin weave
+          cargo build --manifest-path previous/Cargo.toml --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe -p weave-native --example native_scenario
+      - name: Build current migration fixtures
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example compiled_handler_fixture --example source_view_fixture --example three_peer_trace --example governed_effect_probe --example storage_probe --example retention_probe -p weave-native --example native_scenario
+      - name: Preserve populated store28 across atomic lifecycle upgrade
+        working-directory: current
+        run: |
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-snapshot-inventory scripts/check_snapshot_migration.py --old-view ../previous/target/debug/examples/source_view_fixture --old-trace ../previous/target/debug/examples/three_peer_trace --old-protocol 0.21.0 --old-marker 28 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-handler-inventory scripts/check_handler_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-handler ../previous/target/debug/examples/compiled_handler_fixture --handler target/debug/examples/compiled_handler_fixture --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 28 --new-marker 29
+          python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-effect-inventory scripts/check_effect_store_migration.py --old-compiler ../previous-language/target/debug/weave --old-probe ../previous/target/debug/examples/governed_effect_probe --probe target/debug/examples/governed_effect_probe --storage target/debug/examples/storage_probe --old-protocol 0.21.0 --old-marker 28 --new-marker 29
+      - name: Preserve real historical retained cluster journal across host upgrade
+        working-directory: current
+        run: python3 scripts/check_native_scenario.py --compiler-sdk ../previous-language/target/debug/libweave_compiler_sdk.so --host ../previous/target/debug/examples/native_scenario --upgrade-host target/debug/examples/native_scenario --fixtures ../previous-language/examples/native_scenario --report retained-journal-upgrade.json
+      - name: Preserve genuine accepted-time history through the lifecycle upgrade
+        working-directory: current
+        run: python3 scripts/check_retention_inventory.py --host target/debug/examples/retention_probe --evidence-dir retention-accepted-inventory scripts/check_accepted_history_compat.py --old-host ../previous/target/debug/examples/source_view_fixture --host target/debug/examples/source_view_fixture --storage target/debug/examples/storage_probe --old-marker 28 --new-marker 29 --report accepted-history-retention.json

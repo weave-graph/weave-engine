@@ -1,5 +1,6 @@
 name: Browser persistence
-on: [push, pull_request, workflow_dispatch]
+# Browser applications are outside the current native science completion scope.
+on: [workflow_dispatch]
 permissions:
   contents: read
 concurrency:

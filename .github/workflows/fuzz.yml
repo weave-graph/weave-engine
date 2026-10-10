@@ -1,5 +1,14 @@
 name: Fuzz smoke
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [main]
+    paths: ['fuzz/**', 'crates/weave-contract/**', 'crates/weave-policy/**', 'crates/weave-engine/**']
+  pull_request:
+    paths: ['fuzz/**', 'crates/weave-contract/**', 'crates/weave-policy/**', 'crates/weave-engine/**']
+  workflow_dispatch:
+concurrency:
+  group: fuzz-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

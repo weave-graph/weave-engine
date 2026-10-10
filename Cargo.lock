@@ -750,6 +750,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "weave-science"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "weave-contract",
+ "weave-engine",
+]
+
+[[package]]
 name = "weave-spaces"
 version = "0.1.0"
 dependencies = [
