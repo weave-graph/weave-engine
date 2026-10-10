@@ -148,6 +148,12 @@ CREATE TABLE IF NOT EXISTS projection_migrations(source_adapter TEXT PRIMARY KEY
         self.require_adapter_host(&request.adapter, host)?;
         self.reject_governed_effect_adapter(&request.adapter)?;
         let (manifest, _, checkpoint) = self.dispatch_manifest(&request.adapter)?;
+        if self.is_recorded_actor(&request.adapter)? {
+            return Err(err(
+                "E_CANCELLATION_MODE",
+                "recorded actor disposition requires actor state reconstruction",
+            ));
+        }
         if !manifest.effect_destinations.is_empty() {
             return Err(err(
                 "E_CANCELLATION_MODE",

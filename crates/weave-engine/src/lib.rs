@@ -37,10 +37,16 @@ mod authorization;
 #[cfg(feature = "browser-image-experiment")]
 mod image_host;
 mod operation_clock;
+mod recorded_actors;
 mod recorded_history;
+pub use recorded_actors::{
+    RecordedActorBootstrap, RecordedActorCompletion, RecordedActorDefinition, RecordedActorInputs,
+    RecordedActorPrimary, RecordedActorReceipt, RecordedActorRunInputs, RecordedActorState,
+    RecordedToolArtifact, RecordedToolResult,
+};
 pub use recorded_history::{RecordedHistoryRange, RecordedQueryResult};
 pub use weave_contract::{ObservationKind, RecordedCut, RecordedObservation, RecordedSelection};
-pub const STORAGE_VERSION: i64 = 25;
+pub const STORAGE_VERSION: i64 = 26;
 mod retention;
 pub use retention::{RecordedAvailability, RetentionPlan, RetentionPolicy, RetentionReceipt};
 mod adapter_lifecycle;
@@ -281,6 +287,7 @@ impl Engine {
         engine.initialize_adapter_lifecycle(version)?;
         engine.initialize_compiled_lifecycle(version)?;
         engine.initialize_compiled_rebuild(version)?;
+        engine.initialize_recorded_actors(version)?;
         engine
             .conn
             .pragma_update(None, "user_version", STORAGE_VERSION)?;

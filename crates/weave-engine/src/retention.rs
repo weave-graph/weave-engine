@@ -58,6 +58,9 @@ const KNOWN_TABLES: &[&str] = &[
     "mount_events",
     "mount_receipts",
     "mounts",
+    "recorded_actor_definitions",
+    "recorded_actor_states",
+    "recorded_actor_receipts",
     "retention_adapter_states",
     "retention_policy",
     "retention_projection_receipts",
@@ -593,6 +596,9 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                     && matches!(
                                         table.as_str(),
                                         "retention_adapter_states"
+                                            | "recorded_actor_definitions"
+                                            | "recorded_actor_states"
+                                            | "recorded_actor_receipts"
                                             | "retention_projection_receipts"
                                             | "delivery_cancellations"
                                             | "projection_migrations"
@@ -617,6 +623,24 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                         field("adapter")?
                                     };
                                     if matches!(
+                                        table.as_str(),
+                                        "recorded_actor_definitions"
+                                            | "recorded_actor_states"
+                                            | "recorded_actor_receipts"
+                                    ) {
+                                        recorded_actors::validate_retained_actor(
+                                            self,
+                                            &table,
+                                            &adapter,
+                                            &if table == "recorded_actor_receipts" {
+                                                field("event_id")?
+                                            } else {
+                                                String::new()
+                                            },
+                                            &field("digest")?,
+                                            &value,
+                                        )?;
+                                    } else if matches!(
                                         table.as_str(),
                                         "compiled_rebuild_receipts" | "compiled_replay_states"
                                     ) {
