@@ -1,8 +1,24 @@
 name: Language integration
 on:
   push:
+    branches: [main]
+    paths:
+      - 'crates/weave-contract/**'
+      - 'crates/weave-engine/**'
+      - 'crates/weave-host/**'
+      - 'crates/weave-native/**'
+      - 'scripts/root_*.py'
   pull_request:
+    paths:
+      - 'crates/weave-contract/**'
+      - 'crates/weave-engine/**'
+      - 'crates/weave-host/**'
+      - 'crates/weave-native/**'
+      - 'scripts/root_*.py'
   workflow_dispatch:
+concurrency:
+  group: integration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 env:

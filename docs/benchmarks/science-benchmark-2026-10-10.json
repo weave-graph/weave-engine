@@ -1,0 +1,618 @@
+{
+  "format": "weave-science-benchmark/1",
+  "status": "passed",
+  "seed": 1337,
+  "science_version": "0.1.0",
+  "contract_version": "0.21.0",
+  "binary_sha256": "d111a9b263d2a52ab01400e52c3e4bfd8c3e30f407bf6ea2317f72d98b7a7fda",
+  "source": {
+    "revision": "7cc0c96d5e80d9e0c6f09cf0b5c0cbe15ba406ae",
+    "working_tree_dirty": true,
+    "tracked_diff_sha256": "f78c889abae95ab7ec2164c652e730bf0278a2b2e723c8f06778cb2920d6e875",
+    "working_tree_files_sha256": "4198b3ac7f60923b55efd510f7ad771b712e9212b131801b34b2bccf48a73133",
+    "working_tree_file_count": 479,
+    "binary_source_mapping": "current checkout; binary digest is authoritative"
+  },
+  "host": {
+    "system": "Darwin",
+    "release": "25.6.0",
+    "machine": "arm64",
+    "python": "3.14.6",
+    "logical_cpus": 14,
+    "cpu_model": "Apple M4 Max",
+    "physical_memory_bytes": 38654705664
+  },
+  "measurement": "fresh native process and SQLite reopen; engine read, analytics, full JSON serialization and file transfer; excludes build, generation, and Python decoding",
+  "memory_measurement": "wait4 per-child high-water RSS",
+  "limitations": [
+    "synthetic deterministic single-replica workload, not a production SLO",
+    "latencies include full provenance-bearing query echo, not isolated algorithm timings",
+    "native child RSS excludes the Python harness and operating-system page cache",
+    "small samples report median and maximum; p95 appears only for at least five samples",
+    "input/output/work-budget rejection is not demonstrated dataset capacity"
+  ],
+  "cases": [
+    {
+      "input_nodes": 1000,
+      "input_edges": 2050,
+      "authorized_nodes": 900,
+      "authorized_edges": 1604,
+      "edge_density": 2.05,
+      "vector_dimensions": 8,
+      "visibility_partitions": 2,
+      "metadata_depth": 1,
+      "metadata_shared_graph_nodes": 16,
+      "samples": {
+        "import": [
+          {
+            "elapsed_seconds": 0.02352020936086774,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 19349504,
+            "request_bytes": 680405,
+            "response_bytes": 287,
+            "request_sha256": "556825f389ec7b30b4d6e035454b477ef454390edd9c97f234cc18c4b1dc3ab7",
+            "response_sha256": "ac03193666d0720426e6971ec6614aa7d24365d545193a47aff0d8206f3a7a97",
+            "outcome": "passed"
+          }
+        ],
+        "query": [
+          {
+            "elapsed_seconds": 0.023522790987044573,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21250048,
+            "request_bytes": 224,
+            "response_bytes": 1324608,
+            "request_sha256": "5aa04584e50477e658b8f3bcf70b6683f7f6bc50552f21a3a9050cade67838dd",
+            "response_sha256": "51b6be5aeb96960398f69aa69be42edd35060287c2561b1355d7068a2f999871",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.02356537524610758,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21200896,
+            "request_bytes": 224,
+            "response_bytes": 1324608,
+            "request_sha256": "5aa04584e50477e658b8f3bcf70b6683f7f6bc50552f21a3a9050cade67838dd",
+            "response_sha256": "51b6be5aeb96960398f69aa69be42edd35060287c2561b1355d7068a2f999871",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.023751708213239908,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21151744,
+            "request_bytes": 224,
+            "response_bytes": 1324608,
+            "request_sha256": "5aa04584e50477e658b8f3bcf70b6683f7f6bc50552f21a3a9050cade67838dd",
+            "response_sha256": "51b6be5aeb96960398f69aa69be42edd35060287c2561b1355d7068a2f999871",
+            "outcome": "passed"
+          }
+        ],
+        "degree": [
+          {
+            "elapsed_seconds": 0.023787125013768673,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 23134208,
+            "request_bytes": 272,
+            "response_bytes": 1377753,
+            "request_sha256": "b91818135fcc7145b19e7f3f979a303fb8eeacee6029ddecfe2fe7e95b58e7c4",
+            "response_sha256": "80730f3766df9eee433a27094689be81194ff1c0285b2cdf2a3e13d6760c067a",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.02365487487986684,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 23150592,
+            "request_bytes": 272,
+            "response_bytes": 1377753,
+            "request_sha256": "b91818135fcc7145b19e7f3f979a303fb8eeacee6029ddecfe2fe7e95b58e7c4",
+            "response_sha256": "80730f3766df9eee433a27094689be81194ff1c0285b2cdf2a3e13d6760c067a",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.023727166932076216,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 23035904,
+            "request_bytes": 272,
+            "response_bytes": 1377753,
+            "request_sha256": "b91818135fcc7145b19e7f3f979a303fb8eeacee6029ddecfe2fe7e95b58e7c4",
+            "response_sha256": "80730f3766df9eee433a27094689be81194ff1c0285b2cdf2a3e13d6760c067a",
+            "outcome": "passed"
+          }
+        ],
+        "weak_components": [
+          {
+            "elapsed_seconds": 0.023579624947160482,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21839872,
+            "request_bytes": 290,
+            "response_bytes": 1334578,
+            "request_sha256": "f4963b882b660db3e69231d05e0672c17dc0b5cc49ca1c22f86837e4bf1b8a9b",
+            "response_sha256": "a4e2c1b39cb53a6ad95ea37cf9f919b5c21093a3554d433e2af50357afd08321",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.023697208147495985,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21774336,
+            "request_bytes": 290,
+            "response_bytes": 1334578,
+            "request_sha256": "f4963b882b660db3e69231d05e0672c17dc0b5cc49ca1c22f86837e4bf1b8a9b",
+            "response_sha256": "a4e2c1b39cb53a6ad95ea37cf9f919b5c21093a3554d433e2af50357afd08321",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.02363820793107152,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21790720,
+            "request_bytes": 290,
+            "response_bytes": 1334578,
+            "request_sha256": "f4963b882b660db3e69231d05e0672c17dc0b5cc49ca1c22f86837e4bf1b8a9b",
+            "response_sha256": "a4e2c1b39cb53a6ad95ea37cf9f919b5c21093a3554d433e2af50357afd08321",
+            "outcome": "passed"
+          }
+        ],
+        "shortest_paths": [
+          {
+            "elapsed_seconds": 0.02379091689363122,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 22282240,
+            "request_bytes": 299,
+            "response_bytes": 1354639,
+            "request_sha256": "bcd128f8814262a1ae00a06661cae273b47a666bcaf49a4dcba7ceec94959a7b",
+            "response_sha256": "6f99d24d32670ddc1305801d9f862f693b2a6a6b56de6252afa94d69738684cd",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.02362116612493992,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 22167552,
+            "request_bytes": 299,
+            "response_bytes": 1354639,
+            "request_sha256": "bcd128f8814262a1ae00a06661cae273b47a666bcaf49a4dcba7ceec94959a7b",
+            "response_sha256": "6f99d24d32670ddc1305801d9f862f693b2a6a6b56de6252afa94d69738684cd",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.023659500293433666,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 22216704,
+            "request_bytes": 299,
+            "response_bytes": 1354639,
+            "request_sha256": "bcd128f8814262a1ae00a06661cae273b47a666bcaf49a4dcba7ceec94959a7b",
+            "response_sha256": "6f99d24d32670ddc1305801d9f862f693b2a6a6b56de6252afa94d69738684cd",
+            "outcome": "passed"
+          }
+        ],
+        "pagerank": [
+          {
+            "elapsed_seconds": 0.0235640830360353,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21954560,
+            "request_bytes": 296,
+            "response_bytes": 1354370,
+            "request_sha256": "ae7ab4dc2b79a94f4709e6781faf025a99305e430a8e2f80365f1d93fd65e7ff",
+            "response_sha256": "3722eed10ae6bbfec79640ecc31b8d9a37bb6da4864019e0a8893179e913069c",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.02359633380547166,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21987328,
+            "request_bytes": 296,
+            "response_bytes": 1354370,
+            "request_sha256": "ae7ab4dc2b79a94f4709e6781faf025a99305e430a8e2f80365f1d93fd65e7ff",
+            "response_sha256": "3722eed10ae6bbfec79640ecc31b8d9a37bb6da4864019e0a8893179e913069c",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.023702667094767094,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21970944,
+            "request_bytes": 296,
+            "response_bytes": 1354370,
+            "request_sha256": "ae7ab4dc2b79a94f4709e6781faf025a99305e430a8e2f80365f1d93fd65e7ff",
+            "response_sha256": "3722eed10ae6bbfec79640ecc31b8d9a37bb6da4864019e0a8893179e913069c",
+            "outcome": "passed"
+          }
+        ],
+        "nearest_vectors": [
+          {
+            "elapsed_seconds": 0.02374966721981764,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21430272,
+            "request_bytes": 387,
+            "response_bytes": 1326266,
+            "request_sha256": "01aa2113085b08788fccbb2b30295fcd4dafd8ac307002ebc99e14c29812a8f7",
+            "response_sha256": "cd210edd7c3eed603ae5b74cd694362846befab0c41661ce31ae319f539fc3e3",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.023717500269412994,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21364736,
+            "request_bytes": 387,
+            "response_bytes": 1326266,
+            "request_sha256": "01aa2113085b08788fccbb2b30295fcd4dafd8ac307002ebc99e14c29812a8f7",
+            "response_sha256": "cd210edd7c3eed603ae5b74cd694362846befab0c41661ce31ae319f539fc3e3",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.023768916726112366,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 21315584,
+            "request_bytes": 387,
+            "response_bytes": 1326266,
+            "request_sha256": "01aa2113085b08788fccbb2b30295fcd4dafd8ac307002ebc99e14c29812a8f7",
+            "response_sha256": "cd210edd7c3eed603ae5b74cd694362846befab0c41661ce31ae319f539fc3e3",
+            "outcome": "passed"
+          }
+        ]
+      },
+      "summaries": {
+        "import": {
+          "sample_count": 1,
+          "median_seconds": 0.02352020936086774,
+          "max_seconds": 0.02352020936086774,
+          "max_peak_child_rss_bytes": 19349504,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "query": {
+          "sample_count": 3,
+          "median_seconds": 0.02356537524610758,
+          "max_seconds": 0.023751708213239908,
+          "max_peak_child_rss_bytes": 21250048,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "degree": {
+          "sample_count": 3,
+          "median_seconds": 0.023727166932076216,
+          "max_seconds": 0.023787125013768673,
+          "max_peak_child_rss_bytes": 23150592,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "weak_components": {
+          "sample_count": 3,
+          "median_seconds": 0.02363820793107152,
+          "max_seconds": 0.023697208147495985,
+          "max_peak_child_rss_bytes": 21839872,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "shortest_paths": {
+          "sample_count": 3,
+          "median_seconds": 0.023659500293433666,
+          "max_seconds": 0.02379091689363122,
+          "max_peak_child_rss_bytes": 22282240,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "pagerank": {
+          "sample_count": 3,
+          "median_seconds": 0.02359633380547166,
+          "max_seconds": 0.023702667094767094,
+          "max_peak_child_rss_bytes": 21987328,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "nearest_vectors": {
+          "sample_count": 3,
+          "median_seconds": 0.02374966721981764,
+          "max_seconds": 0.023768916726112366,
+          "max_peak_child_rss_bytes": 21430272,
+          "outcomes": [
+            "passed"
+          ]
+        }
+      },
+      "node_metadata_references": 20,
+      "edge_metadata_references": 41,
+      "fixture_sha256": "34309bead256eee8d161a8a038f988f2448471221d2c7651fe0dd8c93455ac7f",
+      "snapshot": {
+        "graph_id": "benchmark",
+        "revision": "sha256:2fcceb3fe126472dd8850055712aed6c135defda87be29940a711ccb1f8deece"
+      },
+      "status": "passed"
+    },
+    {
+      "input_nodes": 10000,
+      "input_edges": 20500,
+      "authorized_nodes": 9000,
+      "authorized_edges": 16077,
+      "edge_density": 2.05,
+      "vector_dimensions": 8,
+      "visibility_partitions": 2,
+      "metadata_depth": 1,
+      "metadata_shared_graph_nodes": 16,
+      "samples": {
+        "import": [
+          {
+            "elapsed_seconds": 0.1816971250809729,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 129449984,
+            "request_bytes": 6822892,
+            "response_bytes": 287,
+            "request_sha256": "763c56f373e8cb9ea8c7acbf37e86245fdb4ebba95194c1cf72de4403ffee475",
+            "response_sha256": "1752b466f616a59710c0c1873f589b6a7ec188f00f5921ae616fe51dcda76dc1",
+            "outcome": "passed"
+          }
+        ],
+        "query": [
+          {
+            "elapsed_seconds": 0.172217708081007,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 156909568,
+            "request_bytes": 224,
+            "response_bytes": 13275181,
+            "request_sha256": "5d6187a19195da1aeedb91d3c11716271fec71f477c27b4f1e1dce0f2aade34d",
+            "response_sha256": "8d9bd117eb1743b5296a2c552b86f9a3c06d719c154281d3df9e48596bdca511",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.17420520819723606,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 156663808,
+            "request_bytes": 224,
+            "response_bytes": 13275181,
+            "request_sha256": "5d6187a19195da1aeedb91d3c11716271fec71f477c27b4f1e1dce0f2aade34d",
+            "response_sha256": "8d9bd117eb1743b5296a2c552b86f9a3c06d719c154281d3df9e48596bdca511",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.16674283286556602,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 157810688,
+            "request_bytes": 224,
+            "response_bytes": 13275181,
+            "request_sha256": "5d6187a19195da1aeedb91d3c11716271fec71f477c27b4f1e1dce0f2aade34d",
+            "response_sha256": "8d9bd117eb1743b5296a2c552b86f9a3c06d719c154281d3df9e48596bdca511",
+            "outcome": "passed"
+          }
+        ],
+        "degree": [
+          {
+            "elapsed_seconds": 0.2063133753836155,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 173473792,
+            "request_bytes": 272,
+            "response_bytes": 13798128,
+            "request_sha256": "b38cf280bf048defbca2f64b0ee2a37693918cb55b3f59894835f33431238ae0",
+            "response_sha256": "fbea2775febc7e9ba6f7bdb442c2ea30ed90deb0e1a2773ed7421e4dd8194543",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.19360124971717596,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 173424640,
+            "request_bytes": 272,
+            "response_bytes": 13798128,
+            "request_sha256": "b38cf280bf048defbca2f64b0ee2a37693918cb55b3f59894835f33431238ae0",
+            "response_sha256": "fbea2775febc7e9ba6f7bdb442c2ea30ed90deb0e1a2773ed7421e4dd8194543",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.1808382081799209,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 173654016,
+            "request_bytes": 272,
+            "response_bytes": 13798128,
+            "request_sha256": "b38cf280bf048defbca2f64b0ee2a37693918cb55b3f59894835f33431238ae0",
+            "response_sha256": "fbea2775febc7e9ba6f7bdb442c2ea30ed90deb0e1a2773ed7421e4dd8194543",
+            "outcome": "passed"
+          }
+        ],
+        "weak_components": [
+          {
+            "elapsed_seconds": 0.1799320406280458,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 159875072,
+            "request_bytes": 290,
+            "response_bytes": 13366153,
+            "request_sha256": "e40102c3bb87cf98dd1714648f6f63c014b7b0b96a83760d10af50e5ac4bae2d",
+            "response_sha256": "7e915b09b337bf8c81b90836371f1082298e64a280132143ba58248af8bf5c7d",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.17456099996343255,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 159170560,
+            "request_bytes": 290,
+            "response_bytes": 13366153,
+            "request_sha256": "e40102c3bb87cf98dd1714648f6f63c014b7b0b96a83760d10af50e5ac4bae2d",
+            "response_sha256": "7e915b09b337bf8c81b90836371f1082298e64a280132143ba58248af8bf5c7d",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.18191999988630414,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 159170560,
+            "request_bytes": 290,
+            "response_bytes": 13366153,
+            "request_sha256": "e40102c3bb87cf98dd1714648f6f63c014b7b0b96a83760d10af50e5ac4bae2d",
+            "response_sha256": "7e915b09b337bf8c81b90836371f1082298e64a280132143ba58248af8bf5c7d",
+            "outcome": "passed"
+          }
+        ],
+        "shortest_paths": [
+          {
+            "elapsed_seconds": 0.18465220788493752,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 164429824,
+            "request_bytes": 299,
+            "response_bytes": 13570321,
+            "request_sha256": "cb5c46ed11a60647ea20e27b6b432a45678b2705f807543476c2c85c926139a0",
+            "response_sha256": "568bdc6f35ffcbb7e3c56d36d52822c6c835a37677168a06835d1634e06f36c4",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.1819009999744594,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 162791424,
+            "request_bytes": 299,
+            "response_bytes": 13570321,
+            "request_sha256": "cb5c46ed11a60647ea20e27b6b432a45678b2705f807543476c2c85c926139a0",
+            "response_sha256": "568bdc6f35ffcbb7e3c56d36d52822c6c835a37677168a06835d1634e06f36c4",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.17956287506967783,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 164331520,
+            "request_bytes": 299,
+            "response_bytes": 13570321,
+            "request_sha256": "cb5c46ed11a60647ea20e27b6b432a45678b2705f807543476c2c85c926139a0",
+            "response_sha256": "568bdc6f35ffcbb7e3c56d36d52822c6c835a37677168a06835d1634e06f36c4",
+            "outcome": "passed"
+          }
+        ],
+        "pagerank": [
+          {
+            "elapsed_seconds": 0.17447391664609313,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 160579584,
+            "request_bytes": 296,
+            "response_bytes": 13572702,
+            "request_sha256": "6277b9664281844ea1a6ec10502226aa58349c722f65fec2d3eb632d5b8a3c15",
+            "response_sha256": "ce2ec4db6a90fe2f1e41305340bc5ed7486039a41c77b0fa8ba58c56d6c9bea1",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.18151479214429855,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 159563776,
+            "request_bytes": 296,
+            "response_bytes": 13572702,
+            "request_sha256": "6277b9664281844ea1a6ec10502226aa58349c722f65fec2d3eb632d5b8a3c15",
+            "response_sha256": "ce2ec4db6a90fe2f1e41305340bc5ed7486039a41c77b0fa8ba58c56d6c9bea1",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.18196295900270343,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 160563200,
+            "request_bytes": 296,
+            "response_bytes": 13572702,
+            "request_sha256": "6277b9664281844ea1a6ec10502226aa58349c722f65fec2d3eb632d5b8a3c15",
+            "response_sha256": "ce2ec4db6a90fe2f1e41305340bc5ed7486039a41c77b0fa8ba58c56d6c9bea1",
+            "outcome": "passed"
+          }
+        ],
+        "nearest_vectors": [
+          {
+            "elapsed_seconds": 0.17254391591995955,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 158760960,
+            "request_bytes": 387,
+            "response_bytes": 13276841,
+            "request_sha256": "86b6a6fe5148f1e2d5a2e72966813144f86e176940b8d01ac53a7966a316ef18",
+            "response_sha256": "34090cbbd0297e3f76959da79280d202a8d2a84b8083d6955a75a6588131e2c7",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.17138908291235566,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 158007296,
+            "request_bytes": 387,
+            "response_bytes": 13276841,
+            "request_sha256": "86b6a6fe5148f1e2d5a2e72966813144f86e176940b8d01ac53a7966a316ef18",
+            "response_sha256": "34090cbbd0297e3f76959da79280d202a8d2a84b8083d6955a75a6588131e2c7",
+            "outcome": "passed"
+          },
+          {
+            "elapsed_seconds": 0.17452850006520748,
+            "exit_code": 0,
+            "peak_child_rss_bytes": 157990912,
+            "request_bytes": 387,
+            "response_bytes": 13276841,
+            "request_sha256": "86b6a6fe5148f1e2d5a2e72966813144f86e176940b8d01ac53a7966a316ef18",
+            "response_sha256": "34090cbbd0297e3f76959da79280d202a8d2a84b8083d6955a75a6588131e2c7",
+            "outcome": "passed"
+          }
+        ]
+      },
+      "summaries": {
+        "import": {
+          "sample_count": 1,
+          "median_seconds": 0.1816971250809729,
+          "max_seconds": 0.1816971250809729,
+          "max_peak_child_rss_bytes": 129449984,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "query": {
+          "sample_count": 3,
+          "median_seconds": 0.172217708081007,
+          "max_seconds": 0.17420520819723606,
+          "max_peak_child_rss_bytes": 157810688,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "degree": {
+          "sample_count": 3,
+          "median_seconds": 0.19360124971717596,
+          "max_seconds": 0.2063133753836155,
+          "max_peak_child_rss_bytes": 173654016,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "weak_components": {
+          "sample_count": 3,
+          "median_seconds": 0.1799320406280458,
+          "max_seconds": 0.18191999988630414,
+          "max_peak_child_rss_bytes": 159875072,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "shortest_paths": {
+          "sample_count": 3,
+          "median_seconds": 0.1819009999744594,
+          "max_seconds": 0.18465220788493752,
+          "max_peak_child_rss_bytes": 164429824,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "pagerank": {
+          "sample_count": 3,
+          "median_seconds": 0.18151479214429855,
+          "max_seconds": 0.18196295900270343,
+          "max_peak_child_rss_bytes": 160579584,
+          "outcomes": [
+            "passed"
+          ]
+        },
+        "nearest_vectors": {
+          "sample_count": 3,
+          "median_seconds": 0.17254391591995955,
+          "max_seconds": 0.17452850006520748,
+          "max_peak_child_rss_bytes": 158760960,
+          "outcomes": [
+            "passed"
+          ]
+        }
+      },
+      "node_metadata_references": 200,
+      "edge_metadata_references": 410,
+      "fixture_sha256": "b9b6fae889ebd75d2463ea3601516cb7e1fa7010febfb2fc1f6453b0e43f939b",
+      "snapshot": {
+        "graph_id": "benchmark",
+        "revision": "sha256:8a723185fc3e04ef2d6a0ebc57e8d5566675fd45100f4c6b79b2b13194fa000f"
+      },
+      "status": "passed"
+    }
+  ],
+  "elapsed_seconds": 5.445127167273313,
+  "host_metadata_note": "CPU model and physical RAM read on the same host immediately after this run; elapsed measurements unchanged."
+}

@@ -1,5 +1,11 @@
 # Weave Engine implementation plan
 
+**Active delivery scope:** the user deferred browser/mobile applications and
+requested a native data-science engine on 10 October 2026. The finite acceptance
+contract is [NATIVE_SCIENCE_PLAN.md](NATIVE_SCIENCE_PLAN.md). The original roadmap
+below remains the broader project plan; its application gates do not block this
+native experiment release.
+
 Status: implementation in progress; executable foundation described in [STATUS.md](STATUS.md), full scope remains open. Owner: engine agent, coordinated by the parent orchestrator. License target: MIT. Public repository target: `weave-graph/weave-engine`.
 
 ## Scope and source authority

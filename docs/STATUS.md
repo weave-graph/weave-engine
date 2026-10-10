@@ -1,3 +1,38 @@
+## Native data-science delivery (science0.1 / protocol0.21 / store29)
+
+The active scope is [DS01–DS09](NATIVE_SCIENCE_PLAN.md), following the user's
+request for a functional native engine for experiments and deferral of
+browser/mobile applications. The new Rust science API/CLI and installable Python
+client use the real immutable runtime, authorization and temporal query paths.
+They provide dataset import/correction, graph expressions, native graph/vector
+analytics, table/result export and reproducible experiment records.
+
+Local integration passes 615 Rust checks with no failures or ignored checks,
+strict workspace Clippy and formatting, and 25 installed Python checks, including
+four actual native integration cases. Release installation and the supplied
+example pass: a correction changes connectivity while the original immutable
+experiment replays after reopening. Replay revalidates authority and the full
+selected input, rejects changed live dependencies, and cannot execute mutations
+from a loaded artifact.
+
+The independent optimized-binary acceptance passes 16 grouped cases; deterministic
+1k/10k workloads pass their numerical and visibility invariants. The 10k
+end-to-end query/analysis medians are 172–194 ms on the reported Apple M4 Max host,
+including the complete query/provenance JSON. See [exact evidence and
+limits](SCIENCE_VALIDATION.md), [native API](SCIENCE_INTERFACE.md) and
+[Python guide](PYTHON_SCIENCE.md).
+
+Normal CI checks current native behavior on Linux, macOS and Windows without
+duplicate branch-push runs. Historical compiler/store suites remain preserved
+and run when their implementations change or by manual dispatch. Browser
+persistence is manual. Hosted results must be inspected before claiming platform
+acceptance; local results alone cover the reported Mac host.
+
+The full decentralized white-paper scope remains open as a separate roadmap.
+Source actors, distributed networking, app/device scenarios, approximate indexes
+and the original formal/cryptographic assurance program are deferred; they do
+not block the native experiment completion contract.
+
 ## Generic browser host (protocol0.21 / store29)
 
 The shared trusted Rust facade now has a raw UTF-8 browser transport and atomic

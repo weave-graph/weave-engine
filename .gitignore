@@ -12,3 +12,9 @@
 /fuzz/runlogs/
 
 __pycache__/
+
+# Local experiment environments and package build products.
+/.venv/
+/python/build/
+/python/dist/
+/python/src/*.egg-info/
