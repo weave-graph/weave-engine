@@ -1,9 +1,6 @@
 //! Trusted embedding-host ABI. JSON plans never grant authority; each handle has fixed host grants.
-pub mod artifacts;
-pub mod cluster_journal;
-pub mod host;
+pub use weave_host::{artifacts, cluster_journal, host};
 mod host_abi;
-mod strict_json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -13,6 +10,9 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Mutex, OnceLock};
 use weave_contract::Program;
 use weave_engine::{Engine, HostContext};
+#[cfg(feature = "browser-image-experiment")]
+pub use weave_host::image_host;
+use weave_host::strict_json;
 const LIMIT: usize = 16 * 1024 * 1024;
 // Share the engine precommit cumulative result bound; reserve ABI envelope/array bytes.
 const OUTPUT_LIMIT: usize = weave_engine::MATERIALIZED_LIMIT + 4096;

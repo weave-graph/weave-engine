@@ -410,7 +410,7 @@ impl HostSession {
             }
         }
     }
-    fn rejected(&self, code: &str, message: &str) -> HostReply {
+    pub(crate) fn rejected(&self, code: &str, message: &str) -> HostReply {
         let error = serde_json::to_vec(&HostError::new(code, message)).expect("small error");
         self.response(false, &error, false)
     }

@@ -3,7 +3,7 @@ use serde::de::{DeserializeSeed, Error, MapAccess, SeqAccess, Visitor};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub(crate) fn check(bytes: &[u8], limit: usize) -> Result<(), &'static str> {
+pub fn check(bytes: &[u8], limit: usize) -> Result<(), &'static str> {
     if bytes.len() > limit {
         return Err("E_HOST_BUDGET");
     }

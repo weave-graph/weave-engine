@@ -71,3 +71,13 @@ destination reconciliation remain trusted native host responsibilities. The
 Swift wrapper typecheck is distinct from application acceptance; source actor
 compilation, actual browser/mobile lifecycle apps and every original wider
 semantic/resource/assurance requirement remain mandatory.
+
+The generic experimental browser host shares the original Rust facade and
+preserves raw UTF-8/exact integers. One atomic IndexedDB generation contains its
+complete SQLite image and original/upgraded SDK inventories. Two actual pure
+source recipes pass compiled completion, reconstruction, upgrade and recorded
+rollback with lost acknowledgments. Actual worker/IDB/quota/corruption/browser
+crash evidence is [separate](VERIFICATION_BROWSER_HOST.md) from native physical
+tool/sink histories. The 8 MiB trusted local profile does not complete portable
+recorded actors/effects, source actor compilation, full application/device or
+the original broader semantics/assurance/release gates. All remain mandatory.

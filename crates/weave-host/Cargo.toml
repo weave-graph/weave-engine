@@ -1,18 +1,15 @@
 [package]
-name = "weave-native"
+name = "weave-host"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 publish = false
-description = "Bounded trusted-host C ABI for the native Weave runtime"
-[lib]
-crate-type = ["staticlib", "cdylib", "rlib"]
+description = "Shared trusted Rust embedding facade and complete artifact handling"
 [features]
-recovery-testing = ["weave-engine/recovery-testing", "weave-host/recovery-testing"]
-browser-image-experiment = ["weave-engine/browser-image-experiment", "weave-host/browser-image-experiment"]
+recovery-testing = ["weave-engine/recovery-testing"]
+browser-image-experiment = ["weave-engine/browser-image-experiment"]
 [dependencies]
 weave-engine = { path = "../weave-engine" }
-weave-host = { path = "../weave-host" }
 weave-contract = { path = "../weave-contract" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }

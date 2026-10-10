@@ -23,6 +23,13 @@ through the existing Rust/C/Swift embedding. Genuine old actor histories and two
 actual compiler sources have separate [recovery evidence](docs/VERIFICATION_HOST_LIFECYCLE.md).
 Protocol0.21, store29 and the original request1/legacy C entry points remain compatible.
 
+The experimental [generic browser host](docs/BROWSER_HOST.md) transports raw
+request2/source artifacts through the shared Rust facade and fences complete
+SQLite plus SDK inventory generations in IndexedDB. Actual compiled completion,
+reconstruction, version transfer and rollback have separate
+[browser recovery evidence](docs/VERIFICATION_BROWSER_HOST.md). Full portable
+actor/effect execution and browser/mobile application acceptance remain open.
+
 Native store28 adds [effect-aware recorded actor cancellation](docs/ACTOR_DISPOSITION.md). Unknown outcomes require actual reconciliation; undispatched intents can be retired atomically with state/checkpoint, pause/rebuild and audit. Exact old retries preserve later work. Future delivery requires explicit owner initialization.
 
 Native store27 adds [recorded actor version transfer and historical observation](docs/ACTOR_LIFECYCLE.md). Rollback restores an actual recorded pair and defaults historical deliveries to original receipt observation without new tool calls, graph writes or external actions. Source/portable and broader lifecycle/assurance requirements remain open.

@@ -63,6 +63,14 @@ Reconstruction creates a new owned occurrence namespace while preserving entity
 identity/content; self-occurrence origins are checked against each actual output
 snapshot. This is source-compiled pure handler evidence, not source actor execution.
 
+The final publication profile passes605 workspace checks and59 controllers,
+including36 populated store20–28 inventories, ten actual SDK journals and every
+prior native/source recovery trace. Final441-file head66d8bda has208 byte-identical
+Rust/Cargo inputs to the fresh native build atd8d744f. All54 exact-head hosted
+checks passed before [PR31](https://github.com/weave-graph/weave-engine/pull/31)
+merged at2cfa6c9. The publication evidence supersedes the following historical
+development requirement to freeze and check before release.
+
 Ubuntu/macOS/Windows CI execute both C profiles with platform native libraries and
 the exact pinned previous26/27/28 binaries/source compiler. Frozen clean-source
 inputs, full prior migration/source/recovery acceptance and exact hosted checks
