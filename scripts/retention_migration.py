@@ -11,6 +11,7 @@ def assert_retention_baseline(path,marker):
     assert_compiled_rebuild_baseline(path,marker)
     assert_recorded_actor_baseline(path,marker)
     assert_actor_lifecycle_baseline(path,marker)
+    assert_actor_disposition_baseline(path,marker)
     if marker<22:
         assert not retention_tables(path);return
     assert retention_tables(path)==RETENTION_TABLES
@@ -69,3 +70,12 @@ def assert_actor_lifecycle_baseline(path,marker):
             assert not present;return
         assert present==ACTOR_LIFECYCLE_TABLES
         for name in ACTOR_LIFECYCLE_TABLES:assert c.execute("SELECT count(*) FROM "+name).fetchone()[0]==0,name
+
+ACTOR_DISPOSITION_TABLES=frozenset(("recorded_actor_cancellations",))
+def assert_actor_disposition_baseline(path,marker):
+    with closing(sqlite3.connect(path)) as c:
+        present={n for(n,)in c.execute("SELECT name FROM sqlite_master WHERE type='table'")if n in ACTOR_DISPOSITION_TABLES}
+        if marker<28:
+            assert not present;return
+        assert present==ACTOR_DISPOSITION_TABLES
+        for name in ACTOR_DISPOSITION_TABLES:assert c.execute("SELECT count(*) FROM "+name).fetchone()[0]==0,name

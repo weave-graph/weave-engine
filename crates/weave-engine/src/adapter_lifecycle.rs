@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS projection_migrations(source_adapter TEXT PRIMARY KEY
     }
     pub(crate) fn require_uncanceled_delivery(&self, adapter: &str, event: &str) -> Result<()> {
         let canceled: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM delivery_cancellations WHERE adapter=?1 AND event_id=?2)",
+            "SELECT EXISTS(SELECT 1 FROM delivery_cancellations WHERE adapter=?1 AND event_id=?2) OR EXISTS(SELECT 1 FROM recorded_actor_cancellations WHERE adapter=?1 AND event_id=?2)",
             params![adapter, event],
             |r| r.get(0),
         )?;

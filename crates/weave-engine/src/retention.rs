@@ -61,6 +61,7 @@ const KNOWN_TABLES: &[&str] = &[
     "recorded_actor_migrations",
     "recorded_actor_replay_fences",
     "recorded_actor_observations",
+    "recorded_actor_cancellations",
     "recorded_actor_definitions",
     "recorded_actor_states",
     "recorded_actor_receipts",
@@ -599,6 +600,7 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                     && matches!(
                                         table.as_str(),
                                         "retention_adapter_states"
+                                            | "recorded_actor_cancellations"
                                             | "recorded_actor_observations"
                                             | "recorded_actor_migrations"
                                             | "recorded_actor_replay_fences"
@@ -628,7 +630,15 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
                                     } else {
                                         field("adapter")?
                                     };
-                                    if table == "recorded_actor_observations" {
+                                    if table == "recorded_actor_cancellations" {
+                                        actor_disposition::validate_retained_actor_cancellation(
+                                            self,
+                                            &adapter,
+                                            &field("event_id")?,
+                                            &field("digest")?,
+                                            &value,
+                                        )?;
+                                    } else if table == "recorded_actor_observations" {
                                         actor_observation::validate_retained_observation(
                                             self,
                                             &adapter,

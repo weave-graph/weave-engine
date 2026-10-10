@@ -4,14 +4,14 @@ import argparse,hashlib,json,shutil,sqlite3,subprocess,tempfile
 from contextlib import closing
 from pathlib import Path
 from check_compiled_lifecycle import snapshot
-from retention_migration import ACTOR_LIFECYCLE_TABLES
+from retention_migration import ACTOR_DISPOSITION_TABLES,ACTOR_LIFECYCLE_TABLES
 from version_profile import store_marker
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for name in ['old-actor','actor']:p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--report',type=Path);p.add_argument('--evidence-dir',type=Path)
-    a=p.parse_args();assert store_marker()==27;trace=[];deaths=0
+    a=p.parse_args();assert store_marker()>=27;trace=[];deaths=0
     if a.evidence_dir:a.evidence_dir.mkdir(parents=True,exist_ok=False)
     with tempfile.TemporaryDirectory(prefix='weave-actor-lifecycle-') as temporary:
         root=Path(temporary);db=root/'store.sqlite';request_file=root/'request.json'
@@ -37,9 +37,9 @@ def main():
         old_tools=rows(db.with_suffix('.tools.sqlite'),'tool_runs');old_sink=rows(db.with_suffix('.sink.sqlite'),'physical_receipts')
         actor('open',crash='before-schema',code=95);assert snapshot(db)==before
         actor('open',crash='after-schema',code=96);after=snapshot(db)
-        assert after['marker']==27 and set(after['tables'])==set(before['tables'])|ACTOR_LIFECYCLE_TABLES
+        assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|ACTOR_LIFECYCLE_TABLES|(ACTOR_DISPOSITION_TABLES if store_marker()>=28 else frozenset())
         assert {n:after['tables'][n]for n in before['tables']}==before['tables']
-        assert all(after['tables'][n]['rows']==[]for n in ACTOR_LIFECYCLE_TABLES)
+        assert all(after['tables'][n]['rows']==[]for n in ACTOR_LIFECYCLE_TABLES|(ACTOR_DISPOSITION_TABLES if store_marker()>=28 else frozenset()))
         error=old('open',code=1);assert b'E_STORAGE_VERSION'in error and snapshot(db)==after
         assert rows(db.with_suffix('.tools.sqlite'),'tool_runs')==old_tools and rows(db.with_suffix('.sink.sqlite'),'physical_receipts')==old_sink
         actor('seed',clock=100);initial={'inputs':actor('inputs',clock=100),'state_revision':'v1-initial','state':{'sample':'initial','input':1}}
@@ -101,7 +101,7 @@ def main():
         assert rows(db.with_suffix('.tools.sqlite'),'tool_runs')==old_tools and rows(db.with_suffix('.sink.sqlite'),'physical_receipts')==old_sink
         if a.evidence_dir:
             for path in root.glob('*.sqlite'):shutil.copy2(path,a.evidence_dir/path.name)
-    report={'profile':'native-actor-lifecycle-observation/1','store_marker':27,'processes':len(trace),'controlled_deaths':deaths,'native_tool_runs':3,'physical_receipts':3,'original_store26_tool_runs':1,'original_store26_physical_receipts':1,'distinct_executed_artifacts':2,'trace':trace,'result':'passed','checks':['every original populated store26 schema and row survives interrupted upgrade','real distinct native v1/v2 code artifacts and nondeterministic journaled samples','unknown physical acknowledgment blocks transfer and reconciles actual destination receipt','version transfer and recorded prior-pair rollback atomic before/after process deaths','rollback fences new tool computation and broker intents','historical observation and private checkpoint atomic before/after deaths without graph writes, model calls or I/O','nested rollback reaches actual ancestor even before intermediate observation','historical observation/migration retries never rewind newer state/output/checkpoint','future occurrence runs the installed restored v1 artifact','typed migration/fence/observation journals survive collection'],'limits':['trusted native host state ABI; artifact hashing is not execution attestation','local SQLite destination idempotency and reconciliation, no arbitrary remote exactly-once','source/portable bindings, full graph-output reconstruction and broader original assurance remain required']}
+    report={'profile':'native-actor-lifecycle-observation/1','store_marker':store_marker(),'processes':len(trace),'controlled_deaths':deaths,'native_tool_runs':3,'physical_receipts':3,'original_store26_tool_runs':1,'original_store26_physical_receipts':1,'distinct_executed_artifacts':2,'trace':trace,'result':'passed','checks':['every original populated store26 schema and row survives interrupted upgrade','real distinct native v1/v2 code artifacts and nondeterministic journaled samples','unknown physical acknowledgment blocks transfer and reconciles actual destination receipt','version transfer and recorded prior-pair rollback atomic before/after process deaths','rollback fences new tool computation and broker intents','historical observation and private checkpoint atomic before/after deaths without graph writes, model calls or I/O','nested rollback reaches actual ancestor even before intermediate observation','historical observation/migration retries never rewind newer state/output/checkpoint','future occurrence runs the installed restored v1 artifact','typed migration/fence/observation journals survive collection'],'limits':['trusted native host state ABI; artifact hashing is not execution attestation','local SQLite destination idempotency and reconciliation, no arbitrary remote exactly-once','source/portable bindings, full graph-output reconstruction and broader original assurance remain required']}
     if a.report:a.report.write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report))
 if __name__=='__main__':main()
