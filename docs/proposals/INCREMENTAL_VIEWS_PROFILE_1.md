@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [incremental selection](../INCREMENTAL_SELECTION.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # First exact incremental living-view profile
 
 Status: reviewed implementation profile, based on engine `45e0ea6`. The first kernel/refresh stage is described in [incremental selection](../INCREMENTAL_SELECTION.md); SQLite marker 13 is approved for private auxiliary state. The separate bounded durable scheduling checkpoint is documented in [view scheduling](../VIEW_SCHEDULING.md). No shared protocol change. E07 remains in progress.

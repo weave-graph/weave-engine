@@ -1,6 +1,6 @@
 # Contract 0.16.0: exact governed reads and host view artifacts
 
-This candidate implements the native protocol 0.16.0 boundary. Source pairing and independent release verification are recorded separately; a passing interface test is not full-system acceptance.
+Released; later versions add to it (current: [0.21](../v0.21/README.md)). This version introduced the native protocol 0.16.0 boundary. Source pairing and independent release verification are recorded separately; a passing interface test is not full-system acceptance.
 
 `GraphExpression::AcceptedGraph { selection: AcceptedGraphSelection { view_id, decision_id } }` requires an exact accepted occurrence. Historical occurrence identity never bypasses current policy, source authorization or the trusted operation clock.
 

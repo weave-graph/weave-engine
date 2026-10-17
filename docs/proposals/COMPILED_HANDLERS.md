@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [contract 0.18](../contract/v0.18/README.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Compiled handler registration and durable preparation
 
 Implemented candidate protocol **0.18**, SQLite marker **16**, following root approval of the native interface and language `REACTOR_INTERFACE.md`. Canonical checkpoint `4e81a16`, deterministic nested RuleSet source identities `efc4b69`, and native preparation checkpoint `27aa723` are local review boundaries. This document describes the implemented profile and its explicit remaining scope; publication is separate.

@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [actor lifecycle](../ACTOR_LIFECYCLE.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Effect-aware recorded actor lifecycle and observation replay
 
 Mandatory engine4.1–4.4; R12/R13/R14/R36/R38, E05/E06/E14. This is an

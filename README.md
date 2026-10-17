@@ -1,14 +1,43 @@
 # Weave Engine
 
-A native engine for experiments with temporal knowledge graphs. Store immutable
-graph revisions in SQLite, select what was valid or known at a particular time,
-derive graph results with provenance, and run graph or vector analyses from
-Python, JSON or Rust.
+**Weave is an open-source temporal knowledge graph for hardware-heavy industries
+and the AI agents that work in them.**
 
-The supported [native experiment profile](docs/STATUS.md) uses science **0.1.0**,
-contract **0.21.0** and store **29**. Browser and mobile applications are deferred;
-experiments run locally without an app, compiler or server. The broader
-[white-paper roadmap](docs/IMPLEMENTATION_PLAN.md) remains open.
+Teams that build and operate hardware keep telemetry, hardware metadata (parts,
+serials, firmware, configurations, maintenance) and user metadata (owners,
+operators, customers, teams) in separate systems. Weave relates them in one
+graph where every fact has a valid time and a recorded time. You can ask how
+things were related at any moment, what was known at any moment, and what
+changed in between.
+
+Weave aims to serve three goals on one core:
+
+1. **Temporal graph database** for telemetry, hardware metadata and user
+   metadata, with time travel and "what changed" queries.
+2. **Shared fact store for AI agents** across people and teams. Agents write and
+   query facts directly, with permissions and provenance, and derived results
+   never leak what a reader may not see.
+3. **Time-aware hybrid RAG.** Embeddings are linked to the graph, so vector search
+   surfaces relations the graph lacks and graph traversal selects what to search.
+
+Read the [vision](VISION.md) and the [phased roadmap](docs/ROADMAP.md).
+
+## Status: what works today and what does not yet
+
+The engine has been tested extensively: 615 Rust tests, crash-injection and
+migration checks, and CI on Linux, macOS and Windows. It is **pre-release**.
+
+| Works today | Not yet (roadmap phase) |
+|---|---|
+| Immutable, durable graph revisions in SQLite; valid-time and recorded-time ("as known at") selection; diff between results | Fact-level incremental writes; today each commit stores a full snapshot, capped at 100k objects per graph (A2) |
+| Per-record read permissions, re-checked through derived results | k-hop traversal and stored "what changed" feeds (A3) |
+| Joins, rules, metadata graphs, provenance and explanations | Time-aware embeddings layer linked to graph queries (A4) |
+| Exact vector neighbors and graph analytics (PageRank, components, paths) from Python, JSON or Rust | Multi-user server, authentication, groups, agent interface (Phase B) |
+| | High-volume telemetry ingestion, approximate vector index (Phase C) |
+
+The supported profile is described in [docs/STATUS.md](docs/STATUS.md): science
+**0.1.0**, contract **0.21.0**, store **29**. It runs locally. There is no
+server, and the CLI trusts its caller (see [SECURITY.md](SECURITY.md)).
 
 ## Run your first experiment
 
@@ -80,7 +109,8 @@ The [documentation index](docs/README.md) separates tutorials, references,
 architecture, evidence and historical proposals. [Current status](docs/STATUS.md)
 identifies supported behavior and remaining work.
 
-For contributors, start with [CONTRIBUTING.md](CONTRIBUTING.md). The companion
+For contributors and AI agents, start with [AGENTS.md](AGENTS.md) and
+[CONTRIBUTING.md](CONTRIBUTING.md). The companion
 [Weave language](https://github.com/weave-graph/weave-language) optionally compiles
 source into the shared JSON contract; this repository owns the runtime and
 canonical [`weave-contract`](crates/weave-contract/src/lib.rs) types.

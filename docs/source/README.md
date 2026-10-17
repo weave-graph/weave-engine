@@ -7,3 +7,7 @@ The papers are architecture proposals, not evidence of an implemented feature or
 The private recovered conversation remains excluded from Git and is superseded by these complete sources for architecture reconciliation.
 
 Download the engine paper as [PDF](Weave_Engine_White_Paper_v0.1.pdf), [Word](Weave_Engine_White_Paper_v0.1.docx), or [Markdown](Weave_Engine_White_Paper_v0.1.md).
+
+The language paper is available as [Markdown](Weave_Language_White_Paper_v0.1.md).
+
+The goals Weave pursues now are stated in [VISION.md](../../VISION.md). They narrow and reorder the scope of these papers; the [roadmap](../ROADMAP.md) records which paper requirements are scheduled or deferred.

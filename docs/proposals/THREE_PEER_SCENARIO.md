@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [three-peer trace](../THREE_PEER_TRACE.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Three native peers: executable paper scenario and next boundary
 
 Design only, based on engine `8d359df` (protocol0.16 candidate), inspected 2026-09-20. No new protocol, storage schema, API or build is implemented here. The source/compiler pair still needs its own fixture and independent release verification. This design follows engine paper [§12](../source/Weave_Engine_White_Paper_v0.1.md) and the orchestration `verification/COMPLETION_PATH.md`.

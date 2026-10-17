@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [recorded actors](../RECORDED_ACTORS.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Recorded native actor state and effect recovery
 
 Mandatory engine4.1–4.4 requirements; R12/R13/R14/R36/R38, E05/E06/E14.

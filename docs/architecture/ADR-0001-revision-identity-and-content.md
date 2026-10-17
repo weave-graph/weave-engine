@@ -1,6 +1,6 @@
 # ADR 0001: logical revision identity and content integrity
 
-Status: adopted and implemented locally in contract 0.4; signed transport remains open.
+Status: adopted; implemented in contract 0.4. Signed whole-capsule export was added later ([SIGNED_CAPSULE_EXPORT.md](../SIGNED_CAPSULE_EXPORT.md)); a network transport is not implemented. Phase A storage work (ADR-0004, [roadmap](../ROADMAP.md)) must preserve this identity model.
 
 ## Current checkpoint
 

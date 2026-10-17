@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [actor disposition](../ACTOR_DISPOSITION.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Explicit effect-aware recorded actor disposition
 
 Mandatory R12/R13/R14/R36/R38, E05/E06/E14. This design follows the recorded actor

@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [adapter lifecycle](../ADAPTER_LIFECYCLE.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Explicit native adapter cancellation and state migration
 
 Required source: engine sections3.4 and4.1–4.4; R12/R13/R36/R38 and E05/E06/E14.

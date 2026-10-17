@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [store 17 verification](../VERIFICATION_STORE17.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Governed effect-intent bridge: bounded native profile
 
 Base: paired engine `edd58fd` / compiled-handler freeze `9b444ff`. The native implementation is an unpublished store17 candidate; current evidence is listed below. Protocol remains0.18: no new Program operation, expression, compiler artifact or remote admission action is proposed. SQLite **store17** is required, because older dispatchers would ignore its binding and current-authorization guards.

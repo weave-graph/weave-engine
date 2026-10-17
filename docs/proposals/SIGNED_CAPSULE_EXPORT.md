@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [signed capsule export](../SIGNED_CAPSULE_EXPORT.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Signed exact capsule export: proposed native profile
 
 Status: design for joint review after the existing-API trace. No implementation, new Program operator, shared contract version or network deployment is included. The prior trace and comparison fix remain frozen. This proposal makes the serving-side authority and response authenticity concrete; it does not turn receipt into acceptance or attribute every embedded assertion to the serving peer.

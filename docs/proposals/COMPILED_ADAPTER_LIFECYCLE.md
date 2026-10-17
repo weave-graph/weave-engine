@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [verification 024](../VERIFICATION_024.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Compiled stateless adapter version transfer
 
 Required source: engine4.1–4.4; R12/R13/R36/R38, E05/E06/E14.

@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [verification 025](../VERIFICATION_025.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Explicit compiled snapshot reconstruction
 
 Mandatory engine3.4/4.1/4.4 requirements; R12/R13/R36, E05/E06/E14.
