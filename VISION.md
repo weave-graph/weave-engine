@@ -1,6 +1,6 @@
 # Weave vision and goals
 
-Status: proposed on 2026-10-17 for owner approval. This file is the canonical
+Status: approved by the owner on 2026-10-18. This file is the canonical
 statement of what Weave is for. It applies to both
 [weave-engine](https://github.com/weave-graph/weave-engine) and
 [weave-language](https://github.com/weave-graph/weave-language). The phased plan

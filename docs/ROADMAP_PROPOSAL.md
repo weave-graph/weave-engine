@@ -1,6 +1,8 @@
 # Proposed GitHub issue changes (engine)
 
-Status: **draft for owner approval. Nothing below has been applied on GitHub.**
+Status: **approved by the owner on 2026-10-18** with four amendments (A2 storage
+abstraction, new A7, one store per tenant in B3, external-first telemetry in
+C1), which are included below.
 It implements [ROADMAP.md](ROADMAP.md). Language-repository changes are in
 [weave-language/docs/ROADMAP_PROPOSAL.md](https://github.com/weave-graph/weave-language/blob/main/docs/ROADMAP_PROPOSAL.md).
 
@@ -27,6 +29,7 @@ It implements [ROADMAP.md](ROADMAP.md). Language-repository changes are in
 | retitle + rebody | #13 E12 | A4: Embeddings layer and hybrid retrieval | phase-a |
 | **create** | — | A5: Hardware reference model and importers | phase-a |
 | retitle + rebody | #16 E15 | A6: Phase A acceptance and release | phase-a |
+| **create** | — | A7: Read-only MCP preview | phase-a |
 | **create** | — | B1: Principals, groups and agent identities | phase-b |
 | retitle + rebody | #5 E04 | B2: Derived-fact leakage protection | phase-b |
 | **create** | — | B3: Authenticated Weave service | phase-b |
@@ -116,6 +119,10 @@ per commit only (see the [audit](https://github.com/weave-graph/weave-engine/blo
   predicate), valid time and recorded time. It must define how revision identity
   and content addressing (ADR-0001) map to log positions, and how snapshots
   become derived, cacheable checkpoints.
+- A storage abstraction: the fact log, indexes and checkpoints sit behind a
+  backend trait, with SQLite as the first implementation. The trait states the
+  transaction, durability and recorded-time guarantees every backend must meet,
+  so a later backend change (C4) is a new implementation, not a rewrite.
 - A write API to assert, retract or correct one or many facts (node, edge,
   assertion, property or attachment) in one atomic transaction, with optional
   optimistic concurrency on the branch head or on individual facts.
@@ -147,6 +154,10 @@ per commit only (see the [audit](https://github.com/weave-graph/weave-engine/blo
 - [ ] The existing read-authorization and influence tests pass unchanged.
 - [ ] The science `import` API accepts incremental batches. Full-snapshot import
   remains available.
+- [ ] No engine code outside the SQLite backend module issues SQL against the
+  fact log, indexes or checkpoints, checked in CI.
+- [ ] A backend-conformance test suite runs against the storage trait, and an
+  in-memory reference backend passes it alongside SQLite.
 
 ---
 
@@ -266,6 +277,41 @@ reference schema, importers and a realistic dataset.
 
 ---
 
+## A7: Read-only MCP preview (new)
+
+**Goal.** Let the owner's own agents dogfood the Phase A core early, against a
+local store, before the full Phase B agent interface exists.
+
+**Scope.**
+- A small local MCP server (stdio transport) over one local Weave store, with
+  read-only tools: `query`, `expand`, `as_of`, `hybrid_search` and `explain`.
+  Tools are added as the A3 and A4 operators land; until then a tool reports
+  itself unavailable rather than approximating.
+- It is a thin adapter over the same engine APIs as the JSON and Python
+  interfaces. It has no separate semantics and no write tools.
+- The calling actor is fixed by local configuration, and existing per-record
+  `readers` still apply. There is no authentication; the preview is for local,
+  single-user use only.
+- Tool outputs mark fact content as untrusted data.
+- B4 builds the full write-capable, authenticated interface on top of this
+  server rather than replacing it.
+
+**Acceptance criteria.**
+- [ ] An MCP client connected to a local store built from the A5 dataset
+  answers Phase A exit-scenario questions 2–4 using only the preview tools, in a
+  scripted test.
+- [ ] Every tool result matches the equivalent JSON API result for the same
+  store and selection.
+- [ ] No tool can write. A test enumerates the tools and shows that each leaves
+  the store unchanged.
+- [ ] Facts hidden from the configured actor never appear in tool output.
+- [ ] Docs give a quickstart for connecting an MCP client, and state the
+  local-only, unauthenticated trust boundary.
+
+**Depends on:** A3 and A4 (for the full tool set). It ships incrementally.
+
+---
+
 ## A6: Phase A acceptance and release (rebody #16)
 
 **Goal.** Prove the shared core end to end and publish a tagged release.
@@ -364,8 +410,10 @@ through one authenticated endpoint rather than a trusted local process.
   tokens are bound to the agent principal.
 - Reuse of the existing signed capability admission (`weave-policy`) for
   delegated agent requests.
-- Tenant isolation, either one store per tenant or a verified tenant key on
-  every row.
+- Tenant isolation by **one store per tenant**: each tenant gets its own
+  database through the A2 storage abstraction, and no request can name a store
+  outside its tenant. Row-level tenant keys are added only if a later need is
+  shown.
 - An append-only audit log of reads and writes: principal, operation, graph and
   result digest.
 - Request limits and budgets, health checks and structured logs. Secrets and
@@ -374,7 +422,8 @@ through one authenticated endpoint rather than a trusted local process.
 **Acceptance criteria.**
 - [ ] Unauthenticated requests are rejected on every endpoint, and a test
   enumerates the endpoints.
-- [ ] A cross-tenant access attempt fails and is audited.
+- [ ] A cross-tenant access attempt fails and is audited. A test shows that
+  two tenants' stores are separate databases.
 - [ ] The audit log answers "who read fact F" and "who wrote fact F".
 - [ ] A load test publishes concurrent read and write throughput for 50 clients.
 - [ ] SECURITY.md is updated with the new trust boundary.
@@ -387,7 +436,8 @@ through one authenticated endpoint rather than a trusted local process.
 tool interface.
 
 **Scope.**
-- An MCP server backed by B3, with tools: `assert_fact`, `retract_fact`,
+- Extends the A7 read-only preview into the full interface: an MCP server
+  backed by B3, with tools: `assert_fact`, `retract_fact`,
   `query`, `expand`, `as_of`, `what_changed`, `hybrid_search`, `explain` and
   `describe_schema`.
 - An SDK (Python first) with the same operations.
@@ -413,6 +463,9 @@ tool interface.
 
 **Goal.** Teams can choose whether agent-written facts become shared immediately
 or only after review.
+
+**Ordering.** Last in Phase B. It starts after B4, because review is optional
+and builds on the agent interface.
 
 **Scope.**
 - Per-graph policy: `direct` (personal or trusted graphs publish immediately) or
@@ -448,16 +501,21 @@ or only after review.
 time-series database.
 
 **Scope.**
-- ADR-0009: native columnar series storage versus external stores (for example
-  Parquet or a TSDB) referenced by `SeriesRef`. Decide using measured ingest and
-  query costs.
+- ADR-0009: the telemetry storage boundary. The default position is to keep raw
+  telemetry in external stores (Parquet files or a TSDB) linked by `SeriesRef`
+  with time ranges, so Weave stores references and derived facts, not raw
+  samples. Native series storage is chosen only if measured ingest and query
+  costs show the external path cannot meet the Phase C target.
 - A batch append path for high-rate derived facts (events, state changes,
   aggregates) with idempotency.
 - Linking: query "all series and derived events for units in this subgraph,
   valid in [t1, t2)".
 
 **Acceptance criteria.**
-- [ ] The ADR is accepted, with measurements from at least two options.
+- [ ] The ADR is accepted, with measurements from at least two options, one of
+  which is the external Parquet or TSDB path via `SeriesRef`.
+- [ ] At least one external series store is reachable through `SeriesRef`
+  resolution in a test, with no raw samples copied into the graph.
 - [ ] A sustained ingest benchmark reports facts per second and series samples
   per second on a recorded host, and the Phase C target is set from it.
 - [ ] Derived event facts link to their exact series range and pass `explain`.
@@ -510,7 +568,8 @@ relations) current under continuous ingestion.
   retention policies, and audited erasure (with documented limits on recalling
   already-copied data), plus backup and restore.
 - A storage-backend decision record: whether SQLite remains adequate or another
-  backend is needed, based on measurement.
+  backend is needed, based on measurement. Any new backend implements the A2
+  storage abstraction and passes its conformance suite.
 - The existing fuzzing, recovery and migration work continues as part of this
   epic.
 

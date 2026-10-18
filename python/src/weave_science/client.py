@@ -92,18 +92,23 @@ class Engine:
         self.binary = _find_binary(binary)
         self.timeout, self.max_response_bytes = float(timeout), max_response_bytes
         self._binary_stat = self._binary_identity()
-        hasher = hashlib.sha256()
-        with self.binary.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                hasher.update(chunk)
-        self.binary_sha256 = hasher.hexdigest()
+        self.binary_sha256 = self._binary_digest()
 
     def _binary_identity(self) -> tuple[int, ...]:
         stat = self.binary.stat()
         return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
 
+    def _binary_digest(self) -> str:
+        hasher = hashlib.sha256()
+        with self.binary.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+
     def _check_binary(self) -> None:
-        if self._binary_identity() != self._binary_stat:
+        # Timestamps can be too coarse to see a same-size in-place rewrite
+        # (notably on Windows), so the content hash is checked as well.
+        if self._binary_identity() != self._binary_stat or self._binary_digest() != self.binary_sha256:
             raise WeaveError("native binary changed during this session; create a new Engine to record its exact identity")
 
     def _request(self, request: Mapping[str, Any]) -> dict[str, Any]:

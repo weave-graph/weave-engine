@@ -5,8 +5,8 @@
 | Document | Use it for |
 |---|---|
 | [Vision and goals](../VISION.md) | What Weave is for, who it serves, the three goals and the non-goals |
-| [Phased roadmap](ROADMAP.md) | Phases A, B and C, the epics, dependencies and definition of done (proposed) |
-| [Proposed issue changes](ROADMAP_PROPOSAL.md) | Draft GitHub epic texts with acceptance criteria (not yet applied) |
+| [Phased roadmap](ROADMAP.md) | Phases A, B and C, the epics, dependencies and definition of done |
+| [Proposed issue changes](ROADMAP_PROPOSAL.md) | Approved GitHub epic texts with acceptance criteria |
 | [State audit, 2026-10-17](AUDIT_2026-10-17.md) | What the code does today versus the goals, with file references |
 | [AGENTS.md](../AGENTS.md) | Architecture overview, build and test commands, conventions, definition of done |
 
