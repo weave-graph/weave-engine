@@ -3,6 +3,7 @@
 Status: **approved by the owner on 2026-10-18** with four amendments (A2 storage
 abstraction, new A7, one store per tenant in B3, external-first telemetry in
 C1), which are included below.
+**Applied on GitHub on 2026-10-18**; the new issues are #36–#44.
 It implements [ROADMAP.md](ROADMAP.md). Language-repository changes are in
 [weave-language/docs/ROADMAP_PROPOSAL.md](https://github.com/weave-graph/weave-language/blob/main/docs/ROADMAP_PROPOSAL.md).
 
@@ -27,22 +28,22 @@ It implements [ROADMAP.md](ROADMAP.md). Language-repository changes are in
 | retitle + rebody | #3 E02 | A2: Incremental bitemporal fact store | phase-a |
 | retitle + rebody | #4 E03 | A3: Time travel, traversal and provenance queries | phase-a |
 | retitle + rebody | #13 E12 | A4: Embeddings layer and hybrid retrieval | phase-a |
-| **create** | — | A5: Hardware reference model and importers | phase-a |
+| **created** | #36 | A5: Hardware reference model and importers | phase-a |
 | retitle + rebody | #16 E15 | A6: Phase A acceptance and release | phase-a |
-| **create** | — | A7: Read-only MCP preview | phase-a |
-| **create** | — | B1: Principals, groups and agent identities | phase-b |
+| **created** | #37 | A7: Read-only MCP preview | phase-a |
+| **created** | #38 | B1: Principals, groups and agent identities | phase-b |
 | retitle + rebody | #5 E04 | B2: Derived-fact leakage protection | phase-b |
-| **create** | — | B3: Authenticated Weave service | phase-b |
-| **create** | — | B4: Agent interface (MCP and SDK) | phase-b |
+| **created** | #39 | B3: Authenticated Weave service | phase-b |
+| **created** | #40 | B4: Agent interface (MCP and SDK) | phase-b |
 | retitle + rebody | #12 E11 | B5: Optional review of shared knowledge | phase-b |
-| **create** | — | B6: Phase B acceptance | phase-b |
-| **create** | — | C1: Telemetry ingestion and series linkage | phase-c |
+| **created** | #41 | B6: Phase B acceptance | phase-b |
+| **created** | #42 | C1: Telemetry ingestion and series linkage | phase-c |
 | retitle + rebody | #6 E05 | C2: Change feed, event bus and connectors | phase-c |
 | **close as merged** | #7 E06 | → #6 (C2); effect broker deferred | deferred |
 | retitle + rebody | #8 E07 | C3: Incremental derivations | phase-c |
 | retitle + rebody | #15 E14 | C4: Storage scale, retention and erasure | phase-c |
-| **create** | — | C5: Approximate vector index | phase-c |
-| **create** | — | C6: Phase C acceptance | phase-c |
+| **created** | #43 | C5: Approximate vector index | phase-c |
+| **created** | #44 | C6: Phase C acceptance | phase-c |
 | label + prepend note | #9 E08 | (unchanged title) | deferred |
 | label + prepend note | #10 E09 | (unchanged title) | deferred |
 | label + prepend note | #11 E10 | (unchanged title) | deferred |
