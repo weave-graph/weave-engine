@@ -41,8 +41,8 @@ hybrid RAG.
 | A2 | Incremental bitemporal fact store | E02 (#3) | Append and retract individual facts; valid time on nodes and properties; engine-recorded per-fact provenance; indexes by entity, predicate and time; snapshots become derived checkpoints; per-graph caps removed. Introduces a storage abstraction (a fact-log and index trait with SQLite as the first backend) so the C4 backend decision is not a rewrite |
 | A3 | Time travel, traversal and provenance queries | E03 (#4) | k-hop expansion, as-of valid/recorded selection, change sets between two times plus a pull change feed, explain to source facts, explicit coverage |
 | A4 | Embeddings layer and hybrid retrieval | E12 (#13) | Vectors as temporal facts in typed spaces; an exact kNN plan operator with time and permission filters; graph-to-vector and vector-to-graph composition; candidate relations with provenance |
-| A5 | Hardware reference model and importers | new | Reference schema for assets, parts, firmware, sites, sensors, series references, users and organizations; CSV/JSON importers; a realistic example dataset |
-| A7 | Read-only MCP preview | new | A small local MCP server exposing `query`, `expand`, `as_of`, `hybrid_search` and `explain` over a local store, so the owner's agents can dogfood the core early. No writes, no authentication; B4 builds the full write-capable interface on top of it |
+| A5 | Hardware reference model and importers | new (#36) | Reference schema for assets, parts, firmware, sites, sensors, series references, users and organizations; CSV/JSON importers; a realistic example dataset |
+| A7 | Read-only MCP preview | new (#37) | A small local MCP server exposing `query`, `expand`, `as_of`, `hybrid_search` and `explain` over a local store, so the owner's agents can dogfood the core early. No writes, no authentication; B4 builds the full write-capable interface on top of it |
 | A6 | Phase A acceptance and release | E15 (#16), core part of E14 (#15) | An integrated scenario, fuzzing for the new write and query paths, store 29 migration, baseline benchmarks, a tagged release |
 
 **Phase A exit scenario:** import a fleet of 5,000 units with parts, firmware,
@@ -72,12 +72,12 @@ protection, audit and optional review.
 
 | ID | Epic | Builds on | Summary |
 |---|---|---|---|
-| B1 | Principals, groups and agent identities | E04 (#5), split | A principal registry for users, groups, teams and agents (each owned by a principal, with narrowed delegated scope); group-resolved readers; graph-level ACLs; the Discover permission; membership revocation |
+| B1 | Principals, groups and agent identities | new (#38), split from E04 (#5) | A principal registry for users, groups, teams and agents (each owned by a principal, with narrowed delegated scope); group-resolved readers; graph-level ACLs; the Discover permission; membership revocation |
 | B2 | Derived-fact leakage protection | E04 (#5) | Write-time restriction propagation; influence on analytics, kNN results and embeddings; release policies; a property-based noninterference harness covering every operator |
-| B3 | Authenticated Weave service | new | A long-running server with authentication mapped to principals; tenant isolation by one store per tenant (row-level tenant keys only if later needed); a read and write audit log, and reuse of signed admission for agent capabilities |
-| B4 | Agent interface (MCP and SDK) | new | Extends the A7 preview into the full write-capable interface: tools to assert, retract, query, time travel, ask what changed, run hybrid search and explain. Facts are stamped with agent identity and method; quotas; a data/code boundary against injected content |
+| B3 | Authenticated Weave service | new (#39) | A long-running server with authentication mapped to principals; tenant isolation by one store per tenant (row-level tenant keys only if later needed); a read and write audit log, and reuse of signed admission for agent capabilities |
+| B4 | Agent interface (MCP and SDK) | new (#40) | Extends the A7 preview into the full write-capable interface: tools to assert, retract, query, time travel, ask what changed, run hybrid search and explain. Facts are stamped with agent identity and method; quotas; a data/code boundary against injected content |
 | B5 | Optional review of shared knowledge | E11 (#12) | **Last in Phase B.** Agents propose into a team graph and reviewers accept; personal graphs publish immediately; reuses the existing governance |
-| B6 | Phase B acceptance | new | An integrated multi-team, multi-agent scenario with leakage tests |
+| B6 | Phase B acceptance | new (#41) | An integrated multi-team, multi-agent scenario with leakage tests |
 
 **Phase B exit scenario:** two teams, each with a human and two agents, share
 one Weave service. Agents assert facts from maintenance logs and query each
@@ -94,12 +94,12 @@ facts current, with measured throughput and bounded storage.
 
 | ID | Epic | Builds on | Summary |
 |---|---|---|---|
-| C1 | Telemetry ingestion and series linkage | new | A decision record on the series storage boundary, leaning toward keeping raw telemetry in external Parquet or a TSDB linked by `SeriesRef` rather than making Weave a time-series database; high-rate batch append; derived event, anomaly and aggregate facts linked to series ranges |
+| C1 | Telemetry ingestion and series linkage | new (#42) | A decision record on the series storage boundary, leaning toward keeping raw telemetry in external Parquet or a TSDB linked by `SeriesRef` rather than making Weave a time-series database; high-rate batch append; derived event, anomaly and aggregate facts linked to series ranges |
 | C2 | Change feed, event bus and connectors | E05 (#6) + E06 (#7), merged | Push subscriptions over the A3 change feed; ingestion connectors as adapters. The external-effect broker is deferred |
 | C3 | Incremental derivations | E07 (#8) | Continuously maintained rules, aggregates and embedding refreshes, checked against a full-recompute oracle |
 | C4 | Storage scale, retention and erasure | E14 (#15) | Partitioning, compaction, retention and erasure policies, backup, and a storage-backend decision record, with measured targets. A new backend implements the A2 storage abstraction |
-| C5 | Approximate vector index | new | An ANN index such as HNSW behind the A4 operator, with exact fallback, measured recall and permission-aware filtering |
-| C6 | Phase C acceptance | new | A sustained-ingestion scenario with published measurements |
+| C5 | Approximate vector index | new (#43) | An ANN index such as HNSW behind the A4 operator, with exact fallback, measured recall and permission-aware filtering |
+| C6 | Phase C acceptance | new (#44) | A sustained-ingestion scenario with published measurements |
 
 **Phase C exit scenario:** sustain a declared telemetry rate, with the target set
 by measurement in C1. Run for 24 hours across 50,000 sensors with retention
@@ -142,7 +142,7 @@ until A1 lands. The JSON and Python interfaces are the critical path for Phase A
 | E01 #2 | **Re-scope** | A1 | 21 additive contract versions need one consolidated core spec before new storage and embedding semantics land |
 | E02 #3 | **Re-scope** | A2 | Full-snapshot commits and 100k/16 MiB per-graph caps block all three goals; nodes lack valid time; provenance is per commit |
 | E03 #4 | **Re-scope** | A3 | The algebra is rich, but k-hop traversal and stored change sets, the core time-travel and RAG needs, are missing |
-| E04 #5 | **Split and re-scope** | B2 (keep #5), B1 (new) | Read-time propagation is strong; Phase B needs identity/groups (B1) and write-time leakage guarantees (B2). Phase A only must not regress existing semantics |
+| E04 #5 | **Split and re-scope** | B2 (keep #5), B1 (new, #38) | Read-time propagation is strong; Phase B needs identity/groups (B1) and write-time leakage guarantees (B2). Phase A only must not regress existing semantics |
 | E05 #6 | **Merge** | C2 (keep #6) | The outbox exists; push delivery matters for streaming telemetry. Phase A gets a pull change feed in A3 |
 | E06 #7 | **Merge into #6, defer effect broker** | C2 | Connectors are adapters; external effects are outside the goals |
 | E07 #8 | **Re-scope** | C3 | Incremental maintenance pays off under continuous ingestion; current recompute is sufficient for Phase A |
@@ -153,8 +153,8 @@ until A1 lands. The JSON and Python interfaces are the critical path for Phase A
 | E12 #13 | **Re-scope** | A4 | The embeddings layer is core for G3; it unifies science kNN with typed spaces. Geometry beyond embeddings is frozen |
 | E13 #14 | **Defer** | — | See the deferred table |
 | E14 #15 | **Re-scope** | C4 (keep #15); core hardening moves into A6/B6 exit criteria | Hardening is a per-phase exit criterion, not a standalone gate |
-| E15 #16 | **Re-scope** | A6 (keep #16); new B6 and C6 | One "everything" gate becomes three phase acceptance gates |
-| — | **New** | A5, A7, B1, B3, B4, B6, C1, C5, C6 | Capabilities the three goals need that no existing epic covers |
+| E15 #16 | **Re-scope** | A6 (keep #16); new B6 (#41) and C6 (#44) | One "everything" gate becomes three phase acceptance gates |
+| — | **New** | A5 #36, A7 #37, B1 #38, B3 #39, B4 #40, B6 #41, C1 #42, C5 #43, C6 #44 | Capabilities the three goals need that no existing epic covers |
 | L0 #1 | **Re-scope** | LA0 | Tracks A1 |
 | L1 #2 | **Merge into #8** | LT | The front end works; the remaining work is maintenance and tooling |
 | L2 #3 | **Re-scope** (absorbs L3) | LA1 | The query language targets Phase A semantics |
