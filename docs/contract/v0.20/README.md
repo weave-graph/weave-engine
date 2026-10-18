@@ -1,6 +1,6 @@
 # Protocol 0.20.0: replica-local recorded query selection
 
-Implementation stage. This coordinated compiler/runtime boundary introduces
+Released; later versions add to it (current: [0.21](../v0.21/README.md)). This coordinated compiler/runtime boundary introduces
 `RecordedQuery { query, selection }` and the query result's optional
 `recorded_observations` manifest. Native store20 prevents older store19 runtimes
 from interpreting cached values without these semantics; capsule0.4 is unchanged.

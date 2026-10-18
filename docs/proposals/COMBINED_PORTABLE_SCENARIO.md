@@ -1,3 +1,5 @@
+> **Historical proposal, not scheduled.** The combined portable scenario depends on browser/mobile work deferred on 2026-10-10 (see [ROADMAP.md](../ROADMAP.md)). Version statements below are design-time and out of date.
+
 # Combined source-to-effect scenario and trusted host facade
 
 Original architecture proposal based on browser freeze `d8e223c`, protocol

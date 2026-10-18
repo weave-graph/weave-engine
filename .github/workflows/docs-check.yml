@@ -1,0 +1,28 @@
+name: Docs updated with code
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+permissions:
+  contents: read
+jobs:
+  docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require docs changes or an explicit [no-docs] reason
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          code=$(echo "$changed" | grep -E '^(crates/|python/src/|hosts/|fuzz/fuzz_targets/)' | grep -vE '/tests?/' || true)
+          docs=$(echo "$changed" | grep -E '(\.md$|^docs/)' || true)
+          if [ -z "$code" ]; then echo "No product code changed."; exit 0; fi
+          if [ -n "$docs" ]; then echo "Docs changed alongside code:"; echo "$docs"; exit 0; fi
+          if printf '%s' "$PR_BODY" | grep -qF '[no-docs]'; then echo "PR declares [no-docs]."; exit 0; fi
+          echo "::error::Code changed without documentation. Update the affected docs (see AGENTS.md, 'Documentation rule') or add '[no-docs]' and a reason to the PR description."
+          echo "$code"
+          exit 1

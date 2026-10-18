@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [contract 0.15](contract/v0.15/README.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](STATUS.md).
+
 # General graph-value influence — design history and next governance boundary
 
 The general carrier portion is implemented in [protocol 0.15](contract/v0.15/README.md); the decision-record/accepted-view portion below remains a proposal. This document retains the original design rationale.

@@ -1,5 +1,10 @@
 # Engine workflow and dependency graph
 
+> **Historical plan: superseded for scheduling.** This is the original
+> white-paper gate graph (E00–E15). Scheduling now follows the proposed
+> [phased roadmap](ROADMAP.md) (Phases A, B and C) and [VISION.md](../VISION.md).
+> The roadmap maps every gate below to keep, merge, re-scope or defer.
+
 The delivered native experiment profile follows [DS01–DS09](NATIVE_SCIENCE_PLAN.md).
 Its native algorithms, Python client and independent validation were developed
 in parallel; [current status](STATUS.md) links the merged evidence. Browser/mobile

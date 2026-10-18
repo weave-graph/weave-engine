@@ -62,6 +62,27 @@ production capacity requires separate evidence.
 See [experiment concepts](SCIENCE_CONCEPTS.md) and the interface guides for the
 precise temporal, identity, replay and resource semantics.
 
+## Fit against the three goals (audit of 17 October 2026)
+
+The [state audit](AUDIT_2026-10-17.md) compares the code with the goals in
+[VISION.md](../VISION.md). These are the main gaps the [phased roadmap](ROADMAP.md)
+addresses:
+
+- **Storage (Phase A).** Each commit stores a full graph snapshot, and there is
+  no fact-level write. Graphs are capped at 100,000 nodes or edges and 16 MiB per
+  revision. Nodes have no valid time. Provenance records the writer per commit,
+  not per fact.
+- **Queries (Phase A).** There is no k-hop traversal operator. "What changed" is
+  computed by diffing two results; there is no stored change feed.
+- **Embeddings (Phase A).** Science kNN uses an untyped `vector` node property
+  without time awareness and is not part of the plan algebra. Typed embedding
+  spaces support only pairwise distance.
+- **Sharing (Phase B).** There is no server, no authentication on the main API,
+  no groups or agent identities, and leakage protection is enforced at read time
+  only.
+- **Scale (Phase C).** There is no telemetry ingestion and no approximate vector
+  index. Measured workloads are 10k–100k objects.
+
 ## Earlier milestones
 
 The runtime also contains earlier adapter, capsule, governed-history, geometry,

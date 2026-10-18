@@ -1,6 +1,6 @@
 # Contract 0.18.0: sealed pure handler artifacts
 
-Local canonical and native implementation candidate. The trusted host can install a sealed recipe, prepare one immutable event occurrence, and complete its fixed commit atomically. Joint source/runtime publication remains separate.
+Released; later versions add to it (current: [0.21](../v0.21/README.md)). The trusted host can install a sealed recipe, prepare one immutable event occurrence, and complete its fixed commit atomically. Joint source/runtime publication remains separate.
 
 `handler_registration` exports `CompiledHandlerTemplate`, `HandlerInput`, `HandlerEventType`, `HandlerRecipe` and `HandlerBinding`, plus sealing, validation and identity helpers. Artifact format is `weave-handler-registration/1`, protocol0.18.0. The canonical event vector covers `graph.accepted` and `graph.committed` in that order. Earlier handler artifact protocol declarations reject explicitly; this is not a new Program command or GraphExpression.
 

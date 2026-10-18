@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [contract 0.13](contract/v0.13/README.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](STATUS.md).
+
 # Native accepted identity mappings
 
 Status: implemented native trusted-host API on protocol 0.11, SQLite schema 7. This is a bounded acceptance profile, not completion of engine §6 or language §2.2. Signed remote acceptance, language resolver syntax and authenticated governance synchronization remain open.

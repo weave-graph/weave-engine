@@ -1,6 +1,6 @@
 # ADR 0002: replica-local recorded head observations
 
-Status: implementing. Requirements R04/R08/R09/R18/R20/R36; E02/E03/E09/E14.
+Status: adopted; implemented with contract 0.20 and stores 19–20. Requirements R04/R08/R09/R18/R20/R36; E02/E03/E09/E14.
 
 Record branch-head selection separately from immutable revision creation/receipt.
 Accepting an old or received revision changes what a branch knows at that local

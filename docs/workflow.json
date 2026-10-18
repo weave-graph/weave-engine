@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project": "weave-engine",
-  "status": "implementation_in_progress",
+  "status": "superseded_for_scheduling",
   "source_status": "original_white_papers_recovered_and_reconciled",
   "completion_gate": "E15",
   "states": [
@@ -10,7 +10,8 @@
     "in_progress",
     "review",
     "passed",
-    "blocked"
+    "blocked",
+    "deferred"
   ],
   "external_dependencies": [
     {
@@ -429,7 +430,7 @@
       "id": "E10",
       "title": "Browser and mobile parity",
       "owner": "engine",
-      "state": "in_progress",
+      "state": "deferred",
       "depends_on": [
         "E03",
         "E09"
@@ -606,5 +607,7 @@
       "E00",
       "E15"
     ]
-  }
+  },
+  "superseded_by": "docs/ROADMAP.md",
+  "note": "Original white-paper gates. Scheduling follows the proposed phased roadmap (2026-10-17). E10 deferred by owner on 2026-10-10; native data-science profile DS01-DS09 delivered in PR #33."
 }

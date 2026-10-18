@@ -1,6 +1,6 @@
 # Protocol 0.19.0: alternative carriers and temporal graph values
 
-Unpublished implementation stage. Protocol0.19, SQLite marker18 and capsule0.4 form
+Released; later versions add to it (current: [0.21](../v0.21/README.md)). Protocol 0.19, SQLite marker 18 and capsule 0.4 formed
 one compatibility boundary. The native and portable acceptance evidence must be
 complete before pairing/publication; enum decoding alone is not support.
 

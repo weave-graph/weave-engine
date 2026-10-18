@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [contract 0.14](contract/v0.14/README.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](STATUS.md).
+
 # Typed context runtime profile B — proposed boundary
 
 Status: design for independent review after protocol 0.13. No protocol number or implemented capability is claimed. Companion portable profile A is language commit ed0125f. This preserves the mandatory richer context/governance scope in the implementation plans.

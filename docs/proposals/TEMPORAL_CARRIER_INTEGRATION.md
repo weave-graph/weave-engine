@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [temporal values](../TEMPORAL_VALUES.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Temporal proof carrier integration review
 
 Review of language checkpoint `9832d70`, `TEMPORAL_ATTACHMENT_PROOFS.md` and its

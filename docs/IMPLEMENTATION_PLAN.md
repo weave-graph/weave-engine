@@ -1,5 +1,11 @@
 # Weave Engine implementation plan
 
+> **Historical plan: superseded for scheduling.** This is the original
+> white-paper gate plan (E00–E15, R01–R40). Scheduling now follows the proposed
+> [phased roadmap](ROADMAP.md) (Phases A, B and C) and [VISION.md](../VISION.md).
+> The requirement IDs below remain valid references; the roadmap maps every gate
+> to keep, merge, re-scope or defer.
+
 **Active delivery scope:** the user deferred browser/mobile applications and
 requested a native data-science engine on 10 October 2026. The finite acceptance
 contract is [NATIVE_SCIENCE_PLAN.md](NATIVE_SCIENCE_PLAN.md). The original roadmap
@@ -26,20 +32,22 @@ Use a Rust semantic core for one set of invariants across native command-line to
 
 Native persistence starts with SQLite transactions, an append-only logical revision journal and an outbox in the same transaction. Immutable content-addressed blocks support capsules and revision exchange; stable semantic IDs permit cyclic knowledge graphs without cyclic hash construction. Canonical encoding, hash domain/version and migration semantics must be shared and tested before persistence is durable. WASM uses the same semantics with an in-memory baseline followed by transactional browser persistence; mobile needs a native binding and real device/emulator acceptance, not only a successful cross-compile.
 
-Modules:
+Module responsibilities as originally designed. The actual crates differ: most
+of these responsibilities live inside `weave-engine`. The table is the design
+target; [AGENTS.md](../AGENTS.md) has the real crate map.
 
-| Module | Owns | Must not own |
+| Designed module | Actual location (2026-10) | Owns |
 |---|---|---|
-| `weave-model` | IDs, nodes, edges/assertions, manifestations, graph refs, intervals, restrictions, diagnostics | Host effects or globally mutable clock |
-| `weave-store` | Atomic commits, immutable revisions, branch heads, snapshot reads, outbox | External effect execution |
-| `weave-query` | Versioned plan interpretation, joins, provenance, incremental views | Hidden networking or LLM calls |
-| `weave-policy` | Discover/read/traverse/propose/publish/delegate checks, restriction propagation | Claims of objective truth |
-| `weave-bus` | Durable event log, subscriptions, checkpoints, retries, dead letters | Exactly-once claims for arbitrary external effects |
-| `weave-adapters` | Registration, lifecycle, manifest validation, budgets and effect broker | Unrestricted authority inherited from the host |
-| `weave-sync` | Capsule boundaries, signed revisions, permitted replication, quarantine and integration | Automatic acceptance of received claims |
-| `weave-spaces` | Counterparts, typed bridges, coordinate and embedding validation | Treating similarity as identity |
-| `weave-clusters` | Versioned grouping, lineage, semantic zoom and authorized summaries | Destructive replacement of source data |
-| `weave-host` / CLI | Configuration, persistence wiring, transport, local operations and diagnostics | A second semantic implementation |
+| `weave-model` | `weave-contract` | IDs, nodes, edges/assertions, manifestations, graph refs, intervals, restrictions, diagnostics |
+| `weave-store` | `weave-engine` (`lib.rs`, `snapshot.rs`, `recorded_history.rs`, `retention.rs`) | Atomic commits, immutable revisions, branch heads, snapshot reads, outbox |
+| `weave-query` | `weave-engine` (`lib.rs`, `views.rs`, `selection.rs`), `weave-contract` (`algebra.rs`, `rules.rs`) | Plan interpretation, joins, provenance, incremental views |
+| `weave-policy` | `weave-policy` (signed capabilities) and `weave-engine` (`influence.rs`, `admission.rs`) | Permission checks, restriction propagation |
+| `weave-bus` | `weave-engine` (`dispatch.rs`, `causal_dispatch.rs`, `governance_delivery.rs`) | Durable event log, subscriptions, checkpoints |
+| `weave-adapters` | `weave-engine` (`adapter_lifecycle.rs`, `compiled_*.rs`, `recorded_actors.rs`, `governed_effects.rs`) | Registration, lifecycle, budgets, effect intents |
+| `weave-sync` | `weave-engine` (`capsule*.rs`, `mounts.rs`, `integration.rs`) | Capsules, signed export, mounts, integration |
+| `weave-spaces` | `weave-spaces`, `weave-engine/src/geometry.rs` | Typed spaces, geometry and embedding validation |
+| `weave-clusters` | `weave-cluster`, `weave-engine/src/clustering.rs` | Grouping, lineage, navigation |
+| `weave-host` / CLI | `weave-host`, `weave-native`, `weave-science`, `weave-engine/src/main.rs` | Host wiring, C ABI, CLIs |
 
 The bus provides at-least-once durable delivery, stable event IDs and ordering within a declared stream. It uses transactional graph+outbox commits, adapter checkpoints and deduplication. Adapters producing graph changes use a commit idempotency key. External effects require an effect ledger plus a destination idempotency key when available; destinations without idempotency expose uncertain outcomes and a reconciliation state. Replay defaults to observation/reconstruction; reissuing external actions requires explicit policy.
 

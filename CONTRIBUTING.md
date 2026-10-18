@@ -1,10 +1,10 @@
 # Contributing
 
-Start with [current status](docs/STATUS.md), [the documentation index](docs/README.md)
-and `AGENTS.md`. The active delivery is the native data-science profile
-[DS01–DS09](docs/NATIVE_SCIENCE_PLAN.md); the full original white-paper roadmap has
-separate gates. Include the relevant requirement or gate IDs when changing
-behavior or recording acceptance evidence.
+Start with [AGENTS.md](AGENTS.md) (architecture, commands, conventions and the
+definition of done), [VISION.md](VISION.md) and the [phased roadmap](docs/ROADMAP.md).
+Work is organized as Phase A, B and C epics on GitHub; reference the epic issue
+in your PR. The native data-science profile [DS01–DS09](docs/NATIVE_SCIENCE_PLAN.md)
+is the currently supported release.
 
 ## Set up and make a focused change
 
@@ -26,6 +26,10 @@ present. On Windows PowerShell, set `$env:WEAVE_SCIENCE_BINARY` to the absolute
 `target/debug/weave-science.exe` path and use `.venv\Scripts\python.exe` for
 Python commands. Native integration tests skip when the binary environment
 variable is absent; a skipped result is not native integration evidence.
+
+**Docs ship with code.** A PR that changes behavior updates the affected docs,
+`docs/STATUS.md` and, if scope changes, `docs/ROADMAP.md` in the same PR. A PR
+without doc changes must state `[no-docs]` and a reason; CI enforces this.
 
 Documentation changes should keep examples runnable against the supported
 profile, verify local links and distinguish measured evidence from proposals.

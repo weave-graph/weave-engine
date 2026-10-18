@@ -1,3 +1,5 @@
+> **Historical design record.** This design was implemented; the current reference is [causal dispatch](../CAUSAL_DISPATCH.md). Status lines below describe the design-time state and may name older protocol/store versions. Current versions: see [STATUS.md](../STATUS.md).
+
 # Native causal dispatch and scoped lag
 
 Mandatory engine3.2–3.4/4.4/11; R10/R12/R13/R38, E05/E06/E14. This proposal closes another runtime gap; full paper acceptance remains open.
