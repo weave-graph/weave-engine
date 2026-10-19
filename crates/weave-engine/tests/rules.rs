@@ -63,7 +63,11 @@ fn program(commands: Vec<Command>) -> Program {
 }
 fn result(outputs: Vec<CommandResult>) -> QueryResult {
     match outputs.into_iter().last().unwrap() {
-        CommandResult::Queried { result } => *result,
+        // Programs of 0.22+ add fact_provenance; view outputs do not.
+        CommandResult::Queried { mut result } => {
+            result.fact_provenance.clear();
+            *result
+        }
         _ => panic!("expected query"),
     }
 }

@@ -1,0 +1,47 @@
+{
+  "fixture": "node-provenance-version-gated",
+  "concepts": [
+    "compat.versions",
+    "provenance.fact"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "version": "0.21.0",
+    "commands": [
+      {
+        "op": "commit",
+        "graph_id": "g",
+        "branch_id": "main",
+        "expected_head": null,
+        "data": {
+          "nodes": [
+            {
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s",
+              "provenance": {
+                "method": {
+                  "kind": "human"
+                }
+              },
+              "properties": {},
+              "metadata": [],
+              "readers": []
+            }
+          ],
+          "edges": []
+        }
+      }
+    ]
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "error": "E_VERSION"
+  }
+}

@@ -646,6 +646,7 @@ mod selector_tests {
         graph.attachments[0].host = node("metadata-node:wrapper");
         let origins = BTreeMap::from([("bc".into(), vec![proof])]);
         QueryResult {
+            fact_provenance: Vec::new(),
             recorded_observations: vec![],
             accepted_observations: vec![],
             version: VERSION.into(),

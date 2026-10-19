@@ -49,7 +49,7 @@ fn filter(input: GraphExpression, time: Option<i64>) -> GraphExpression {
     }
 }
 fn oracle(e: &mut Engine, expression: GraphExpression) -> QueryResult {
-    let CommandResult::Queried { result } = e
+    let CommandResult::Queried { mut result } = e
         .execute(
             &Program {
                 version: VERSION.into(),
@@ -63,6 +63,8 @@ fn oracle(e: &mut Engine, expression: GraphExpression) -> QueryResult {
     else {
         panic!()
     };
+    // Programs of 0.22+ add fact_provenance; view outputs do not.
+    result.fact_provenance.clear();
     *result
 }
 #[test]

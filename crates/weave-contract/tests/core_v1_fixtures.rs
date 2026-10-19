@@ -26,6 +26,7 @@ const CONCEPTS: &[&str] = &[
     "fact.polarity",
     "fact.immutability",
     "fact.readers",
+    "fact.write",
     "time.valid",
     "time.recorded",
     "provenance.fact",
@@ -222,7 +223,7 @@ fn negative_fixtures_fail_with_their_stable_code() {
 
 #[test]
 fn unknown_version_fails_with_e_version_before_structure() {
-    for version in ["0.22.0", "1.0.0", "0.21", "", "0.21.0-rc1"] {
+    for version in ["0.23.0", "1.0.0", "0.21", "", "0.21.0-rc1"] {
         let program = json!({"version": version, "commands": [], "unknown": true});
         let error = decode_program(&serde_json::to_vec(&program).unwrap()).unwrap_err();
         assert_eq!(error.code, wire::E_VERSION, "{version}");
@@ -238,7 +239,7 @@ fn unknown_version_fails_with_e_version_before_structure() {
         let program = json!({"version": version, "commands": []});
         decode_program(&serde_json::to_vec(&program).unwrap()).unwrap();
     }
-    assert_eq!(wire::SUPPORTED_VERSIONS.len(), 21);
+    assert_eq!(wire::SUPPORTED_VERSIONS.len(), 22);
     assert_eq!(wire::SUPPORTED_VERSIONS[0], VERSION);
 }
 
@@ -249,7 +250,7 @@ fn unknown_fields_fail_with_e_unknown_field_at_every_depth() {
         json!({"version": VERSION, "commands": [{"op": "query", "query": {"graph_id": "g", "extra": 1}}]}),
         json!({"version": VERSION, "commands": [{"op": "commit", "graph_id": "g", "extra": 1, "data": {}}]}),
         json!({"version": VERSION, "commands": [{"op": "commit", "graph_id": "g", "data": {"nodes": [
-            {"id": "a", "entity_id": "A", "space_id": "s", "valid_time": {"start": 0, "end": null}}
+            {"id": "a", "entity_id": "A", "space_id": "s", "reader_groups": ["team"]}
         ]}}]}),
         json!({"version": VERSION, "commands": [{"op": "evaluate", "value": {"kind": "filter",
             "input": {"kind": "query", "query": {"graph_id": "g"}}, "as_of": 5}}]}),

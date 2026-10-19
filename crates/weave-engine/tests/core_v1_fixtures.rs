@@ -81,6 +81,40 @@ fn compare_query(name: &str, index: usize, expected: &Value, result: &QueryResul
     if let Some(count) = expected["recorded_observations"].as_u64() {
         assert_eq!(result.recorded_observations.len() as u64, count, "{name}");
     }
+    let provenance = &expected["fact_provenance"];
+    if !provenance.is_null() {
+        let entries: Vec<Value> = result
+            .fact_provenance
+            .iter()
+            .map(|p| serde_json::to_value(&p.provenance).unwrap())
+            .collect();
+        assert_eq!(
+            provenance["count"],
+            entries.len(),
+            "{name} provenance count"
+        );
+        let writers: BTreeSet<String> = entries
+            .iter()
+            .map(|p| p["writer"].as_str().unwrap().to_string())
+            .collect();
+        let methods: BTreeSet<String> = entries
+            .iter()
+            .map(|p| p["method"]["kind"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            provenance["writers"],
+            serde_json::to_value(writers).unwrap(),
+            "{name}"
+        );
+        assert_eq!(
+            provenance["methods"],
+            serde_json::to_value(methods).unwrap(),
+            "{name}"
+        );
+        if let Some(at) = provenance["recorded_at_ms"].as_i64() {
+            assert!(entries.iter().all(|p| p["recorded_at_ms"] == at), "{name}");
+        }
+    }
 }
 
 #[test]
@@ -180,7 +214,7 @@ fn run_cli(program: &str) -> Value {
 
 #[test]
 fn engine_cli_reports_stable_codes_for_unknown_versions_and_fields() {
-    let version = run_cli(r#"{"version":"0.22.0","commands":[]}"#);
+    let version = run_cli(r#"{"version":"0.23.0","commands":[]}"#);
     assert_eq!(version["code"], "E_VERSION");
     let field = run_cli(r#"{"version":"0.21.0","commands":[],"comment":"x"}"#);
     assert_eq!(field["code"], "E_UNKNOWN_FIELD");
@@ -200,7 +234,7 @@ fn engine_rejects_every_unsupported_version_and_accepts_every_supported_one() {
         };
         engine.execute(&program, &host).unwrap();
     }
-    for version in ["0.22.0", "1.0.0", "0.0.0"] {
+    for version in ["0.23.0", "1.0.0", "0.0.0"] {
         let program = weave_contract::Program {
             source_revisions: vec![],
             version: version.into(),

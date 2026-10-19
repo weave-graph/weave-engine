@@ -72,7 +72,7 @@ fn validate(record: &Migration, digest: &str) -> Result<()> {
         || record.source_manifest.id != record.request.inputs.source_adapter
         || record.source_manifest.principal != record.principal
         || record.request.destination.principal != record.principal
-        || record.request.event_schema != VERSION
+        || !["0.21.0", VERSION].contains(&record.request.event_schema.as_str())
         || record.source_manifest.id == record.request.destination.id
         || record.source_manifest.subscriptions != record.request.destination.subscriptions
         || record.source_manifest.output_graphs != record.request.destination.output_graphs
@@ -294,7 +294,7 @@ impl Engine {
                 "resolve all in-flight work before migration",
             ));
         }
-        if request.event_schema != VERSION
+        if !["0.21.0", VERSION].contains(&request.event_schema.as_str())
             || request.destination.id == *source
             || request.destination.principal != manifest.principal
             || request.destination.subscriptions != manifest.subscriptions

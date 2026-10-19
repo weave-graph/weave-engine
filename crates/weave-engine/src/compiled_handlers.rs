@@ -368,7 +368,7 @@ impl Engine {
             || preparation.binding_digest
                 != digest("weave-handler-registration-binding/1", registration)?
             || preparation.prepared_at_ms < 0
-            || ![VERSION, "0.20.0", "0.19.0", "0.18.0"]
+            || ![VERSION, "0.21.0", "0.20.0", "0.19.0", "0.18.0"]
                 .contains(&preparation.program.version.as_str())
         {
             return Err(invalid());
@@ -397,7 +397,7 @@ impl Engine {
         else {
             return Err(invalid());
         };
-        if ![VERSION, "0.20.0", "0.19.0"].contains(&preparation.program.version.as_str())
+        if ![VERSION, "0.21.0", "0.20.0", "0.19.0"].contains(&preparation.program.version.as_str())
             && weave_contract::carrier_profile::requires_v019(data)
         {
             return Err(invalid());
@@ -928,6 +928,7 @@ fn owned_output(
         }
     }
     let attribution = MetadataAttachment {
+        provenance: None,
         derivations: Vec::new(),
         id: local_id(&namespace, "attribution", "sources")?,
         host: MetadataHost::Graph,

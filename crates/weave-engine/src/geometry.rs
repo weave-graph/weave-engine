@@ -364,6 +364,8 @@ fn geometry_result(
         }
     };
     let node = Node {
+        provenance: None,
+        valid_time: None,
         derivations: node_gates.derivations,
         derived_snapshots: vec![],
         derived_nodes: node_gates.nodes,
@@ -382,6 +384,7 @@ fn geometry_result(
         readers: vec![host.principal.clone()],
     };
     let edge = Edge {
+        provenance: None,
         derived_snapshots: vec![],
         derived_nodes: vec![],
         structural_ref: None,

@@ -25,8 +25,8 @@ pub const TABLES: &[&str] = &[
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS fact_lines(line INTEGER PRIMARY KEY,graph_id TEXT NOT NULL,header TEXT NOT NULL,base_parent TEXT);
-CREATE TABLE IF NOT EXISTS fact_revisions(revision TEXT PRIMARY KEY,graph_id TEXT NOT NULL,branch_id TEXT NOT NULL,parent TEXT,line INTEGER NOT NULL REFERENCES fact_lines(line),seq INTEGER NOT NULL CHECK(seq>0),first_position INTEGER NOT NULL,op_count INTEGER NOT NULL CHECK(op_count>0),writer TEXT NOT NULL,recorded_at_ms INTEGER NOT NULL CHECK(recorded_at_ms>=0),UNIQUE(line,seq));
-CREATE TABLE IF NOT EXISTS fact_log(position INTEGER PRIMARY KEY,line INTEGER NOT NULL REFERENCES fact_lines(line),seq INTEGER NOT NULL,op TEXT NOT NULL CHECK(op IN ('base','assert','retract')),kind TEXT NOT NULL,namespace TEXT NOT NULL,fact_id TEXT NOT NULL,body TEXT,writer TEXT NOT NULL,recorded_at_ms INTEGER NOT NULL,recorded_in TEXT NOT NULL,CHECK((op='retract')=(body IS NULL)));
+CREATE TABLE IF NOT EXISTS fact_revisions(revision TEXT PRIMARY KEY,graph_id TEXT NOT NULL,branch_id TEXT NOT NULL,parent TEXT,line INTEGER NOT NULL REFERENCES fact_lines(line),seq INTEGER NOT NULL CHECK(seq>0),first_position INTEGER NOT NULL,op_count INTEGER NOT NULL CHECK(op_count>0),writer TEXT NOT NULL,on_behalf_of TEXT,recorded_at_ms INTEGER NOT NULL CHECK(recorded_at_ms>=0),UNIQUE(line,seq));
+CREATE TABLE IF NOT EXISTS fact_log(position INTEGER PRIMARY KEY,line INTEGER NOT NULL REFERENCES fact_lines(line),seq INTEGER NOT NULL,op TEXT NOT NULL CHECK(op IN ('base','assert','retract')),kind TEXT NOT NULL,namespace TEXT NOT NULL,fact_id TEXT NOT NULL,body TEXT,writer TEXT NOT NULL,on_behalf_of TEXT,recorded_at_ms INTEGER NOT NULL,recorded_in TEXT NOT NULL,CHECK((op='retract')=(body IS NULL)));
 CREATE TABLE IF NOT EXISTS fact_index(position INTEGER PRIMARY KEY REFERENCES fact_log(position),line INTEGER NOT NULL,namespace TEXT NOT NULL,fact_id TEXT NOT NULL,kind TEXT NOT NULL,from_seq INTEGER NOT NULL,until_seq INTEGER,entity TEXT,subject TEXT,object TEXT,predicate TEXT,valid_from INTEGER,valid_to INTEGER,recorded_at_ms INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS fact_checkpoints(revision TEXT PRIMARY KEY REFERENCES fact_revisions(revision),body TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS fact_revisions_line ON fact_revisions(line,seq);
@@ -40,7 +40,7 @@ CREATE INDEX IF NOT EXISTS fact_index_valid ON fact_index(line,valid_from);
 CREATE INDEX IF NOT EXISTS fact_index_recorded ON fact_index(line,recorded_at_ms);
 ";
 
-const FACT_COLUMNS: &str = "l.position,l.kind,l.fact_id,l.body,l.writer,l.recorded_at_ms,l.recorded_in,i.entity,i.subject,i.object,i.predicate,i.valid_from,i.valid_to";
+const FACT_COLUMNS: &str = "l.position,l.kind,l.fact_id,l.body,l.writer,l.recorded_at_ms,l.recorded_in,i.entity,i.subject,i.object,i.predicate,i.valid_from,i.valid_to,l.on_behalf_of";
 const LIVE: &str = "i.line=?1 AND i.from_seq<=?2 AND (i.until_seq IS NULL OR i.until_seq>?2)";
 
 struct Entry<'a> {
@@ -56,6 +56,20 @@ struct Entry<'a> {
 pub struct SqliteFactStore<'c> {
     conn: &'c Connection,
     open: bool,
+}
+
+/// How many of this backend's tables exist (to detect downgraded or partial stores).
+pub fn installed(conn: &Connection) -> Result<usize> {
+    let mut count = 0;
+    for table in TABLES {
+        let present: i64 = conn.query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1",
+            [table],
+            |r| r.get(0),
+        )?;
+        count += present as usize;
+    }
+    Ok(count)
 }
 
 /// Create the fact-store schema if it is absent. Idempotent.
@@ -107,7 +121,7 @@ impl<'c> SqliteFactStore<'c> {
             body,
         } = entry;
         self.conn.execute(
-            "INSERT INTO fact_log(line,seq,op,kind,namespace,fact_id,body,writer,recorded_at_ms,recorded_in) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            "INSERT INTO fact_log(line,seq,op,kind,namespace,fact_id,body,writer,on_behalf_of,recorded_at_ms,recorded_in) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
             params![
                 line,
                 seq,
@@ -117,6 +131,7 @@ impl<'c> SqliteFactStore<'c> {
                 id,
                 body,
                 recording.writer,
+                recording.on_behalf_of,
                 recording.recorded_at_ms,
                 recording.revision
             ],
@@ -218,6 +233,7 @@ impl<'c> SqliteFactStore<'c> {
         };
         let recording = Recording {
             writer: revision.writer.clone(),
+            on_behalf_of: revision.on_behalf_of.clone(),
             recorded_at_ms: revision.recorded_at_ms,
             revision: revision.revision.clone(),
         };
@@ -266,6 +282,7 @@ impl<'c> SqliteFactStore<'c> {
             first_position,
             op_count: revision.ops.len() as i64,
             writer: revision.writer,
+            on_behalf_of: revision.on_behalf_of,
             recorded_at_ms: revision.recorded_at_ms,
         };
         let line_graph: String = self.conn.query_row(
@@ -277,7 +294,7 @@ impl<'c> SqliteFactStore<'c> {
             return Err(err("E_INTEGRITY", "fact line belongs to another graph"));
         }
         self.conn.execute(
-            "INSERT INTO fact_revisions(revision,graph_id,branch_id,parent,line,seq,first_position,op_count,writer,recorded_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            "INSERT INTO fact_revisions(revision,graph_id,branch_id,parent,line,seq,first_position,op_count,writer,on_behalf_of,recorded_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
             params![
                 info.revision,
                 info.graph_id,
@@ -288,6 +305,7 @@ impl<'c> SqliteFactStore<'c> {
                 info.first_position,
                 info.op_count,
                 info.writer,
+                info.on_behalf_of,
                 info.recorded_at_ms
             ],
         )?;
@@ -310,6 +328,7 @@ type FactRow = (
     [Option<String>; 4],
     Option<i64>,
     Option<i64>,
+    Option<String>,
 );
 
 fn fact_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FactRow> {
@@ -324,11 +343,13 @@ fn fact_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FactRow> {
         [r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?],
         r.get(11)?,
         r.get(12)?,
+        r.get(13)?,
     ))
 }
 
 fn stored(row: FactRow) -> Result<StoredFact> {
-    let (position, kind, id, body, writer, recorded_at_ms, revision, keys, from, to) = row;
+    let (position, kind, id, body, writer, recorded_at_ms, revision, keys, from, to, on_behalf_of) =
+        row;
     let kind = FactKind::parse(&kind).ok_or_else(integrity)?;
     let body = body.ok_or_else(integrity)?;
     let [entity, subject, object, predicate] = keys;
@@ -353,6 +374,7 @@ fn stored(row: FactRow) -> Result<StoredFact> {
         },
         recording: Recording {
             writer,
+            on_behalf_of,
             recorded_at_ms,
             revision,
         },
@@ -392,7 +414,7 @@ impl FactBackend for SqliteFactStore<'_> {
         Ok(self
             .conn
             .query_row(
-                "SELECT revision,graph_id,branch_id,parent,line,seq,first_position,op_count,writer,recorded_at_ms FROM fact_revisions WHERE revision=?1",
+                "SELECT revision,graph_id,branch_id,parent,line,seq,first_position,op_count,writer,recorded_at_ms,on_behalf_of FROM fact_revisions WHERE revision=?1",
                 [revision],
                 |r| {
                     Ok(RevisionInfo {
@@ -406,6 +428,7 @@ impl FactBackend for SqliteFactStore<'_> {
                         op_count: r.get(7)?,
                         writer: r.get(8)?,
                         recorded_at_ms: r.get(9)?,
+                        on_behalf_of: r.get(10)?,
                     })
                 },
             )

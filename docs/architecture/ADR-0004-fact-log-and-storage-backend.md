@@ -52,7 +52,8 @@ live in two identity namespaces per graph: `node` (node IDs) and `record`
 (edges, structural edges, assertions, attachments and, later, embeddings),
 matching core v1 `identity.assertion`. A fact key is `(namespace, id)`.
 
-A write is a list of operations on distinct keys:
+A write is one `write` command (protocol 0.22.0, core v1 `fact.write`) holding
+a list of changes on distinct keys:
 
 - `assert`: the key is not live; add this version.
 - `correct`: the key is live with the same kind; this version supersedes it.
@@ -133,9 +134,11 @@ and no schema.
 ```
 fact_lines(line PK, graph_id, header, base_parent)
 fact_revisions(revision PK, graph_id, branch_id, parent, line, seq,
-               first_position, op_count, writer, recorded_at_ms, UNIQUE(line, seq))
+               first_position, op_count, writer, on_behalf_of, recorded_at_ms,
+               UNIQUE(line, seq))
 fact_log(position PK, line, seq, op IN ('base','assert','retract'), kind,
-         namespace, fact_id, body, writer, recorded_at_ms, recorded_in)
+         namespace, fact_id, body, writer, on_behalf_of, recorded_at_ms,
+         recorded_in)
 fact_index(position PK → fact_log, line, namespace, fact_id, kind,
            from_seq, until_seq, entity, subject, object, predicate,
            valid_from, valid_to, recorded_at_ms)
@@ -279,9 +282,19 @@ without committing to a design:
   principal ID forever, so no existing record changes meaning when groups
   arrive. The record field name `reader_groups` is reserved in core v1 for
   B1's group references, as an additive field on every fact kind.
-- **Writer stays a principal.** `writer` is the authenticated principal, never
-  a group. B1 may add the acting agent's delegation chain as a new field of
-  the engine-recorded part of provenance.
+- **Writer stays a principal.** `writer` is the `HostContext.principal`
+  string, never a key, a display name or a group. Store 30 reserves a
+  nullable `on_behalf_of` column in `fact_log` and `fact_revisions`
+  (`Recording.on_behalf_of` in the trait). It is engine-recorded, outside
+  content and always empty until B1, so B1 needs no migration for it.
+- **ADR-0007 section 13.** `reader_groups` is omitted when empty, lives in
+  the record body and the revision hash and never in an index column; it is
+  rejected (`E_UNKNOWN_FIELD`) until B1. Record visibility goes through one
+  predicate (`visibility::readers_admit`), and reader intersections for
+  derived records through one helper (`visibility::intersect_readers`). The
+  earlier copies in `governance.rs`, `governance_graph.rs` and
+  `accepted_history.rs` now call the predicate. Fact writes to `weave:`
+  graphs fail with `E_RESERVED_NAMESPACE`.
 
 ### 12. Limits and non-guarantees
 

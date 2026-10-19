@@ -1078,7 +1078,10 @@ fn accepted_graph_expression_matches_exact_native_occurrence_and_expiry_rolls_ba
     let CommandResult::Queried { result: actual } = &result[0] else {
         panic!("query expected")
     };
-    assert_eq!(actual.as_ref(), &expected);
+    // Programs of 0.22+ add fact_provenance; the native API does not.
+    let mut actual = actual.as_ref().clone();
+    actual.fact_provenance.clear();
+    assert_eq!(actual, expected);
     clock.set(10000);
     let error = e
         .execute(

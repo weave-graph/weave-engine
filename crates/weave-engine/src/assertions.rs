@@ -12,6 +12,7 @@ pub(crate) fn assertion_edge(
         }
     }
     Edge {
+        provenance: assertion.provenance.clone(),
         derived_snapshots: assertion.derived_snapshots.clone(),
         derived_nodes: assertion.derived_nodes.clone(),
         assertion_source: Some(assertion.source.clone()),
@@ -27,18 +28,7 @@ pub(crate) fn assertion_edge(
         polarity: assertion.polarity.clone(),
         properties: edge.properties.clone(),
         metadata,
-        readers: if assertion.readers.is_empty() {
-            edge.readers.clone()
-        } else if edge.readers.is_empty() {
-            assertion.readers.clone()
-        } else {
-            assertion
-                .readers
-                .iter()
-                .filter(|p| edge.readers.contains(p))
-                .cloned()
-                .collect()
-        },
+        readers: crate::visibility::intersect_readers(&assertion.readers, &edge.readers),
         derived_from: assertion.derived_from.clone(),
         derivations: assertion.derivations.clone(),
     }

@@ -1,0 +1,167 @@
+{
+  "fixture": "fact-write-assert-correct-retract",
+  "concepts": [
+    "fact.write",
+    "fact.immutability",
+    "identity.revision"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "version": "0.22.0",
+    "commands": [
+      {
+        "op": "write",
+        "graph_id": "g",
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "node",
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s",
+              "properties": {},
+              "metadata": [],
+              "readers": []
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "node",
+              "id": "b",
+              "entity_id": "B",
+              "space_id": "s",
+              "properties": {},
+              "metadata": [],
+              "readers": []
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "edge",
+              "id": "e",
+              "predicate": "p",
+              "from": "a",
+              "to": "b",
+              "valid_time": {
+                "start": 0,
+                "end": null
+              },
+              "polarity": "positive",
+              "properties": {},
+              "metadata": [],
+              "readers": [],
+              "derived_from": []
+            }
+          }
+        ]
+      },
+      {
+        "op": "write",
+        "graph_id": "g",
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "correct",
+            "fact": {
+              "kind": "node",
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s",
+              "properties": {
+                "v": 2
+              },
+              "metadata": [],
+              "readers": []
+            }
+          },
+          {
+            "change": "retract",
+            "target": {
+              "kind": "edge",
+              "id": "e"
+            }
+          }
+        ]
+      },
+      {
+        "op": "write",
+        "graph_id": "g",
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "node",
+              "id": "b",
+              "entity_id": "B",
+              "space_id": "s",
+              "properties": {},
+              "metadata": [],
+              "readers": []
+            }
+          }
+        ]
+      },
+      {
+        "op": "query",
+        "query": {
+          "graph_id": "g",
+          "revision": null,
+          "branch_id": "main",
+          "predicate": null,
+          "from": null,
+          "to": null,
+          "valid_at": null,
+          "include_metadata": false,
+          "max_depth": 8
+        }
+      }
+    ]
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "clock_ms": 100,
+    "results": [
+      {
+        "kind": "committed",
+        "revision": "fact:sha256:000aac150911f80a1e3f5e1cf0b8cac3c5682eca7bcf6aebac903280564afa22"
+      },
+      {
+        "kind": "committed",
+        "revision": "fact:sha256:8990742ff8966daf29b3a2e742ea1f019081a74ebe344a8aed17e3eadaab7c03"
+      },
+      {
+        "kind": "unchanged",
+        "revision": "fact:sha256:8990742ff8966daf29b3a2e742ea1f019081a74ebe344a8aed17e3eadaab7c03"
+      },
+      {
+        "kind": "queried",
+        "coverage": "complete",
+        "nodes": [
+          "a",
+          "b"
+        ],
+        "edges": [],
+        "fact_provenance": {
+          "writers": [
+            "alice"
+          ],
+          "methods": [
+            "unspecified"
+          ],
+          "count": 2
+        }
+      }
+    ]
+  }
+}

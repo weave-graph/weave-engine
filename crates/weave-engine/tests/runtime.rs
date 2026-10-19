@@ -8,6 +8,8 @@ fn host() -> HostContext {
 }
 fn node(id: &str, entity: &str, space: &str) -> Node {
     Node {
+        provenance: None,
+        valid_time: None,
         derivations: Vec::new(),
         derived_snapshots: vec![],
         derived_nodes: vec![],
@@ -36,6 +38,7 @@ fn data() -> GraphData {
             node("operational", "device", "operational"),
         ],
         edges: vec![Edge {
+            provenance: None,
             derived_snapshots: vec![],
             derived_nodes: vec![],
             assertion_source: None,

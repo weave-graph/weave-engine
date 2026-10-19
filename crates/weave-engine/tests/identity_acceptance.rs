@@ -941,7 +941,10 @@ fn program_identity_selector_is_a_pinned_read_not_acceptance_authority() {
     let CommandResult::Queried { result } = &results[0] else {
         panic!("query result required")
     };
-    assert_eq!(**result, expected);
+    // Programs of 0.22+ add fact_provenance; the native API does not.
+    let mut result = result.as_ref().clone();
+    result.fact_provenance.clear();
+    assert_eq!(result, expected);
     assert_eq!(e.event_count().unwrap(), events);
     let mut old = program.clone();
     old.version = "0.12.0".into();

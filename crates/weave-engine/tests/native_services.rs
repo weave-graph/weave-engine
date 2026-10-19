@@ -43,7 +43,10 @@ fn pinned_cluster_expression_matches_native_result_and_rejects_old_nested_wire()
     let CommandResult::Queried { result } = &results[0] else {
         panic!("query result required")
     };
-    assert_eq!(**result, expected);
+    // Programs of 0.22+ add fact_provenance; the native API does not.
+    let mut result = result.as_ref().clone();
+    result.fact_provenance.clear();
+    assert_eq!(result, expected);
     assert_eq!(e.event_count().unwrap(), 1);
     let old = Program {
         version: "0.12.0".into(),

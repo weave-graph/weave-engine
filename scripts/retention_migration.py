@@ -13,6 +13,7 @@ def assert_retention_baseline(path,marker):
     assert_actor_lifecycle_baseline(path,marker)
     assert_actor_disposition_baseline(path,marker)
     assert_causal_dispatch_baseline(path,marker)
+    assert_fact_store_baseline(path,marker)
     if marker<22:
         assert not retention_tables(path);return
     assert retention_tables(path)==RETENTION_TABLES
@@ -101,3 +102,15 @@ def assert_causal_dispatch_baseline(path,marker):
             policy=json.loads(body);assert policy=={'max_depth':16}
             assert digest=='sha256:'+hashlib.sha256(json.dumps([adapter,policy],ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
         assert c.execute('SELECT count(*) FROM dispatch_circuits').fetchone()[0]==0
+
+FACT_STORE_TABLES=frozenset(("fact_lines","fact_revisions","fact_log","fact_index","fact_checkpoints"))
+def assert_fact_store_baseline(path,marker):
+    """Store 30 (ADR-0004) adds the fact store empty; earlier markers have none of it."""
+    with closing(sqlite3.connect(path))as c:
+        present={n for(n,)in c.execute("SELECT name FROM sqlite_master WHERE type='table'")if n in FACT_STORE_TABLES}
+        if marker<30:
+            assert not present;return
+        assert present==FACT_STORE_TABLES
+        # Migration rewrites no snapshot revision into fact revisions.
+        for (revision,data) in c.execute("SELECT revision,data FROM revisions"):
+            assert revision.startswith('fact:sha256:') or data is not None

@@ -12,8 +12,8 @@ white-paper requirements remain tracked separately in the
 |---|---|
 | Science API and CLI | `weave-science` 0.1.0; native Rust and one-request JSON process |
 | Python client | `weave_science` 0.1.0; Python 3.10+, no mandatory runtime dependencies |
-| Engine contract | 0.21.0; existing graph, temporal, metadata and authorization semantics. The core subset is specified in [core contract v1](contract/core-v1.md) |
-| Native storage | Store 29; persistent local SQLite graph revisions and history |
+| Engine contract | 0.22.0; existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
+| Native storage | Store 30; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)) |
 | Platforms | Linux, macOS and Windows in the native CI profile |
 
 Experiments support durable import and correction with optimistic concurrency,
@@ -40,12 +40,36 @@ between store and contract versions, deprecation and reserved names).
   `weave-engine run` CLI reports these codes and now rejects duplicate JSON
   keys; it previously reported `E_INPUT` for every decode failure. Plans over
   16 MiB still report `E_INPUT`, and the science envelope keeps `E_INPUT`.
-- **Not yet active.** Per-fact provenance
-  ([ADR-0005](architecture/ADR-0005-per-fact-provenance.md)) and embedding
-  facts and spaces
+- **Not yet active.** Embedding facts and spaces
   ([ADR-0006](architecture/ADR-0006-embedding-facts-and-spaces.md)) are
-  accepted. Their records exist in `weave-contract`, but no 0.21.0 program
-  carries them. Their wire fields are reserved until A2 and A4.
+  accepted. Their records exist in `weave-contract`, but no program carries
+  them. Their wire fields are reserved until A4.
+
+## Fact-level writes (A2, in progress)
+
+Protocol 0.22.0 and store 30 add the fact store of
+[ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md):
+
+- **Writes.** The `write` command asserts, corrects or retracts individual
+  nodes, edges, structural edges, assertions and attachments in one atomic
+  *fact revision* (`fact:sha256:…`), with optional `expected_head` and
+  per-fact `expected` concurrency. A write logs only its changes. History stays
+  immutable: every earlier revision remains readable.
+- **Node valid time.** `Node.valid_time` scopes a manifestation in valid time;
+  `valid_at` excludes nodes outside it. Time-varying properties are
+  node-hosted attachments with their own valid time.
+- **Provenance.** Results of 0.22.0 programs carry `fact_provenance`: for
+  every cited stored fact, the engine-recorded writer and recorded time plus
+  the claimed source, method and evidence. Hidden evidence is removed and
+  makes coverage partial. A client cannot supply the writer.
+- **Migration.** Store 29 upgrades to store 30 by adding the empty fact store;
+  no existing row is rewritten. A process kill before or after the schema
+  commit is safe, and store-29 binaries refuse store 30.
+- **Limits.** Reading a fact revision materializes it, so per-request read
+  budgets bound the graph size a query can read; indexed queries, the removal
+  of the 100,000-object snapshot cap and the head-observation capacity are the
+  remaining A2 work. Fact writes inherit the graph header from their parent.
+  Retention never erases fact revisions, and capsules cannot carry them.
 - **Language CI.** Language CI does not run the fixtures yet; that follows in
   LA0.
 

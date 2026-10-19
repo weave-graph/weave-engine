@@ -227,7 +227,7 @@ async function main() {
       await reopen(page,store,authority('foreign'));const foreign=await call(page,rollback);assert.equal(foreign.ok,false);assert.match(foreign.response_json,/E_HOST_AUTH/);
       await reopen(page,store,authority('owner',['Input']));const narrowed=await call(page,rollback);assert.equal(narrowed.ok,false);assert.match(narrowed.response_json,/E_HOST_AUTH/);
       await reopen(page,store);assert.equal(control(await call(page,rollback)).duplicate,true);
-      const restored=await saved(page,store,true);assert.equal(restored.marker,29);assert.equal(JSON.parse(restored.journal_raw).artifacts[0].sdk_raw,f.sdk_raw);assert.equal(JSON.parse(restored.journal_raw).artifacts[1].sdk_raw,f.upgraded_sdk_raw);
+      const restored=await saved(page,store,true);assert.equal(restored.marker,30);assert.equal(JSON.parse(restored.journal_raw).artifacts[0].sdk_raw,f.sdk_raw);assert.equal(JSON.parse(restored.journal_raw).artifacts[1].sdk_raw,f.upgraded_sdk_raw);
       record(`actual SDK source ${index}: complete inventory, completion/rebuild/version transfer/rollback and lost acknowledgments; current foreign/narrow authority denied`);
       await stop(page,store);
     }

@@ -879,8 +879,7 @@ impl Engine {
         let _clock_scope = self.operation_scope()?;
         let head = self.gov_head(view)?;
         let policy = self.gov_policy(view, &head.policy)?;
-        if !policy.readers.is_empty()
-            && !policy.readers.contains(&host.principal)
+        if !crate::visibility::readers_admit(&policy.readers, &host.principal)
             && !policy.proposers.contains(&host.principal)
         {
             return Err(failure("E_GOV_UNAVAILABLE"));

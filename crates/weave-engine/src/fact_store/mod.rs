@@ -124,7 +124,11 @@ pub struct FactVersion {
 /// Engine-recorded part of a version's provenance (ADR-0005).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Recording {
+    /// The writing `HostContext.principal`, never a key or display name.
     pub writer: String,
+    /// Reserved for B1 delegation (ADR-0007 section 13): the principal an
+    /// agent writer acted for. Engine-recorded, outside content; `None` until B1.
+    pub on_behalf_of: Option<String>,
     pub recorded_at_ms: i64,
     /// The revision that first recorded this version. Base copies keep the original.
     pub revision: String,
@@ -162,6 +166,9 @@ pub struct NewRevision {
     pub branch_id: String,
     pub parent: Option<String>,
     pub writer: String,
+    /// Reserved for B1 delegation (ADR-0007 section 13): the principal an
+    /// agent writer acted for. Engine-recorded, outside content; `None` until B1.
+    pub on_behalf_of: Option<String>,
     pub recorded_at_ms: i64,
     pub ops: Vec<FactOp>,
 }
@@ -187,6 +194,9 @@ pub struct RevisionInfo {
     pub first_position: i64,
     pub op_count: i64,
     pub writer: String,
+    /// Reserved for B1 delegation (ADR-0007 section 13): the principal an
+    /// agent writer acted for. Engine-recorded, outside content; `None` until B1.
+    pub on_behalf_of: Option<String>,
     pub recorded_at_ms: i64,
 }
 
@@ -307,6 +317,7 @@ pub(crate) fn validate_new(revision: &NewRevision, base: Option<&BaseState>) -> 
         && bounded(&revision.graph_id)
         && bounded(&revision.branch_id)
         && bounded(&revision.writer)
+        && revision.on_behalf_of.as_deref().is_none_or(bounded)
         && revision.parent.as_deref().is_none_or(bounded)
         && revision.recorded_at_ms >= 0;
     if !ids_ok {
@@ -337,6 +348,10 @@ pub(crate) fn validate_new(revision: &NewRevision, base: Option<&BaseState>) -> 
         for (version, recording) in &base.facts {
             validate_version(version)?;
             if !bounded(&recording.writer)
+                || recording
+                    .on_behalf_of
+                    .as_deref()
+                    .is_some_and(|p| !bounded(p))
                 || !bounded(&recording.revision)
                 || recording.recorded_at_ms < 0
             {

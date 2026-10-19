@@ -293,3 +293,82 @@ They may be imported into the registry. B3 serves HTTP/JSON over TLS with
 core v1 bodies. gRPC is deferred until measured. Tenancy is one store per
 tenant, with the tenant taken from the credential, a per-tenant audience and
 a separate control store that holds no graph data.
+
+### 2026-10-19 — #3 A2 — One `write` command with assert, correct and retract changes
+
+A2's write API is one command op, `write`, whose `changes` are tagged
+`assert`, `correct` or `retract`. One write is one revision with one recorded
+time. An agent's typical change, such as decommissioning a unit (correct the
+node and retract an edge), is therefore atomic in recorded time as well as in
+the transaction. The core-v1 reservation of `assert`, `retract` and `correct`
+as command ops is released and reused as change kinds. `assert` refuses a
+live key; overwriting needs an explicit `correct`, so no write silently
+replaces a fact.
+
+### 2026-10-19 — #3 A2 — Concurrency: `expected_head` absent, null or string; per-fact `expected`
+
+On `write`, `expected_head` absent means no head check. This keeps
+single-fact appends cheap for agents. `null` keeps the `commit` meaning (new
+branch), and a string must equal the head. Per-fact `expected` is `absent` or
+`unchanged_since` a named revision, which the client already has from the
+query that showed it the fact. Any mismatch fails the whole write with
+`E_CONFLICT`.
+
+### 2026-10-19 — #3 A2 — No cascading retraction; identity is immutable on correction
+
+Retracting a fact that live facts still need fails with `E_DEPENDENT_FACT`;
+the writer retracts the dependents in the same write. A cascade would delete
+facts the writer never named. A correction cannot change a record's
+structural identity (node entity and space, edge endpoints and predicate,
+assertion edge, attachment host and key). This matches the existing per-graph
+structural registry and keeps every index key of a fact stable.
+
+### 2026-10-19 — #3 A2 — Provenance only in results of 0.22.0 programs
+
+`fact_provenance` is filled only when the program declares 0.22.0. Programs
+of earlier versions get their exact previous results, differing only in the
+engine's `version` field. That is what lets pinned pre-migration queries stay
+byte-identical. Native APIs that return a `QueryResult` directly (views,
+accepted graphs, cluster navigation) do not attach it. Five existing tests
+compared a 0.22 program's result with such a native result. They now clear
+`fact_provenance` before comparing. No authorization or influence test
+changed.
+
+### 2026-10-19 — #3 A2 — Artifact and event-schema versions advance with the protocol
+
+The view and handler artifact protocols move to 0.22.0 and still accept 0.21.0
+artifacts. The actor and projection `event_schema` checks accept both 0.21.0
+and 0.22.0. Stored definitions keep their declared version and are never
+rewritten. The `negative/unknown-version.json` fixture now uses 0.23.0,
+because 0.22.0 is real. `negative/reserved-node-provenance.json` is replaced
+by `negative/node-provenance-version-gated.json`: a 0.21.0 program with node
+provenance now decodes and fails with `E_VERSION` at execution. It adds
+`negative/reserved-node-reader-groups.json`. The Python client and
+`check_science.py` speak 0.22.0.
+
+### 2026-10-19 — #3 A2 — ADR-0007 section 13 folded into store 30
+
+`on_behalf_of` is a reserved nullable column in `fact_log` and
+`fact_revisions`, so B1 needs no migration for it. `reader_groups` stays
+rejected and is never an index column. The literal-reader rule now lives in
+`visibility::readers_admit`. Three copies in governance and accepted history
+were moved onto it, which was cheap and changes no behaviour. The assertion
+reader intersection lives in `visibility::intersect_readers`, with its exact
+previous semantics. Fact writes to `weave:` graphs fail with
+`E_RESERVED_NAMESPACE`.
+
+### 2026-10-19 — #3 A2 — Retention and capsules around fact revisions
+
+Retention treats every fact revision as present and retained (a root). It
+never erases them, so whatever they reference is also kept. It skips the
+fact-store tables in its generic inventory; those tables belong to the
+backend. Capsule export rejects fact revisions with `E_UNSUPPORTED`. Log
+compaction, erasure and export formats are C4 and E08 decisions. A silent
+partial capsule would be worse than a refusal.
+
+### 2026-10-19 — #3 A2 — Head-observation capacity moves to part 3
+
+The 100,000-observation store cap (ADR-0002) is in A2 scope, per the review of
+part 1. Part 3 restructures it together with the indexed read path. Part 2's
+migration therefore leaves `head_observations` unchanged. If part 3 needs a
+schema change for the cap, it brings its own crash-tested 30→31 migration.

@@ -76,7 +76,7 @@ for index, f in enumerate(fixtures['cases']):
     connection = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
     try:
         assert connection.execute('PRAGMA integrity_check').fetchone() == ('ok',)
-        assert connection.execute('PRAGMA user_version').fetchone() == (29,)
+        assert connection.execute('PRAGMA user_version').fetchone() == (30,)
         assert connection.execute("SELECT revision FROM heads WHERE graph_id='Output' AND branch_id='main'").fetchone() == (rebuilt['snapshots']['Output'],)
         assert connection.execute('SELECT count(*) FROM compiled_migrations').fetchone() == (2,)
         assert connection.execute('SELECT count(*) FROM compiled_rebuild_receipts').fetchone() == (1,)

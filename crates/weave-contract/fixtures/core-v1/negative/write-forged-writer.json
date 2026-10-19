@@ -1,35 +1,38 @@
 {
-  "fixture": "reserved-node-provenance",
+  "fixture": "write-forged-writer",
   "concepts": [
     "error.unknown_field",
-    "compat.reserved",
-    "provenance.fact"
+    "provenance.fact",
+    "fact.write"
   ],
   "type": "program",
   "expect": {
     "reject": "E_UNKNOWN_FIELD"
   },
   "input": {
-    "version": "0.21.0",
+    "version": "0.22.0",
     "commands": [
       {
-        "op": "commit",
+        "op": "write",
         "graph_id": "g",
-        "data": {
-          "nodes": [
-            {
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "node",
               "id": "a",
               "entity_id": "A",
               "space_id": "s",
               "provenance": {
                 "method": {
                   "kind": "human"
-                }
+                },
+                "writer": "mallory"
               }
             }
-          ],
-          "edges": []
-        }
+          }
+        ]
       }
     ]
   }

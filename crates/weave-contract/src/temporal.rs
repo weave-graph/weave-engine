@@ -204,6 +204,7 @@ fn envelope(
         budget.charge(right)?;
     }
     let mut out = QueryResult {
+        fact_provenance: Vec::new(),
         recorded_observations: left.recorded_observations.clone(),
         accepted_observations: left.accepted_observations.clone(),
         version: VERSION.into(),

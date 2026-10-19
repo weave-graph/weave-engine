@@ -231,6 +231,8 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             }
             size(&(kind, scope, dependencies, &local_nodes), remaining)?;
             let n = Node {
+                provenance: None,
+                valid_time: None,
                 derivations: vec![],
                 derived_snapshots: vec![],
                 derived_nodes: local_nodes,
@@ -518,6 +520,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                 .collect::<Vec<_>>(),
         )?;
         let record = Edge {
+            provenance: None,
             derived_snapshots: vec![],
             derived_nodes: vec![],
             id: id.clone(),
@@ -577,6 +580,8 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             )?
         );
         let record = Node {
+            provenance: None,
+            valid_time: None,
             derivations: vec![],
             id: id.clone(),
             entity_id: id,
@@ -682,6 +687,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     )?;
     let node_origins = nodes.keys().map(|id| (id.clone(), Vec::new())).collect();
     let mut result = QueryResult {
+        fact_provenance: Vec::new(),
         recorded_observations: input.recorded_observations.clone(),
         accepted_observations: input.accepted_observations.clone(),
         selected_context: input.selected_context.clone(),

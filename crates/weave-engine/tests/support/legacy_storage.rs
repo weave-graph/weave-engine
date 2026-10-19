@@ -3,7 +3,12 @@
 pub fn strip_retention_schema(connection: &rusqlite::Connection) {
     connection
         .execute_batch(
-            "DROP TABLE dispatch_circuits;
+            "DROP TABLE fact_checkpoints;
+DROP TABLE fact_index;
+DROP TABLE fact_log;
+DROP TABLE fact_revisions;
+DROP TABLE fact_lines;
+DROP TABLE dispatch_circuits;
 DROP TABLE dispatch_causal_policies;
 DROP TABLE event_causation;
 DROP TABLE recorded_actor_cancellations;
