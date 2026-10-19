@@ -3,7 +3,7 @@
 from copy import deepcopy
 from typing import Any, Mapping
 
-CONTRACT_VERSION = "0.22.0"
+CONTRACT_VERSION = "0.23.0"
 READ_ONLY_COMMANDS = frozenset({"query", "evaluate", "bind", "join", "recorded_range", "accepted_range"})
 
 

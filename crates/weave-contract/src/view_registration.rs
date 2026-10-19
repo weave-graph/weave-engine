@@ -3,7 +3,7 @@ use crate::*;
 use serde::{Deserialize, Serialize};
 
 pub const VIEW_TEMPLATE_FORMAT: &str = "weave-view-registration/1";
-pub const VIEW_TEMPLATE_PROTOCOL: &str = "0.22.0";
+pub const VIEW_TEMPLATE_PROTOCOL: &str = "0.23.0";
 const LIMIT: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -79,6 +79,7 @@ fn fields(template: &CompiledViewTemplate) -> Result<(), Diagnostic> {
     if template.format != VIEW_TEMPLATE_FORMAT
         || ![
             VIEW_TEMPLATE_PROTOCOL,
+            "0.22.0",
             "0.21.0",
             "0.20.0",
             "0.19.0",
@@ -114,7 +115,7 @@ fn fields(template: &CompiledViewTemplate) -> Result<(), Diagnostic> {
     for _ in 0..=32 {
         match expression {
             GraphExpression::RecordedQuery { query, selection } => {
-                if ![VIEW_TEMPLATE_PROTOCOL, "0.21.0", "0.20.0"]
+                if ![VIEW_TEMPLATE_PROTOCOL, "0.22.0", "0.21.0", "0.20.0"]
                     .contains(&template.protocol.as_str())
                     || !id(&query.graph_id)
                     || !id(&query.branch_id)

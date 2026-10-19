@@ -1,0 +1,40 @@
+{
+  "profile": "weave-as-of-benchmark/1",
+  "protocol": "0.23.0",
+  "results": [
+    {
+      "as_of_expand_ms": {
+        "max": 0.6555909999999999,
+        "median": 0.42789699999999997,
+        "p95": 0.443847,
+        "samples": 500
+      },
+      "load_seconds": 9.045198543,
+      "pinned_expand_ms": {
+        "max": 0.878427,
+        "median": 0.46142,
+        "p95": 0.47764,
+        "samples": 500
+      },
+      "revisions": 10000
+    },
+    {
+      "as_of_expand_ms": {
+        "max": 1.0012860000000001,
+        "median": 0.463494,
+        "p95": 0.47962299999999997,
+        "samples": 500
+      },
+      "load_seconds": 900.75018087,
+      "pinned_expand_ms": {
+        "max": 0.795342,
+        "median": 0.479063,
+        "p95": 0.49048400000000003,
+        "samples": 500
+      },
+      "revisions": 1000000
+    }
+  ],
+  "store": 30,
+  "workload": "one new node asserted per fact revision on one branch of an on-disk store (WAL); each sample is one expand as_of a uniformly random recorded time of the node recorded then and the next one, checked to find only the first, and the same expand pinned to the head revision"
+}

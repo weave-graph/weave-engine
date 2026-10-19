@@ -1,6 +1,8 @@
 # ADR 0002: replica-local recorded head observations
 
-Status: adopted; implemented with contract 0.20 and stores 19–20. Amended by A2 ([ADR-0004](ADR-0004-fact-log-and-storage-backend.md) section 12): the 100,000-observation store cap is removed and date selection uses the recorded-time index with a boundary integrity check. Requirements R04/R08/R09/R18/R20/R36; E02/E03/E09/E14.
+Status: adopted; implemented with contract 0.20 and stores 19–20. Amended by A3
+(contract 0.23.0, [below](#amendment-a3-protocol-0230-as-of-reads-of-partially-visible-revisions)):
+as-of reads authorize record by record and return no witness. Amended by A2 ([ADR-0004](ADR-0004-fact-log-and-storage-backend.md) section 12): the 100,000-observation store cap is removed and date selection uses the recorded-time index with a boundary integrity check. Requirements R04/R08/R09/R18/R20/R36; E02/E03/E09/E14.
 
 Record branch-head selection separately from immutable revision creation/receipt.
 Accepting an old or received revision changes what a branch knows at that local
@@ -51,6 +53,26 @@ language/contract query selection and source acceptance. Pure results still pin
 the actual selected immutable graph revisions; local observation metadata never
 authenticates remote policy, compiler origin or data truth. Existing trusted host
 APIs and authorization rules remain in force.
+
+## Amendment (A3, protocol 0.23.0): as-of reads of partially visible revisions
+
+The whole-revision rule above stays for `recorded_query`, `recorded_range`
+and checkpoint APIs, because they return observation witnesses: checkpoint
+IDs, the observer, observation kinds and exact recorded times of every head
+change in a range. That is an inventory of the branch's history, including
+writes the reader cannot see, so it is released only to a reader who can see
+every selected revision.
+
+The A3 `as_of` selection (the `as_of` expression, the `as_of` field of
+`expand` and the `as_of` bound of `changes`) uses the same
+`(graph, branch, recorded_at_ms)` index and boundary check but returns no
+witness. It authorizes the selected revision record by record, so its result
+equals a read pinned to that revision, which any reader may already make. A
+reader who cannot see every record gets the visible subset with the coverage
+of that pinned read, and the result reveals nothing about hidden records
+beyond what the pinned read does: the selected revision's content-derived ID,
+which a head read also exposes. The branch head must be readable, so a missing
+and a denied graph stay indistinguishable.
 
 ## Canonical/source extension
 

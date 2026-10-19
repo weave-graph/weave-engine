@@ -137,7 +137,7 @@ fn canonical_pins(pins: &mut Vec<GraphRef>) {
     pins.dedup();
 }
 pub(crate) fn validate_definition(definition: &RecordedActorDefinition) -> Result<()> {
-    if !["0.21.0", VERSION].contains(&definition.event_schema.as_str())
+    if !["0.21.0", "0.22.0", VERSION].contains(&definition.event_schema.as_str())
         || !valid_id(&definition.state_protocol)
         || definition.manifest.projection_replay
         || definition.metadata_depth > 8

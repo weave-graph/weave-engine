@@ -325,6 +325,7 @@ pub(crate) fn evaluate(
     };
     let mut result = QueryResult {
         fact_provenance: Vec::new(),
+        changes: None,
         recorded_observations: vec![],
         accepted_observations: vec![],
         graph,

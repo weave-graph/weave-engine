@@ -1,0 +1,28 @@
+{
+  "fixture": "expand-unknown-field",
+  "concepts": [
+    "query.expand",
+    "error.unknown_field"
+  ],
+  "type": "program",
+  "expect": {
+    "reject": "E_UNKNOWN_FIELD"
+  },
+  "input": {
+    "version": "0.23.0",
+    "commands": [
+      {
+        "op": "evaluate",
+        "value": {
+          "kind": "expand",
+          "graph_id": "g",
+          "seeds": [
+            "a"
+          ],
+          "hops": 1,
+          "depth": 2
+        }
+      }
+    ]
+  }
+}

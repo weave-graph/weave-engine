@@ -575,3 +575,147 @@ The engine checks are unchanged, and two tests now pin them: history fails close
 exactly at policy expiry, and a proposal may not outlive its policy. No retries
 were added. The script reports elapsed seconds on a failed invocation so a
 recurrence shows wall-clock drift immediately.
+
+### 2026-10-19 — #4 A3 — Delivery in two parts; protocol 0.23.0, store unchanged
+
+Part 1 adds the contract and engine operators (`expand`, `as_of`, `changes`),
+explanations, coverage, the paired hidden-input tests, the 100k-fact BFS
+check, the change-set property test, the as-of benchmark, golden fixtures and
+the spec. Part 2 adds the Python helpers, the science JSON operations and the
+tutorial, and closes #4. The operators are new expression kinds and one new
+optional result field (`QueryResult.changes`), so this is the additive minor
+bump 0.23.0. Nothing new is stored: the change set is computed from the fact
+log and indexes that store 30 already has, so `STORAGE_VERSION` stays 30.
+
+### 2026-10-19 — #4 A3 — `expand` is a graph value; `changes` is a terminal change set
+
+`expand` returns an ordinary `QueryResult` with exact origins, so it composes
+with every operator (A4's "restricted to the 2-hop neighborhood" is a join or
+filter over it) and `fact_provenance` explains it without new machinery. The
+edge set is every matching edge that leaves a node fewer than `hops` hops
+away, which is what an independent BFS produces and what "how was it related"
+needs: edges between two nodes at the last hop are not included. A change set
+is not a graph: a corrected fact has two values. It goes in a new optional
+`QueryResult.changes` field with authorized `before` and `after` values, and
+operators reject a change set as input (`E_CHANGES_OPERAND`) rather than
+silently dropping the field. The reserved names `expand` and `changes` are
+kept.
+
+### 2026-10-19 — #4 A3 — A change set is the difference of two authorized states
+
+`changes(K1, K2)` lists, fact by fact, what differs between the two states a
+reader can see, not every intermediate log entry. This is the acceptance
+criterion's definition, it is what a pull feed consumer needs (apply the
+entries to reach the new state), and it makes permissions simple: both states
+are authorized under current authority, exactly as two pinned reads. A fact
+whose visibility changes because a dependency changed (an edge whose endpoint
+became hidden) is reported as the reader sees it. The cursor is the `to`
+revision ID, so a cursor works on any revision of the graph and needs no new
+stored state.
+
+### 2026-10-19 — #4 A3 — `as_of` needs no whole-graph visibility and returns no witness
+
+`recorded_query` requires the selected revision to be wholly visible and
+returns observation witnesses, because the witness chain describes the head
+history. `as_of` only maps a recorded time to a revision through the
+`(graph, branch, recorded_at_ms)` index and then authorizes that revision
+record by record, like a read pinned to it, which any reader can already do
+with the revision ID. Requiring whole visibility would make `as_of` fail for
+every reader with any hidden record, so hidden facts would change the output
+(an error instead of a result). The branch head must be readable, so missing
+and denied graphs stay indistinguishable. `recorded_query` remains the way to
+get a replayable checkpoint.
+
+### 2026-10-19 — #4 A3 — Coverage is attributed to the output's own region
+
+Authorization reports one "incomplete" flag per value. On a subset chosen by
+traversal, that flag would depend on hidden facts: a hidden edge pulls its far
+endpoint into the subset, and a denied attachment there would make the result
+partial only in the store that holds the hidden edge. The operators therefore
+authorize and attribute denials per record: a record is *denied* when its
+readers admit the principal but authorization removes or narrows it, and a
+record whose readers exclude the principal is simply absent. `expand` reports
+partial coverage only for denied candidate edges at visible frontier nodes and
+denied attachments on returned records; `changes` only for denied facts whose
+stored content changed. Header-level gates still make any value partial.
+
+### 2026-10-19 — #4 A3 — Paired tests normalize revision IDs
+
+Revision IDs are content-derived over every fact (ADR-0001, ADR-0004), so a
+store with extra hidden facts has different revision IDs and a hidden write
+creates a new one. Hiding them would mean a second, visibility-dependent
+identity scheme. The paired tests compare all output with revision IDs
+normalized, as `tests/fact_reads.rs` already does, and the spec states the
+exception: a revision ID reveals that something changed, never what.
+
+### 2026-10-19 — #4 A3 — One read path for fact and snapshot revisions
+
+`FactSource` gives the closure and traversal code one interface over a fact
+revision (the backend's indexes) and a snapshot revision (its payload indexed
+in memory by the same keys). Both operators and the existing filtered-query
+closure use it, so the two revision kinds cannot drift; the BFS test checks
+both kinds give identical results. Changed keys between two revisions of one
+line come from a new `FactBackend::changed_keys`, which reads the logged
+operations in the revisions' position range, so the change set costs O(changes
+and their dependents) with no schema change. Any other pair falls back to
+comparing both states whole, within the read budget.
+
+### 2026-10-19 — #4 A3 — Key lookups probe one version
+
+The as-of benchmark showed single-fact writes slowing linearly with the
+number of versions of the corrected key: the SQLite backend's live-version
+lookup scanned every version of the key at or before the read point. It now
+takes the version with the greatest `from_seq` at or before the read point,
+one index probe, because versions of a key on a line never overlap. Results
+are unchanged (the conformance suite passes on both backends). Selections by
+subject still scan every version recorded under that subject, so a node
+corrected very many times makes reads of its hosted attachments slower; a
+composite index needs a store bump and is left to C4.
+
+### 2026-10-19 — #4 A3 — Bounds and defaults
+
+`hops` 1 to 16, `seeds` 1 to 1,000 and `limit` (nodes plus edges, or change
+entries) 1 to 200,000 with default 10,000, matching the bound-value budget of
+`bind`. Each limit fails with `E_BUDGET`; `E_EXPAND` is for an empty seed list
+or zero hops, which are malformed rather than too large. View and handler
+artifact protocols advance to 0.23.0 with the protocol, as in A2, and still
+accept 0.22.0 and older artifacts. Views and handler recipes reject `expand`,
+`changes` and `as_of`: their freshness and egress models do not cover a
+traversal frontier or a change set yet.
+
+### 2026-10-19 — #4 A3 — 100k-fact acceptance runs in the release CI job
+
+`tests/traversal_scale.rs` runs at 100,000 facts in the existing
+`fact-scale-1m` release job (about 25 s) and at 20,000 in the debug suite,
+where 100,000 takes over two minutes. Each check compares one `expand` with
+an independent BFS over the generated edges.
+
+### 2026-10-19 — #4 A3 — An `as_of` expression for every query; ADR-0002 rule kept for witness APIs
+
+A5 found that "as known at K" (`recorded_query`) fails with
+`E_HISTORY_UNAVAILABLE` for any reader who cannot see the whole selected
+revision, such as a fleet analyst with customer-restricted units. The Phase A
+exit scenario needs those answers. Protocol 0.23.0 therefore adds
+`{kind: "as_of", query, unix_millis}`: any `QueryPlan` read from the revision
+selected through the recorded-time index and authorized record by record, so
+the result equals the same query pinned to that revision. A pinned read is
+already available to every reader, so `as_of` reveals no more than it: no
+witness chain, no observation times and no hidden records. The revision ID is
+the one remaining signal and a head read exposes it too.
+
+`recorded_query`, `recorded_range` and checkpoints keep ADR-0002's
+whole-revision rule (amended there), because their observation witnesses
+describe every head change, including hidden writes. Callers that need
+replayable checkpoints still use them.
+
+### 2026-10-19 — #4 A3 — Hidden records never make an as-of result partial
+
+The request was to mark partially visible as-of reads `partial`. That would
+make coverage depend on whether hidden records exist: a reader could tell
+"some unit is restricted from me" from `complete` versus `partial`, a one-bit
+existence oracle. Core v1 §9 already defines `complete` as describing the
+authorized input, not the world, and a pinned read of the same revision is
+`complete`. `as_of` keeps exactly that coverage. It is `partial` only for
+derivations a reader is denied (`E_DERIVATION_UNAVAILABLE`), as every read.
+The paired tests compare as-of output, coverage included, with and without
+hidden facts.

@@ -1,0 +1,230 @@
+{
+  "fixture": "as-of-partially-visible",
+  "concepts": [
+    "time.as_of",
+    "fact.readers"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "version": "0.23.0",
+    "commands": [
+      {
+        "op": "evaluate",
+        "value": {
+          "kind": "as_of",
+          "query": {
+            "graph_id": "g",
+            "revision": null,
+            "branch_id": "main",
+            "predicate": "located_at",
+            "from": null,
+            "to": null,
+            "valid_at": null,
+            "include_metadata": false,
+            "max_depth": 8
+          },
+          "unix_millis": 15
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "kind": "as_of",
+          "query": {
+            "graph_id": "g",
+            "revision": null,
+            "branch_id": "main",
+            "predicate": "located_at",
+            "from": null,
+            "to": null,
+            "valid_at": null,
+            "include_metadata": false,
+            "max_depth": 8
+          },
+          "unix_millis": 25
+        }
+      }
+    ]
+  },
+  "engine": {
+    "principal": "analyst",
+    "write_graphs": [],
+    "clock_ms": 30,
+    "setup": [
+      {
+        "principal": "writer",
+        "write_graphs": [
+          "g"
+        ],
+        "clock_ms": 10,
+        "program": {
+          "version": "0.23.0",
+          "commands": [
+            {
+              "op": "write",
+              "graph_id": "g",
+              "branch_id": "main",
+              "changes": [
+                {
+                  "change": "assert",
+                  "fact": {
+                    "kind": "node",
+                    "id": "site",
+                    "entity_id": "SITE",
+                    "space_id": "s",
+                    "properties": {},
+                    "metadata": [],
+                    "readers": []
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "kind": "node",
+                    "id": "u1",
+                    "entity_id": "U1",
+                    "space_id": "s",
+                    "properties": {},
+                    "metadata": [],
+                    "readers": []
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "kind": "node",
+                    "id": "u2",
+                    "entity_id": "U2",
+                    "space_id": "s",
+                    "properties": {},
+                    "metadata": [],
+                    "readers": [
+                      "admin"
+                    ]
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "kind": "edge",
+                    "id": "a1",
+                    "predicate": "located_at",
+                    "from": "u1",
+                    "to": "site",
+                    "valid_time": {
+                      "start": 0,
+                      "end": null
+                    },
+                    "polarity": "positive",
+                    "properties": {},
+                    "metadata": [],
+                    "readers": [],
+                    "derived_from": []
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "kind": "edge",
+                    "id": "a2",
+                    "predicate": "located_at",
+                    "from": "u2",
+                    "to": "site",
+                    "valid_time": {
+                      "start": 0,
+                      "end": null
+                    },
+                    "polarity": "positive",
+                    "properties": {},
+                    "metadata": [],
+                    "readers": [],
+                    "derived_from": []
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "principal": "writer",
+        "write_graphs": [
+          "g"
+        ],
+        "clock_ms": 20,
+        "program": {
+          "version": "0.23.0",
+          "commands": [
+            {
+              "op": "write",
+              "graph_id": "g",
+              "branch_id": "main",
+              "changes": [
+                {
+                  "change": "assert",
+                  "fact": {
+                    "kind": "node",
+                    "id": "u3",
+                    "entity_id": "U3",
+                    "space_id": "s",
+                    "properties": {},
+                    "metadata": [],
+                    "readers": []
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "kind": "edge",
+                    "id": "a3",
+                    "predicate": "located_at",
+                    "from": "u3",
+                    "to": "site",
+                    "valid_time": {
+                      "start": 0,
+                      "end": null
+                    },
+                    "polarity": "positive",
+                    "properties": {},
+                    "metadata": [],
+                    "readers": [],
+                    "derived_from": []
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "results": [
+      {
+        "kind": "queried",
+        "coverage": "complete",
+        "nodes": [
+          "site",
+          "u1"
+        ],
+        "edges": [
+          "a1"
+        ]
+      },
+      {
+        "kind": "queried",
+        "coverage": "complete",
+        "nodes": [
+          "site",
+          "u1",
+          "u3"
+        ],
+        "edges": [
+          "a1",
+          "a3"
+        ]
+      }
+    ]
+  }
+}

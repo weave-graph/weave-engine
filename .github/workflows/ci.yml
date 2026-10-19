@@ -67,6 +67,10 @@ jobs:
           WEAVE_SCALE_FACTS: '1000000'
           WEAVE_SCALE_WRITES: '120000'
         run: cargo test --release --locked -p weave-engine --test fact_scale -- --nocapture
+      - name: k-hop expand on a 100k-fact graph against a BFS oracle (release)
+        env:
+          WEAVE_A3_FACTS: '100000'
+        run: cargo test --release --locked -p weave-engine --test traversal_scale -- --nocapture
   hardware-fleet-5k:
     # The A5 fleet scenario at the Phase A exit size, in its own job.
     runs-on: ubuntu-latest

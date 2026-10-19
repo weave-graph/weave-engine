@@ -688,6 +688,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
     let node_origins = nodes.keys().map(|id| (id.clone(), Vec::new())).collect();
     let mut result = QueryResult {
         fact_provenance: Vec::new(),
+        changes: None,
         recorded_observations: input.recorded_observations.clone(),
         accepted_observations: input.accepted_observations.clone(),
         selected_context: input.selected_context.clone(),
