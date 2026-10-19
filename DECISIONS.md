@@ -372,3 +372,15 @@ The 100,000-observation store cap (ADR-0002) is in A2 scope, per the review of
 part 1. Part 3 restructures it together with the indexed read path. Part 2's
 migration therefore leaves `head_observations` unchanged. If part 3 needs a
 schema change for the cap, it brings its own crash-tested 30→31 migration.
+
+### 2026-10-19 — #3 A2 — The head-observation index already exists, so store 30 needs no extra schema
+
+The review asked to put the `(graph, branch, recorded_at_ms)` head-observation
+index into store 30 rather than adding a 30→31 migration later. That index
+already exists. Store 19 created it as `head_observations_scope`
+(`recorded_history.rs`), and every upgrade path creates it with
+`IF NOT EXISTS`. A migrated store 30 holds it, and the query planner uses it
+for "last observation at or before T". So #52 adds no schema for this. Part 3
+changes only code: it removes the store-wide `count(*)` cap and selects
+recorded heads through this index, keeping the predecessor integrity check on
+the selected observation. Neither change needs a new store version.
