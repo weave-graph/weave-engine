@@ -41,6 +41,36 @@ class NativeIntegration(unittest.TestCase):
             self.assertEqual(reopened.analyze(query("experiment", revision=new.revision),
                                              algorithm="components", mode="weak", valid_at=5).input.coverage, "complete")
 
+    def test_incremental_fact_batches_after_snapshot_import(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = Path(directory) / "facts.db"
+            engine = Engine(db, actor="importer", write_graphs=["fleet"])
+            base = engine.import_graph("fleet", nodes=[node("a", entity_id="A", space_id="s"),
+                                                       node("b", entity_id="B", space_id="s")],
+                                       edges=[edge("ab", "a", "b", valid_from=0)])
+            unit = {"kind": "node", "id": "u", "entity_id": "U", "space_id": "s",
+                    "valid_time": {"start": 10, "end": 50},
+                    "provenance": {"source": "erp", "method": {"kind": "import", "importer": "csv", "version": "1"}}}
+            first = engine.import_facts("fleet", [{"change": "assert", "fact": unit}], expected_head=base.revision)
+            self.assertTrue(first.changed and first.revision.startswith("fact:sha256:"))
+            second = engine.import_facts("fleet", [{"change": "retract", "target": {"kind": "edge", "id": "ab"}}])
+            again = engine.import_facts("fleet", [{"change": "assert", "fact": unit}])
+            self.assertFalse(again.changed)
+            self.assertEqual(again.revision, second.revision)
+            with self.assertRaises(NativeError) as stale:
+                engine.import_facts("fleet", [{"change": "retract", "target": {"kind": "node", "id": "u"}}],
+                                    expected_head=first.revision)
+            self.assertEqual(stale.exception.code, "E_CONFLICT")
+            reopened = Engine(db, actor="analyst")
+            self.assertEqual(sorted(n["id"] for n in reopened.query("fleet").nodes), ["a", "b", "u"])
+            self.assertEqual([e["id"] for e in reopened.query("fleet", revision=first.revision).edges], ["ab"])
+            self.assertEqual([n["id"] for n in reopened.query("fleet", valid_at=60).nodes], [])
+            program = {"version": "0.22.0", "commands": [{"op": "query", "query": {"graph_id": "fleet"}}]}
+            provenance = reopened.execute(program)["results"][0]["result"]["fact_provenance"]
+            unit_entry = [p for p in provenance if p["fact"].get("node_id") == "u"][0]["provenance"]
+            self.assertEqual((unit_entry["writer"], unit_entry["source"], unit_entry["method"]["kind"]),
+                             ("importer", "erp", "import"))
+
     def test_hidden_vectors_and_topology_are_authorized_before_analysis(self):
         with tempfile.TemporaryDirectory() as directory:
             db = Path(directory) / "restricted.db"

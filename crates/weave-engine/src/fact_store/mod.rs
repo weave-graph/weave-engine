@@ -109,6 +109,9 @@ pub struct IndexKeys {
     pub predicate: Option<String>,
     /// `None` means valid at every time.
     pub valid: Option<ValidTime>,
+    /// The record carries whole-value influence (declared snapshot gates or
+    /// attachment influence) that a filtered read must still account for.
+    pub carrier: bool,
 }
 
 /// One version of a fact, as written.
@@ -227,6 +230,10 @@ pub struct FactFilter {
     pub valid_at: Option<i64>,
     /// Facts whose live version was recorded in `[start, end)` milliseconds.
     pub recorded: Option<(i64, i64)>,
+    /// Only influence carriers.
+    pub carrier: bool,
+    /// Only facts with neither a subject nor an entity key (graph-hosted attachments).
+    pub unanchored: bool,
 }
 
 impl FactFilter {
@@ -245,6 +252,8 @@ impl FactFilter {
             && self
                 .valid_at
                 .is_none_or(|t| keys.valid.is_none_or(|v| v.contains(t)))
+            && (!self.carrier || keys.carrier)
+            && (!self.unanchored || (keys.subject.is_none() && keys.entity.is_none()))
             && self.recorded.is_none_or(|(start, end)| {
                 fact.recording.recorded_at_ms >= start && fact.recording.recorded_at_ms < end
             })

@@ -384,3 +384,79 @@ for "last observation at or before T". So #52 adds no schema for this. Part 3
 changes only code: it removes the store-wide `count(*)` cap and selects
 recorded heads through this index, keeping the predecessor integrity check on
 the selected observation. Neither change needs a new store version.
+
+### 2026-10-19 — #3 A2 — Filtered fact reads scope their coverage to what they select
+
+A `query` on a fact revision with `predicate`, `from` or `to` reads only the
+facts the filter can select, plus their authorization closure and every
+influence carrier. The result is the same as a whole-snapshot read of the same
+records in every field but one. On a snapshot, a derivation denied on any
+record, even one the filter discards, makes the result `partial`. On a fact
+revision, only denials on selected records count. Matching that would mean
+reading the whole graph again. The answer is no less complete, and it reveals
+less about records outside the filter. `tests/fact_reads.rs` checks that the
+two reads otherwise match and that an indexed read is never less complete
+than a snapshot read.
+
+### 2026-10-19 — #3 A2 — Store 30 amended before release: an index carrier flag and an append-order observation index
+
+Store 30 had not been released, so part 3 amends its schema in place instead
+of adding a 30→31 migration.
+
+- **`fact_index.carrier`.** This new column, with a partial index, marks
+  records whose declared snapshot gates or attachment influence enter
+  whole-value influence even after filtering, so a filtered read can find them
+  without a scan.
+- **Pre-release stores.** A store created by the pre-release store-30 build
+  (main `61eccfb`) has no `carrier` column. The engine refuses it with
+  `E_STORAGE_VERSION` instead of reading it wrongly.
+- **`head_observations_order`.** This new `(graph_id, branch_id)` index is
+  created idempotently on every open. Tip and predecessor lookups sort by
+  append order. Through the recorded-time index they needed a temporary
+  B-tree, which made N writes cost O(N²). Measured on the same host: 20,000
+  single-fact writes took 132 s before and 3.7 s after.
+
+### 2026-10-19 — #3 A2 — Recorded-time selection is indexed and checks its boundary
+
+The store-wide 100,000-observation cap is gone. A date cut selects the last
+observation at or before T through the `(graph, branch, recorded_at_ms)`
+index. Two checks keep the old guarantee that a deleted or corrupt
+observation cannot be skipped at the selection point:
+
+- the selected observation's digest is verified;
+- the next observation in append order must name it as its immediate parent.
+
+The linear walk from the tip was bounded by the 4,096-read budget, so it
+failed for cuts more than about 4,000 writes back. Observations between the
+boundary and the tip are no longer re-verified on every date read; reads of
+those observations still verify them.
+
+### 2026-10-19 — #3 A2 — 1M-fact evidence runs in its own release CI job
+
+The `fact-scale-1m` job in `ci.yml` runs `tests/fact_scale.rs` optimized,
+with 1,000,000 facts and 120,000 single-fact revisions, under a 60-minute
+timeout. Because it is a separate job, a slow runner cannot hide failures in
+the main matrix. The default debug suite runs the same test at 20,000 facts
+and 2,000 writes. Locally the 1M run takes about 66 s and the 120k-write run
+27 s.
+
+### 2026-10-19 — #3 A2 — Swift host release-build timeout raised to 900 s
+
+`scripts/root_native.py` gave the native library's release build 180 s. On a
+cold macOS runner that timed out before any test ran (#52, first run). Both
+release builds, host and simulator target, now get 900 s. The probes keep
+their short timeouts.
+
+### 2026-10-19 — weave-language#14 — `check_handlers.py` expects E_VERSION from a field table
+
+The language handler check now expects `E_VERSION` only when the copied data
+uses a field newer than the compiler's protocol. It looks the field up in a
+table instead of comparing version labels, because a protocol bump with no
+new graph field leaves old-profile data valid.
+
+### 2026-10-19 — weave-language#15 — The compiler emits 0.22.0
+
+The compiler's emitted protocol label follows its vendored contract (0.22.0),
+since its commands are unchanged. `write` and fact provenance are classified
+core v1. The script comparisons check provenance by presence and ignore
+`recorded_at_ms`. There is no source syntax for fact writes yet.

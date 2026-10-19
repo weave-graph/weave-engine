@@ -1,0 +1,44 @@
+{
+  "profile": "weave-fact-write-benchmark/1",
+  "protocol": "0.22.0",
+  "results": [
+    {
+      "facts": 10000,
+      "load_seconds": 0.53353459,
+      "mean_growth_bytes_per_single_fact_commit": 2498.56,
+      "single_fact_commit_ms": {
+        "max": 1.902996,
+        "median": 0.8934340000000001,
+        "p95": 1.03535,
+        "samples": 200
+      },
+      "store_bytes": 6475776
+    },
+    {
+      "facts": 100000,
+      "load_seconds": 5.618576513,
+      "mean_growth_bytes_per_single_fact_commit": 2519.04,
+      "single_fact_commit_ms": {
+        "max": 1.961895,
+        "median": 0.902672,
+        "p95": 1.203192,
+        "samples": 200
+      },
+      "store_bytes": 58904576
+    },
+    {
+      "facts": 1000000,
+      "load_seconds": 62.720384078,
+      "mean_growth_bytes_per_single_fact_commit": 2560.0,
+      "single_fact_commit_ms": {
+        "max": 1.9523570000000001,
+        "median": 0.90166,
+        "p95": 1.076496,
+        "samples": 200
+      },
+      "store_bytes": 591511552
+    }
+  ],
+  "store": 30,
+  "workload": "half nodes, half edges, loaded in 100k-change writes; each sample is one write with one new node on an on-disk store (WAL)"
+}

@@ -55,6 +55,29 @@ fn valid(interval: &Interval) -> Option<ValidTime> {
 
 /// Index keys of a record (ADR-0004 section 5).
 fn index_keys(fact: &Fact) -> IndexKeys {
+    IndexKeys {
+        carrier: is_carrier(fact),
+        ..anchor_keys(fact)
+    }
+}
+
+/// Records whose influence survives filtering (`collect_declared_snapshots`
+/// and `input_influence` read them from the whole authorized graph value).
+fn is_carrier(fact: &Fact) -> bool {
+    match fact {
+        Fact::Node(n) => !n.derived_snapshots.is_empty(),
+        Fact::Edge(e) => !e.derived_snapshots.is_empty(),
+        Fact::StructuralEdge(_) => false,
+        Fact::Assertion(a) => !a.derived_snapshots.is_empty(),
+        Fact::Attachment(a) => {
+            !a.derived_snapshots.is_empty()
+                || !a.derived_from.is_empty()
+                || !a.derived_nodes.is_empty()
+        }
+    }
+}
+
+fn anchor_keys(fact: &Fact) -> IndexKeys {
     match fact {
         Fact::Node(n) => IndexKeys {
             entity: Some(n.entity_id.clone()),
@@ -298,6 +321,12 @@ impl Engine {
             return Err(err(
                 "E_INTEGRITY",
                 "fact store schema does not match the store version",
+            ));
+        }
+        if !store::sqlite::current_layout(&self.conn)? {
+            return Err(err(
+                "E_STORAGE_VERSION",
+                "fact store from a pre-release store-30 build; recreate the store",
             ));
         }
         store::sqlite::install(&self.conn)
@@ -789,11 +818,13 @@ impl Engine {
 
     /// Materialize a fact revision (ADR-0004 section 7). `None` when it is not
     /// a revision of `graph`.
-    pub(crate) fn load_fact_revision(
+    /// The stored fact revision of `graph`, after checking its revision row
+    /// and recomputing its content-derived ID from the logged operations.
+    fn verified_fact_revision(
         &self,
         graph: &str,
         revision: &str,
-    ) -> Result<Option<GraphData>> {
+    ) -> Result<Option<store::RevisionInfo>> {
         let store = self.fact_store();
         let Some(info) = store.revision(revision)? else {
             let row: Option<String> = self
@@ -846,6 +877,24 @@ impl Engine {
         if fact_revision_id(graph, &info.branch_id, &info.parent, &canonical)? != revision {
             return Err(err("E_INTEGRITY", "fact revision digest mismatch"));
         }
+        Ok(Some(info))
+    }
+
+    /// Rows a whole materialization may read before it must fail with
+    /// `E_BUDGET`: a stored fact body is never shorter than 16 bytes.
+    fn materialization_limit(&self) -> usize {
+        self.read_budget.remaining() / 16
+    }
+
+    pub(crate) fn load_fact_revision(
+        &self,
+        graph: &str,
+        revision: &str,
+    ) -> Result<Option<GraphData>> {
+        if self.verified_fact_revision(graph, revision)?.is_none() {
+            return Ok(None);
+        }
+        let store = self.fact_store();
         if let Some(body) = store.checkpoint(revision)? {
             self.read_budget.charge(body.len())?;
             let data: GraphData = serde_json::from_str(&body)
@@ -854,7 +903,16 @@ impl Engine {
         }
         let mut data: GraphData = serde_json::from_str(&store.header(revision)?)
             .map_err(|_| err("E_INTEGRITY", "stored line header is malformed"))?;
-        let facts = store.select(revision, &FactFilter::default(), usize::MAX - 1)?;
+        let facts = store
+            .select(
+                revision,
+                &FactFilter::default(),
+                self.materialization_limit(),
+            )
+            .map_err(|e| match e.code.as_str() {
+                "E_BUDGET" => err("E_BUDGET", "cumulative graph-read byte budget exceeded"),
+                _ => e,
+            })?;
         for stored in &facts {
             self.read_budget.charge(stored.version.body.len())?;
         }
@@ -862,6 +920,207 @@ impl Engine {
             push(&mut data, parse(&stored.version)?);
         }
         Ok(Some(data))
+    }
+
+    /// The part of a fact revision that a filtered `query` reads (ADR-0004
+    /// section 7): the edges, structural edges and assertions the filter can
+    /// select, every influence carrier, and the closure each of them needs to
+    /// be authorized exactly as in the whole revision (endpoints, hosts,
+    /// attachments on them, entity nodes and graph-hosted attachments).
+    /// Running the ordinary query pipeline on this subset gives the same
+    /// result as on the whole revision.
+    pub(crate) fn load_query_subset(
+        &self,
+        graph: &str,
+        revision: &str,
+        query: &QueryPlan,
+    ) -> Result<Option<GraphData>> {
+        self.read_budget.request()?;
+        if self.verified_fact_revision(graph, revision)?.is_none() {
+            return Ok(None);
+        }
+        let store = self.fact_store();
+        let limit = self.materialization_limit();
+        let edge_filter = |kind| FactFilter {
+            kind: Some(kind),
+            predicate: query.predicate.clone(),
+            subject: query.from.clone(),
+            object: query.to.clone(),
+            ..FactFilter::default()
+        };
+        let mut seeds = Vec::new();
+        seeds.extend(store.select(
+            revision,
+            &FactFilter {
+                valid_at: query.valid_at,
+                ..edge_filter(store::FactKind::Edge)
+            },
+            limit,
+        )?);
+        let structures = store.select(
+            revision,
+            &edge_filter(store::FactKind::StructuralEdge),
+            limit,
+        )?;
+        for structure in &structures {
+            seeds.extend(store.select(
+                revision,
+                &FactFilter {
+                    kind: Some(store::FactKind::Assertion),
+                    subject: Some(structure.version.id.clone()),
+                    ..FactFilter::default()
+                },
+                limit,
+            )?);
+        }
+        seeds.extend(structures);
+        seeds.extend(store.select(
+            revision,
+            &FactFilter {
+                carrier: true,
+                ..FactFilter::default()
+            },
+            limit,
+        )?);
+        seeds.extend(store.select(
+            revision,
+            &FactFilter {
+                kind: Some(store::FactKind::Attachment),
+                unanchored: true,
+                ..FactFilter::default()
+            },
+            limit,
+        )?);
+        self.fact_closure(revision, seeds, true).map(Some)
+    }
+
+    /// The part of a fact revision that a dependency check on one referenced
+    /// fact reads: that fact and the closure it needs to be authorized.
+    pub(crate) fn load_reference_subset(
+        &self,
+        graph: &str,
+        revision: &str,
+        namespace: store::Namespace,
+        id: &str,
+    ) -> Result<Option<GraphData>> {
+        self.read_budget.request()?;
+        if self.verified_fact_revision(graph, revision)?.is_none() {
+            return Ok(None);
+        }
+        let seeds = self
+            .fact_store()
+            .get(revision, namespace, id)?
+            .into_iter()
+            .collect();
+        self.fact_closure(revision, seeds, false).map(Some)
+    }
+
+    /// A revision as a dependency check on one of its facts needs it: the
+    /// whole snapshot, or for a fact revision only that fact's closure.
+    pub(crate) fn load_for_reference(
+        &self,
+        graph: &str,
+        revision: &str,
+        namespace: store::Namespace,
+        id: &str,
+    ) -> Result<Option<GraphData>> {
+        if is_fact_revision(revision) {
+            self.load_reference_subset(graph, revision, namespace, id)
+        } else {
+            self.load(graph, revision)
+        }
+    }
+
+    /// Header plus `seeds` and everything they depend on. With `hosted`, the
+    /// attachments hosted on included records are added too (a query result
+    /// keeps them; a dependency check does not read them).
+    fn fact_closure(
+        &self,
+        revision: &str,
+        seeds: Vec<store::StoredFact>,
+        hosted: bool,
+    ) -> Result<GraphData> {
+        let store = self.fact_store();
+        let limit = self.materialization_limit();
+        let mut facts: BTreeMap<(store::FactKind, String), Fact> = BTreeMap::new();
+        let mut queue: Vec<store::StoredFact> = seeds;
+        let mut hosted_done: BTreeSet<String> = BTreeSet::new();
+        while let Some(stored) = queue.pop() {
+            let slot = (stored.version.kind, stored.version.id.clone());
+            if facts.contains_key(&slot) {
+                continue;
+            }
+            self.read_budget.charge(stored.version.body.len())?;
+            let fact = parse(&stored.version)?;
+            let get = |namespace, id: &str| store.get(revision, namespace, id);
+            let mut needed = Vec::new();
+            match &fact {
+                Fact::Node(_) => {}
+                Fact::Edge(e) => {
+                    needed.extend(get(store::Namespace::Node, &e.from)?);
+                    needed.extend(get(store::Namespace::Node, &e.to)?);
+                }
+                Fact::StructuralEdge(e) => {
+                    needed.extend(get(store::Namespace::Node, &e.from)?);
+                    needed.extend(get(store::Namespace::Node, &e.to)?);
+                }
+                Fact::Assertion(a) => needed.extend(get(store::Namespace::Record, &a.edge_id)?),
+                Fact::Attachment(a) => match &a.host {
+                    MetadataHost::Node { id } => needed.extend(get(store::Namespace::Node, id)?),
+                    MetadataHost::Edge { id } | MetadataHost::Assertion { id } => {
+                        needed.extend(get(store::Namespace::Record, id)?)
+                    }
+                    MetadataHost::Entity { id } => {
+                        // Entity-hosted attachments survive while any node of the entity does.
+                        needed.extend(store.select(
+                            revision,
+                            &FactFilter {
+                                kind: Some(store::FactKind::Node),
+                                entity: Some(id.clone()),
+                                ..FactFilter::default()
+                            },
+                            limit,
+                        )?);
+                    }
+                    MetadataHost::Graph => {}
+                },
+            }
+            if hosted
+                && !matches!(fact, Fact::Attachment(_))
+                && hosted_done.insert(fact.id().to_string())
+            {
+                needed.extend(store.select(
+                    revision,
+                    &FactFilter {
+                        kind: Some(store::FactKind::Attachment),
+                        subject: Some(fact.id().to_string()),
+                        ..FactFilter::default()
+                    },
+                    limit,
+                )?);
+            }
+            if let Fact::Node(n) = &fact {
+                if hosted && hosted_done.insert(format!("entity:{}", n.entity_id)) {
+                    needed.extend(store.select(
+                        revision,
+                        &FactFilter {
+                            kind: Some(store::FactKind::Attachment),
+                            entity: Some(n.entity_id.clone()),
+                            ..FactFilter::default()
+                        },
+                        limit,
+                    )?);
+                }
+            }
+            facts.insert(slot, fact);
+            queue.extend(needed);
+        }
+        let mut data: GraphData = serde_json::from_str(&store.header(revision)?)
+            .map_err(|_| err("E_INTEGRITY", "stored line header is malformed"))?;
+        for fact in facts.into_values() {
+            push(&mut data, fact);
+        }
+        Ok(data)
     }
 
     /// Cache the materialized state of a fact revision as a checkpoint. The

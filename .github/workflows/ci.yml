@@ -52,3 +52,18 @@ jobs:
           name: science-acceptance-${{ matrix.os }}
           path: science-acceptance.json
           if-no-files-found: ignore
+  fact-scale-1m:
+    # Separate job, so a slow runner here cannot hide failures elsewhere.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: fact-scale
+      - name: 1M-fact graph, O(change) writes and 120k single-fact revisions (release)
+        env:
+          WEAVE_SCALE_FACTS: '1000000'
+          WEAVE_SCALE_WRITES: '120000'
+        run: cargo test --release --locked -p weave-engine --test fact_scale -- --nocapture

@@ -45,7 +45,7 @@ between store and contract versions, deprecation and reserved names).
   accepted. Their records exist in `weave-contract`, but no program carries
   them. Their wire fields are reserved until A4.
 
-## Fact-level writes (A2, in progress)
+## Fact-level writes (A2)
 
 Protocol 0.22.0 and store 30 add the fact store of
 [ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md):
@@ -53,8 +53,10 @@ Protocol 0.22.0 and store 30 add the fact store of
 - **Writes.** The `write` command asserts, corrects or retracts individual
   nodes, edges, structural edges, assertions and attachments in one atomic
   *fact revision* (`fact:sha256:…`), with optional `expected_head` and
-  per-fact `expected` concurrency. A write logs only its changes. History stays
-  immutable: every earlier revision remains readable.
+  per-fact `expected` concurrency. A write stores only its changes. Every
+  earlier revision stays readable. The science `import` request accepts
+  `changes` for incremental batches (`Engine.import_facts` in Python); full
+  `data` snapshots remain available.
 - **Node valid time.** `Node.valid_time` scopes a manifestation in valid time;
   `valid_at` excludes nodes outside it. Time-varying properties are
   node-hosted attachments with their own valid time.
@@ -62,16 +64,40 @@ Protocol 0.22.0 and store 30 add the fact store of
   every cited stored fact, the engine-recorded writer and recorded time plus
   the claimed source, method and evidence. Hidden evidence is removed and
   makes coverage partial. A client cannot supply the writer.
+- **Indexed reads.** A `query` on a fact revision with `predicate`, `from` or
+  `to` reads only what the filter needs through the indexes by entity,
+  subject, object, predicate, valid time and recorded time.
+- **No per-graph caps.** The 100,000 node/edge cap and the 100,000
+  head-observation store cap are removed. Recorded-time selection is indexed.
 - **Migration.** Store 29 upgrades to store 30 by adding the empty fact store;
   no existing row is rewritten. A process kill before or after the schema
   commit is safe, and store-29 binaries refuse store 30.
-- **Limits.** Reading a fact revision materializes it, so per-request read
-  budgets bound the graph size a query can read; indexed queries, the removal
-  of the 100,000-object snapshot cap and the head-observation capacity are the
-  remaining A2 work. Fact writes inherit the graph header from their parent.
-  Retention never erases fact revisions, and capsules cannot carry them.
-- **Language CI.** Language CI does not run the fixtures yet; that follows in
-  LA0.
+
+**Measured** on one Linux host (AMD Ryzen 9 7950X, optimized build, on-disk
+WAL store; [report](benchmarks/fact-writes-2026-10-19.json)):
+
+| Graph size | Load (100k-change writes) | Single-fact commit, median / p95 | Mean growth per single-fact commit | Store size |
+|---|---|---|---|---|
+| 10,000 facts | 0.5 s | 0.89 / 1.04 ms | 2.5 KB | 6 MB |
+| 100,000 facts | 5.6 s | 0.90 / 1.20 ms | 2.5 KB | 59 MB |
+| 1,000,000 facts | 63 s | 0.90 / 1.08 ms | 2.6 KB | 592 MB |
+
+The growth per commit includes the revision, event, head observation and
+causal-root rows, not just the fact. The `fact-scale-1m` CI job re-checks a
+1M-fact graph (create, indexed query, reopen, O(change) growth) and 120,000
+single-fact revisions in one store on every PR.
+
+**Limits.**
+- Per-request limits remain. A whole fact revision is materialized for
+  unfiltered queries and most algebra, so the 128 MiB read budget bounds it
+  (a 1M-fact graph fails with `E_BUDGET` unless the query filters by
+  `predicate`, `from` or `to`).
+- Fact writes inherit the graph header (profile, schema, influence, context
+  typing) from their parent; changing it takes a snapshot commit.
+- Retention never erases fact revisions, its planner still inventories at most
+  3,000 revisions, and capsules cannot carry fact revisions (C4, E08).
+- A filtered fact read reports partial coverage only for records the filter
+  selects.
 
 ## Verified evidence
 
@@ -119,10 +145,10 @@ The [state audit](AUDIT_2026-10-17.md) compares the code with the goals in
 [VISION.md](../VISION.md). These are the main gaps the [phased roadmap](ROADMAP.md)
 addresses:
 
-- **Storage (Phase A).** Each commit stores a full graph snapshot, and there is
-  no fact-level write. Graphs are capped at 100,000 nodes or edges and 16 MiB per
-  revision. Nodes have no valid time. Provenance records the writer per commit,
-  not per fact.
+- **Storage (Phase A).** Addressed by A2: fact-level writes, node valid time,
+  per-fact provenance, indexed reads and no per-graph object cap (see
+  [fact-level writes](#fact-level-writes-a2)). Snapshot commits remain bounded
+  by the 16 MiB request limit.
 - **Queries (Phase A).** There is no k-hop traversal operator. "What changed" is
   computed by diffing two results; there is no stored change feed.
 - **Embeddings (Phase A).** Science kNN uses an untyped `vector` node property

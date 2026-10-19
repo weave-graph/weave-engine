@@ -252,3 +252,63 @@ fn strict_json_rejects_duplicate_keys_and_trailing_input() {
     assert!(weave_science::parse_request(br#"{"operation":"capabilities"} {}"#).is_err());
     assert!(weave_science::parse_request(br#"{"operation":"capabilities"}"#).is_ok());
 }
+
+#[test]
+fn incremental_import_appends_fact_batches_after_a_snapshot() {
+    let mut s = session();
+    let base = import(&mut s, graph(), Value::Null);
+    let batch = |changes: Value, expected: Value| {
+        request(
+            json!({"operation":"import","graph_id":"g","expected_head":expected,"changes":changes}),
+        )
+    };
+    let first = s
+        .handle(batch(
+            json!([
+                {"change":"assert","fact":{"kind":"node","id":"D","entity_id":"D","space_id":"vectors","properties":{"vector":[0,-1]}}},
+                {"change":"assert","fact":{"kind":"edge","id":"cd","predicate":"link","from":"C","to":"D","valid_time":{"start":0}}}
+            ]),
+            json!(base),
+        ))
+        .unwrap();
+    assert_eq!(first["results"][0]["kind"], "committed");
+    let r1 = first["results"][0]["revision"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(r1.starts_with("fact:sha256:"));
+    // A batch without a head check, then a stale head check that writes nothing.
+    let second = s
+        .handle(batch(
+            json!([{"change":"retract","target":{"kind":"edge","id":"cc"}}]),
+            Value::Null,
+        ))
+        .unwrap();
+    let r2 = second["results"][0]["revision"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let stale = s
+        .handle(batch(
+            json!([{"change":"retract","target":{"kind":"edge","id":"bc"}}]),
+            json!(r1),
+        ))
+        .unwrap_err();
+    assert_eq!(stale.code, "E_CONFLICT");
+    let degree = analyze(&mut s, &r2, json!({"algorithm":"degree"}));
+    let earlier = analyze(&mut s, &r1, json!({"algorithm":"degree"}));
+    assert_ne!(
+        degree["analysis"], earlier["analysis"],
+        "the retraction is visible at r2 only"
+    );
+    // Full-snapshot import remains available on top of fact revisions.
+    let snapshot = import(&mut s, graph(), json!(r2));
+    assert!(snapshot.starts_with("sha256:"));
+    // Exactly one of data and changes.
+    for body in [
+        json!({"operation":"import","graph_id":"g"}),
+        json!({"operation":"import","graph_id":"g","data":graph(),"changes":[]}),
+    ] {
+        assert_eq!(s.handle(request(body)).unwrap_err().code, "E_INPUT");
+    }
+}

@@ -167,14 +167,24 @@ graph expressions use **`kind`**. These fields are not interchangeable.
 | Operation | Required fields | Optional fields and defaults | `result` on success |
 |---|---|---|---|
 | `capabilities` | None | None | Supported operations, algorithms, semantics, versions and limits. |
-| `import` | `graph_id`, `data` | `branch_id: "main"`, `expected_head: null` | `{"results": [commit receipt]}`. |
+| `import` | `graph_id` and exactly one of `data` or `changes` | `branch_id: "main"`, `expected_head: null` | `{"results": [commit receipt]}`. |
 | `execute` | `program` | None | `{"results": [ordered engine command results]}`. |
 | `analyze` | `program`, `analysis` | `result_index: 0`, `allow_partial: false`, `limits` as below | `{"input": QueryResult, "analysis": metrics, "semantics": declared semantics}`. |
 
-Import commits a **full snapshot**, not a patch. A null or absent expected head
-creates an empty branch's first revision. Updating requires its current revision
-as `expected_head`; a stale head fails with `E_CONFLICT`. A content-identical
-update can return `kind: "unchanged"` with a revision and no event ID.
+Import with `data` commits a **full snapshot**, not a patch. A null or absent
+expected head creates an empty branch's first revision. Updating requires its
+current revision as `expected_head`; a stale head fails with `E_CONFLICT`. A
+content-identical update can return `kind: "unchanged"` with a revision and no
+event ID.
+
+Import with `changes` appends an **incremental batch**: the contract 0.22
+`write` changes (`{"change": "assert"|"correct", "fact": {...}}` or
+`{"change": "retract", "target": {"kind", "id"}}`, where a fact is a record
+tagged by `kind`). The batch becomes one fact revision (`fact:sha256:…`) that
+stores only the changes, at most 100,000 per batch. Here a null or absent
+`expected_head` skips the head check, and a string must equal the head. Both
+forms can follow each other on one branch. Sending both or neither fails with
+`E_INPUT`. See [fact-level writes](STATUS.md#fact-level-writes-a2).
 
 In the ordinary graph profile, nodes require `id`, `entity_id` and `space_id`;
 edges require `id`, `predicate`, `from`, `to` and `valid_time`. Endpoints name

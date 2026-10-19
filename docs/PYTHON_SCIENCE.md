@@ -322,6 +322,7 @@ requires a persistent database path and rejects `:memory:`.
 | Operation | Typical use |
 |---|---|
 | `import_graph(graph_id, data, expected_head=...)` | Commit a full native `GraphData`; alternatively provide `nodes` and `edges` |
+| `import_facts(graph_id, changes, expected_head=None)` | Append an incremental batch of `assert`, `correct` or `retract` changes as one fact revision; `expected_head=None` skips the head check |
 | `query(graph_id, revision=..., valid_at=..., predicate=...)` | Select graph records; `from_id`, `to_id`, metadata depth and branch selectors are also supported |
 | `recorded_query(graph_id, recorded_at_ms=...)` | Select a replica-local recorded-time cut, or use `observer` plus `checkpoint` |
 | `analyze(value, algorithm=..., **parameters)` | Analyze a graph ID, expression, read-only Program or returned `QueryResult` |

@@ -244,9 +244,6 @@ pub(crate) fn validate_explicit(data: &GraphData) -> Result<()> {
             "explicit graphs cannot contain legacy claim edges",
         ));
     }
-    if data.structural_edges.len() > 100_000 || data.assertions.len() > 100_000 {
-        return Err(err("E_BUDGET", "explicit graph object budget exceeded"));
-    }
     let mut ids = HashSet::new();
     let nodes: HashSet<_> = data.nodes.iter().map(|n| &n.id).collect();
     for edge in &data.structural_edges {

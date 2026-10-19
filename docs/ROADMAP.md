@@ -57,8 +57,9 @@ reference backend and their conformance suite are merged, with a CI check that
 only the SQLite backend issues SQL against fact-store tables. The engine does
 use it from protocol 0.22.0 and store 30: the `write` command, fact revisions,
 node valid time, per-fact provenance in results and the crash-tested store
-29→30 migration. Indexed reads for large graphs, cap removal, the
-head-observation capacity, benchmarks and incremental science import remain.
+29→30 migration. Part 3 adds indexed reads, removes the per-graph object and
+head-observation caps, measures single-fact commits at 10k/100k/1M facts and
+adds incremental science import. A2 is complete.
 
 **Phase A exit scenario:** import a fleet of 5,000 units with parts, firmware,
 sites, owners, sensor series references and maintenance notes with embeddings.

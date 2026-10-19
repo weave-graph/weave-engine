@@ -50,6 +50,19 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(kwargs["timeout"], 30.0)
         self.assertEqual(json.loads(kwargs["input"]), {"operation": "capabilities"})
 
+    def test_import_facts_sends_one_incremental_batch(self):
+        change = {"change": "assert", "fact": {"kind": "node", "id": "n", "entity_id": "N", "space_id": "s"}}
+        receipt = {"kind": "committed", "revision": "fact:sha256:00", "event_id": "ev"}
+        with self.respond(envelope({"results": [receipt]})) as run:
+            actual = self.engine.import_facts("g", [change], expected_head="r1")
+        request = json.loads(run.call_args.kwargs["input"])
+        self.assertEqual(request, {"operation": "import", "graph_id": "g", "branch_id": "main",
+                                   "expected_head": "r1", "changes": [change]})
+        self.assertNotIn("data", request)
+        self.assertTrue(actual.changed)
+        with self.assertRaises(ValueError):
+            self.engine.import_facts("g", [])
+
     def test_import_uses_cas_and_preserves_data(self):
         snapshot = graph_data([node("n", entity_id="entity", space_id="physical")])
         receipt = {"kind": "committed", "revision": "r2", "event_id": "ev"}
