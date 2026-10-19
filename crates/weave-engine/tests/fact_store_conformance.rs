@@ -692,6 +692,60 @@ fn malformed_input_is_rejected(b: &mut dyn FactBackend) {
     assert!(b.revision("r").unwrap().is_none());
 }
 
+fn select_carriers_and_unanchored(b: &mut dyn FactBackend) {
+    let mut carrier = attachment("c1", "n1", "k");
+    carrier.keys.carrier = true;
+    let mut graph_hosted = attachment("g1", "graph", "k");
+    graph_hosted.keys.subject = None;
+    b.append(
+        rev(
+            "r1",
+            None,
+            1,
+            vec![
+                FactOp::Assert(node("n1", "E", None)),
+                FactOp::Assert(carrier),
+                FactOp::Assert(graph_hosted),
+            ],
+        ),
+        empty_base(),
+    )
+    .unwrap();
+    let carriers = FactFilter {
+        carrier: true,
+        ..Default::default()
+    };
+    assert_eq!(ids(&b.select("r1", &carriers, 10).unwrap()), ["c1"]);
+    assert!(
+        b.get("r1", Namespace::Record, "c1")
+            .unwrap()
+            .unwrap()
+            .version
+            .keys
+            .carrier
+    );
+    let unanchored = FactFilter {
+        unanchored: true,
+        ..Default::default()
+    };
+    assert_eq!(ids(&b.select("r1", &unanchored, 10).unwrap()), ["g1"]);
+    b.append(
+        rev(
+            "r2",
+            Some("r1"),
+            2,
+            vec![FactOp::Retract {
+                kind: FactKind::Attachment,
+                id: "c1".into(),
+            }],
+        ),
+        None,
+    )
+    .unwrap();
+    assert!(b.select("r2", &carriers, 10).unwrap().is_empty());
+    assert_eq!(ids(&b.select("r1", &carriers, 10).unwrap()), ["c1"]);
+}
+
 macro_rules! conformance {
     ($($name:ident),* $(,)?) => {
         mod memory_backend {
@@ -726,6 +780,7 @@ conformance!(
     checkpoints_are_cached_and_droppable,
     parents_stay_in_their_graph,
     malformed_input_is_rejected,
+    select_carriers_and_unanchored,
 );
 
 /// Deterministic pseudo-random operation sequence, replayed on both backends.

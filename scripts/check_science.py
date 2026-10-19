@@ -470,6 +470,28 @@ def run_acceptance(runtime, seed, random_cases, use_networkx=False, case_results
     runtime.calls.extend(restricted.calls)
     assert runtime.query(query) == selected, "denied write changed pinned results"
     report.append({"case": "writes-require-independent-host-grant", "status": "passed"})
+    # Incremental fact batches (contract 0.22 write) on top of a snapshot import.
+    base = runtime.import_graph("incremental", {"nodes": [node("p"), node("q"), node("r")],
+                                                "edges": [edge("pq", "p", "q")]})
+    def batch(changes, expected_head=None, expect_error=None):
+        return runtime.request({"operation": "import", "graph_id": "incremental", "expected_head": expected_head,
+                                "changes": changes}, expect_error=expect_error)
+    fact = lambda record, kind: {"change": "assert", "fact": {"kind": kind, **record}}
+    first = batch([fact(edge("qr", "q", "r"), "edge")], expected_head=base)["results"][0]
+    assert first["kind"] == "committed" and first["revision"].startswith("fact:sha256:"), first
+    second = batch([{"change": "retract", "target": {"kind": "edge", "id": "pq"}}])["results"][0]
+    batch([{"change": "retract", "target": {"kind": "edge", "id": "qr"}}], expected_head=base, expect_error="E_CONFLICT")
+    expected = {base: {"pq"}, first["revision"]: {"pq", "qr"}, second["revision"]: {"qr"}}
+    for revision_id, edges in expected.items():
+        selected = runtime.query({"graph_id": "incremental", "revision": revision_id})
+        assert {e["id"] for e in selected["graph"]["edges"]} == edges, (revision_id, selected["graph"])
+        verify_topology(runtime, {"graph_id": "incremental", "revision": revision_id}, selected["graph"])
+    head = runtime.request({"operation": "execute", "program": {"version": CONTRACT_VERSION, "commands": [
+        {"op": "query", "query": {"graph_id": "incremental"}}]}})["results"][0]["result"]
+    writers = {entry["provenance"]["writer"] for entry in head["fact_provenance"]}
+    assert writers == {runtime.actor} and len(head["fact_provenance"]) == 4, head["fact_provenance"]
+    report.append({"case": "incremental-fact-batches-after-snapshot", "status": "passed",
+                   "revisions": [base, first["revision"], second["revision"]]})
     return capabilities, report
 
 
@@ -498,7 +520,7 @@ def main():
         report["networkx_version"] = networkx.__version__
     started = time.perf_counter()
     with tempfile.TemporaryDirectory(prefix="weave-science-acceptance-") as temporary:
-        writable = ["evidence", "science", "hidden-control", "temporal", "left", "right", "disjoint", "empty", "partial"]
+        writable = ["evidence", "science", "hidden-control", "temporal", "left", "right", "disjoint", "empty", "partial", "incremental"]
         writable += [f"random-{index}" for index in range(args.random_cases)]
         runtime = Native(args.engine, Path(temporary) / "experiments.db", writable=writable, timeout=args.timeout)
         try:

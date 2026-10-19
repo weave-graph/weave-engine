@@ -186,6 +186,31 @@ class Engine:
         return CommitReceipt(receipt["revision"], receipt.get("event_id"),
                              receipt["kind"] == "committed", deepcopy(receipt))
 
+    def import_facts(self, graph_id: str, changes: Any, *, branch_id: str = "main",
+                     expected_head: str | None = None) -> CommitReceipt:
+        """Append an incremental batch of fact changes (contract 0.22 ``write``).
+
+        Each change is ``{"change": "assert"|"correct", "fact": {...}}`` or
+        ``{"change": "retract", "target": {"kind": ..., "id": ...}}``; a fact
+        is a record tagged with ``kind`` (``node``, ``edge``, ``structural_edge``,
+        ``assertion`` or ``attachment``). The batch is one atomic revision that
+        stores only its changes. ``expected_head=None`` skips the head check;
+        a revision string must equal the current head. The engine records the
+        writer and recorded time; a client cannot supply them.
+        """
+        changes = [deepcopy(dict(change)) for change in changes]
+        if not changes:
+            raise ValueError("an incremental import needs at least one change")
+        request = {"operation": "import", "graph_id": graph_id, "branch_id": branch_id,
+                   "expected_head": expected_head, "changes": changes}
+        response = self._request(request)
+        receipts = response["result"].get("results", [])
+        if len(receipts) != 1 or receipts[0].get("kind") not in {"committed", "unchanged"}:
+            raise ProtocolError("import did not return a single commit receipt")
+        receipt = receipts[0]
+        return CommitReceipt(receipt["revision"], receipt.get("event_id"),
+                             receipt["kind"] == "committed", deepcopy(receipt))
+
     def import_csv(self, graph_id: str, nodes_path: str | Path, edges_path: str | Path, *,
                    node_options: Mapping[str, Any] | None = None,
                    edge_options: Mapping[str, Any] | None = None,

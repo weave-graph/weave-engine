@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='weave-native-') as directory:
     if a.ios:
         target='aarch64-apple-ios-sim'
         env=dict(os.environ,IPHONEOS_DEPLOYMENT_TARGET='17.0')
-        run(['cargo','build','--release','--locked','-p','weave-native','--target',target],env=env)
+        run(['cargo','build','--release','--locked','-p','weave-native','--target',target],timeout=900,env=env)
         sdk=run(['xcrun','--sdk','iphonesimulator','--show-sdk-path']).strip()
         app=work/'WeaveProbe.app';app.mkdir()
         executable=app/'WeaveProbe'
@@ -60,7 +60,8 @@ with tempfile.TemporaryDirectory(prefix='weave-native-') as directory:
             subprocess.run(simctl+['shutdown',simulator],capture_output=True,timeout=30)
             run(simctl+['delete',simulator],timeout=30)
     else:
-        run(['cargo','build','--release','--locked','-p','weave-native'])
+        # A cold macOS runner needs several minutes for a release build of the native library.
+        run(['cargo','build','--release','--locked','-p','weave-native'],timeout=900)
         executable=work/'weave-swift-probe'
         run(['swiftc','-import-objc-header',str(ROOT/'crates/weave-native/include/weave_native.h'),str(ROOT/'hosts/swift/Weave.swift'),str(ROOT/'hosts/swift/Probe.swift'),str(ROOT/'target/release/libweave_native.a'),'-framework','Foundation','-framework','Security','-o',str(executable)])
         for stage in ['seed','read','rollback','read']:

@@ -141,7 +141,7 @@ fact_log(position PK, line, seq, op IN ('base','assert','retract'), kind,
          recorded_in)
 fact_index(position PK → fact_log, line, namespace, fact_id, kind,
            from_seq, until_seq, entity, subject, object, predicate,
-           valid_from, valid_to, recorded_at_ms)
+           valid_from, valid_to, recorded_at_ms, carrier)
 fact_checkpoints(revision PK → fact_revisions, body)
 ```
 
@@ -164,7 +164,8 @@ backend never parses fact bodies:
 
 SQLite indexes: by key `(line, namespace, fact_id, from_seq)`, and
 `(line, entity)`, `(line, subject)`, `(line, object)`, `(line, predicate)`,
-`(line, valid_from)` and `(line, recorded_at_ms)`. These give the roadmap's
+`(line, valid_from)` and `(line, recorded_at_ms)`, plus partial indexes for
+influence carriers and for unanchored (graph-hosted) facts. These give the roadmap's
 indexes by (graph, entity), (graph, predicate), valid time and recorded time,
 because a line belongs to one graph.
 
@@ -226,10 +227,17 @@ backend by implementing this trait and passing the same suite.
   materialized from its line (or checkpoint) and charged to the read budget
   by the bytes it reads, so every existing operator works unchanged.
 - `query` on a fact revision with a `predicate`, `from` or `to` filter reads
-  only the matching facts through the index. It assembles the subset those
-  facts need (their endpoint nodes, the attachments on them and graph-hosted
-  attachments) and runs the same authorization and filter code on it.
-  Differential tests compare it with full materialization.
+  only the matching facts through the index (`valid_at` also narrows the
+  edge scan). It assembles the subset those facts need (endpoint nodes,
+  structural edges, the attachments on them, entity nodes, graph-hosted
+  attachments and every *influence carrier*, a record whose declared snapshot
+  gates or attachment influence survive filtering) and runs the same
+  authorization and filter code on it. A dependency check that cites one fact
+  of a fact revision reads only that fact's closure. Differential tests
+  (`tests/fact_reads.rs`) compare both paths with whole-snapshot reads of the
+  same records. The one intended difference is coverage: a filtered fact read
+  reports `partial` for derivations denied on records the filter selects,
+  while a whole-snapshot read also reports those on records it discards.
 - Recorded time selection (`recorded_query`, `recorded_range`) is unchanged:
   fact writes advance heads through the same `advance_head`, so ADR-0002
   observations cover them.
@@ -298,16 +306,19 @@ without committing to a design:
 
 ### 12. Limits and non-guarantees
 
-- No per-graph object cap. Per-request limits stay: 16 MiB requests, the read
-  budget (128 MiB and 4,096 reads per operation), the 32 MiB result budget
-  and at most 100,000 operations per write. Reading a whole fact revision
-  bigger than the read budget fails with `E_BUDGET`. Indexed queries are the
-  path for large graphs.
-- ADR-0002 caps recorded head observations at 100,000 per store, which would
-  limit a store to 100,000 head-advancing writes. That cap is in A2 scope: a
-  later A2 part lifts or restructures it (for example with an index by
-  recorded time instead of the linear walk) and records the measured practical
-  limit in `docs/STATUS.md`.
+- No per-graph object cap: the 100,000 node/edge and structural-edge/assertion
+  checks are gone for every revision kind. Per-request limits stay: 16 MiB
+  requests (which still bound a snapshot commit), the read budget (128 MiB and
+  4,096 reads per operation), the 32 MiB result budget and at most 100,000
+  changes per write. Reading a whole fact revision bigger than the read budget
+  fails with `E_BUDGET`; filtered queries are the path for large graphs.
+- No head-observation capacity. The 100,000-observation store cap of ADR-0002
+  is removed. Recorded-time selection uses the `(graph, branch,
+  recorded_at_ms)` index and checks that the selected observation is the
+  authenticated, immediately preceding parent of the first observation after
+  the cut, so a deleted or corrupt observation at the selection boundary still
+  fails closed. Tip and predecessor lookups use a `(graph, branch)` index in
+  append order. Measured numbers are in `docs/STATUS.md`.
 - Fact revisions cannot be erased by retention, and capsule export rejects
   them. Log compaction, retention and erasure are C4.
 - Integrity is checked per revision (its own operations), not along the whole

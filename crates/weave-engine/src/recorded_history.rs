@@ -2,7 +2,6 @@
 use super::*;
 use serde::{Deserialize, Serialize};
 
-pub const MAX_RECORDED_OBSERVATIONS: usize = 100_000;
 pub const MAX_HISTORY_RANGE: usize = 1000;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -125,7 +124,8 @@ impl Engine {
             return Err(err("E_INTEGRITY", "recorded history table unavailable"));
         }
         self.conn.execute_batch("CREATE TABLE IF NOT EXISTS head_observations(id TEXT PRIMARY KEY,graph_id TEXT NOT NULL,branch_id TEXT NOT NULL,revision TEXT NOT NULL REFERENCES revisions(revision),parent TEXT REFERENCES head_observations(id),recorded_at_ms INTEGER NOT NULL CHECK(recorded_at_ms>=0),kind TEXT NOT NULL CHECK(kind IN ('baseline','committed','accepted')));
-CREATE INDEX IF NOT EXISTS head_observations_scope ON head_observations(graph_id,branch_id,recorded_at_ms);")?;
+CREATE INDEX IF NOT EXISTS head_observations_scope ON head_observations(graph_id,branch_id,recorded_at_ms);
+CREATE INDEX IF NOT EXISTS head_observations_order ON head_observations(graph_id,branch_id);")?;
         if old_version < 19
             && self
                 .conn
@@ -186,7 +186,7 @@ CREATE INDEX IF NOT EXISTS head_observations_scope ON head_observations(graph_id
         }
         if let Some(parent) = &parent {
             self.read_budget.request()?;
-            let valid: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM head_observations p JOIN head_observations c ON c.id=?1 WHERE p.id=?2 AND p.graph_id=c.graph_id AND p.branch_id=c.branch_id AND p.recorded_at_ms<=c.recorded_at_ms AND p.id=(SELECT id FROM head_observations WHERE graph_id=c.graph_id AND branch_id=c.branch_id AND rowid<c.rowid ORDER BY rowid DESC LIMIT 1))", params![value.checkpoint, parent], |r| r.get(0))?;
+            let valid: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM head_observations p JOIN head_observations c ON c.id=?1 WHERE p.id=?2 AND p.graph_id=c.graph_id AND p.branch_id=c.branch_id AND p.recorded_at_ms<=c.recorded_at_ms AND p.id=(SELECT id FROM head_observations INDEXED BY head_observations_order WHERE graph_id=c.graph_id AND branch_id=c.branch_id AND rowid<c.rowid ORDER BY rowid DESC LIMIT 1))", params![value.checkpoint, parent], |r| r.get(0))?;
             if !valid {
                 return Err(err("E_INTEGRITY", "recorded predecessor unavailable"));
             }
@@ -195,7 +195,7 @@ CREATE INDEX IF NOT EXISTS head_observations_scope ON head_observations(graph_id
     }
     fn latest_observation(&self, graph: &str, branch: &str) -> Result<Option<StoredObservation>> {
         self.read_budget.request()?;
-        self.conn.query_row(&format!("SELECT {COLUMNS} FROM head_observations WHERE graph_id=?1 AND branch_id=?2 ORDER BY rowid DESC LIMIT 1"),
+        self.conn.query_row(&format!("SELECT {COLUMNS} FROM head_observations INDEXED BY head_observations_order WHERE graph_id=?1 AND branch_id=?2 ORDER BY rowid DESC LIMIT 1"),
             params![graph, branch], row).optional()?.map(|row| self.decode_observation(row)).transpose()
     }
     fn recorded_tip(&self, graph: &str, branch: &str) -> Result<StoredObservation> {
@@ -206,6 +206,30 @@ CREATE INDEX IF NOT EXISTS head_observations_scope ON head_observations(graph_id
             return Err(err("E_INTEGRITY", "head and recorded observation disagree"));
         }
         Ok(tip)
+    }
+    /// The last observation at or before `unix_millis` through the
+    /// `(graph, branch, recorded_at_ms)` index (ADR-0004 section 12). A date
+    /// predicate alone could skip a deleted or corrupt observation, so the
+    /// selected observation must be the authenticated, immediately preceding
+    /// predecessor of the first observation after the cut.
+    fn observation_at(
+        &self,
+        graph: &str,
+        branch: &str,
+        unix_millis: i64,
+    ) -> Result<RecordedObservation> {
+        self.read_budget.request()?;
+        let at = self.conn.query_row(&format!("SELECT {COLUMNS} FROM head_observations WHERE graph_id=?1 AND branch_id=?2 AND recorded_at_ms<=?3 ORDER BY recorded_at_ms DESC, rowid DESC LIMIT 1"), params![graph, branch, unix_millis], row).optional()?.ok_or_else(unavailable)?;
+        let selected = self.decode_observation(at)?;
+        self.read_budget.request()?;
+        let next = self.conn.query_row(&format!("SELECT {COLUMNS} FROM head_observations INDEXED BY head_observations_order WHERE graph_id=?1 AND branch_id=?2 AND rowid>(SELECT rowid FROM head_observations WHERE id=?3) ORDER BY rowid LIMIT 1"), params![graph, branch, selected.value.checkpoint], row).optional()?.ok_or_else(|| err("E_INTEGRITY", "recorded successor unavailable"))?;
+        let successor = self.decode_observation(next)?;
+        if successor.parent.as_deref() != Some(selected.value.checkpoint.as_str())
+            || successor.value.recorded_at_ms <= unix_millis
+        {
+            return Err(err("E_INTEGRITY", "recorded predecessor unavailable"));
+        }
+        Ok(selected.value)
     }
     fn previous_observation(
         &self,
@@ -249,12 +273,6 @@ CREATE INDEX IF NOT EXISTS head_observations_scope ON head_observations(graph_id
                 "E_HISTORY_CLOCK",
                 "recording clock moved backwards in this branch",
             ));
-        }
-        let count: i64 =
-            self.conn
-                .query_row("SELECT count(*) FROM head_observations", [], |r| r.get(0))?;
-        if count >= MAX_RECORDED_OBSERVATIONS as i64 {
-            return Err(err("E_BUDGET", "recorded observation capacity exhausted"));
         }
         let parent = prior.map(|p| p.value.checkpoint);
         let mut value = RecordedObservation {
@@ -365,16 +383,10 @@ CREATE INDEX IF NOT EXISTS head_observations_scope ON head_observations(graph_id
                         "recorded cut precedes retained history",
                     ));
                 }
-                // Follow the authenticated predecessor path. A date predicate
-                // alone could skip a deleted/corrupt intermediate observation.
-                let mut current = tip;
-                loop {
-                    if current.value.recorded_at_ms <= *unix_millis {
-                        break current.value;
-                    }
-                    current = self
-                        .previous_observation(&current)?
-                        .ok_or_else(unavailable)?;
+                if tip.value.recorded_at_ms <= *unix_millis {
+                    tip.value
+                } else {
+                    self.observation_at(graph, branch, *unix_millis)?
                 }
             }
         };

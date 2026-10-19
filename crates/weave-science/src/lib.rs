@@ -7,7 +7,7 @@ pub use input::parse_request;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::Path;
-use weave_contract::{Command, CommandResult, Coverage, GraphData, Program, VERSION};
+use weave_contract::{Command, CommandResult, Coverage, FactChange, GraphData, Program, VERSION};
 use weave_engine::{Engine, Error, HostContext, Result};
 
 pub const SCIENCE_VERSION: &str = "0.1.0";
@@ -40,13 +40,20 @@ fn neighbors() -> usize {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Request {
+    /// Full-snapshot import (`data`) or incremental fact import (`changes`,
+    /// contract 0.22 `write`). Exactly one is required.
     Import {
         graph_id: String,
         #[serde(default = "main_branch")]
         branch_id: String,
+        /// Snapshot import: `null` requires a new branch. Incremental import:
+        /// `null` or absent means no head check, a string must equal the head.
         #[serde(default)]
         expected_head: Option<String>,
-        data: Box<GraphData>,
+        #[serde(default)]
+        data: Option<Box<GraphData>>,
+        #[serde(default)]
+        changes: Option<Vec<FactChange>>,
     },
     Execute {
         program: Program,
@@ -242,16 +249,30 @@ impl ScienceSession {
                 branch_id,
                 expected_head,
                 data,
+                changes,
             } => {
-                let program = Program {
-                    version: VERSION.into(),
-                    source_revisions: vec![],
-                    commands: vec![Command::Commit {
+                let command = match (data, changes) {
+                    (Some(data), None) => Command::Commit {
                         graph_id,
                         branch_id,
                         expected_head,
                         data: *data,
-                    }],
+                    },
+                    (None, Some(changes)) => Command::Write {
+                        graph_id,
+                        branch_id,
+                        expected_head: expected_head.map(Some),
+                        changes,
+                    },
+                    _ => return Err(failure(
+                        "E_INPUT",
+                        "import requires exactly one of data (snapshot) or changes (incremental)",
+                    )),
+                };
+                let program = Program {
+                    version: VERSION.into(),
+                    source_revisions: vec![],
+                    commands: vec![command],
                 };
                 json!({"results":self.engine.execute(&program, &self.host)?})
             }

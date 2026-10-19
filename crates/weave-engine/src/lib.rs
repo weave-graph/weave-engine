@@ -1026,9 +1026,15 @@ impl Engine {
         if !self.protected_reference_allowed(&query.graph_id, &revision, host)? {
             return Err(err("E_UNAVAILABLE", "graph unavailable"));
         }
-        let data = self
-            .load(&query.graph_id, &revision)?
-            .ok_or_else(|| err("E_UNAVAILABLE", "graph unavailable"))?;
+        // A filtered read of a fact revision reads only what the filter needs.
+        let indexed = facts::is_fact_revision(&revision)
+            && (query.predicate.is_some() || query.from.is_some() || query.to.is_some());
+        let data = if indexed {
+            self.load_query_subset(&query.graph_id, &revision, query)?
+        } else {
+            self.load(&query.graph_id, &revision)?
+        }
+        .ok_or_else(|| err("E_UNAVAILABLE", "graph unavailable"))?;
         let (graph, incomplete_derivation) = self.authorized(data, host)?;
         let (mut graph, materialized_origins) = materialize(graph, &query.graph_id, &revision)?;
         graph.influence = weave_contract::influence::input_influence(&graph)
@@ -2118,7 +2124,13 @@ impl Engine {
             if !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)? {
                 return Ok(false);
             }
-            let Some(source) = self.load(&reference.graph_id, &reference.revision)? else {
+            let Some(source) = self.load_for_reference(
+                &reference.graph_id,
+                &reference.revision,
+                fact_store::Namespace::Node,
+                &reference.node_id,
+            )?
+            else {
                 return Ok(false);
             };
             let source = visible(source, &host.principal);
@@ -2185,7 +2197,13 @@ impl Engine {
             if !self.protected_reference_allowed(&reference.graph_id, &reference.revision, host)? {
                 return Ok(false);
             }
-            let Some(source) = self.load(&reference.graph_id, &reference.revision)? else {
+            let Some(source) = self.load_for_reference(
+                &reference.graph_id,
+                &reference.revision,
+                fact_store::Namespace::Record,
+                &reference.assertion_id,
+            )?
+            else {
                 return Ok(false);
             };
             let source = visible(source, &host.principal);
@@ -2644,9 +2662,6 @@ fn validate_graph(data: &GraphData) -> Result<()> {
     }
     if let Some(diagnostic) = validate_schema_graph(data).first() {
         return Err(err(&diagnostic.code, &diagnostic.message));
-    }
-    if data.nodes.len() > 100_000 || data.edges.len() > 100_000 {
-        return Err(err("E_BUDGET", "graph exceeds 100000 nodes or edges"));
     }
     let mut ids = HashSet::new();
     for n in &data.nodes {

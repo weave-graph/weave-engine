@@ -1,6 +1,6 @@
 # ADR 0002: replica-local recorded head observations
 
-Status: adopted; implemented with contract 0.20 and stores 19–20. Requirements R04/R08/R09/R18/R20/R36; E02/E03/E09/E14.
+Status: adopted; implemented with contract 0.20 and stores 19–20. Amended by A2 ([ADR-0004](ADR-0004-fact-log-and-storage-backend.md) section 12): the 100,000-observation store cap is removed and date selection uses the recorded-time index with a boundary integrity check. Requirements R04/R08/R09/R18/R20/R36; E02/E03/E09/E14.
 
 Record branch-head selection separately from immutable revision creation/receipt.
 Accepting an old or received revision changes what a branch knows at that local
@@ -40,7 +40,7 @@ The log does not advertise a globally atomic distributed cut or treat quarantine
 receipt as accepted branch knowledge. Governance acceptance times remain their
 separate genuine occurrence axis.
 
-Bound observations to 100,000 per store and range results to 1,000 entries, with
+Bound range results to 1,000 entries, with
 existing cumulative read/materialization budgets. No implicit eviction is allowed.
 Retention/replay expiration must subsequently preserve declared horizons and
 anchors, with explicit expired-checkpoint/rebase behavior. This first storage step

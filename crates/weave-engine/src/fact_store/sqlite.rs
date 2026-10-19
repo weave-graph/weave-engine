@@ -27,7 +27,7 @@ const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS fact_lines(line INTEGER PRIMARY KEY,graph_id TEXT NOT NULL,header TEXT NOT NULL,base_parent TEXT);
 CREATE TABLE IF NOT EXISTS fact_revisions(revision TEXT PRIMARY KEY,graph_id TEXT NOT NULL,branch_id TEXT NOT NULL,parent TEXT,line INTEGER NOT NULL REFERENCES fact_lines(line),seq INTEGER NOT NULL CHECK(seq>0),first_position INTEGER NOT NULL,op_count INTEGER NOT NULL CHECK(op_count>0),writer TEXT NOT NULL,on_behalf_of TEXT,recorded_at_ms INTEGER NOT NULL CHECK(recorded_at_ms>=0),UNIQUE(line,seq));
 CREATE TABLE IF NOT EXISTS fact_log(position INTEGER PRIMARY KEY,line INTEGER NOT NULL REFERENCES fact_lines(line),seq INTEGER NOT NULL,op TEXT NOT NULL CHECK(op IN ('base','assert','retract')),kind TEXT NOT NULL,namespace TEXT NOT NULL,fact_id TEXT NOT NULL,body TEXT,writer TEXT NOT NULL,on_behalf_of TEXT,recorded_at_ms INTEGER NOT NULL,recorded_in TEXT NOT NULL,CHECK((op='retract')=(body IS NULL)));
-CREATE TABLE IF NOT EXISTS fact_index(position INTEGER PRIMARY KEY REFERENCES fact_log(position),line INTEGER NOT NULL,namespace TEXT NOT NULL,fact_id TEXT NOT NULL,kind TEXT NOT NULL,from_seq INTEGER NOT NULL,until_seq INTEGER,entity TEXT,subject TEXT,object TEXT,predicate TEXT,valid_from INTEGER,valid_to INTEGER,recorded_at_ms INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS fact_index(position INTEGER PRIMARY KEY REFERENCES fact_log(position),line INTEGER NOT NULL,namespace TEXT NOT NULL,fact_id TEXT NOT NULL,kind TEXT NOT NULL,from_seq INTEGER NOT NULL,until_seq INTEGER,entity TEXT,subject TEXT,object TEXT,predicate TEXT,valid_from INTEGER,valid_to INTEGER,recorded_at_ms INTEGER NOT NULL,carrier INTEGER NOT NULL CHECK(carrier IN (0,1)));
 CREATE TABLE IF NOT EXISTS fact_checkpoints(revision TEXT PRIMARY KEY REFERENCES fact_revisions(revision),body TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS fact_revisions_line ON fact_revisions(line,seq);
 CREATE INDEX IF NOT EXISTS fact_index_key ON fact_index(line,namespace,fact_id,from_seq);
@@ -38,9 +38,11 @@ CREATE INDEX IF NOT EXISTS fact_index_object ON fact_index(line,object);
 CREATE INDEX IF NOT EXISTS fact_index_predicate ON fact_index(line,predicate);
 CREATE INDEX IF NOT EXISTS fact_index_valid ON fact_index(line,valid_from);
 CREATE INDEX IF NOT EXISTS fact_index_recorded ON fact_index(line,recorded_at_ms);
+CREATE INDEX IF NOT EXISTS fact_index_carrier ON fact_index(line) WHERE carrier=1;
+CREATE INDEX IF NOT EXISTS fact_index_unanchored ON fact_index(line) WHERE subject IS NULL AND entity IS NULL;
 ";
 
-const FACT_COLUMNS: &str = "l.position,l.kind,l.fact_id,l.body,l.writer,l.recorded_at_ms,l.recorded_in,i.entity,i.subject,i.object,i.predicate,i.valid_from,i.valid_to,l.on_behalf_of";
+const FACT_COLUMNS: &str = "l.position,l.kind,l.fact_id,l.body,l.writer,l.recorded_at_ms,l.recorded_in,i.entity,i.subject,i.object,i.predicate,i.valid_from,i.valid_to,l.on_behalf_of,i.carrier";
 const LIVE: &str = "i.line=?1 AND i.from_seq<=?2 AND (i.until_seq IS NULL OR i.until_seq>?2)";
 
 struct Entry<'a> {
@@ -70,6 +72,16 @@ pub fn installed(conn: &Connection) -> Result<usize> {
         count += present as usize;
     }
     Ok(count)
+}
+
+/// True when an existing `fact_index` has every column this build writes.
+/// Store 30 was amended before release (part 3 added `carrier`).
+pub fn current_layout(conn: &Connection) -> Result<bool> {
+    let mut statement = conn.prepare("SELECT name FROM pragma_table_info('fact_index')")?;
+    let columns = statement
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(columns.is_empty() || columns.iter().any(|c| c == "carrier"))
 }
 
 /// Create the fact-store schema if it is absent. Idempotent.
@@ -159,7 +171,7 @@ impl<'c> SqliteFactStore<'c> {
         )?;
         let keys = &version.keys;
         self.conn.execute(
-            "INSERT INTO fact_index(position,line,namespace,fact_id,kind,from_seq,until_seq,entity,subject,object,predicate,valid_from,valid_to,recorded_at_ms) VALUES (?1,?2,?3,?4,?5,?6,NULL,?7,?8,?9,?10,?11,?12,?13)",
+            "INSERT INTO fact_index(position,line,namespace,fact_id,kind,from_seq,until_seq,entity,subject,object,predicate,valid_from,valid_to,recorded_at_ms,carrier) VALUES (?1,?2,?3,?4,?5,?6,NULL,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 position,
                 line,
@@ -173,7 +185,8 @@ impl<'c> SqliteFactStore<'c> {
                 keys.predicate,
                 keys.valid.map(|v| v.start),
                 keys.valid.and_then(|v| v.end),
-                recording.recorded_at_ms
+                recording.recorded_at_ms,
+                keys.carrier
             ],
         )?;
         Ok(position)
@@ -329,6 +342,7 @@ type FactRow = (
     Option<i64>,
     Option<i64>,
     Option<String>,
+    bool,
 );
 
 fn fact_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FactRow> {
@@ -344,12 +358,25 @@ fn fact_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FactRow> {
         r.get(11)?,
         r.get(12)?,
         r.get(13)?,
+        r.get(14)?,
     ))
 }
 
 fn stored(row: FactRow) -> Result<StoredFact> {
-    let (position, kind, id, body, writer, recorded_at_ms, revision, keys, from, to, on_behalf_of) =
-        row;
+    let (
+        position,
+        kind,
+        id,
+        body,
+        writer,
+        recorded_at_ms,
+        revision,
+        keys,
+        from,
+        to,
+        on_behalf_of,
+        carrier,
+    ) = row;
     let kind = FactKind::parse(&kind).ok_or_else(integrity)?;
     let body = body.ok_or_else(integrity)?;
     let [entity, subject, object, predicate] = keys;
@@ -370,6 +397,7 @@ fn stored(row: FactRow) -> Result<StoredFact> {
                 object,
                 predicate,
                 valid,
+                carrier,
             },
         },
         recording: Recording {
@@ -510,6 +538,12 @@ impl FactBackend for SqliteFactStore<'_> {
                 t.into(),
             );
         }
+        if filter.carrier {
+            sql.push_str(" AND i.carrier=1");
+        }
+        if filter.unanchored {
+            sql.push_str(" AND i.subject IS NULL AND i.entity IS NULL");
+        }
         if let Some((start, end)) = filter.recorded {
             bind(&mut sql, " AND i.recorded_at_ms>=?", start.into());
             bind(&mut sql, " AND i.recorded_at_ms<?", end.into());
@@ -533,7 +567,7 @@ impl FactBackend for SqliteFactStore<'_> {
     fn ops(&self, revision: &str) -> Result<Vec<LoggedOp>> {
         let info = self.info(revision)?;
         let mut statement = self.conn.prepare(
-            "SELECT l.position,l.op,l.kind,l.fact_id,l.body,i.entity,i.subject,i.object,i.predicate,i.valid_from,i.valid_to FROM fact_log l LEFT JOIN fact_index i ON i.position=l.position WHERE l.position>=?1 AND l.position<?2 ORDER BY l.position",
+            "SELECT l.position,l.op,l.kind,l.fact_id,l.body,i.entity,i.subject,i.object,i.predicate,i.valid_from,i.valid_to,coalesce(i.carrier,0) FROM fact_log l LEFT JOIN fact_index i ON i.position=l.position WHERE l.position>=?1 AND l.position<?2 ORDER BY l.position",
         )?;
         let rows = statement.query_map(
             params![info.first_position, info.first_position + info.op_count],
@@ -547,12 +581,13 @@ impl FactBackend for SqliteFactStore<'_> {
                     [r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?],
                     r.get::<_, Option<i64>>(9)?,
                     r.get::<_, Option<i64>>(10)?,
+                    r.get::<_, bool>(11)?,
                 ))
             },
         )?;
         let mut ops = Vec::new();
         for row in rows {
-            let (position, op, kind, id, body, keys, from, to) = row?;
+            let (position, op, kind, id, body, keys, from, to, carrier) = row?;
             let kind = FactKind::parse(&kind).ok_or_else(integrity)?;
             let op = match (op.as_str(), body) {
                 ("retract", None) => FactOp::Retract { kind, id },
@@ -573,6 +608,7 @@ impl FactBackend for SqliteFactStore<'_> {
                             object,
                             predicate,
                             valid,
+                            carrier,
                         },
                     })
                 }

@@ -6,6 +6,12 @@ For implementation status and platform verification, read [status](../STATUS.md)
 This directory preserves earlier workloads as historical evidence; their sizes
 and timing boundaries differ from the current science workload.
 
+## Fact-level writes (A2)
+
+| Report | Recorded scope | Result |
+|---|---|---|
+| [Fact writes, 19 October 2026](fact-writes-2026-10-19.json) | `cargo run --release --example fact_write_benchmark`; contract 0.22.0, store 30; graphs of 10k, 100k and 1M facts (half nodes, half edges); 200 single-fact commits each on an on-disk WAL store; one AMD Ryzen 9 7950X Linux host | Median single-fact commit 0.89–0.90 ms at every size; mean growth 2.5–2.6 KB per commit |
+
 ## Current native science baseline
 
 | Report | Recorded scope | Result |
