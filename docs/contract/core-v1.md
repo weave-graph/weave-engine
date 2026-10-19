@@ -2,7 +2,9 @@
 
 Status: **accepted** on 2026-10-19 (A1,
 [#2](https://github.com/weave-graph/weave-engine/issues/2)). Baseline protocol:
-**0.21.0**. Profile name: `core-v1` (`weave_contract::wire::CORE_PROFILE`).
+**0.21.0**. Current protocol: **0.22.0**, which activates per-fact provenance,
+node valid time and fact-level writes (A2,
+[#3](https://github.com/weave-graph/weave-engine/issues/3)). Profile name: `core-v1` (`weave_contract::wire::CORE_PROFILE`).
 
 This document is the consolidated, normative specification of the core of the
 Weave contract that Phases A–C build on. It replaces reading the 21 additive
@@ -35,12 +37,12 @@ An implementation conforms to core v1 when it:
 - produces every fixture's `engine` outcome when it executes programs (the
   weave-engine runtime does; a compiler that only emits programs does not).
 
-Two parts of core v1 are **defined but not yet active on the wire**:
-provenance ([section 6](#6-provenance), activated by A2) and embeddings
-([section 7](#7-embeddings), activated by A4). Their records are normative
-and fixture-tested as standalone records. The fields that will carry them in
-programs are reserved ([section 11.6](#116-reserved-names)), and protocol
-0.21.0 rejects them with `E_UNKNOWN_FIELD`.
+Provenance ([section 6](#6-provenance)) is active on the wire from protocol
+0.22.0. Embeddings ([section 7](#7-embeddings), activated by A4) are **defined
+but not yet active on the wire**. Their records are normative and
+fixture-tested as standalone records. The fields that will carry them in
+programs are reserved ([section 11.6](#116-reserved-names)) and rejected with
+`E_UNKNOWN_FIELD`.
 
 ## 2. Notation
 
@@ -95,6 +97,11 @@ convention, and two of them are never merged because of a similarity.
   content in the same context always has the same revision ID. A no-op write
   returns `unchanged` and creates no revision. Fixtures:
   `positive/correction-new-revision.json` (golden revision IDs).
+  A *fact revision* (0.22, [ADR-0004](../architecture/ADR-0004-fact-log-and-storage-backend.md))
+  has an ID `fact:sha256:…` derived from the graph, branch, parent revision
+  and the write's effective operations sorted by fact key. Writer, recorded
+  time, change order and concurrency expectations are not content. Fixture:
+  `positive/fact-write-assert-correct-retract.json` (golden IDs).
 - Replica identity (the `observer` in recorded selections) is the seventh.
   It is covered by `time.recorded`.
 
@@ -118,6 +125,26 @@ A **fact** is a node, an edge, an explicit assertion, a metadata attachment or
   write fails with `E_CONFLICT` and nothing is written. Fixtures:
   `positive/correction-new-revision.json`,
   `negative/stale-expected-head.json`.
+- **`fact.write`.** The `write` command (0.22) changes individual facts of one
+  graph branch in one atomic fact revision: `{op: "write", graph_id,
+  branch_id, expected_head?, changes}`. Each change is
+  `{change: "assert", fact}` (the fact must not be live; re-asserting the
+  identical live version is a no-op), `{change: "correct", fact, expected?}`
+  (replace the live version of the same kind and ID) or
+  `{change: "retract", target: {kind, id}, expected?}`. `fact` is a record
+  tagged by `kind`: `node`, `edge`, `structural_edge`, `assertion` or
+  `attachment`. A key occurs at most once per write. A correction cannot
+  change structural identity (node `entity_id`/`space_id`, edge
+  `from`/`to`/`predicate`, assertion `edge_id`, attachment `host`/`key`). A
+  retraction fails with `E_DEPENDENT_FACT` while live facts still need the
+  target (edges of a node, attachments on a host). `expected_head` absent
+  means no head check, `null` requires a new branch, a string must equal the
+  head. `expected` is `{kind: "absent"}` or `{kind: "unchanged_since",
+  revision}`. Any mismatch fails the whole write with `E_CONFLICT`. Writes to
+  `weave:` graphs fail with `E_RESERVED_NAMESPACE`. At most 100,000 changes
+  per write (`E_BUDGET`). The result is `committed` or `unchanged`. Fixtures:
+  `positive/fact-write-assert-correct-retract.json`,
+  `negative/write-forged-writer.json`.
 - **`fact.readers`.** Every fact has `readers`. An empty list means public.
   A nonempty list is a disjunction of principal IDs. An edge is visible only
   when its own readers and both endpoints' readers admit the principal. The
@@ -140,7 +167,11 @@ other.
   true in the world. It is half-open, `[start, end)`. `end: null` is unbounded,
   and `start < end` is required (`E_INTERVAL` otherwise). `valid_at = t`
   selects facts with `start <= t < end`. Edges, assertions, attachments and
-  embeddings have valid time today. Nodes gain it in A2 (field reserved).
+  embeddings have valid time. Nodes have an optional `valid_time` (0.22);
+  absent means valid at every time. With `valid_at = t`, a node whose
+  `valid_time` excludes `t` is removed with the edges that need it, and with
+  `valid_at` as the only filter a node whose explicit `valid_time` contains
+  `t` is kept even without an edge. Fixture: `positive/node-valid-time.json`.
   Fixtures: `positive/valid-time-half-open.json`,
   `negative/empty-valid-interval.json`, `negative/wrong-json-type.json`.
 - **`time.recorded`.** Recorded time is when this replica learned a fact. The
@@ -158,7 +189,8 @@ other.
 ## 6. Provenance
 
 Defined by [ADR-0005](../architecture/ADR-0005-per-fact-provenance.md)
-(accepted). Records: `weave_contract::provenance`. Active on the wire from A2.
+(accepted). Records: `weave_contract::provenance`. Active on the wire from
+protocol 0.22.0.
 
 - **`provenance.fact`.** Every stored fact has a `FactProvenance`:
   - `writer` and `recorded_at_ms`, which the engine records from host
@@ -166,24 +198,30 @@ Defined by [ADR-0005](../architecture/ADR-0005-per-fact-provenance.md)
   - `source` (optional claimed label), `method` (`human`, `import`, `rule`,
     `model` or `unspecified`) and `evidence` (at most 64 tagged references:
     `assertion`, `node`, `graph` or `artifact`). The writer claims these, as
-    `ClaimedProvenance`, inline in the fact's reserved `provenance` field.
+    `ClaimedProvenance`, inline in the fact's `provenance` field (on `Node`,
+  `Edge`, `StructuralEdge`, `Assertion` and `MetadataAttachment`).
 
   A client cannot send `writer` or `recorded_at_ms`: `ClaimedProvenance`
   rejects them with `E_UNKNOWN_FIELD`. An omitted claim is recorded as
-  `method: unspecified`. Results list provenance in the reserved
-  `QueryResult.fact_provenance` as `ProvenanceEntry { fact: FactRef,
-  provenance }`. Evidence a reader cannot see is removed, and coverage becomes
+  `method: unspecified`; without a claim, a record's legacy `source` or
+  `assertion_source` label is reported as `source`. A claimed `source` must
+  equal that label when both are present (`E_PROVENANCE`). Results of
+  0.22.0 programs list provenance in `QueryResult.fact_provenance` as
+  `ProvenanceEntry { fact: FactRef, provenance }`, one entry per stored
+  source fact the result cites, keyed by its origin references. Facts of
+  snapshot revisions report the revision's commit event actor and recorded
+  time. A fact whose provenance is unavailable is omitted with
+  `E_PROVENANCE_UNAVAILABLE` and partial coverage. Programs of earlier
+  versions get no list. Evidence a reader cannot see is removed, and coverage becomes
   `partial`. Invalid provenance labels fail with `E_PROVENANCE`, and too much
   evidence fails with `E_BUDGET`. Fixtures:
   `positive/fact-provenance-model.json`,
   `positive/claimed-provenance-import.json`,
   `positive/provenance-entry-unspecified.json`,
   `negative/claimed-provenance-forged-writer.json`,
-  `negative/reserved-node-provenance.json`.
-
-Until A2, the existing claimed labels `Assertion.source` and
-`Edge.assertion_source` and the per-commit `Event.actor` are the only
-provenance on the wire.
+  `positive/fact-provenance-in-results.json`,
+  `negative/node-provenance-version-gated.json`,
+  `negative/write-forged-writer.json`.
 
 ## 7. Embeddings
 
@@ -229,8 +267,8 @@ never reinterpreted as an embedding fact.
   edges. `include_metadata` expands pinned metadata graphs to `max_depth`
   (default 8), bounded and cycle-safe. Unresolved metadata gives partial
   coverage and never distinguishes "missing" from "denied". Commands are
-  `commit`, `commit_batch`, `query`, `join`, `bind`, `evaluate`,
-  `recorded_range` and `accepted_range`. Fixtures:
+  `commit`, `commit_batch`, `write` (0.22), `query`, `join`, `bind`,
+  `evaluate`, `recorded_range` and `accepted_range`. Fixtures:
   `positive/identity-graph-nodes-edges.json`,
   `positive/valid-time-half-open.json`, `positive/defaults-pinned.json` (pins
   every default: `branch_id: "main"`, `max_depth: 8`, `polarity: "positive"`,
@@ -278,7 +316,8 @@ A3 adds `expand` (k-hop traversal) and `changes` (change sets). A4 adds
     references for each returned record;
   - `metadata_graphs`;
   - optional `recorded_observations`, `accepted_observations`,
-    `selected_context` and `source_revisions`, each omitted when empty.
+    `selected_context`, `source_revisions` and `fact_provenance` (0.22),
+    each omitted when empty.
 
   Unknown, partial, denied and empty stay distinguishable. When any selected
   input is missing, hidden or unresolved, the result has `coverage: partial`
@@ -350,10 +389,10 @@ automatically:
 
 | Identifier | Current | Where |
 |---|---|---|
-| Protocol (`Program.version`, `QueryResult.version`) | 0.21.0 | `weave_contract::VERSION` |
+| Protocol (`Program.version`, `QueryResult.version`) | 0.22.0 | `weave_contract::VERSION` |
 | Core profile | `core-v1` | This document |
-| Contract crate | 0.21.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
-| Store schema | 29 | `STORAGE_VERSION` |
+| Contract crate | 0.22.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
+| Store schema | 30 | `STORAGE_VERSION` |
 | Capsule format | 0.4 | [CAPSULES.md](../CAPSULES.md) |
 | Science API | 0.1.0 | [SCIENCE_INTERFACE.md](../SCIENCE_INTERFACE.md) |
 | Artifact formats | `weave-view-registration/1`, `weave-handler-registration/1` | 0.16 and 0.18 notes |
@@ -362,7 +401,7 @@ automatically:
 
 - **`compat.versions`.** A program declares exactly one protocol version.
   There is no range negotiation. The engine accepts the closed set
-  `SUPPORTED_VERSIONS` (0.1.0 through 0.21.0 today) and executes each with
+  `SUPPORTED_VERSIONS` (0.1.0 through 0.22.0 today) and executes each with
   the exact semantics it was published with. A feature used under an older
   version fails with `E_VERSION` before any write. Fixtures:
   `positive/legacy-version-accepted.json`,
@@ -377,6 +416,7 @@ automatically:
 - **Core v1 activation.** A2 and A4 activate the reserved core-v1 fields
   through additive minor bumps. Each implementing PR records its exact version
   number. A1 itself changes no wire bytes, so the protocol stays 0.21.0.
+  A2 activated provenance, `Node.valid_time` and `write` as **0.22.0**.
 
 ### 11.3 What a minor version may add
 
@@ -414,24 +454,23 @@ meaning.
 ### 11.6 Reserved names
 
 - **`compat.reserved`.** The following names are reserved for core-v1
-  activation. Protocol 0.21.0 rejects them (`E_UNKNOWN_FIELD` or
+  activation. The current protocol rejects them (`E_UNKNOWN_FIELD` or
   `E_UNKNOWN_VARIANT`), and no extension may use them for anything else:
 
   | Name | Kind | Owner |
   |---|---|---|
-  | `provenance` on `Node`, `Edge`, `StructuralEdge`, `Assertion` and `MetadataAttachment` | field (`ClaimedProvenance`) | ADR-0005, A2 |
-  | `QueryResult.fact_provenance` | result field (`ProvenanceEntry[]`) | ADR-0005, A2 |
-  | `Node.valid_time` | field (`Interval`) | A2 |
   | `GraphData.embedding_spaces`, `GraphData.embeddings` | fields | ADR-0006, A4 |
   | `QueryResult.candidates`, `QueryResult.exactness` | result fields | ADR-0006, A4 |
-  | `assert`, `retract`, `correct` | command `op` | A2 write API |
   | `expand`, `changes` | expression `kind` | A3 |
   | `nearest`, `similar_candidates` | expression `kind` | A4 |
   | `weave:` | predicate and ID namespace (`weave:similar_to`) | engine |
-  | `reader_groups` on every fact record | field (group references) | B1, room reserved by ADR-0004 section 11 |
+  | `reader_groups` on every fact record (omitted when empty) | field (group references) | B1, ADR-0007 section 13 |
 
   An epic MAY choose different names, in which case its PR releases the
-  reservation here. Fixtures: `negative/reserved-node-provenance.json`,
+  reservation here. A2 activated `provenance`, `QueryResult.fact_provenance`
+  and `Node.valid_time` in 0.22.0, and released `assert`, `retract` and
+  `correct` as command ops: they are change kinds of the `write` command.
+  Fixtures: `negative/reserved-node-reader-groups.json`,
   `negative/reserved-graph-embeddings.json`, `negative/unknown-command.json`,
   `negative/reserved-expression-nearest.json`.
 
@@ -500,6 +539,7 @@ No feature changes semantics because of this classification.
 | 0.20 | `recorded_query`, `RecordedSelection`, `recorded_observations` | core v1 | §5 `time.recorded` |
 | 0.21 | `recorded_range`, `HistoryRanged` | core v1 | §5 |
 | 0.21 | `accepted_history`, `accepted_range`, `accepted_observations` | extension | Governance |
+| 0.22 | `write` (assert, correct, retract), fact revisions, `Node.valid_time`, claimed `provenance`, `QueryResult.fact_provenance` | core v1 | §4 `fact.write`, §5, §6 |
 
 Capsules, mounts, dispatch, actors, governed effects and the browser host are
 native APIs, not contract versions. Their deferral is recorded in the
@@ -563,13 +603,18 @@ Positive: `positive/identity-graph-nodes-edges.json`,
 `positive/fact-provenance-model.json`,
 `positive/claimed-provenance-import.json`,
 `positive/provenance-entry-unspecified.json`,
+`positive/fact-write-assert-correct-retract.json`,
+`positive/node-valid-time.json`,
+`positive/fact-provenance-in-results.json`,
 `positive/embedding-space.json`, `positive/embedding-fact.json`,
 `positive/candidate-relation.json`.
 
 Negative: `negative/unknown-version.json`, `negative/missing-version.json`,
 `negative/unknown-version-checked-first.json`,
 `negative/unknown-field-program.json`,
-`negative/reserved-node-provenance.json`,
+`negative/reserved-node-reader-groups.json`,
+`negative/write-forged-writer.json`,
+`negative/node-provenance-version-gated.json`,
 `negative/reserved-graph-embeddings.json`,
 `negative/claimed-provenance-forged-writer.json`,
 `negative/unknown-command.json`,
@@ -611,7 +656,7 @@ To vendor them (LA0, weave-language#1):
   that changes it fails the harness instead of silently changing codes.
 - Decoding is structural only. Version feature gates, identifier bounds and
   authorization are checked at execution by the engine.
-- Provenance and embedding records are not yet accepted by any program. Their
-  fixtures test the records alone until A2 and A4.
+- Embedding records are not yet accepted by any program. Their fixtures test
+  the records alone until A4.
 - Error messages are diagnostic text. They are not stable and not part of the
   contract.

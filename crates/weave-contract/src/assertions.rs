@@ -34,6 +34,9 @@ pub struct StructuralEdge {
     pub metadata: Vec<GraphRef>,
     #[serde(default)]
     pub readers: Vec<String>,
+    /// Claimed provenance (0.22, ADR-0005). Part of the record's content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<provenance::ClaimedProvenance>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -54,6 +57,9 @@ pub struct Assertion {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<GraphRef>,
     pub valid_time: Interval,
+    /// Claimed provenance (0.22, ADR-0005). Part of the record's content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<provenance::ClaimedProvenance>,
     #[serde(default)]
     pub polarity: Polarity,
     #[serde(default)]

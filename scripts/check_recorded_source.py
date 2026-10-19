@@ -28,6 +28,8 @@ def main():
     parser.add_argument('--report', type=Path)
     args = parser.parse_args()
     protocol = tomllib.loads((Path(__file__).parents[1]/"crates/weave-contract/Cargo.toml").read_text())["package"]["version"]
+    wire = (Path(__file__).parents[1]/"crates/weave-contract/src/wire.rs").read_text()
+    supported = {protocol, *__import__("re").findall(r'"(0\.\d+\.0)"', wire.split('SUPPORTED_VERSIONS', 1)[1].split('];', 1)[0])}
     store_marker = int(__import__("re").search(r"pub const STORAGE_VERSION: i64 = (\d+);",(Path(__file__).parents[1]/"crates/weave-engine/src/lib.rs").read_text()).group(1))
     compiler_trace, runtime_trace = [], []
     started = time.monotonic()
@@ -45,7 +47,9 @@ def main():
             raw = response_path.read_bytes()
             response = json.loads(raw)
             assert response['ok'], response
-            assert response['artifacts']['program']['version'] == protocol
+            # The pinned compiler may emit any protocol the engine still accepts (0.20+ for recorded selection).
+            emitted = response['artifacts']['program']['version']
+            assert emitted in supported and tuple(map(int, emitted.split('.'))) >= (0, 20, 0), emitted
             compiler_trace.append({'source':name,'request_sha256':sha(request_path.read_bytes()),'response_sha256':sha(raw),'response_bytes':len(raw)})
             return response['artifacts']
 

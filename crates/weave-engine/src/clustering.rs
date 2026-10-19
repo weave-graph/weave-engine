@@ -218,6 +218,8 @@ impl Engine {
         );
         let mut ids: BTreeSet<_> = value.graph.nodes.iter().map(|n| n.id.clone()).collect();
         let derived = |id: String, properties: BTreeMap<String, serde_json::Value>| Node {
+            provenance: None,
+            valid_time: None,
             derivations: Vec::new(),
             derived_snapshots: vec![],
             id: id.clone(),
@@ -297,6 +299,7 @@ impl Engine {
                     Sha256::digest(serde_json::to_vec(&(from, to, predicate, &evidence))?)
                 );
                 let edge = Edge {
+                    provenance: None,
                     derived_snapshots: vec![],
                     derived_nodes: node_proofs.clone(),
                     id,
@@ -505,6 +508,8 @@ impl Engine {
             Sha256::digest(serde_json::to_vec(&lineage)?)
         );
         let node = Node {
+            provenance: None,
+            valid_time: None,
             derivations: Vec::new(),
             derived_snapshots: vec![],
             id: id.clone(),

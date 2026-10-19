@@ -324,6 +324,7 @@ pub(crate) fn evaluate(
         revision: revision.into(),
     };
     let mut result = QueryResult {
+        fact_provenance: Vec::new(),
         recorded_observations: vec![],
         accepted_observations: vec![],
         graph,

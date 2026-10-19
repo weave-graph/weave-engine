@@ -20,6 +20,7 @@ use std::fmt;
 /// [`E_VERSION`].
 pub const SUPPORTED_VERSIONS: &[&str] = &[
     VERSION,
+    "0.21.0",
     "0.20.0",
     "0.19.0",
     "0.18.0",

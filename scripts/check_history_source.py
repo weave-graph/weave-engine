@@ -25,6 +25,8 @@ def main():
     parser.add_argument('--report', type=Path)
     args = parser.parse_args()
     protocol = tomllib.loads((Path(__file__).parents[1]/'crates/weave-contract/Cargo.toml').read_text())['package']['version']
+    wire = (Path(__file__).parents[1]/'crates/weave-contract/src/wire.rs').read_text()
+    supported = {protocol, *__import__('re').findall(r'"(0\.\d+\.0)"', wire.split('SUPPORTED_VERSIONS', 1)[1].split('];', 1)[0])}
     started = time.monotonic(); compilers = []; runtimes = []
     with tempfile.TemporaryDirectory(prefix='weave-source-history-') as temporary:
         root = Path(temporary); db = root/'store.db'; plan = root/'plan.json'
@@ -36,7 +38,9 @@ def main():
             raw=response.read_bytes(); value=json.loads(raw); assert value['ok']==ok,value
             compilers.append({'source':name,'request_sha256':sha(request.read_bytes()),'response_sha256':sha(raw),'response_bytes':len(raw)})
             if ok:
-                assert value['artifacts']['program']['version']==protocol
+                # The pinned compiler may emit any accepted protocol with history ranges (0.21+).
+                emitted=value['artifacts']['program']['version']
+                assert emitted in supported and tuple(map(int,emitted.split('.')))>=(0,21,0),emitted
                 assert value['artifacts']['values']['Exact']['value']==9007199254740993
                 return value['artifacts']['program']
             assert value['error']['code']=='E_FUNCTION_EFFECT',value

@@ -168,7 +168,7 @@ view_template Visible revision "1" from Head clock fixed {{}}
                     assert result['ok'] and result['requires_fence'] and not result['poisoned'], result
                     return result['value']
                 capability = owner({'kind':'capabilities'})
-                assert capability['store_marker'] == 29 and len(capability['operations']) == 31
+                assert capability['store_marker'] == 30 and len(capability['operations']) == 31
                 owner({'kind':'lifecycle','adapter':'projection','state':'paused'})
                 inputs = owner({'kind':'compiled_rebuild_inputs','adapter':'projection'})
                 reconstruction = {'kind':'compiled_rebuild','request':{'inputs':inputs,'nonce':'source-rebuild'}}

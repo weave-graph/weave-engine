@@ -55,8 +55,10 @@ A2 in progress: [ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md
 is accepted. The `FactBackend` storage trait, its SQLite backend, an in-memory
 reference backend and their conformance suite are merged, with a CI check that
 only the SQLite backend issues SQL against fact-store tables. The engine does
-not use the fact store yet; fact writes, provenance, node valid time and the
-store 30 migration follow in later A2 parts.
+use it from protocol 0.22.0 and store 30: the `write` command, fact revisions,
+node valid time, per-fact provenance in results and the crash-tested store
+29→30 migration. Indexed reads for large graphs, cap removal, the
+head-observation capacity, benchmarks and incremental science import remain.
 
 **Phase A exit scenario:** import a fleet of 5,000 units with parts, firmware,
 sites, owners, sensor series references and maintenance notes with embeddings.

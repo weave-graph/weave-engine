@@ -59,9 +59,13 @@ fn unavailable() -> Error {
         "actual historical actor outcome unavailable",
     )
 }
+/// The observation completion program is a stored, hashed record format
+/// (`handler_receipts.request_hash`). Its version is frozen at the protocol it
+/// was introduced with, so receipts stay verifiable across protocol bumps.
+const OBSERVATION_PROGRAM_VERSION: &str = "0.21.0";
 fn empty_program() -> Program {
     Program {
-        version: VERSION.into(),
+        version: OBSERVATION_PROGRAM_VERSION.into(),
         commands: vec![],
         source_revisions: vec![],
     }

@@ -148,6 +148,7 @@ impl State {
         };
         let recording = Recording {
             writer: revision.writer.clone(),
+            on_behalf_of: revision.on_behalf_of.clone(),
             recorded_at_ms: revision.recorded_at_ms,
             revision: revision.revision.clone(),
         };
@@ -190,6 +191,7 @@ impl State {
             first_position,
             op_count: revision.ops.len() as i64,
             writer: revision.writer,
+            on_behalf_of: revision.on_behalf_of,
             recorded_at_ms: revision.recorded_at_ms,
         };
         self.revisions.insert(revision.revision, info.clone());

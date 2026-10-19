@@ -1,0 +1,124 @@
+{
+  "fixture": "fact-provenance-in-results",
+  "concepts": [
+    "provenance.fact",
+    "result.envelope"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "version": "0.22.0",
+    "commands": [
+      {
+        "op": "write",
+        "graph_id": "g",
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "node",
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s",
+              "provenance": {
+                "source": "erp",
+                "method": {
+                  "kind": "import",
+                  "importer": "csv",
+                  "version": "1"
+                }
+              },
+              "properties": {},
+              "metadata": [],
+              "readers": []
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "edge",
+              "id": "x",
+              "predicate": "p",
+              "from": "a",
+              "to": "a",
+              "valid_time": {
+                "start": 0,
+                "end": null
+              },
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "extractor",
+                  "version": "7"
+                },
+                "evidence": [
+                  {
+                    "kind": "artifact",
+                    "uri": "s3://notes/1",
+                    "digest": "sha256:00"
+                  }
+                ]
+              },
+              "polarity": "positive",
+              "properties": {},
+              "metadata": [],
+              "readers": [],
+              "derived_from": []
+            }
+          }
+        ]
+      },
+      {
+        "op": "query",
+        "query": {
+          "graph_id": "g",
+          "revision": null,
+          "branch_id": "main",
+          "predicate": null,
+          "from": null,
+          "to": null,
+          "valid_at": null,
+          "include_metadata": false,
+          "max_depth": 8
+        }
+      }
+    ]
+  },
+  "engine": {
+    "principal": "agent-7",
+    "write_graphs": [
+      "g"
+    ],
+    "clock_ms": 5000,
+    "results": [
+      {
+        "kind": "committed",
+        "revision": "fact:sha256:e6843b1c0fbba141db1634d694b292c840d217c62a99f25912c4b1666d247b2a"
+      },
+      {
+        "kind": "queried",
+        "coverage": "complete",
+        "nodes": [
+          "a"
+        ],
+        "edges": [
+          "x"
+        ],
+        "fact_provenance": {
+          "writers": [
+            "agent-7"
+          ],
+          "methods": [
+            "import",
+            "model"
+          ],
+          "count": 2,
+          "recorded_at_ms": 5000
+        }
+      }
+    ]
+  }
+}

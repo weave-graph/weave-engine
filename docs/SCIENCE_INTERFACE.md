@@ -7,7 +7,7 @@ or drive experiments with JSON; use the [Python client](PYTHON_SCIENCE.md) for
 notebooks, table helpers and experiment records.
 
 The science interface version is **0.1.0** and the engine contract version is
-**0.21.0**. These are separate versions. The Rust
+**0.22.0**. These are separate versions. The Rust
 [request types](../crates/weave-science/src/lib.rs) define the science schema;
 the [engine contract index](contract/README.md) explains base and extension
 semantics. Canonical [contract types](../crates/weave-contract/src/lib.rs) define
@@ -82,7 +82,7 @@ def call(request, *, write=False):
     if completed.returncode or not response["ok"]:
         raise RuntimeError(response.get("error", completed.stderr))
     assert response["science_version"] == "0.1.0"
-    assert response["contract_version"] == "0.21.0"
+    assert response["contract_version"] == "0.22.0"
     return response["result"]
 
 graph = {
@@ -204,7 +204,7 @@ Successful envelope:
 {
   "ok": true,
   "science_version": "0.1.0",
-  "contract_version": "0.21.0",
+  "contract_version": "0.22.0",
   "result": {
     "results": [{
       "kind": "committed",
@@ -226,7 +226,7 @@ Failure envelope, with nonzero CLI exit status:
 {
   "ok": false,
   "science_version": "0.1.0",
-  "contract_version": "0.21.0",
+  "contract_version": "0.22.0",
   "error": {"code": "E_SCIENCE_READ_ONLY", "message": "analysis programs must contain only read operations"}
 }
 ```

@@ -712,6 +712,7 @@ pub fn diff(
         serde_json::to_writer(&mut budget.bytes, &attachment_influence)
             .map_err(|_| err("E_ALGEBRA_LIMIT", "Graph algebra byte budget exceeded"))?;
         let attachment = MetadataAttachment {
+            provenance: None,
             derivations: attachment_influence.derivations.clone(),
             derived_from: attachment_influence.assertions.clone(),
             derived_nodes: attachment_influence.nodes.clone(),
@@ -780,6 +781,7 @@ pub fn diff(
         serde_json::to_writer(&mut budget.bytes, &attachment_influence)
             .map_err(|_| err("E_ALGEBRA_LIMIT", "Graph algebra byte budget exceeded"))?;
         let attachment = MetadataAttachment {
+            provenance: None,
             derivations: attachment_influence.derivations.clone(),
             derived_from: attachment_influence.assertions.clone(),
             derived_nodes: attachment_influence.nodes.clone(),
@@ -945,6 +947,8 @@ pub fn support(
     };
     let id = format!("support:{identity}");
     let mut node = Node {
+        provenance: None,
+        valid_time: None,
         derivations: vec![],
         derived_snapshots: vec![],
         derived_nodes: identity::node_dependencies(
@@ -1114,6 +1118,7 @@ pub fn support(
     if !derivations.is_empty() {
         let origins = unique(derivations.iter().flat_map(|d| d.premises.clone()));
         let edge = Edge {
+            provenance: None,
             derived_snapshots: vec![],
             derived_nodes: vec![],
             structural_ref: None,

@@ -36,7 +36,7 @@ migration checks, and CI on Linux, macOS and Windows. It is **pre-release**.
 | | High-volume telemetry ingestion, approximate vector index (Phase C) |
 
 The supported profile is described in [docs/STATUS.md](docs/STATUS.md): science
-**0.1.0**, contract **0.21.0**, store **29**. It runs locally. There is no
+**0.1.0**, contract **0.22.0**, store **30**. It runs locally. There is no
 server, and the CLI trusts its caller (see [SECURITY.md](SECURITY.md)).
 
 ## Run your first experiment

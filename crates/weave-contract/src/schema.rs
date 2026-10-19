@@ -246,6 +246,7 @@ pub fn validate_schema_graph(graph: &GraphData) -> Vec<Diagnostic> {
                 .structural_edges
                 .iter()
                 .map(|e| Edge {
+                    provenance: None,
                     derived_snapshots: vec![],
                     derived_nodes: vec![],
                     id: e.id.clone(),
@@ -484,6 +485,7 @@ mod tests {
         let e = g.edges.remove(0);
         g.profile = GraphProfile::Explicit;
         g.structural_edges.push(crate::StructuralEdge {
+            provenance: None,
             id: e.id.clone(),
             predicate: e.predicate,
             from: e.from,

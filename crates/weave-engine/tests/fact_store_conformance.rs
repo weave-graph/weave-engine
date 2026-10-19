@@ -69,6 +69,7 @@ fn attachment(id: &str, host: &str, key: &str) -> FactVersion {
 
 fn rev(revision: &str, parent: Option<&str>, at: i64, ops: Vec<FactOp>) -> NewRevision {
     NewRevision {
+        on_behalf_of: None,
         revision: revision.into(),
         graph_id: "g".into(),
         branch_id: "main".into(),
@@ -208,6 +209,7 @@ fn base_state_rules(b: &mut dyn FactBackend) {
         facts: vec![(
             node("s1", "S", None),
             Recording {
+                on_behalf_of: None,
                 writer: "snapshot-writer".into(),
                 recorded_at_ms: 1,
                 revision: "sha256:snapshot".into(),
@@ -372,6 +374,7 @@ fn recorded_time_is_verbatim_and_monotonic(b: &mut dyn FactBackend) {
     assert_eq!(
         fact.recording,
         Recording {
+            on_behalf_of: None,
             writer: "writer".into(),
             recorded_at_ms: 20,
             revision: "r2".into()
@@ -406,6 +409,7 @@ fn recorded_time_is_verbatim_and_monotonic(b: &mut dyn FactBackend) {
         facts: vec![(
             node("late", "E", None),
             Recording {
+                on_behalf_of: None,
                 writer: "w".into(),
                 recorded_at_ms: 99,
                 revision: "r0".into(),
@@ -808,6 +812,7 @@ fn sqlite_matches_reference_backend_on_random_histories() {
             }
         }
         let new = NewRevision {
+            on_behalf_of: None,
             revision: format!("r{step}"),
             graph_id: "g".into(),
             branch_id: "main".into(),

@@ -23,7 +23,8 @@ fn definition() -> RecordedActorDefinition {
     let artifact = include_bytes!("recorded_actor_fixture.rs").to_vec();
     RecordedActorDefinition {
         manifest: serde_json::from_value(json!({"id":"recorded-actor","version":"1","artifact_digest":format!("sha256:{:x}",Sha256::digest(&artifact)),"config_revision":"1","principal":"owner","subscriptions":[{"graph_id":"actor-input","branch_id":"main"}],"output_graphs":["actor-output"],"effect_destinations":["reference-sink"],"max_attempts":5,"lease_ms":10000,"max_pending_events":100,"projection_replay":false})).expect("fixed manifest"),
-        event_schema:VERSION.into(),state_protocol:"weave-recorded-opaque-state/1".into(),metadata_depth:2,artifact,
+        // Pinned to the event schema of the genuine store-26/27 installations it continues.
+        event_schema:"0.21.0".into(),state_protocol:"weave-recorded-opaque-state/1".into(),metadata_depth:2,artifact,
     }
 }
 fn write(e: &Engine, graph: &str, value: Value) -> Program {

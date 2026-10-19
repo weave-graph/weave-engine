@@ -69,6 +69,12 @@ impl CapsuleRevision {
 }
 impl Engine {
     pub(crate) fn revision_record(&self, reference: &GraphRef) -> Result<Option<CapsuleRevision>> {
+        if crate::facts::is_fact_revision(&reference.revision) {
+            return Err(err(
+                "E_UNSUPPORTED",
+                "capsules cannot carry fact revisions (ADR-0004 section 12)",
+            ));
+        }
         let Some(data) = self.load(&reference.graph_id, &reference.revision)? else {
             return Ok(None);
         };

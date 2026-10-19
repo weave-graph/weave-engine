@@ -1,0 +1,35 @@
+{
+  "fixture": "reserved-node-reader-groups",
+  "concepts": [
+    "error.unknown_field",
+    "compat.reserved"
+  ],
+  "type": "program",
+  "expect": {
+    "reject": "E_UNKNOWN_FIELD"
+  },
+  "input": {
+    "version": "0.22.0",
+    "commands": [
+      {
+        "op": "write",
+        "graph_id": "g",
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "node",
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s",
+              "reader_groups": [
+                "team"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

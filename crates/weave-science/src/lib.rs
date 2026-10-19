@@ -227,7 +227,7 @@ impl ScienceSession {
     }
 
     pub fn handle(&mut self, request: Request) -> Result<Value> {
-        let mutating_execute = matches!(&request, Request::Execute { program } if program.commands.iter().any(|command| matches!(command, Command::Commit { .. } | Command::CommitBatch { .. })));
+        let mutating_execute = matches!(&request, Request::Execute { program } if program.commands.iter().any(|command| matches!(command, Command::Commit { .. } | Command::CommitBatch { .. } | Command::Write { .. })));
         let output_limit = match &request {
             Request::Analyze { limits, .. } => {
                 limits.validate()?;
@@ -269,7 +269,9 @@ impl ScienceSession {
                 if program.commands.iter().any(|command| {
                     matches!(
                         command,
-                        Command::Commit { .. } | Command::CommitBatch { .. }
+                        Command::Commit { .. }
+                            | Command::CommitBatch { .. }
+                            | Command::Write { .. }
                     )
                 }) {
                     return Err(failure(

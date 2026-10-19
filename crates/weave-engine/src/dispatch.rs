@@ -596,9 +596,14 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         self.require_causal_work(adapter, event)?;
         // Until declassification exists, derived handler output stays within the installed principal.
         for command in &program.commands {
+            let written;
             let datas: Vec<&GraphData> = match command {
                 Command::Commit { data, .. } => vec![data],
                 Command::CommitBatch { commits, .. } => commits.iter().map(|c| &c.data).collect(),
+                Command::Write { changes, .. } => {
+                    written = crate::facts::asserted_data(changes);
+                    vec![&written]
+                }
                 _ => vec![],
             };
             for data in datas {

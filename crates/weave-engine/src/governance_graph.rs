@@ -231,8 +231,7 @@ impl Engine {
         }
         let head = self.gov_head(&binding.view)?;
         let policy = self.gov_policy(&binding.view, &head.policy)?;
-        if !policy.readers.is_empty()
-            && !policy.readers.contains(&host.principal)
+        if !crate::visibility::readers_admit(&policy.readers, &host.principal)
             && !policy.proposers.contains(&host.principal)
         {
             return Err(unavailable());

@@ -482,6 +482,8 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
             if !valid_id(&revision) || !valid_id(&graph_id) || time < 0 {
                 return Err(failure());
             }
+            // Fact revisions keep their content in the fact log; retention never erases them.
+            let present = present || crate::facts::is_fact_revision(&revision);
             if !present {
                 match self.load(&graph_id, &revision) {
                     Err(error) if error.code == "E_UNAVAILABLE" => {}
@@ -518,6 +520,13 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
             }
             events.insert(event, revision);
         }
+        // A fact revision is never erased, so everything it references is retained.
+        roots.extend(
+            revisions
+                .keys()
+                .filter(|revision| crate::facts::is_fact_revision(revision))
+                .cloned(),
+        );
         let mut references = References {
             revisions: &revisions,
             events: &events,
@@ -534,6 +543,10 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
         });
         let mut row_budget = MAX_ROWS;
         for table in tables {
+            // The fact store validates its own tables through the backend (ADR-0004).
+            if crate::fact_store::sqlite::TABLES.contains(&table.as_str()) {
+                continue;
+            }
             if !KNOWN_TABLES.contains(&table.as_str()) {
                 return Err(err(
                     "E_RETENTION_SCHEMA",
@@ -854,7 +867,11 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
         let mut collect = Vec::new();
         let mut payload_bytes = 0;
         for (revision, (reference, time, present)) in &revisions {
-            if *present && *time < policy.history_before_ms && !retained.contains(revision) {
+            if *present
+                && *time < policy.history_before_ms
+                && !retained.contains(revision)
+                && !crate::facts::is_fact_revision(revision)
+            {
                 self.load(&reference.graph_id, revision)?
                     .ok_or_else(failure)?;
                 let bytes: i64 = self.conn.query_row(

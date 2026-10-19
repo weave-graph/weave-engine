@@ -5,11 +5,12 @@ from contextlib import closing
 from pathlib import Path
 from check_compiled_lifecycle import snapshot
 from version_profile import store_marker
+from retention_migration import FACT_STORE_TABLES
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for name in ['old-disposition-controller','old-lifecycle-controller','old26-actor','old27-actor','old28-actor','host']:p.add_argument('--'+name,type=Path,required=True)
-    p.add_argument('--report',type=Path);p.add_argument('--evidence-dir',type=Path);a=p.parse_args();assert store_marker()==29;trace=[];deaths=0
+    p.add_argument('--report',type=Path);p.add_argument('--evidence-dir',type=Path);a=p.parse_args();assert store_marker()>=29;trace=[];deaths=0
     if a.evidence_dir:a.evidence_dir.mkdir(parents=True,exist_ok=False)
     with tempfile.TemporaryDirectory(prefix='weave-causal-dispatch-')as temporary:
         root=Path(temporary);generated=root/'genuine-store28';old_report=root/'genuine-store28.json'
@@ -36,7 +37,7 @@ def main():
         def host(mode,**fields):return invoke(a.host,mode,**fields)
         before=snapshot(db);assert before['marker']==28 and before['tables']['recorded_actor_cancellations']['rows']
         host('open',crash='before-schema',code=95);assert snapshot(db)==before
-        host('open',crash='after-schema',code=96);after=snapshot(db);assert after['marker']==29 and set(after['tables'])==set(before['tables'])|{'event_causation','dispatch_causal_policies','dispatch_circuits'}
+        host('open',crash='after-schema',code=96);after=snapshot(db);assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|{'event_causation','dispatch_causal_policies','dispatch_circuits'}|(FACT_STORE_TABLES if store_marker()>=30 else frozenset())
         assert {n:after['tables'][n]for n in before['tables']}==before['tables']
         with closing(sqlite3.connect(db))as c:
             assert c.execute('SELECT count(*) FROM event_causation').fetchone()[0]==c.execute('SELECT count(*) FROM events').fetchone()[0]
@@ -81,7 +82,7 @@ def main():
         for name,digest in sidecars.items():assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest
         if a.evidence_dir:
             for path in root.glob('*.sqlite'):shutil.copy2(path,a.evidence_dir/path.name)
-    report={'profile':'native-causal-dispatch/1','store_marker':29,'result':'passed','processes':len(trace),'controlled_deaths':deaths,'genuine_store28_processes':44,'genuine_store28_deaths':7,'genuine_store27_processes':88,'genuine_store27_deaths':12,'checks':['genuine old28 actor/effect/version/observation/cancellation journals preserved across interrupted modern upgrade','actual kernel-bound two-adapter parent/root/depth lineage commits with output/receipt/checkpoint','pre/post completion deaths and stale retries neither lose nor duplicate child events','private/unsubscribed occurrences do not change owner lag counts or expose global offsets','pre/post circuit deaths preserve suspension without acknowledging blocked source','explicit drained owner policy change permits another bounded step and the other adapter suspends','actual no-op and duplicate completion emit no child occurrence','typed collection preserves actual old actor/effect journals and every independent tool/sink sidecar'],'limits':['trusted native local graph-handler causal profile; old history is a boundary without invented former ancestry','separate governance/mount/remote taxonomies, source/portable commands, CPU/RSS isolation and all original assurance remain required','owner-scoped lag is bounded and reports visible lower bounds; no public global offset']}
+    report={'profile':'native-causal-dispatch/1','store_marker':store_marker(),'result':'passed','processes':len(trace),'controlled_deaths':deaths,'genuine_store28_processes':44,'genuine_store28_deaths':7,'genuine_store27_processes':88,'genuine_store27_deaths':12,'checks':['genuine old28 actor/effect/version/observation/cancellation journals preserved across interrupted modern upgrade','actual kernel-bound two-adapter parent/root/depth lineage commits with output/receipt/checkpoint','pre/post completion deaths and stale retries neither lose nor duplicate child events','private/unsubscribed occurrences do not change owner lag counts or expose global offsets','pre/post circuit deaths preserve suspension without acknowledging blocked source','explicit drained owner policy change permits another bounded step and the other adapter suspends','actual no-op and duplicate completion emit no child occurrence','typed collection preserves actual old actor/effect journals and every independent tool/sink sidecar'],'limits':['trusted native local graph-handler causal profile; old history is a boundary without invented former ancestry','separate governance/mount/remote taxonomies, source/portable commands, CPU/RSS isolation and all original assurance remain required','owner-scoped lag is bounded and reports visible lower bounds; no public global offset']}
     if a.report:a.report.write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report))
 if __name__=='__main__':main()

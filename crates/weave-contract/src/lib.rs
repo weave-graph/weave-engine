@@ -14,13 +14,15 @@ pub use view_registration::{
 };
 pub mod decimal;
 pub mod embedding;
+pub mod facts;
+pub use facts::{Fact, FactChange, FactExpectation, FactKind, FactTarget};
 pub mod provenance;
 pub mod quantity;
 pub mod wire;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 pub use wire::{decode, decode_program, is_supported_version, ContractError, SUPPORTED_VERSIONS};
-pub const VERSION: &str = "0.21.0";
+pub const VERSION: &str = "0.22.0";
 pub mod accepted_history;
 pub use accepted_history::{
     AcceptedSelection, AcceptedViewHistoryCut, AcceptedViewHistoryRange, AcceptedViewHistoryResult,
@@ -123,6 +125,12 @@ pub struct Node {
     pub id: String,
     pub entity_id: String,
     pub space_id: String,
+    /// When this manifestation exists (0.22). Absent means at every time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_time: Option<Interval>,
+    /// Claimed provenance (0.22, ADR-0005). Part of the record's content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<provenance::ClaimedProvenance>,
     #[serde(default)]
     pub properties: BTreeMap<String, serde_json::Value>,
     #[serde(default)]
@@ -159,6 +167,9 @@ pub struct Edge {
     pub from: String,
     pub to: String,
     pub valid_time: Interval,
+    /// Claimed provenance (0.22, ADR-0005). Part of the record's content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<provenance::ClaimedProvenance>,
     #[serde(default)]
     pub polarity: Polarity,
     #[serde(default)]
@@ -262,6 +273,19 @@ pub enum Command {
     },
     Query {
         query: QueryPlan,
+    },
+    /// Fact-level write (0.22, ADR-0004): one atomic fact revision.
+    Write {
+        graph_id: String,
+        #[serde(default = "main_branch")]
+        branch_id: String,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "facts::expected_head"
+        )]
+        expected_head: Option<Option<String>>,
+        changes: Vec<FactChange>,
     },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -435,6 +459,9 @@ pub struct QueryResult {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub attachment_origins: BTreeMap<String, Vec<AssertionRef>>,
     pub metadata_graphs: Vec<ResolvedGraph>,
+    /// Provenance of every stored source fact in the result (0.22, ADR-0005).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fact_provenance: Vec<provenance::ProvenanceEntry>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ResolvedGraph {
@@ -561,6 +588,9 @@ pub struct MetadataAttachment {
     pub key: String,
     pub value: MetadataValue,
     pub valid_time: Interval,
+    /// Claimed provenance (0.22, ADR-0005). Part of the record's content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<provenance::ClaimedProvenance>,
     #[serde(default)]
     pub origin: Option<AssertionRef>,
     #[serde(default)]

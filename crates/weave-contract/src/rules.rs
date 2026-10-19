@@ -689,6 +689,7 @@ pub fn reason(
         }
         let origins = unique(derivations.iter().flat_map(|d| d.premises.clone()));
         let edge = Edge {
+            provenance: None,
             derived_snapshots: whole.snapshots.clone(),
             derived_nodes: vec![],
             id: id.clone(),

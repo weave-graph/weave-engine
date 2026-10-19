@@ -5,7 +5,7 @@ from contextlib import closing
 from pathlib import Path
 from check_compiled_lifecycle import snapshot
 from version_profile import store_marker
-from retention_migration import CAUSAL_DISPATCH_TABLES
+from retention_migration import FACT_STORE_TABLES,CAUSAL_DISPATCH_TABLES
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
@@ -38,7 +38,7 @@ def main():
         for table in ['recorded_actor_migrations','recorded_actor_observations','recorded_actor_receipts']:assert before['tables'][table]['rows']
         tools=db.with_suffix('.lifecycle.tools.sqlite');sink=db.with_suffix('.lifecycle.sink.sqlite');original26_tools=rows(db.with_suffix('.tools.sqlite'),'tool_runs');original26_sink=rows(db.with_suffix('.sink.sqlite'),'physical_receipts');old_tools=rows(tools,'tool_runs');old_physical=rows(sink,'physical_receipts');assert len(old_tools)==3 and len(old_physical)==3
         actor('open',crash='before-schema',code=95);assert snapshot(db)==before
-        actor('open',crash='after-schema',code=96);after=snapshot(db);assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|{'recorded_actor_cancellations'}|(CAUSAL_DISPATCH_TABLES if store_marker()>=29 else frozenset())
+        actor('open',crash='after-schema',code=96);after=snapshot(db);assert after['marker']==store_marker() and set(after['tables'])==set(before['tables'])|{'recorded_actor_cancellations'}|(CAUSAL_DISPATCH_TABLES if store_marker()>=29 else frozenset())|(FACT_STORE_TABLES if store_marker()>=30 else frozenset())
         assert {n:after['tables'][n]for n in before['tables']}==before['tables'] and after['tables']['recorded_actor_cancellations']['rows']==[]
         error=invoke(a.old_actor,'open',code=1);assert b'E_STORAGE_VERSION'in error and snapshot(db)==after
         with closing(sqlite3.connect(db))as c:event3=c.execute("SELECT event_id FROM recorded_actor_observations WHERE adapter='restored'").fetchone()[0]
