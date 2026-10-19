@@ -12,7 +12,7 @@ white-paper requirements remain tracked separately in the
 |---|---|
 | Science API and CLI | `weave-science` 0.1.0; native Rust and one-request JSON process |
 | Python client | `weave_science` 0.1.0; Python 3.10+, no mandatory runtime dependencies |
-| Engine contract | 0.21.0; existing graph, temporal, metadata and authorization semantics |
+| Engine contract | 0.21.0; existing graph, temporal, metadata and authorization semantics. The core subset is specified in [core contract v1](contract/core-v1.md) |
 | Native storage | Store 29; persistent local SQLite graph revisions and history |
 | Platforms | Linux, macOS and Windows in the native CI profile |
 
@@ -21,6 +21,33 @@ revision and temporal selection, existing graph expressions, authorized graph
 analytics, exact vector neighbors, result/table export and saved experiment
 records. Start with the [README quickstart](../README.md#run-your-first-experiment),
 [Python tutorial](PYTHON_SCIENCE.md) or [native JSON guide](SCIENCE_INTERFACE.md).
+
+## Core contract v1
+
+[Core contract v1](contract/core-v1.md) is the consolidated specification of
+the core subset (A1). It defines the core concepts normatively and classifies
+every contract feature 0.1–0.21 as core v1, extension or deferred. It also sets
+the compatibility policy (semantic versioning, additive rules, the relationship
+between store and contract versions, deprecation and reserved names).
+
+- **Golden fixtures.** 34 golden fixtures in
+  `crates/weave-contract/fixtures/core-v1/` are pinned by a SHA-256 manifest.
+  The contract harness checks decoding and canonical re-encoding. The engine
+  harness checks execution outcomes. Both fail on drift.
+- **Stable decode error codes.** `weave_contract::decode_program` reports
+  `E_VERSION`, `E_UNKNOWN_FIELD`, `E_UNKNOWN_VARIANT`, `E_DECODE` and
+  `E_BUDGET`, and checks the version before the structure. The
+  `weave-engine run` CLI reports these codes and now rejects duplicate JSON
+  keys; it previously reported `E_INPUT` for every decode failure. Plans over
+  16 MiB still report `E_INPUT`, and the science envelope keeps `E_INPUT`.
+- **Not yet active.** Per-fact provenance
+  ([ADR-0005](architecture/ADR-0005-per-fact-provenance.md)) and embedding
+  facts and spaces
+  ([ADR-0006](architecture/ADR-0006-embedding-facts-and-spaces.md)) are
+  accepted. Their records exist in `weave-contract`, but no 0.21.0 program
+  carries them. Their wire fields are reserved until A2 and A4.
+- **Language CI.** Language CI does not run the fixtures yet; that follows in
+  LA0.
 
 ## Verified evidence
 

@@ -1,0 +1,83 @@
+{
+  "fixture": "result-envelope",
+  "concepts": [
+    "result.envelope"
+  ],
+  "type": "query_result",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "coverage": "partial",
+    "diagnostics": [
+      {
+        "code": "E_UNAVAILABLE",
+        "message": "metadata graph unavailable"
+      }
+    ],
+    "edge_origins": {
+      "e": [
+        {
+          "assertion_id": "e",
+          "graph_id": "g",
+          "revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        }
+      ]
+    },
+    "graph": {
+      "edges": [
+        {
+          "derived_from": [],
+          "from": "a",
+          "id": "e",
+          "metadata": [],
+          "polarity": "positive",
+          "predicate": "p",
+          "properties": {},
+          "readers": [],
+          "to": "b",
+          "valid_time": {
+            "end": null,
+            "start": 0
+          }
+        }
+      ],
+      "nodes": [
+        {
+          "entity_id": "A",
+          "id": "a",
+          "metadata": [],
+          "properties": {},
+          "readers": [],
+          "space_id": "s"
+        },
+        {
+          "entity_id": "B",
+          "id": "b",
+          "metadata": [],
+          "properties": {},
+          "readers": [],
+          "space_id": "s"
+        }
+      ]
+    },
+    "input_snapshots": [
+      {
+        "graph_id": "g",
+        "revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "metadata_graphs": [],
+    "provenance": [
+      {
+        "assertion_id": "e",
+        "graph_id": "g",
+        "revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "snapshots": {
+      "g": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "version": "0.21.0"
+  }
+}

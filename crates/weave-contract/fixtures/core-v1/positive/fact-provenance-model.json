@@ -1,0 +1,33 @@
+{
+  "fixture": "fact-provenance-model",
+  "concepts": [
+    "provenance.fact"
+  ],
+  "type": "fact_provenance",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "evidence": [
+      {
+        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "kind": "artifact",
+        "uri": "s3://logs/unit-7/2026-09-14.txt"
+      },
+      {
+        "assertion_id": "e",
+        "graph_id": "g",
+        "kind": "assertion",
+        "revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "method": {
+      "kind": "model",
+      "model": "note-extractor",
+      "version": "3.1.0"
+    },
+    "recorded_at_ms": 1760000000000,
+    "source": "maintenance-log-2026-09",
+    "writer": "agent:maintenance-reader"
+  }
+}

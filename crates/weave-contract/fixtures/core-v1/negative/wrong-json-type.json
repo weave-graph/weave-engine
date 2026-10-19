@@ -1,0 +1,46 @@
+{
+  "fixture": "wrong-json-type",
+  "concepts": [
+    "error.decode",
+    "time.valid"
+  ],
+  "type": "program",
+  "expect": {
+    "reject": "E_DECODE"
+  },
+  "input": {
+    "version": "0.21.0",
+    "commands": [
+      {
+        "op": "commit",
+        "graph_id": "g",
+        "data": {
+          "nodes": [
+            {
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s"
+            },
+            {
+              "id": "b",
+              "entity_id": "B",
+              "space_id": "s"
+            }
+          ],
+          "edges": [
+            {
+              "id": "e",
+              "predicate": "p",
+              "from": "a",
+              "to": "b",
+              "valid_time": {
+                "start": "yesterday",
+                "end": null
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

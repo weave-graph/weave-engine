@@ -1,5 +1,4 @@
 use std::{collections::HashSet, env, fs, io::Read, process};
-use weave_contract::Program;
 use weave_engine::{Engine, HostContext};
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -43,7 +42,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if bytes.len() > 16 * 1024 * 1024 {
         return Err("plan exceeds 16 MiB".into());
     }
-    let plan: Program = serde_json::from_slice(&bytes)?;
+    // Stable core-v1 decode codes (E_VERSION, E_UNKNOWN_FIELD, ...) reach the caller.
+    let plan = match weave_contract::decode_program(&bytes) {
+        Ok(plan) => plan,
+        Err(error) => {
+            eprintln!("{}", serde_json::to_string(&error)?);
+            process::exit(1);
+        }
+    };
     let host = HostContext::new(actor.ok_or("--actor required")?, graphs);
     let mut engine = Engine::open(db.ok_or("--db required")?)?;
     match engine.execute(&plan, &host) {

@@ -1,0 +1,149 @@
+{
+  "fixture": "valid-time-half-open",
+  "concepts": [
+    "time.valid"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "data": {
+          "edges": [
+            {
+              "derived_from": [],
+              "from": "a",
+              "id": "installed",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "installed_at",
+              "properties": {},
+              "readers": [],
+              "to": "b",
+              "valid_time": {
+                "end": 200,
+                "start": 100
+              }
+            }
+          ],
+          "nodes": [
+            {
+              "entity_id": "A",
+              "id": "a",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            },
+            {
+              "entity_id": "B",
+              "id": "b",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          ]
+        },
+        "expected_head": null,
+        "graph_id": "g",
+        "op": "commit"
+      },
+      {
+        "op": "query",
+        "query": {
+          "branch_id": "main",
+          "from": null,
+          "graph_id": "g",
+          "include_metadata": false,
+          "max_depth": 8,
+          "predicate": null,
+          "revision": null,
+          "to": null,
+          "valid_at": 99
+        }
+      },
+      {
+        "op": "query",
+        "query": {
+          "branch_id": "main",
+          "from": null,
+          "graph_id": "g",
+          "include_metadata": false,
+          "max_depth": 8,
+          "predicate": null,
+          "revision": null,
+          "to": null,
+          "valid_at": 100
+        }
+      },
+      {
+        "op": "query",
+        "query": {
+          "branch_id": "main",
+          "from": null,
+          "graph_id": "g",
+          "include_metadata": false,
+          "max_depth": 8,
+          "predicate": null,
+          "revision": null,
+          "to": null,
+          "valid_at": 199
+        }
+      },
+      {
+        "op": "query",
+        "query": {
+          "branch_id": "main",
+          "from": null,
+          "graph_id": "g",
+          "include_metadata": false,
+          "max_depth": 8,
+          "predicate": null,
+          "revision": null,
+          "to": null,
+          "valid_at": 200
+        }
+      }
+    ],
+    "version": "0.21.0"
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "results": [
+      {
+        "kind": "committed"
+      },
+      {
+        "coverage": "complete",
+        "edges": [],
+        "kind": "queried"
+      },
+      {
+        "coverage": "complete",
+        "edges": [
+          "installed"
+        ],
+        "kind": "queried"
+      },
+      {
+        "coverage": "complete",
+        "edges": [
+          "installed"
+        ],
+        "kind": "queried"
+      },
+      {
+        "coverage": "complete",
+        "edges": [],
+        "kind": "queried"
+      }
+    ]
+  }
+}

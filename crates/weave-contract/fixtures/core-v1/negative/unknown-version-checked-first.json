@@ -1,0 +1,16 @@
+{
+  "fixture": "unknown-version-checked-first",
+  "concepts": [
+    "error.version",
+    "error.unknown_field"
+  ],
+  "type": "program",
+  "expect": {
+    "reject": "E_VERSION"
+  },
+  "input": {
+    "version": "1.0.0",
+    "commands": [],
+    "provenance": {}
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "fixture": "duplicate-key",
+  "concepts": [
+    "error.decode"
+  ],
+  "type": "program",
+  "expect": {
+    "reject": "E_DECODE"
+  },
+  "input_text": "{\"version\": \"0.1.0\", \"version\": \"0.21.0\", \"commands\": []}"
+}

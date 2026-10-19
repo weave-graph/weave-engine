@@ -1,0 +1,30 @@
+{
+  "fixture": "embedding-space-encoder-version",
+  "concepts": [
+    "embedding.space"
+  ],
+  "type": "embedding_space_pair",
+  "expect": {
+    "reject": "E_SPACE"
+  },
+  "input": [
+    {
+      "id": "notes-text",
+      "revision": "1",
+      "encoder": "text-embedding-3-small",
+      "encoder_version": "2024-01-25",
+      "preprocessing": "weave-chunk/512-tokens/v1",
+      "dimensions": 4,
+      "metric": "cosine_distance"
+    },
+    {
+      "id": "notes-text",
+      "revision": "1",
+      "encoder": "text-embedding-3-small",
+      "encoder_version": "2025-06-01",
+      "preprocessing": "weave-chunk/512-tokens/v1",
+      "dimensions": 4,
+      "metric": "cosine_distance"
+    }
+  ]
+}

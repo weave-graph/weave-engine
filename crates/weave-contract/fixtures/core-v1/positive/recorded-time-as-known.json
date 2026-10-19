@@ -1,0 +1,185 @@
+{
+  "fixture": "recorded-time-as-known",
+  "concepts": [
+    "time.recorded"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "commands": [
+      {
+        "op": "evaluate",
+        "value": {
+          "kind": "recorded_query",
+          "query": {
+            "branch_id": "main",
+            "from": null,
+            "graph_id": "g",
+            "include_metadata": false,
+            "max_depth": 8,
+            "predicate": null,
+            "revision": null,
+            "to": null,
+            "valid_at": null
+          },
+          "selection": {
+            "kind": "local_time",
+            "unix_millis": 15
+          }
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "kind": "recorded_query",
+          "query": {
+            "branch_id": "main",
+            "from": null,
+            "graph_id": "g",
+            "include_metadata": false,
+            "max_depth": 8,
+            "predicate": null,
+            "revision": null,
+            "to": null,
+            "valid_at": null
+          },
+          "selection": {
+            "kind": "local_time",
+            "unix_millis": 25
+          }
+        }
+      }
+    ],
+    "version": "0.21.0"
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "clock_ms": 30,
+    "setup": [
+      {
+        "principal": "alice",
+        "write_graphs": [
+          "g"
+        ],
+        "clock_ms": 10,
+        "program": {
+          "commands": [
+            {
+              "data": {
+                "edges": [
+                  {
+                    "from": "a",
+                    "id": "e",
+                    "predicate": "firmware",
+                    "properties": {
+                      "version": "4.1"
+                    },
+                    "to": "b",
+                    "valid_time": {
+                      "end": null,
+                      "start": 0
+                    }
+                  }
+                ],
+                "nodes": [
+                  {
+                    "entity_id": "A",
+                    "id": "a",
+                    "space_id": "s"
+                  },
+                  {
+                    "entity_id": "B",
+                    "id": "b",
+                    "space_id": "s"
+                  }
+                ]
+              },
+              "graph_id": "g",
+              "op": "commit"
+            }
+          ],
+          "version": "0.21.0"
+        }
+      },
+      {
+        "principal": "alice",
+        "write_graphs": [
+          "g"
+        ],
+        "clock_ms": 20,
+        "program": {
+          "commands": [
+            {
+              "data": {
+                "edges": [
+                  {
+                    "from": "a",
+                    "id": "e",
+                    "predicate": "firmware",
+                    "properties": {
+                      "version": "4.2"
+                    },
+                    "to": "b",
+                    "valid_time": {
+                      "end": null,
+                      "start": 0
+                    }
+                  }
+                ],
+                "nodes": [
+                  {
+                    "entity_id": "A",
+                    "id": "a",
+                    "space_id": "s"
+                  },
+                  {
+                    "entity_id": "B",
+                    "id": "b",
+                    "space_id": "s"
+                  }
+                ]
+              },
+              "expected_head": "sha256:1bfa94849ce25ef360cb21190e18612abaa8cc9a46a5bbcd41542970ff5208ba",
+              "graph_id": "g",
+              "op": "commit"
+            }
+          ],
+          "version": "0.21.0"
+        }
+      }
+    ],
+    "results": [
+      {
+        "coverage": "complete",
+        "edge_properties": {
+          "e": {
+            "version": "4.1"
+          }
+        },
+        "edges": [
+          "e"
+        ],
+        "kind": "queried",
+        "recorded_observations": 1
+      },
+      {
+        "coverage": "complete",
+        "edge_properties": {
+          "e": {
+            "version": "4.2"
+          }
+        },
+        "edges": [
+          "e"
+        ],
+        "kind": "queried",
+        "recorded_observations": 1
+      }
+    ]
+  }
+}

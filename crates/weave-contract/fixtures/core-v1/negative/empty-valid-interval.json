@@ -1,0 +1,65 @@
+{
+  "fixture": "empty-valid-interval",
+  "concepts": [
+    "time.valid"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "data": {
+          "edges": [
+            {
+              "derived_from": [],
+              "from": "a",
+              "id": "e",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "p",
+              "properties": {},
+              "readers": [],
+              "to": "b",
+              "valid_time": {
+                "end": 100,
+                "start": 100
+              }
+            }
+          ],
+          "nodes": [
+            {
+              "entity_id": "A",
+              "id": "a",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            },
+            {
+              "entity_id": "B",
+              "id": "b",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          ]
+        },
+        "expected_head": null,
+        "graph_id": "g",
+        "op": "commit"
+      }
+    ],
+    "version": "0.21.0"
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "error": "E_INTERVAL"
+  }
+}

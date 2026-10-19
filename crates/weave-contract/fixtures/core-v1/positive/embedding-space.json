@@ -1,0 +1,19 @@
+{
+  "fixture": "embedding-space",
+  "concepts": [
+    "embedding.space"
+  ],
+  "type": "embedding_space",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "dimensions": 4,
+    "encoder": "text-embedding-3-small",
+    "encoder_version": "2024-01-25",
+    "id": "notes-text",
+    "metric": "cosine_distance",
+    "preprocessing": "weave-chunk/512-tokens/v1",
+    "revision": "1"
+  }
+}

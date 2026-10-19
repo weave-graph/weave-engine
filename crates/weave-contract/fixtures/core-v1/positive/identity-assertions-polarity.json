@@ -1,0 +1,118 @@
+{
+  "fixture": "identity-assertions-polarity",
+  "concepts": [
+    "identity.assertion",
+    "fact.polarity"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "data": {
+          "assertions": [
+            {
+              "derived_from": [],
+              "edge_id": "runs",
+              "id": "runs-by-erp",
+              "metadata": [],
+              "polarity": "positive",
+              "properties": {},
+              "readers": [],
+              "source": "erp",
+              "valid_time": {
+                "end": null,
+                "start": 10
+              }
+            },
+            {
+              "derived_from": [],
+              "edge_id": "runs",
+              "id": "runs-by-tech",
+              "metadata": [],
+              "polarity": "negative",
+              "properties": {},
+              "readers": [],
+              "source": "technician-report",
+              "valid_time": {
+                "end": null,
+                "start": 20
+              }
+            }
+          ],
+          "edges": [],
+          "nodes": [
+            {
+              "entity_id": "unit-7",
+              "id": "unit-7",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "physical"
+            },
+            {
+              "entity_id": "fw-4.2",
+              "id": "fw-4.2",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "physical"
+            }
+          ],
+          "profile": "explicit",
+          "structural_edges": [
+            {
+              "from": "unit-7",
+              "id": "runs",
+              "metadata": [],
+              "predicate": "runs_firmware",
+              "properties": {},
+              "readers": [],
+              "to": "fw-4.2"
+            }
+          ]
+        },
+        "expected_head": null,
+        "graph_id": "g",
+        "op": "commit"
+      },
+      {
+        "op": "query",
+        "query": {
+          "branch_id": "main",
+          "from": null,
+          "graph_id": "g",
+          "include_metadata": false,
+          "max_depth": 8,
+          "predicate": null,
+          "revision": null,
+          "to": null,
+          "valid_at": 25
+        }
+      }
+    ],
+    "version": "0.21.0"
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "results": [
+      {
+        "kind": "committed"
+      },
+      {
+        "coverage": "complete",
+        "edges": [
+          "runs-by-erp",
+          "runs-by-tech"
+        ],
+        "kind": "queried"
+      }
+    ]
+  }
+}
