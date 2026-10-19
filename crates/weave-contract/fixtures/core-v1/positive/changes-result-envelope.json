@@ -1,0 +1,107 @@
+{
+  "fixture": "changes-result-envelope",
+  "concepts": [
+    "query.changes",
+    "result.envelope"
+  ],
+  "type": "query_result",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "changes": {
+      "entries": [
+        {
+          "after": {
+            "entity_id": "A",
+            "id": "a",
+            "kind": "node",
+            "metadata": [],
+            "properties": {
+              "firmware": "2.0"
+            },
+            "readers": [],
+            "space_id": "s"
+          },
+          "before": {
+            "entity_id": "A",
+            "id": "a",
+            "kind": "node",
+            "metadata": [],
+            "properties": {
+              "firmware": "1.0"
+            },
+            "readers": [],
+            "space_id": "s"
+          },
+          "change": "corrected",
+          "id": "a",
+          "kind": "node"
+        },
+        {
+          "before": {
+            "derived_from": [],
+            "from": "a",
+            "id": "ab",
+            "kind": "edge",
+            "metadata": [],
+            "polarity": "positive",
+            "predicate": "feeds",
+            "properties": {},
+            "readers": [],
+            "to": "b",
+            "valid_time": {
+              "end": null,
+              "start": 0
+            }
+          },
+          "change": "retracted",
+          "id": "ab",
+          "kind": "edge"
+        }
+      ],
+      "from_revision": "fact:sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "to_revision": "fact:sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "coverage": "complete",
+    "diagnostics": [],
+    "edge_origins": {},
+    "fact_provenance": [
+      {
+        "fact": {
+          "graph_id": "g",
+          "kind": "node",
+          "node_id": "a",
+          "revision": "fact:sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "provenance": {
+          "method": {
+            "kind": "unspecified"
+          },
+          "recorded_at_ms": 20,
+          "writer": "writer"
+        }
+      }
+    ],
+    "graph": {
+      "edges": [],
+      "nodes": []
+    },
+    "input_snapshots": [
+      {
+        "graph_id": "g",
+        "revision": "fact:sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      {
+        "graph_id": "g",
+        "revision": "fact:sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ],
+    "metadata_graphs": [],
+    "provenance": [],
+    "snapshots": {
+      "g": "fact:sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "version": "0.23.0"
+  }
+}

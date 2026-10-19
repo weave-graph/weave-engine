@@ -75,6 +75,12 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
         if !valid_id(&definition.id) || !valid_id(&host.principal) {
             return Err(err("E_VIEW", "view and principal IDs required"));
         }
+        if crate::traversal::uses_traversal(&definition.expression) {
+            return Err(err(
+                "E_VIEW",
+                "expand, changes and as_of are not supported in views",
+            ));
+        }
         json_size(definition, 1024 * 1024)?;
         let tx = self.conn.unchecked_transaction()?;
         let _clock_scope = self.operation_write_scope()?;
@@ -765,6 +771,12 @@ fn clock_expression(
                 "governed or cached view reads cannot be registered as view dependencies",
             ))
         }
+        GraphExpression::Expand(_) | GraphExpression::Changes(_) | GraphExpression::AsOf { .. } => {
+            return Err(err(
+                "E_VIEW",
+                "expand and changes are not supported in views",
+            ))
+        }
         GraphExpression::ResolveIdentity { selection } => {
             if let Some(t) = tick {
                 selection.valid_at = t;
@@ -886,6 +898,9 @@ fn collect_heads(expression: &GraphExpression, heads: &mut BTreeMap<(String, Str
         | GraphExpression::Explain { input }
         | GraphExpression::Counterparts { input, .. } => collect_heads(input, heads),
         GraphExpression::AcceptedHistory { .. }
+        | GraphExpression::Expand(_)
+        | GraphExpression::Changes(_)
+        | GraphExpression::AsOf { .. }
         | GraphExpression::AcceptedGraph { .. }
         | GraphExpression::CurrentView { .. }
         | GraphExpression::Reference { .. }

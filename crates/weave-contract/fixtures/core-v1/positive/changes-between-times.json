@@ -1,0 +1,247 @@
+{
+  "fixture": "changes-between-times",
+  "concepts": [
+    "query.changes",
+    "time.as_of",
+    "fact.readers"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "commands": [
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "from": {
+            "kind": "as_of",
+            "unix_millis": 15
+          },
+          "graph_id": "g",
+          "kind": "changes",
+          "limit": 10000,
+          "to": {
+            "kind": "head"
+          }
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "entities": [
+            "A"
+          ],
+          "from": {
+            "kind": "as_of",
+            "unix_millis": 5
+          },
+          "graph_id": "g",
+          "kind": "changes",
+          "limit": 10000,
+          "to": {
+            "kind": "as_of",
+            "unix_millis": 15
+          }
+        }
+      }
+    ],
+    "version": "0.23.0"
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "clock_ms": 30,
+    "setup": [
+      {
+        "principal": "writer",
+        "write_graphs": [
+          "g"
+        ],
+        "clock_ms": 10,
+        "program": {
+          "commands": [
+            {
+              "branch_id": "main",
+              "changes": [
+                {
+                  "change": "assert",
+                  "fact": {
+                    "entity_id": "A",
+                    "id": "a",
+                    "kind": "node",
+                    "metadata": [],
+                    "properties": {
+                      "firmware": "1.0"
+                    },
+                    "readers": [],
+                    "space_id": "s"
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "entity_id": "B",
+                    "id": "b",
+                    "kind": "node",
+                    "metadata": [],
+                    "properties": {},
+                    "readers": [],
+                    "space_id": "s"
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "entity_id": "S",
+                    "id": "s",
+                    "kind": "node",
+                    "metadata": [],
+                    "properties": {},
+                    "readers": [
+                      "bob"
+                    ],
+                    "space_id": "s"
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "derived_from": [],
+                    "from": "a",
+                    "id": "ab",
+                    "kind": "edge",
+                    "metadata": [],
+                    "polarity": "positive",
+                    "predicate": "feeds",
+                    "properties": {},
+                    "readers": [],
+                    "to": "b",
+                    "valid_time": {
+                      "end": null,
+                      "start": 0
+                    }
+                  }
+                }
+              ],
+              "graph_id": "g",
+              "op": "write"
+            }
+          ],
+          "version": "0.23.0"
+        }
+      },
+      {
+        "principal": "writer",
+        "write_graphs": [
+          "g"
+        ],
+        "clock_ms": 20,
+        "program": {
+          "commands": [
+            {
+              "branch_id": "main",
+              "changes": [
+                {
+                  "change": "correct",
+                  "fact": {
+                    "entity_id": "A",
+                    "id": "a",
+                    "kind": "node",
+                    "metadata": [],
+                    "properties": {
+                      "firmware": "2.0"
+                    },
+                    "readers": [],
+                    "space_id": "s"
+                  }
+                },
+                {
+                  "change": "retract",
+                  "target": {
+                    "id": "ab",
+                    "kind": "edge"
+                  }
+                },
+                {
+                  "change": "correct",
+                  "fact": {
+                    "entity_id": "S",
+                    "id": "s",
+                    "kind": "node",
+                    "metadata": [],
+                    "properties": {
+                      "secret": true
+                    },
+                    "readers": [
+                      "bob"
+                    ],
+                    "space_id": "s"
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "entity_id": "C",
+                    "id": "c",
+                    "kind": "node",
+                    "metadata": [],
+                    "properties": {},
+                    "readers": [],
+                    "space_id": "s"
+                  }
+                }
+              ],
+              "graph_id": "g",
+              "op": "write"
+            }
+          ],
+          "version": "0.23.0"
+        }
+      }
+    ],
+    "results": [
+      {
+        "changes": [
+          [
+            "asserted",
+            "node",
+            "c"
+          ],
+          [
+            "corrected",
+            "node",
+            "a"
+          ],
+          [
+            "retracted",
+            "edge",
+            "ab"
+          ]
+        ],
+        "coverage": "complete",
+        "kind": "queried"
+      },
+      {
+        "changes": [
+          [
+            "asserted",
+            "edge",
+            "ab"
+          ],
+          [
+            "asserted",
+            "node",
+            "a"
+          ]
+        ],
+        "coverage": "complete",
+        "kind": "queried"
+      }
+    ]
+  }
+}

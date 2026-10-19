@@ -18,11 +18,15 @@ pub mod facts;
 pub use facts::{Fact, FactChange, FactExpectation, FactKind, FactTarget};
 pub mod provenance;
 pub mod quantity;
+pub mod traversal;
+pub use traversal::{
+    ChangeBound, ChangeEntry, ChangeKind, ChangeSet, ChangesPlan, Direction, ExpandPlan,
+};
 pub mod wire;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 pub use wire::{decode, decode_program, is_supported_version, ContractError, SUPPORTED_VERSIONS};
-pub const VERSION: &str = "0.22.0";
+pub const VERSION: &str = "0.23.0";
 pub mod accepted_history;
 pub use accepted_history::{
     AcceptedSelection, AcceptedViewHistoryCut, AcceptedViewHistoryRange, AcceptedViewHistoryResult,
@@ -54,7 +58,7 @@ pub use algebra_types::*;
 pub use assertions::*;
 pub use schema::*;
 pub const LEGACY_VERSION: &str = "0.1.0";
-fn main_branch() -> String {
+pub(crate) fn main_branch() -> String {
     "main".into()
 }
 fn depth() -> u32 {
@@ -300,6 +304,15 @@ pub struct CounterpartSelection {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphExpression {
+    /// k-hop expansion from seed nodes (0.23, A3).
+    Expand(traversal::ExpandPlan),
+    /// Facts changed between two states of a branch (0.23, A3).
+    Changes(traversal::ChangesPlan),
+    /// A query of the branch as this replica knew it at a recorded time (0.23, A3).
+    AsOf {
+        query: QueryPlan,
+        unix_millis: i64,
+    },
     Window {
         input: Box<GraphExpression>,
         window: Interval,
@@ -462,6 +475,9 @@ pub struct QueryResult {
     /// Provenance of every stored source fact in the result (0.22, ADR-0005).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fact_provenance: Vec<provenance::ProvenanceEntry>,
+    /// The change set of a `changes` expression (0.23, A3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes: Option<traversal::ChangeSet>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ResolvedGraph {

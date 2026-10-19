@@ -12,7 +12,7 @@ white-paper requirements remain tracked separately in the
 |---|---|
 | Science API and CLI | `weave-science` 0.1.0; native Rust and one-request JSON process |
 | Python client | `weave_science` 0.1.0; Python 3.10+, no mandatory runtime dependencies |
-| Engine contract | 0.22.0; existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
+| Engine contract | 0.23.0; existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), and k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
 | Native storage | Store 30; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)) |
 | Platforms | Linux, macOS and Windows in the native CI profile |
 
@@ -126,10 +126,61 @@ The `weave-hardware` crate and CLI provide the
   against an independent oracle, reader restrictions and reopening.
 
 **Limits.** Imports above 100,000 changes are written in several revisions.
-Rows missing from an export are not retracted. Recorded-time selection
-requires a reader who can see the whole revision (ADR-0002), so restricted
-readers pin revisions instead. Series overlap is filtered after an indexed
+Rows missing from an export are not retracted. `recorded_query` requires a
+reader who can see the whole revision (ADR-0002); restricted readers use the
+A3 `as_of` expression, which reads the visible subset as known at a time. Series overlap is filtered after an indexed
 read, not indexed itself. Embeddings for maintenance notes are A4.
+## Traversal, time travel and change sets (A3)
+
+Protocol 0.23.0 adds three graph expressions
+([guide](TRAVERSAL.md), [0.23](contract/v0.23/README.md)); the store stays 30:
+
+- **`expand`.** The exact k-hop neighborhood (1 to 16 hops) of seed nodes,
+  with predicate, direction and valid-time filters and a result-size `limit`
+  (`E_BUDGET`, never truncated). It reads a pinned revision, the head, or the
+  branch `as_of` a recorded time. On a fact revision each hop reads only the
+  frontier's edges through the subject and object indexes.
+- **`as_of`.** `{kind: "as_of", query, unix_millis}` reads any query as this
+  replica knew the branch at a recorded time, and `expand` and `changes` take
+  the same selection. It uses the `(graph, branch, recorded_at_ms)` index
+  without a history walk and authorizes record by record, so a reader who
+  cannot see restricted records (for example a fleet analyst) gets the
+  visible subset exactly as a read pinned to that revision.
+  `recorded_query` keeps its whole-revision rule (ADR-0002, amended).
+- **`changes`.** The facts asserted, retracted or corrected between two
+  authorized states (as of a time, a cursor revision or the head), scoped by
+  entity or predicate. It is the pull change feed: `to_revision` is the next
+  cursor. Between two revisions of one fact line it reads only the logged
+  operations between them and the records whose visibility depends on them.
+- **Explanations.** Every element of `expand`, `changes` and join results is
+  listed in `fact_provenance` with its writer, recorded time and claim.
+- **Coverage.** A missing or hidden seed (`E_SEED_UNAVAILABLE`) and a denied
+  derivation in the result's region (`E_DERIVATION_UNAVAILABLE`) make the
+  result partial; an empty complete result means nothing visible matched.
+- **Hidden input.** Paired tests (`tests/traversal.rs`) show that facts a
+  reader cannot see do not change any `expand` or `changes` output for that
+  reader, apart from content-derived revision IDs.
+
+Evidence: `tests/traversal.rs` checks `expand` against an independent BFS on
+40 random graphs (1,440 expansions over fact and snapshot revisions) and
+`changes` against the difference of two model states on 1,000+ random
+histories with corrections, retractions and snapshot commits.
+`tests/traversal_scale.rs` checks k = 1..4 on a 100,000-fact graph with
+valid-time, as-of and reader filters in the release CI job. As-of selection
+is measured at 10,000 and 1,000,000 revisions
+([report](benchmarks/as-of-selection-2026-10-20.json)).
+
+**Limits.**
+- The Python client and the science JSON envelope reach the operators through
+  `execute` programs only; dedicated helpers and a tutorial follow in the next
+  A3 part.
+- A change set across a snapshot revision or two fact lines reads both states
+  whole, within the read budget.
+- The read budget counts stored records an operator reads, including hidden
+  ones, as every read does. Revision IDs change with hidden writes.
+- The change feed is pull only (push is C2).
+- Selecting the edges or attachments of a node scans every version recorded
+  under it, so a node corrected very many times is slower to traverse.
 
 ## Verified evidence
 
@@ -181,8 +232,9 @@ addresses:
   per-fact provenance, indexed reads and no per-graph object cap (see
   [fact-level writes](#fact-level-writes-a2)). Snapshot commits remain bounded
   by the 16 MiB request limit.
-- **Queries (Phase A).** There is no k-hop traversal operator. "What changed" is
-  computed by diffing two results; there is no stored change feed.
+- **Queries (Phase A).** Addressed by A3: k-hop `expand`, indexed `as_of`
+  selection and `changes` change sets with a pull feed (see
+  [traversal](#traversal-time-travel-and-change-sets-a3)).
 - **Embeddings (Phase A).** Science kNN uses an untyped `vector` node property
   without time awareness and is not part of the plan algebra. Typed embedding
   spaces support only pairwise distance.

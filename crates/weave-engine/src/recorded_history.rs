@@ -218,8 +218,20 @@ CREATE INDEX IF NOT EXISTS head_observations_order ON head_observations(graph_id
         branch: &str,
         unix_millis: i64,
     ) -> Result<RecordedObservation> {
+        self.observation_at_or_before(graph, branch, unix_millis)?
+            .ok_or_else(unavailable)
+    }
+    /// [`Self::observation_at`], or `None` when no observation is at or before the cut.
+    fn observation_at_or_before(
+        &self,
+        graph: &str,
+        branch: &str,
+        unix_millis: i64,
+    ) -> Result<Option<RecordedObservation>> {
         self.read_budget.request()?;
-        let at = self.conn.query_row(&format!("SELECT {COLUMNS} FROM head_observations WHERE graph_id=?1 AND branch_id=?2 AND recorded_at_ms<=?3 ORDER BY recorded_at_ms DESC, rowid DESC LIMIT 1"), params![graph, branch, unix_millis], row).optional()?.ok_or_else(unavailable)?;
+        let Some(at) = self.conn.query_row(&format!("SELECT {COLUMNS} FROM head_observations WHERE graph_id=?1 AND branch_id=?2 AND recorded_at_ms<=?3 ORDER BY recorded_at_ms DESC, rowid DESC LIMIT 1"), params![graph, branch, unix_millis], row).optional()? else {
+            return Ok(None);
+        };
         let selected = self.decode_observation(at)?;
         self.read_budget.request()?;
         let next = self.conn.query_row(&format!("SELECT {COLUMNS} FROM head_observations INDEXED BY head_observations_order WHERE graph_id=?1 AND branch_id=?2 AND rowid>(SELECT rowid FROM head_observations WHERE id=?3) ORDER BY rowid LIMIT 1"), params![graph, branch, selected.value.checkpoint], row).optional()?.ok_or_else(|| err("E_INTEGRITY", "recorded successor unavailable"))?;
@@ -229,7 +241,57 @@ CREATE INDEX IF NOT EXISTS head_observations_order ON head_observations(graph_id
         {
             return Err(err("E_INTEGRITY", "recorded predecessor unavailable"));
         }
-        Ok(selected.value)
+        Ok(Some(selected.value))
+    }
+    /// The revision `branch` had as this replica knew it at `unix_millis`
+    /// (A3 `as_of`), selected through the recorded-time index in O(log n):
+    /// `None` before the branch's first recorded head. The branch must exist
+    /// and its head must be readable (`E_UNAVAILABLE` otherwise), so a
+    /// missing and a denied graph stay indistinguishable. Unlike
+    /// `recorded_query`, no observation witness is returned and the selected
+    /// revision is not required to be wholly visible: the caller authorizes
+    /// it record by record, exactly as a read pinned to that revision.
+    pub(crate) fn revision_as_of(
+        &self,
+        graph: &str,
+        branch: &str,
+        unix_millis: i64,
+        host: &HostContext,
+    ) -> Result<Option<String>> {
+        let head = self
+            .head(graph, branch)?
+            .ok_or_else(|| err("E_UNAVAILABLE", "graph unavailable"))?;
+        if !self.protected_reference_allowed(graph, &head, host)? {
+            return Err(err("E_UNAVAILABLE", "graph unavailable"));
+        }
+        if unix_millis < 0 || unix_millis > self.operation_time()? {
+            return Err(err(
+                "E_HISTORY_TIME",
+                "recording cut is outside the observed clock",
+            ));
+        }
+        if unix_millis < self.retention_history_floor()? {
+            return Err(err(
+                "E_HISTORY_EXPIRED",
+                "recorded cut precedes retained history",
+            ));
+        }
+        let tip = self.recorded_tip(graph, branch)?;
+        if tip.value.recorded_at_ms <= unix_millis {
+            return Ok(Some(tip.value.graph.revision));
+        }
+        if let Some(selected) = self.observation_at_or_before(graph, branch, unix_millis)? {
+            return Ok(Some(selected.graph.revision));
+        }
+        // Before the first observation: the branch did not exist yet, unless
+        // its history starts at a migration baseline, before which it is unknown.
+        self.read_budget.request()?;
+        let first = self.conn.query_row(&format!("SELECT {COLUMNS} FROM head_observations INDEXED BY head_observations_order WHERE graph_id=?1 AND branch_id=?2 ORDER BY rowid LIMIT 1"), params![graph, branch], row).optional()?.ok_or_else(|| err("E_INTEGRITY", "recorded history unavailable"))?;
+        let first = self.decode_observation(first)?;
+        if first.parent.is_some() || first.value.kind == ObservationKind::Baseline {
+            return Err(unavailable());
+        }
+        Ok(None)
     }
     fn previous_observation(
         &self,

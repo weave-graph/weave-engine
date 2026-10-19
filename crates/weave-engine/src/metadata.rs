@@ -647,6 +647,7 @@ mod selector_tests {
         let origins = BTreeMap::from([("bc".into(), vec![proof])]);
         QueryResult {
             fact_provenance: Vec::new(),
+            changes: None,
             recorded_observations: vec![],
             accepted_observations: vec![],
             version: VERSION.into(),

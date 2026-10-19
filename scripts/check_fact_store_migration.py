@@ -126,7 +126,7 @@ def main():
             new = after[key]
             assert len(old) == len(new) == 1
             old_result, new_result = old[0]["result"], new[0]["result"]
-            assert old_result.pop("version") == "0.21.0" and new_result.pop("version") == "0.22.0"
+            assert old_result.pop("version") == "0.21.0" and new_result.pop("version") == "0.23.0"
             assert json.dumps(old_result, sort_keys=False) == json.dumps(new_result, sort_keys=False), key
             compared += 1
         report = {"profile": "native-fact-store-migration/1", "result": "passed", "old_marker": 29, "new_marker": 30,
