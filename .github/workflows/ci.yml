@@ -67,3 +67,18 @@ jobs:
           WEAVE_SCALE_FACTS: '1000000'
           WEAVE_SCALE_WRITES: '120000'
         run: cargo test --release --locked -p weave-engine --test fact_scale -- --nocapture
+  hardware-fleet-5k:
+    # The A5 fleet scenario at the Phase A exit size, in its own job.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: hardware-fleet
+      - name: 5,000-unit fleet with 1,000 incremental updates (release)
+        env:
+          WEAVE_FLEET_UNITS: '5000'
+          WEAVE_FLEET_UPDATES: '1000'
+        run: cargo test --release --locked -p weave-hardware --test fleet_scenario -- --nocapture

@@ -1,0 +1,9 @@
+team_id,name,org_id
+C001-OPS,Customer 001 Operations,C001
+C002-OPS,Customer 002 Operations,C002
+C003-OPS,Customer 003 Operations,C003
+C004-OPS,Customer 004 Operations,C004
+NWM-ENG,Firmware Engineering,NWM
+OPS-EAST,Field Service EAST,OPS
+OPS-NORTH,Field Service NORTH,OPS
+OPS-SOUTH,Field Service SOUTH,OPS

@@ -99,6 +99,38 @@ single-fact revisions in one store on every PR.
 - A filtered fact read reports partial coverage only for records the filter
   selects.
 
+## Hardware reference model (A5)
+
+The `weave-hardware` crate and CLI provide the
+[hardware reference model](HARDWARE_MODEL.md):
+
+- **Schema.** Twelve node types (organization, team, user, site, model,
+  firmware version, configuration, unit, part, sensor, maintenance event,
+  incident) and fourteen relations, enforced by an engine graph schema
+  (`weave.hardware` revision 1) on every write.
+- **`SeriesRef`.** A typed literal on an `hw:series` sensor attachment whose
+  valid time is the referenced range. No raw samples are stored. References
+  are selected by half-open range overlap.
+- **Importers.** CSV and JSON tables map to facts with IDs derived from each
+  row's key. `Engine::reconcile_facts` (new, needs write authority) plans the
+  asserts and corrections, which are written as A2 fact writes with claimed
+  provenance (`method: import`). An identical re-import writes zero facts and
+  no revision.
+- **Generator.** A deterministic, seeded fleet generator: by default 5,000
+  units (about 151,600 facts, roughly a fifth customer-restricted) plus 1,000
+  updates (rollouts, relocations, replacements, maintenance, incidents and
+  corrections), byte-identical on every platform.
+- **Scenario.** The parts of the Phase A exit scenario that the current
+  operators reach run on it in CI at full size (`hardware-fleet-5k`): import,
+  zero-fact re-import, 1,000 single-update writes, question 2 in both forms
+  against an independent oracle, reader restrictions and reopening.
+
+**Limits.** Imports above 100,000 changes are written in several revisions.
+Rows missing from an export are not retracted. Recorded-time selection
+requires a reader who can see the whole revision (ADR-0002), so restricted
+readers pin revisions instead. Series overlap is filtered after an indexed
+read, not indexed itself. Embeddings for maintenance notes are A4.
+
 ## Verified evidence
 
 The implementation at `3bbd9d87f708c7aa3d5a2fb2afccb01be0789340` was merged at

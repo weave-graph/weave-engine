@@ -1,0 +1,7 @@
+model_id,name,manufacturer,product_line
+CX-200,CX-200 compressor,Northwind Machines,compressor
+CX-300,CX-300 compressor,Northwind Machines,compressor
+PX-40,PX-40 pump,Northwind Machines,pump
+PX-60,PX-60 pump,Northwind Machines,pump
+TX-12,TX-12 turbine,Northwind Machines,turbine
+TX-9,TX-9 turbine,Northwind Machines,turbine

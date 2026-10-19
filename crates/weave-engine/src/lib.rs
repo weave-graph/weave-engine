@@ -112,6 +112,7 @@ mod geometry;
 pub use weave_contract::{ClusterRequest, IdentityPolicyRef, IdentityResolve, ViewClock};
 pub mod fact_store;
 mod facts;
+pub use facts::FactReconciliation;
 mod metadata;
 mod snapshot;
 mod typed;
