@@ -48,7 +48,8 @@ def main():
             fields=[]
             if program is not None: plan.write_text(json.dumps(program)); fields=[str(plan)]
             result=subprocess.run([str(args.host.resolve()),str(db),mode,*fields],capture_output=True,timeout=30)
-            assert result.returncode==(1 if error else 0),(name,result.stdout,result.stderr)
+            # Elapsed seconds show wall-clock drift against the fixture's live policy lifetime.
+            assert result.returncode==(1 if error else 0),(name,result.stdout,result.stderr,{'elapsed_s':round(time.monotonic()-started,3)})
             raw=result.stderr if error else result.stdout; value=json.loads(raw)
             if error: assert value['code']==error,value
             (evidence/(name+'-runtime.json')).write_bytes(raw)

@@ -554,3 +554,24 @@ matrix, and at 5,000 units and 1,000 updates optimized in the
 `hardware-fleet-5k` job (about 90 s locally). That job is separate, as with
 `fact-scale-1m`, so a slow runner there cannot hide failures in the main
 matrix.
+
+### 2026-10-20 — CI — Live governance fixture windows outlast the job, not seconds
+
+The one-off Windows failure of `check_history_source.py` (`E_GOV_HISTORY_UNAVAILABLE`
+on the `old` query, PR #54 run 39327688334 attempt 1) was wall-clock expiry of the
+`source_view_fixture` policy, not clock ties, SQLite locking or test order. In
+`live_*` modes the fixture installed a SystemClock policy valid for 10 s after
+`live_seed`. Accepted-history reads check the current head policy and fail closed
+once it expires, so a slow runner (the failed step took 14 s; the passing re-run
+took 2 s) turned a correct query into "unavailable". A second, tighter window hid
+behind it: `live_publish` proposed with expiry `own sample + 9 s`, which must not
+exceed `seed sample + 10 s`, so publishing more than 1 s after seeding failed with
+`E_GOV_POLICY`. Both reproduce locally by delaying one fixture process.
+
+The fix is in the trusted harness only: live policies now last 60 minutes and
+live proposals and approvals 30 minutes, both longer than the 20-minute job
+timeout. ManualClock modes keep 10 s and 9 s, which the `expired` mode depends on.
+The engine checks are unchanged, and two tests now pin them: history fails closed
+exactly at policy expiry, and a proposal may not outlive its policy. No retries
+were added. The script reports elapsed seconds on a failed invocation so a
+recurrence shows wall-clock drift immediately.
