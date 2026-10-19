@@ -44,6 +44,11 @@ CREATE INDEX IF NOT EXISTS fact_index_unanchored ON fact_index(line) WHERE subje
 
 const FACT_COLUMNS: &str = "l.position,l.kind,l.fact_id,l.body,l.writer,l.recorded_at_ms,l.recorded_in,i.entity,i.subject,i.object,i.predicate,i.valid_from,i.valid_to,l.on_behalf_of,i.carrier";
 const LIVE: &str = "i.line=?1 AND i.from_seq<=?2 AND (i.until_seq IS NULL OR i.until_seq>?2)";
+/// The version of key (?3, ?4) live at seq ?2 of line ?1: the one with the
+/// greatest `from_seq` at or before ?2, if it has not ended. Versions of a key
+/// on a line never overlap, so this is one index probe, however many
+/// versions the key has.
+const KEY_LIVE: &str = "i.position=(SELECT k.position FROM fact_index k WHERE k.line=?1 AND k.namespace=?3 AND k.fact_id=?4 AND k.from_seq<=?2 ORDER BY k.from_seq DESC LIMIT 1) AND (i.until_seq IS NULL OR i.until_seq>?2)";
 
 struct Entry<'a> {
     line: i64,
@@ -115,9 +120,7 @@ impl<'c> SqliteFactStore<'c> {
         Ok(self
             .conn
             .query_row(
-                &format!(
-                    "SELECT i.position,i.kind FROM fact_index i WHERE {LIVE} AND i.namespace=?3 AND i.fact_id=?4"
-                ),
+                &format!("SELECT i.position,i.kind FROM fact_index i WHERE {KEY_LIVE}"),
                 params![line, seq, namespace.as_str(), id],
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
@@ -495,7 +498,7 @@ impl FactBackend for SqliteFactStore<'_> {
         let row = self
             .conn
             .query_row(
-                &format!("SELECT {FACT_COLUMNS} FROM fact_index i JOIN fact_log l ON l.position=i.position WHERE {LIVE} AND i.namespace=?3 AND i.fact_id=?4"),
+                &format!("SELECT {FACT_COLUMNS} FROM fact_index i JOIN fact_log l ON l.position=i.position WHERE {KEY_LIVE}"),
                 params![info.line, info.seq, namespace.as_str(), id],
                 fact_row,
             )
@@ -620,6 +623,60 @@ impl FactBackend for SqliteFactStore<'_> {
             return Err(integrity());
         }
         Ok(ops)
+    }
+    fn changed_keys(
+        &self,
+        from: Option<&str>,
+        to: &str,
+        limit: usize,
+    ) -> Result<Option<Vec<(Namespace, String)>>> {
+        let info = self.info(to)?;
+        let base_parent: Option<String> = self.conn.query_row(
+            "SELECT base_parent FROM fact_lines WHERE line=?1",
+            [info.line],
+            |r| r.get(0),
+        )?;
+        let other = match from {
+            Some(from) => self.revision(from)?,
+            None => None,
+        };
+        let (low, high) = match other {
+            Some(other) if other.line == info.line => {
+                (other.seq.min(info.seq), other.seq.max(info.seq))
+            }
+            _ if from == base_parent.as_deref() => (0, info.seq),
+            _ => return Ok(None),
+        };
+        if low == high {
+            return Ok(Some(vec![]));
+        }
+        // The operations of seq (low, high] occupy one position range, which
+        // other lines' operations may interleave; the line and seq bounds
+        // keep only this line's.
+        let (start, end): (i64, i64) = self.conn.query_row(
+            "SELECT (SELECT first_position FROM fact_revisions WHERE line=?1 AND seq=?2),(SELECT first_position+op_count FROM fact_revisions WHERE line=?1 AND seq=?3)",
+            params![info.line, low + 1, high],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        let cap = i64::try_from(limit)
+            .unwrap_or(i64::MAX - 1)
+            .saturating_add(1);
+        let mut statement = self.conn.prepare(
+            "SELECT DISTINCT namespace,fact_id FROM fact_log WHERE position>=?1 AND position<?2 AND line=?3 AND seq>?4 AND seq<=?5 AND op!='base' ORDER BY namespace,fact_id LIMIT ?6",
+        )?;
+        let rows = statement.query_map(params![start, end, info.line, low, high, cap], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        let mut keys = Vec::new();
+        for row in rows {
+            let (namespace, id) = row?;
+            if keys.len() == limit {
+                return Err(err("E_BUDGET", "changed keys exceed their limit"));
+            }
+            keys.push((Namespace::parse(&namespace).ok_or_else(integrity)?, id));
+        }
+        keys.sort();
+        Ok(Some(keys))
     }
     fn put_checkpoint(&mut self, revision: &str, body: &str) -> Result<()> {
         self.info(revision)?;

@@ -20,7 +20,7 @@ import tempfile
 import time
 from pathlib import Path
 
-CONTRACT_VERSION = "0.22.0"
+CONTRACT_VERSION = "0.23.0"
 SCIENCE_VERSION = "0.1.0"
 REPOSITORY = Path(__file__).resolve().parents[1]
 

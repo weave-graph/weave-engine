@@ -205,6 +205,7 @@ fn envelope(
     }
     let mut out = QueryResult {
         fact_provenance: Vec::new(),
+        changes: None,
         recorded_observations: left.recorded_observations.clone(),
         accepted_observations: left.accepted_observations.clone(),
         version: VERSION.into(),

@@ -78,6 +78,18 @@ fn compare_query(name: &str, index: usize, expected: &Value, result: &QueryResul
             );
         }
     }
+    if let Some(changes) = expected["changes"].as_array() {
+        let entries = &result.changes.as_ref().expect("a change set").entries;
+        let actual: BTreeSet<String> = entries
+            .iter()
+            .map(|e| {
+                let v = serde_json::to_value(e).unwrap();
+                serde_json::json!([v["change"], v["kind"], v["id"]]).to_string()
+            })
+            .collect();
+        let want: BTreeSet<String> = changes.iter().map(Value::to_string).collect();
+        assert_eq!(actual, want, "{name} result {index} changes");
+    }
     if let Some(count) = expected["recorded_observations"].as_u64() {
         assert_eq!(result.recorded_observations.len() as u64, count, "{name}");
     }
@@ -214,7 +226,7 @@ fn run_cli(program: &str) -> Value {
 
 #[test]
 fn engine_cli_reports_stable_codes_for_unknown_versions_and_fields() {
-    let version = run_cli(r#"{"version":"0.23.0","commands":[]}"#);
+    let version = run_cli(r#"{"version":"0.24.0","commands":[]}"#);
     assert_eq!(version["code"], "E_VERSION");
     let field = run_cli(r#"{"version":"0.21.0","commands":[],"comment":"x"}"#);
     assert_eq!(field["code"], "E_UNKNOWN_FIELD");
@@ -234,7 +246,7 @@ fn engine_rejects_every_unsupported_version_and_accepts_every_supported_one() {
         };
         engine.execute(&program, &host).unwrap();
     }
-    for version in ["0.23.0", "1.0.0", "0.0.0"] {
+    for version in ["0.24.0", "1.0.0", "0.0.0"] {
         let program = weave_contract::Program {
             source_revisions: vec![],
             version: version.into(),

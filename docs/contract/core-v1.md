@@ -2,9 +2,11 @@
 
 Status: **accepted** on 2026-10-19 (A1,
 [#2](https://github.com/weave-graph/weave-engine/issues/2)). Baseline protocol:
-**0.21.0**. Current protocol: **0.22.0**, which activates per-fact provenance,
-node valid time and fact-level writes (A2,
-[#3](https://github.com/weave-graph/weave-engine/issues/3)). Profile name: `core-v1` (`weave_contract::wire::CORE_PROFILE`).
+**0.21.0**. Current protocol: **0.23.0**. Protocol 0.22.0 activated per-fact
+provenance, node valid time and fact-level writes (A2,
+[#3](https://github.com/weave-graph/weave-engine/issues/3)); 0.23.0 adds
+k-hop `expand`, `as_of` selection and `changes` change sets (A3,
+[#4](https://github.com/weave-graph/weave-engine/issues/4)). Profile name: `core-v1` (`weave_contract::wire::CORE_PROFILE`).
 
 This document is the consolidated, normative specification of the core of the
 Weave contract that Phases A–C build on. It replaces reading the 21 additive
@@ -124,7 +126,10 @@ A **fact** is a node, an edge, an explicit assertion, a metadata attachment or
   new branch, and a string MUST equal the current head revision, otherwise the
   write fails with `E_CONFLICT` and nothing is written. Fixtures:
   `positive/correction-new-revision.json`,
-  `negative/stale-expected-head.json`.
+  `negative/stale-expected-head.json`,
+`negative/expand-version-gated.json`,
+`negative/expand-unknown-field.json`,
+`negative/changes-unknown-bound.json`.
 - **`fact.write`.** The `write` command (0.22) changes individual facts of one
   graph branch in one atomic fact revision: `{op: "write", graph_id,
   branch_id, expected_head?, changes}`. Each change is
@@ -185,6 +190,27 @@ other.
   witnesses are descriptive and never grant authority (ADR-0002).
   `recorded_range` returns every observation in a half-open recorded-time
   interval. Fixture: `positive/recorded-time-as-known.json`.
+- **`time.as_of`.** The expression `{kind: "as_of", query: QueryPlan,
+  unix_millis}` (0.23), the field `as_of: unix_millis` on `expand` and the
+  change bound `{kind: "as_of", unix_millis}` on `changes` read a branch as this
+  replica knew it at a recorded time: the last head recorded at or before that
+  millisecond, selected through the `(graph, branch, recorded_at_ms)` index in
+  O(log n) of the history length, never by walking history. Before the
+  branch's first recorded head the state is empty; before a migration
+  baseline it is unknown (`E_HISTORY_UNAVAILABLE`); a time in the future is
+  rejected (`E_HISTORY_TIME`). The branch must exist and its head must be
+  readable (`E_UNAVAILABLE`). Unlike `recorded_query`, `as_of` returns no
+  observation witness and does not require the selected revision to be
+  wholly visible: it is authorized record by record, exactly as a read pinned
+  to that revision. The `as_of` expression's result is therefore exactly the
+  result of the same `query` pinned to the selected revision: a reader who
+  cannot see every record gets the visible subset, with the coverage a pinned
+  read has, and nothing that reveals the hidden records. `recorded_query` and
+  `recorded_range` keep the whole-revision rule because they return
+  observation witnesses ([ADR-0002](../architecture/ADR-0002-recorded-head-observations.md)).
+  Fixtures: `positive/as-of-partially-visible.json`,
+  `positive/expand-valid-time-as-of.json`,
+  `positive/changes-between-times.json`.
 
 ## 6. Provenance
 
@@ -293,13 +319,65 @@ never reinterpreted as an embedding fact.
   | `support` | `supported`, `refuted`, `conflicted` or `unknown` at an instant, from visible evidence |
   | `metadata` | Follow a named metadata attachment |
   | `explain` | Derivation explanation of a value's records |
+  | `as_of` | Read a graph as known at a recorded time, record by record (0.23, `time.as_of`) |
+  | `expand` | k-hop neighborhood of seed nodes (0.23, `query.expand`) |
+  | `changes` | Facts changed between two states of a branch (0.23, `query.changes`) |
 
   Derived values carry their exact source origins and are readable only by
   the evaluating principal until a release policy exists (B2). Fixture:
   `positive/selection-operators.json`.
 
-A3 adds `expand` (k-hop traversal) and `changes` (change sets). A4 adds
-`nearest` and `similar_candidates`. These names are reserved
+- **`query.expand`.** `ExpandPlan { graph_id, branch_id, revision?, as_of?,
+  seeds, hops, direction, predicates?, valid_at?, limit }` (0.23) reads one
+  revision (pinned, as of a recorded time, or the head) and returns every node
+  within `hops` hops of a visible seed along visible edges whose predicate is
+  in `predicates` (empty: any) and, with `valid_at`, that are valid at that
+  instant between endpoints valid then, plus every such edge that leaves a
+  node fewer than `hops` hops away. `direction` is `out` (edges from the node,
+  the default), `in` or `both`. Explicit-profile assertions are traversed as
+  their materialized edges. The value is an ordinary graph value with exact
+  origins, so it composes with every operator, and its attachments are those
+  valid at `valid_at` on returned records. Bounds: 1 to 1,000 `seeds` and 1 to
+  16 `hops` (`E_EXPAND` for none, `E_BUDGET` beyond), and `limit` (default
+  10,000, at most 200,000) on returned nodes plus edges, which fails with
+  `E_BUDGET` rather than truncating. A seed that is missing or hidden makes
+  the result partial (`E_SEED_UNAVAILABLE`); the two are not distinguished. A
+  visible seed with no matching edge is a complete, empty neighborhood.
+  Fixtures: `positive/expand-k-hop.json`,
+  `positive/expand-valid-time-as-of.json`,
+  `negative/expand-version-gated.json`, `negative/expand-unknown-field.json`.
+- **`query.changes`.** `ChangesPlan { graph_id, branch_id, from, to,
+  entities?, predicates?, limit }` (0.23) compares two authorized states of a
+  branch fact by fact. Each bound is `{kind: "as_of", unix_millis}`
+  (`time.as_of`), `{kind: "cursor", revision}` (an exact revision of the
+  graph, typically an earlier `to_revision`) or `{kind: "head"}` (the default
+  `to`). A fact visible only in `to` is `asserted`, one visible only in
+  `from` is `retracted`, and one visible in both with different content is
+  `corrected`; intermediate versions are not listed. `entities` keeps changes
+  about those entities (nodes, edges and assertions touching them, and
+  attachments on them) and `predicates` keeps edges with those predicates and
+  attachments with those keys. The result is `QueryResult.changes`
+  (`ChangeSet { from_revision?, to_revision?, entries }`, each entry
+  `ChangeEntry { change, kind, id, before?, after? }` in `(kind, id)` order,
+  with the authorized value on each side), and `fact_provenance` lists every
+  `before` and `after` fact. `to_revision` continues the pull feed as the next
+  `cursor`. At most `limit` entries (default 10,000, at most 200,000;
+  `E_BUDGET` beyond). A change set is terminal: no operator takes one as
+  input (`E_CHANGES_OPERAND`). Fixtures:
+  `positive/changes-between-times.json`,
+  `positive/changes-result-envelope.json`,
+  `negative/changes-unknown-bound.json`.
+
+Both A3 operators authorize every record through the engine's one
+authorization path, together with the records it depends on, which gives the
+same decision as authorizing the whole revision. Traversal continues only
+from visible nodes along visible edges, `limit` counts visible output, and
+coverage becomes partial only for denials on records in the output's own
+region. Hidden facts therefore never appear in and never change their output.
+Revision identifiers are the exception: they are content-derived over every
+fact (ADR-0001, ADR-0004), so a hidden write gives a new revision ID.
+
+A4 adds `nearest` and `similar_candidates`. These names are reserved
 ([section 11.6](#116-reserved-names)).
 
 ## 9. Result envelope
@@ -316,8 +394,8 @@ A3 adds `expand` (k-hop traversal) and `changes` (change sets). A4 adds
     references for each returned record;
   - `metadata_graphs`;
   - optional `recorded_observations`, `accepted_observations`,
-    `selected_context`, `source_revisions` and `fact_provenance` (0.22),
-    each omitted when empty.
+    `selected_context`, `source_revisions`, `fact_provenance` (0.22) and
+    `changes` (0.23, `query.changes`), each omitted when empty.
 
   Unknown, partial, denied and empty stay distinguishable. When any selected
   input is missing, hidden or unresolved, the result has `coverage: partial`
@@ -375,6 +453,8 @@ decoding failures, and the C ABI keeps `E_NATIVE_INPUT`.
 | `E_RESERVED_NAMESPACE` | A write targets an engine-reserved graph or descriptor (for example identity or governance storage) |
 | `E_PROVENANCE` | Invalid provenance, or a missing origin (ADR-0005) |
 | `E_SPACE` | An invalid or mismatched embedding space or vector (ADR-0006) |
+| `E_EXPAND` | An `expand` with no seed or no hop (0.23) |
+| `E_CHANGES_OPERAND` | A change set used as the input of another operator (0.23) |
 | `E_STORAGE`, `E_FORMAT` | Internal storage or serialization failure |
 
 Extension features define further codes in their version notes. Those codes
@@ -389,9 +469,9 @@ automatically:
 
 | Identifier | Current | Where |
 |---|---|---|
-| Protocol (`Program.version`, `QueryResult.version`) | 0.22.0 | `weave_contract::VERSION` |
+| Protocol (`Program.version`, `QueryResult.version`) | 0.23.0 | `weave_contract::VERSION` |
 | Core profile | `core-v1` | This document |
-| Contract crate | 0.22.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
+| Contract crate | 0.23.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
 | Store schema | 30 | `STORAGE_VERSION` |
 | Capsule format | 0.4 | [CAPSULES.md](../CAPSULES.md) |
 | Science API | 0.1.0 | [SCIENCE_INTERFACE.md](../SCIENCE_INTERFACE.md) |
@@ -401,7 +481,7 @@ automatically:
 
 - **`compat.versions`.** A program declares exactly one protocol version.
   There is no range negotiation. The engine accepts the closed set
-  `SUPPORTED_VERSIONS` (0.1.0 through 0.22.0 today) and executes each with
+  `SUPPORTED_VERSIONS` (0.1.0 through 0.23.0 today) and executes each with
   the exact semantics it was published with. A feature used under an older
   version fails with `E_VERSION` before any write. Fixtures:
   `positive/legacy-version-accepted.json`,
@@ -417,6 +497,8 @@ automatically:
   through additive minor bumps. Each implementing PR records its exact version
   number. A1 itself changes no wire bytes, so the protocol stays 0.21.0.
   A2 activated provenance, `Node.valid_time` and `write` as **0.22.0**.
+  A3 activated `expand`, `as_of`, `changes` and `QueryResult.changes` as
+  **0.23.0**, with no store change.
 
 ### 11.3 What a minor version may add
 
@@ -461,7 +543,6 @@ meaning.
   |---|---|---|
   | `GraphData.embedding_spaces`, `GraphData.embeddings` | fields | ADR-0006, A4 |
   | `QueryResult.candidates`, `QueryResult.exactness` | result fields | ADR-0006, A4 |
-  | `expand`, `changes` | expression `kind` | A3 |
   | `nearest`, `similar_candidates` | expression `kind` | A4 |
   | `weave:` | predicate and ID namespace (`weave:similar_to`) | engine |
   | `reader_groups` on every fact record (omitted when empty) | field (group references) | B1, ADR-0007 section 13 |
@@ -470,6 +551,8 @@ meaning.
   reservation here. A2 activated `provenance`, `QueryResult.fact_provenance`
   and `Node.valid_time` in 0.22.0, and released `assert`, `retract` and
   `correct` as command ops: they are change kinds of the `write` command.
+  A3 activated the reserved expression kinds `expand` and `changes` in
+  0.23.0.
   Fixtures: `negative/reserved-node-reader-groups.json`,
   `negative/reserved-graph-embeddings.json`, `negative/unknown-command.json`,
   `negative/reserved-expression-nearest.json`.
@@ -540,6 +623,7 @@ No feature changes semantics because of this classification.
 | 0.21 | `recorded_range`, `HistoryRanged` | core v1 | §5 |
 | 0.21 | `accepted_history`, `accepted_range`, `accepted_observations` | extension | Governance |
 | 0.22 | `write` (assert, correct, retract), fact revisions, `Node.valid_time`, claimed `provenance`, `QueryResult.fact_provenance` | core v1 | §4 `fact.write`, §5, §6 |
+| 0.23 | `expand`, `as_of` (expression and field), `changes`, `QueryResult.changes` | core v1 | §5 `time.as_of`, §8 `query.expand`, `query.changes` |
 
 Capsules, mounts, dispatch, actors, governed effects and the browser host are
 native APIs, not contract versions. Their deferral is recorded in the
@@ -607,7 +691,11 @@ Positive: `positive/identity-graph-nodes-edges.json`,
 `positive/node-valid-time.json`,
 `positive/fact-provenance-in-results.json`,
 `positive/embedding-space.json`, `positive/embedding-fact.json`,
-`positive/candidate-relation.json`.
+`positive/candidate-relation.json`, `positive/as-of-partially-visible.json`,
+`positive/expand-k-hop.json`,
+`positive/expand-valid-time-as-of.json`,
+`positive/changes-between-times.json`,
+`positive/changes-result-envelope.json`.
 
 Negative: `negative/unknown-version.json`, `negative/missing-version.json`,
 `negative/unknown-version-checked-first.json`,

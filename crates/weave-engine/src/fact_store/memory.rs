@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 struct Line {
     graph_id: String,
     header: String,
+    base_parent: Option<String>,
     tip: i64,
 }
 
@@ -138,6 +139,7 @@ impl State {
                 Line {
                     graph_id: revision.graph_id.clone(),
                     header: base.header,
+                    base_parent: revision.parent.clone(),
                     tip: 0,
                 },
             );
@@ -283,6 +285,44 @@ impl FactBackend for MemoryFactStore {
                 op: op.clone(),
             })
             .collect())
+    }
+    fn changed_keys(
+        &self,
+        from: Option<&str>,
+        to: &str,
+        limit: usize,
+    ) -> Result<Option<Vec<(Namespace, String)>>> {
+        let info = self.state.info(to)?;
+        let line = self.state.lines.get(&info.line).ok_or_else(unavailable)?;
+        let other = match from {
+            Some(from) => self.state.revisions.get(from),
+            None => None,
+        };
+        let (low, high) = match other {
+            Some(other) if other.line == info.line => {
+                (other.seq.min(info.seq), other.seq.max(info.seq))
+            }
+            _ if from == line.base_parent.as_deref() => (0, info.seq),
+            _ => return Ok(None),
+        };
+        let mut keys = std::collections::BTreeSet::new();
+        for revision in self.state.revisions.values() {
+            if revision.line != info.line || revision.seq <= low || revision.seq > high {
+                continue;
+            }
+            for op in self
+                .state
+                .log
+                .range(revision.first_position..revision.first_position + revision.op_count)
+                .map(|(_, op)| op)
+            {
+                keys.insert((op.kind().namespace(), op.id().to_string()));
+            }
+        }
+        if keys.len() > limit {
+            return Err(err("E_BUDGET", "changed keys exceed their limit"));
+        }
+        Ok(Some(keys.into_iter().collect()))
     }
     fn put_checkpoint(&mut self, revision: &str, body: &str) -> Result<()> {
         self.state.info(revision)?;

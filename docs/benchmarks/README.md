@@ -12,6 +12,12 @@ and timing boundaries differ from the current science workload.
 |---|---|---|
 | [Fact writes, 19 October 2026](fact-writes-2026-10-19.json) | `cargo run --release --example fact_write_benchmark`; contract 0.22.0, store 30; graphs of 10k, 100k and 1M facts (half nodes, half edges); 200 single-fact commits each on an on-disk WAL store; one AMD Ryzen 9 7950X Linux host | Median single-fact commit 0.89–0.90 ms at every size; mean growth 2.5–2.6 KB per commit |
 
+## Recorded-time selection (A3)
+
+| Report | Recorded scope | Result |
+|---|---|---|
+| [As-of selection, 20 October 2026](as-of-selection-2026-10-20.json) | `cargo run --release --example as_of_benchmark`; contract 0.23.0, store 30; 10k and 1M single-fact revisions on one branch of an on-disk WAL store; 500 `expand` reads `as_of` uniformly random recorded times, each checked against the state recorded then, plus the same read pinned to the head; one AMD Ryzen 9 7950X Linux host | Median as-of read 0.43 ms at 10k and 0.46 ms at 1M revisions (pinned 0.46 and 0.48 ms): selection cost does not grow with history length beyond index depth |
+
 ## Current native science baseline
 
 | Report | Recorded scope | Result |

@@ -5,7 +5,7 @@ use crate::fact_store::{
     self as store, sqlite::SqliteFactStore, BaseState, FactBackend, FactFilter, FactOp,
     FactVersion, IndexKeys, NewRevision, Recording, ValidTime,
 };
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use weave_contract::facts::MAX_WRITE_CHANGES;
 use weave_contract::provenance::{
     ClaimedProvenance, EvidenceRef, FactProvenance, FactRef, Method, ProvenanceEntry,
@@ -20,7 +20,7 @@ pub(crate) fn is_fact_revision(revision: &str) -> bool {
     revision.starts_with(FACT_PREFIX)
 }
 
-fn store_kind(kind: FactKind) -> store::FactKind {
+pub(crate) fn store_kind(kind: FactKind) -> store::FactKind {
     match kind {
         FactKind::Node => store::FactKind::Node,
         FactKind::Edge => store::FactKind::Edge,
@@ -29,7 +29,7 @@ fn store_kind(kind: FactKind) -> store::FactKind {
         FactKind::Attachment => store::FactKind::Attachment,
     }
 }
-fn contract_kind(kind: store::FactKind) -> FactKind {
+pub(crate) fn contract_kind(kind: store::FactKind) -> FactKind {
     match kind {
         store::FactKind::Node => FactKind::Node,
         store::FactKind::Edge => FactKind::Edge,
@@ -38,11 +38,11 @@ fn contract_kind(kind: store::FactKind) -> FactKind {
         store::FactKind::Attachment => FactKind::Attachment,
     }
 }
-fn namespace(kind: FactKind) -> store::Namespace {
+pub(crate) fn namespace(kind: FactKind) -> store::Namespace {
     store_kind(kind).namespace()
 }
-type Key = (store::Namespace, String);
-fn key(fact: &Fact) -> Key {
+pub(crate) type Key = (store::Namespace, String);
+pub(crate) fn key(fact: &Fact) -> Key {
     (namespace(fact.kind()), fact.id().to_string())
 }
 
@@ -122,7 +122,7 @@ fn anchor_keys(fact: &Fact) -> IndexKeys {
     }
 }
 
-fn version(fact: &Fact) -> Result<FactVersion> {
+pub(crate) fn version(fact: &Fact) -> Result<FactVersion> {
     Ok(FactVersion {
         kind: store_kind(fact.kind()),
         id: fact.id().to_string(),
@@ -131,7 +131,7 @@ fn version(fact: &Fact) -> Result<FactVersion> {
     })
 }
 
-fn parse(version: &FactVersion) -> Result<Fact> {
+pub(crate) fn parse(version: &FactVersion) -> Result<Fact> {
     let fact: Fact = serde_json::from_str(&version.body)
         .map_err(|_| err("E_INTEGRITY", "stored fact is malformed"))?;
     if fact.kind() != contract_kind(version.kind) || fact.id() != version.id {
@@ -141,7 +141,7 @@ fn parse(version: &FactVersion) -> Result<Fact> {
 }
 
 /// The graph-level fields of a graph value, with every fact list empty.
-fn header_of(data: &GraphData) -> GraphData {
+pub(crate) fn header_of(data: &GraphData) -> GraphData {
     GraphData {
         nodes: vec![],
         edges: vec![],
@@ -152,7 +152,7 @@ fn header_of(data: &GraphData) -> GraphData {
     }
 }
 
-fn facts_of(data: &GraphData) -> Vec<Fact> {
+pub(crate) fn facts_of(data: &GraphData) -> Vec<Fact> {
     data.nodes
         .iter()
         .cloned()
@@ -169,7 +169,7 @@ fn facts_of(data: &GraphData) -> Vec<Fact> {
         .collect()
 }
 
-fn push(data: &mut GraphData, fact: Fact) {
+pub(crate) fn push(data: &mut GraphData, fact: Fact) {
     match fact {
         Fact::Node(n) => data.nodes.push(n),
         Fact::Edge(e) => data.edges.push(e),
@@ -316,6 +316,157 @@ struct Seen {
     fact: Fact,
     /// The revision that recorded this version, when it was recorded by a fact write.
     recorded_in: Option<String>,
+}
+
+/// Read access to the facts live at one revision: a fact revision through the
+/// backend's indexes, or a snapshot revision through an in-memory index of its
+/// stored payload. Both give the same records, so one closure and traversal
+/// path serves both kinds of revision.
+pub(crate) trait FactSource {
+    /// The graph-level fields, with every fact list empty.
+    fn header(&self) -> Result<GraphData>;
+    fn get(&self, namespace: store::Namespace, id: &str) -> Result<Option<store::StoredFact>>;
+    /// Every live fact matching `filter`, in `(kind, id)` order; `E_BUDGET` beyond `limit`.
+    fn select(&self, filter: &FactFilter, limit: usize) -> Result<Vec<store::StoredFact>>;
+    /// True when bodies read here are not yet charged to the read budget
+    /// (a snapshot payload was charged once, when it was loaded).
+    fn charged(&self) -> bool;
+}
+
+/// A fact revision, read through the SQLite backend.
+pub(crate) struct LineSource<'c> {
+    store: SqliteFactStore<'c>,
+    revision: String,
+}
+
+impl<'c> LineSource<'c> {
+    pub(crate) fn new(store: SqliteFactStore<'c>, revision: &str) -> Self {
+        Self {
+            store,
+            revision: revision.into(),
+        }
+    }
+}
+
+impl FactSource for LineSource<'_> {
+    fn header(&self) -> Result<GraphData> {
+        serde_json::from_str(&self.store.header(&self.revision)?)
+            .map_err(|_| err("E_INTEGRITY", "stored line header is malformed"))
+    }
+    fn get(&self, namespace: store::Namespace, id: &str) -> Result<Option<store::StoredFact>> {
+        self.store.get(&self.revision, namespace, id)
+    }
+    fn select(&self, filter: &FactFilter, limit: usize) -> Result<Vec<store::StoredFact>> {
+        self.store.select(&self.revision, filter, limit)
+    }
+    fn charged(&self) -> bool {
+        true
+    }
+}
+
+/// A snapshot revision's payload, indexed by the keys the fact index has.
+pub(crate) struct SnapshotSource {
+    header: GraphData,
+    facts: Vec<store::StoredFact>,
+    by_key: HashMap<Key, usize>,
+    by_subject: HashMap<String, Vec<usize>>,
+    by_object: HashMap<String, Vec<usize>>,
+    by_entity: HashMap<String, Vec<usize>>,
+    carriers: Vec<usize>,
+    unanchored: Vec<usize>,
+}
+
+impl SnapshotSource {
+    pub(crate) fn new(data: &GraphData, revision: &str) -> Result<Self> {
+        let mut source = Self {
+            header: header_of(data),
+            facts: Vec::new(),
+            by_key: HashMap::new(),
+            by_subject: HashMap::new(),
+            by_object: HashMap::new(),
+            by_entity: HashMap::new(),
+            carriers: Vec::new(),
+            unanchored: Vec::new(),
+        };
+        for fact in facts_of(data) {
+            let index = source.facts.len();
+            let stored = store::StoredFact {
+                position: index as i64,
+                version: version(&fact)?,
+                recording: Recording {
+                    writer: String::new(),
+                    on_behalf_of: None,
+                    recorded_at_ms: 0,
+                    revision: revision.into(),
+                },
+            };
+            if source.by_key.insert(key(&fact), index).is_some() {
+                return Err(err("E_INTEGRITY", "a fact key occurs twice in a snapshot"));
+            }
+            let keys = &stored.version.keys;
+            for (map, value) in [
+                (&mut source.by_subject, &keys.subject),
+                (&mut source.by_object, &keys.object),
+                (&mut source.by_entity, &keys.entity),
+            ] {
+                if let Some(value) = value {
+                    map.entry(value.clone()).or_default().push(index);
+                }
+            }
+            if keys.carrier {
+                source.carriers.push(index);
+            }
+            if keys.subject.is_none() && keys.entity.is_none() {
+                source.unanchored.push(index);
+            }
+            source.facts.push(stored);
+        }
+        Ok(source)
+    }
+}
+
+impl FactSource for SnapshotSource {
+    fn header(&self) -> Result<GraphData> {
+        Ok(self.header.clone())
+    }
+    fn get(&self, namespace: store::Namespace, id: &str) -> Result<Option<store::StoredFact>> {
+        Ok(self
+            .by_key
+            .get(&(namespace, id.to_string()))
+            .map(|index| self.facts[*index].clone()))
+    }
+    fn select(&self, filter: &FactFilter, limit: usize) -> Result<Vec<store::StoredFact>> {
+        let all: Vec<usize>;
+        let candidates: &[usize] = if let Some(subject) = &filter.subject {
+            self.by_subject.get(subject).map_or(&[], Vec::as_slice)
+        } else if let Some(object) = &filter.object {
+            self.by_object.get(object).map_or(&[], Vec::as_slice)
+        } else if let Some(entity) = &filter.entity {
+            self.by_entity.get(entity).map_or(&[], Vec::as_slice)
+        } else if filter.carrier {
+            &self.carriers
+        } else if filter.unanchored {
+            &self.unanchored
+        } else {
+            all = (0..self.facts.len()).collect();
+            &all
+        };
+        let mut facts = Vec::new();
+        for index in candidates {
+            let fact = &self.facts[*index];
+            if filter.matches(fact) {
+                if facts.len() == limit {
+                    return Err(err("E_BUDGET", "fact selection exceeds its limit"));
+                }
+                facts.push(fact.clone());
+            }
+        }
+        store::order(&mut facts);
+        Ok(facts)
+    }
+    fn charged(&self) -> bool {
+        false
+    }
 }
 
 impl Engine {
@@ -915,7 +1066,7 @@ impl Engine {
     /// a revision of `graph`.
     /// The stored fact revision of `graph`, after checking its revision row
     /// and recomputing its content-derived ID from the logged operations.
-    fn verified_fact_revision(
+    pub(crate) fn verified_fact_revision(
         &self,
         graph: &str,
         revision: &str,
@@ -977,7 +1128,7 @@ impl Engine {
 
     /// Rows a whole materialization may read before it must fail with
     /// `E_BUDGET`: a stored fact body is never shorter than 16 bytes.
-    fn materialization_limit(&self) -> usize {
+    pub(crate) fn materialization_limit(&self) -> usize {
         self.read_budget.remaining() / 16
     }
 
@@ -1135,7 +1286,16 @@ impl Engine {
         seeds: Vec<store::StoredFact>,
         hosted: bool,
     ) -> Result<GraphData> {
-        let store = self.fact_store();
+        self.closure_in(&LineSource::new(self.fact_store(), revision), seeds, hosted)
+    }
+
+    /// [`Self::fact_closure`] over any [`FactSource`].
+    pub(crate) fn closure_in(
+        &self,
+        store: &dyn FactSource,
+        seeds: Vec<store::StoredFact>,
+        hosted: bool,
+    ) -> Result<GraphData> {
         let limit = self.materialization_limit();
         let mut facts: BTreeMap<(store::FactKind, String), Fact> = BTreeMap::new();
         let mut queue: Vec<store::StoredFact> = seeds;
@@ -1145,9 +1305,11 @@ impl Engine {
             if facts.contains_key(&slot) {
                 continue;
             }
-            self.read_budget.charge(stored.version.body.len())?;
+            if store.charged() {
+                self.read_budget.charge(stored.version.body.len())?;
+            }
             let fact = parse(&stored.version)?;
-            let get = |namespace, id: &str| store.get(revision, namespace, id);
+            let get = |namespace, id: &str| store.get(namespace, id);
             let mut needed = Vec::new();
             match &fact {
                 Fact::Node(_) => {}
@@ -1168,7 +1330,6 @@ impl Engine {
                     MetadataHost::Entity { id } => {
                         // Entity-hosted attachments survive while any node of the entity does.
                         needed.extend(store.select(
-                            revision,
                             &FactFilter {
                                 kind: Some(store::FactKind::Node),
                                 entity: Some(id.clone()),
@@ -1185,7 +1346,6 @@ impl Engine {
                 && hosted_done.insert(fact.id().to_string())
             {
                 needed.extend(store.select(
-                    revision,
                     &FactFilter {
                         kind: Some(store::FactKind::Attachment),
                         subject: Some(fact.id().to_string()),
@@ -1197,7 +1357,6 @@ impl Engine {
             if let Fact::Node(n) = &fact {
                 if hosted && hosted_done.insert(format!("entity:{}", n.entity_id)) {
                     needed.extend(store.select(
-                        revision,
                         &FactFilter {
                             kind: Some(store::FactKind::Attachment),
                             entity: Some(n.entity_id.clone()),
@@ -1210,8 +1369,7 @@ impl Engine {
             facts.insert(slot, fact);
             queue.extend(needed);
         }
-        let mut data: GraphData = serde_json::from_str(&store.header(revision)?)
-            .map_err(|_| err("E_INTEGRITY", "stored line header is malformed"))?;
+        let mut data = store.header()?;
         for fact in facts.into_values() {
             push(&mut data, fact);
         }
@@ -1401,6 +1559,36 @@ impl Engine {
                 revision: origin.revision.clone(),
                 assertion_id: origin.assertion_id.clone(),
             });
+        }
+        if let Some(changes) = &result.changes {
+            for entry in &changes.entries {
+                for (fact, revision) in [
+                    (&entry.before, &changes.from_revision),
+                    (&entry.after, &changes.to_revision),
+                ] {
+                    let (Some(fact), Some(revision)) = (fact, revision) else {
+                        continue;
+                    };
+                    let graph_id = result
+                        .input_snapshots
+                        .iter()
+                        .find(|r| &r.revision == revision)
+                        .map(|r| r.graph_id.clone())
+                        .ok_or_else(|| err("E_INTEGRITY", "change set revision not an input"))?;
+                    references.insert(match fact {
+                        Fact::Node(n) => FactRef::Node {
+                            graph_id,
+                            revision: revision.clone(),
+                            node_id: n.id.clone(),
+                        },
+                        other => FactRef::Assertion {
+                            graph_id,
+                            revision: revision.clone(),
+                            assertion_id: other.id().to_string(),
+                        },
+                    });
+                }
+            }
         }
         let mut snapshots = BTreeMap::new();
         let mut entries = Vec::new();

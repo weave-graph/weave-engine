@@ -1,0 +1,271 @@
+{
+  "fixture": "expand-k-hop",
+  "concepts": [
+    "query.expand",
+    "fact.readers"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "A",
+              "id": "a",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "B",
+              "id": "b",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "C",
+              "id": "c",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "D",
+              "id": "d",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "H",
+              "id": "h",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [
+                "bob"
+              ],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "derived_from": [],
+              "from": "a",
+              "id": "ab",
+              "kind": "edge",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "feeds",
+              "properties": {},
+              "readers": [],
+              "to": "b",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "derived_from": [],
+              "from": "b",
+              "id": "bc",
+              "kind": "edge",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "feeds",
+              "properties": {},
+              "readers": [],
+              "to": "c",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "derived_from": [],
+              "from": "c",
+              "id": "cd",
+              "kind": "edge",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "feeds",
+              "properties": {},
+              "readers": [],
+              "to": "d",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "derived_from": [],
+              "from": "a",
+              "id": "ah",
+              "kind": "edge",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "feeds",
+              "properties": {},
+              "readers": [],
+              "to": "h",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "derived_from": [],
+              "from": "c",
+              "id": "ca",
+              "kind": "edge",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "monitors",
+              "properties": {},
+              "readers": [],
+              "to": "a",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          }
+        ],
+        "graph_id": "g",
+        "op": "write"
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "direction": "out",
+          "graph_id": "g",
+          "hops": 2,
+          "kind": "expand",
+          "limit": 10000,
+          "predicates": [
+            "feeds"
+          ],
+          "seeds": [
+            "a"
+          ]
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "direction": "both",
+          "graph_id": "g",
+          "hops": 1,
+          "kind": "expand",
+          "limit": 10000,
+          "seeds": [
+            "c"
+          ]
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "direction": "out",
+          "graph_id": "g",
+          "hops": 1,
+          "kind": "expand",
+          "limit": 10000,
+          "seeds": [
+            "h"
+          ]
+        }
+      }
+    ],
+    "version": "0.23.0"
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "results": [
+      {
+        "kind": "committed",
+        "revision": "fact:sha256:ff5ba9044dec619d89b586607520d5bc7aab7a788cc512dfbfa34f4334a1cb86"
+      },
+      {
+        "coverage": "complete",
+        "edges": [
+          "ab",
+          "bc"
+        ],
+        "kind": "queried",
+        "nodes": [
+          "a",
+          "b",
+          "c"
+        ]
+      },
+      {
+        "coverage": "complete",
+        "edges": [
+          "bc",
+          "ca",
+          "cd"
+        ],
+        "kind": "queried",
+        "nodes": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "edges": [],
+        "kind": "queried",
+        "nodes": []
+      }
+    ]
+  }
+}

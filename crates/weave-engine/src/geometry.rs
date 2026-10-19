@@ -40,7 +40,7 @@ impl Engine {
         if !valid_id(&operand.assertion_id) {
             return Err(err("E_ID", "geometry assertion ID must be bounded"));
         }
-        let value = self.expression(&operand.input, values, host, depth, budget)?;
+        let value = self.operand(&operand.input, values, host, depth, budget)?;
         let edge = value
             .graph
             .edges

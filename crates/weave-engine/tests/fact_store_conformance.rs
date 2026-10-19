@@ -746,6 +746,59 @@ fn select_carriers_and_unanchored(b: &mut dyn FactBackend) {
     assert_eq!(ids(&b.select("r1", &carriers, 10).unwrap()), ["c1"]);
 }
 
+/// Keys changed between two states of one line, from the log.
+fn changed_keys_between_states(b: &mut dyn FactBackend) {
+    two_revisions(b);
+    let key = |namespace, id: &str| (namespace, id.to_string());
+    let r1_r2 = vec![
+        key(Namespace::Node, "n1"),
+        key(Namespace::Record, "e1"),
+        key(Namespace::Record, "e2"),
+    ];
+    assert_eq!(
+        b.changed_keys(Some("r1"), "r2", 10).unwrap(),
+        Some(r1_r2.clone())
+    );
+    // Either order, the same line.
+    assert_eq!(b.changed_keys(Some("r2"), "r1", 10).unwrap(), Some(r1_r2));
+    assert_eq!(b.changed_keys(Some("r2"), "r2", 10).unwrap(), Some(vec![]));
+    // The line started from an empty graph: its base parent is `None`.
+    let all = b.changed_keys(None, "r2", 10).unwrap().unwrap();
+    assert_eq!(all.len(), 4);
+    // Fails instead of truncating.
+    assert_eq!(code(b.changed_keys(None, "r2", 3)), "E_BUDGET");
+    // A fork is another line; it shares its base parent with nothing else.
+    let base = BaseState {
+        header: "{}".into(),
+        facts: b
+            .select("r1", &FactFilter::default(), 100)
+            .unwrap()
+            .into_iter()
+            .map(|f| (f.version, f.recording))
+            .collect(),
+    };
+    b.append(
+        rev(
+            "f1",
+            Some("r1"),
+            30,
+            vec![FactOp::Retract {
+                kind: FactKind::Node,
+                id: "n2".into(),
+            }],
+        ),
+        Some(base),
+    )
+    .unwrap();
+    assert_eq!(
+        b.changed_keys(Some("r1"), "f1", 10).unwrap(),
+        Some(vec![key(Namespace::Node, "n2")])
+    );
+    assert_eq!(b.changed_keys(Some("r2"), "f1", 10).unwrap(), None);
+    assert_eq!(b.changed_keys(None, "f1", 10).unwrap(), None);
+    assert_eq!(code(b.changed_keys(None, "nope", 10)), "E_UNAVAILABLE");
+}
+
 macro_rules! conformance {
     ($($name:ident),* $(,)?) => {
         mod memory_backend {
@@ -781,6 +834,7 @@ conformance!(
     parents_stay_in_their_graph,
     malformed_input_is_rejected,
     select_carriers_and_unanchored,
+    changed_keys_between_states,
 );
 
 /// Deterministic pseudo-random operation sequence, replayed on both backends.
@@ -939,6 +993,35 @@ fn sqlite_matches_reference_backend_on_random_histories() {
                 strip(reference.ops(revision).unwrap()),
                 strip(sqlite_store.ops(revision).unwrap())
             );
+            for from in [None, revisions.first(), revisions.last()] {
+                let from = from.map(String::as_str);
+                let expected = reference.changed_keys(from, revision, 10_000).unwrap();
+                assert_eq!(
+                    expected,
+                    sqlite_store.changed_keys(from, revision, 10_000).unwrap(),
+                    "changed keys {from:?} to {revision}"
+                );
+                // Every key whose live version differs is listed.
+                if let Some(keys) = expected {
+                    let live = |r: Option<&str>| -> std::collections::BTreeMap<(Namespace, String), String> {
+                        r.map(|r| {
+                            reference
+                                .select(r, &FactFilter::default(), 10_000)
+                                .unwrap()
+                                .into_iter()
+                                .map(|f| ((f.version.kind.namespace(), f.version.id), f.version.body))
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                    };
+                    let (a, z) = (live(from), live(Some(revision)));
+                    for k in a.keys().chain(z.keys()) {
+                        if a.get(k) != z.get(k) {
+                            assert!(keys.contains(k), "{k:?} changed {from:?} to {revision}");
+                        }
+                    }
+                }
+            }
         }
     }
     assert!(

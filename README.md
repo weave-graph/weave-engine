@@ -29,14 +29,14 @@ migration checks, and CI on Linux, macOS and Windows. It is **pre-release**.
 
 | Works today | Not yet (roadmap phase) |
 |---|---|
-| Immutable, durable graph revisions in SQLite; valid-time and recorded-time ("as known at") selection; diff between results | Fact-level incremental writes; today each commit stores a full snapshot, capped at 100k objects per graph (A2) |
-| Per-record read permissions, re-checked through derived results | k-hop traversal and stored "what changed" feeds (A3) |
-| Joins, rules, metadata graphs, provenance and explanations | Time-aware embeddings layer linked to graph queries (A4) |
-| Exact vector neighbors and graph analytics (PageRank, components, paths) from Python, JSON or Rust | Multi-user server, authentication, groups, agent interface (Phase B) |
-| | High-volume telemetry ingestion, approximate vector index (Phase C) |
+| Immutable, durable graph revisions in SQLite with incremental fact-level writes; valid-time and recorded-time ("as known at") selection | Time-aware embeddings layer linked to graph queries (A4) |
+| k-hop traversal (`expand`), as-of reads and "what changed" change sets with a pull feed (`changes`) | Multi-user server, authentication, groups, agent interface (Phase B) |
+| Per-record read permissions, re-checked through derived results | High-volume telemetry ingestion, approximate vector index (Phase C) |
+| Joins, rules, metadata graphs, per-fact provenance and explanations | |
+| Exact vector neighbors and graph analytics (PageRank, components, paths) from Python, JSON or Rust | |
 
 The supported profile is described in [docs/STATUS.md](docs/STATUS.md): science
-**0.1.0**, contract **0.22.0**, store **30**. It runs locally. There is no
+**0.1.0**, contract **0.23.0**, store **30**. It runs locally. There is no
 server, and the CLI trusts its caller (see [SECURITY.md](SECURITY.md)).
 
 ## Run your first experiment

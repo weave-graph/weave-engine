@@ -1,0 +1,216 @@
+{
+  "fixture": "expand-valid-time-as-of",
+  "concepts": [
+    "query.expand",
+    "time.as_of",
+    "time.valid"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "commands": [
+      {
+        "op": "evaluate",
+        "value": {
+          "as_of": 15,
+          "branch_id": "main",
+          "direction": "out",
+          "graph_id": "g",
+          "hops": 2,
+          "kind": "expand",
+          "limit": 10000,
+          "seeds": [
+            "a"
+          ]
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "direction": "out",
+          "graph_id": "g",
+          "hops": 2,
+          "kind": "expand",
+          "limit": 10000,
+          "seeds": [
+            "a"
+          ]
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "direction": "out",
+          "graph_id": "g",
+          "hops": 2,
+          "kind": "expand",
+          "limit": 10000,
+          "seeds": [
+            "a"
+          ],
+          "valid_at": 60
+        }
+      }
+    ],
+    "version": "0.23.0"
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "clock_ms": 30,
+    "setup": [
+      {
+        "principal": "writer",
+        "write_graphs": [
+          "g"
+        ],
+        "clock_ms": 10,
+        "program": {
+          "commands": [
+            {
+              "branch_id": "main",
+              "changes": [
+                {
+                  "change": "assert",
+                  "fact": {
+                    "entity_id": "A",
+                    "id": "a",
+                    "kind": "node",
+                    "metadata": [],
+                    "properties": {},
+                    "readers": [],
+                    "space_id": "s"
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "entity_id": "B",
+                    "id": "b",
+                    "kind": "node",
+                    "metadata": [],
+                    "properties": {},
+                    "readers": [],
+                    "space_id": "s"
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "entity_id": "C",
+                    "id": "c",
+                    "kind": "node",
+                    "metadata": [],
+                    "properties": {},
+                    "readers": [],
+                    "space_id": "s"
+                  }
+                },
+                {
+                  "change": "assert",
+                  "fact": {
+                    "derived_from": [],
+                    "from": "a",
+                    "id": "ab",
+                    "kind": "edge",
+                    "metadata": [],
+                    "polarity": "positive",
+                    "predicate": "feeds",
+                    "properties": {},
+                    "readers": [],
+                    "to": "b",
+                    "valid_time": {
+                      "end": 50,
+                      "start": 0
+                    }
+                  }
+                }
+              ],
+              "graph_id": "g",
+              "op": "write"
+            }
+          ],
+          "version": "0.23.0"
+        }
+      },
+      {
+        "principal": "writer",
+        "write_graphs": [
+          "g"
+        ],
+        "clock_ms": 20,
+        "program": {
+          "commands": [
+            {
+              "branch_id": "main",
+              "changes": [
+                {
+                  "change": "assert",
+                  "fact": {
+                    "derived_from": [],
+                    "from": "b",
+                    "id": "bc",
+                    "kind": "edge",
+                    "metadata": [],
+                    "polarity": "positive",
+                    "predicate": "feeds",
+                    "properties": {},
+                    "readers": [],
+                    "to": "c",
+                    "valid_time": {
+                      "end": null,
+                      "start": 0
+                    }
+                  }
+                }
+              ],
+              "graph_id": "g",
+              "op": "write"
+            }
+          ],
+          "version": "0.23.0"
+        }
+      }
+    ],
+    "results": [
+      {
+        "coverage": "complete",
+        "edges": [
+          "ab"
+        ],
+        "kind": "queried",
+        "nodes": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "coverage": "complete",
+        "edges": [
+          "ab",
+          "bc"
+        ],
+        "kind": "queried",
+        "nodes": [
+          "a",
+          "b",
+          "c"
+        ]
+      },
+      {
+        "coverage": "complete",
+        "edges": [],
+        "kind": "queried",
+        "nodes": [
+          "a"
+        ]
+      }
+    ]
+  }
+}

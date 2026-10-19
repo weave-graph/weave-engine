@@ -136,7 +136,7 @@ class Engine:
             raise ProtocolError("native response lacks a boolean ok field")
         if not all(isinstance(response.get(key), str) for key in ("science_version", "contract_version")):
             raise ProtocolError("native response lacks protocol versions")
-        if response["science_version"] != "0.1.0" or response["contract_version"] != "0.22.0":
+        if response["science_version"] != "0.1.0" or response["contract_version"] != "0.23.0":
             raise ProtocolError("native response uses an unsupported protocol version")
         if not response["ok"]:
             error = response.get("error")

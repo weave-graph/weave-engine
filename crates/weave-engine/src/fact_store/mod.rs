@@ -309,6 +309,19 @@ pub trait FactBackend {
     fn select(&self, revision: &str, filter: &FactFilter, limit: usize) -> Result<Vec<StoredFact>>;
     /// The revision's own operations, in position order.
     fn ops(&self, revision: &str) -> Result<Vec<LoggedOp>>;
+    /// Every key asserted or retracted between two states of `to`'s line, in
+    /// `(namespace, id)` order, at most `limit` (`E_BUDGET` beyond). `from`
+    /// is another revision of that line (either order), or the line's base
+    /// parent (`None` for a line started from an empty graph). Any other
+    /// `from` gives `Ok(None)`: the two states share no line. A key whose live
+    /// version is the same in both states may still be listed; a key whose
+    /// live version differs always is.
+    fn changed_keys(
+        &self,
+        from: Option<&str>,
+        to: &str,
+        limit: usize,
+    ) -> Result<Option<Vec<(Namespace, String)>>>;
     /// Cache a materialized checkpoint body for a revision, replacing any prior one.
     fn put_checkpoint(&mut self, revision: &str, body: &str) -> Result<()>;
     fn checkpoint(&self, revision: &str) -> Result<Option<String>>;

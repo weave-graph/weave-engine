@@ -1,0 +1,37 @@
+{
+  "fixture": "expand-version-gated",
+  "concepts": [
+    "compat.versions",
+    "query.expand"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "commands": [
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "direction": "out",
+          "graph_id": "g",
+          "hops": 1,
+          "kind": "expand",
+          "limit": 10000,
+          "seeds": [
+            "a"
+          ]
+        }
+      }
+    ],
+    "version": "0.22.0"
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "error": "E_VERSION"
+  }
+}

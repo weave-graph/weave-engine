@@ -216,6 +216,10 @@ each one against the SQLite backend and the in-memory reference backend:
   revision, in `(kind, id)` order. `select` fails with `E_BUDGET` rather than
   truncating when more than its limit match. Unknown revisions fail with
   `E_UNAVAILABLE`.
+- **Changed keys** (A3). `changed_keys(from, to)` lists every key asserted or
+  retracted between two revisions of one line, or between a line and its
+  base parent, and never omits a key whose live version differs. Any other
+  pair gives no answer, and the engine compares both states instead.
 
 The engine owns everything semantic: validation, authorization, provenance
 merging, revision IDs, header handling and the request budgets. C4 adds a
