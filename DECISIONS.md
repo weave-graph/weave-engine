@@ -122,3 +122,21 @@ AGENTS.md still says "the next number is ADR-0004". That remains true, because
 ADR-0004 (A2) is unwritten. A pointer to core-v1.md would help, but AGENTS.md
 holds agent instructions, so the PR proposes the edit for the owner to make
 rather than changing it from an agent branch.
+
+### 2026-10-19 — weave-language#1 LA0 — Contract classification behind `describe --contract`
+The core-v1 / extension / deferred report is opt-in via `weave describe --contract`; plain
+`describe` keeps its existing output because tests and scripts depend on it. The report
+classifies the emitted plan (not source syntax) with an exhaustive match, so a future vendored
+variant fails to build until it is classified. Locations are plan paths, not source spans
+(documented limit). Typed embedding vectors are reported as the 0.9 geometry extension because
+they still lower to legacy vector properties.
+
+### 2026-10-19 — weave-language#1 LA0 — Vendored harness runs in place
+The engine golden fixtures run in language CI from `vendor/weave-contract` with a separate
+target dir. `verify_contract.py` ignores exactly `Cargo.lock` and `target/` produced by that run;
+every vendored file is still hash-checked.
+
+### 2026-10-19 — #2 A1 — A1 closed across two repositories
+A1's "fixtures run in language CI" criterion was delivered by LA0 (weave-language#13). A1 closed
+when both #48 and weave-language#13 merged. Suggested AGENTS.md updates from both agents
+(test counts, harness command) are deferred to the owner, since AGENTS.md is agent instructions.
