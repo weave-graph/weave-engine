@@ -1,7 +1,7 @@
 """Builders for the existing engine contract, without a second evaluator."""
 
 from copy import deepcopy
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 CONTRACT_VERSION = "0.23.0"
 READ_ONLY_COMMANDS = frozenset({"query", "evaluate", "bind", "join", "recorded_range", "accepted_range"})
@@ -50,6 +50,96 @@ def recorded_query(graph_id: str, *, recorded_at_ms: int | None = None,
         raise ValueError("provide recorded_at_ms or both observer and checkpoint")
     return {"kind": "recorded_query", "query": query(graph_id, **selection)["query"],
             "selection": cut}
+
+
+def as_of(graph_id: str, recorded_at_ms: int, **selection: Any) -> dict[str, Any]:
+    """Any query of the branch as this replica knew it at a recorded time.
+
+    The revision is selected through the recorded-time index and authorized
+    record by record, so a reader who cannot see every record gets the visible
+    subset, exactly as a read pinned to that revision. Unlike recorded_query it
+    returns no checkpoint witness. ``selection`` takes the query() options
+    except ``revision``.
+    """
+    if "revision" in selection:
+        raise ValueError("as_of selects the revision; do not pass revision")
+    _time(recorded_at_ms, "recorded_at_ms")
+    return {"kind": "as_of", "query": query(graph_id, **selection)["query"],
+            "unix_millis": recorded_at_ms}
+
+
+def expand(graph_id: str, seeds: Iterable[str], *, hops: int, direction: str = "out",
+           predicates: Iterable[str] = (), valid_at: int | None = None,
+           revision: str | None = None, as_of: int | None = None,
+           branch_id: str = "main", limit: int = 10_000) -> dict[str, Any]:
+    """The exact k-hop neighborhood of the visible seed nodes.
+
+    Every node within ``hops`` hops along visible edges whose predicate is in
+    ``predicates`` (empty: any) and, with ``valid_at``, that are valid then,
+    plus every such edge that leaves a node fewer than ``hops`` hops away.
+    ``direction`` is ``out``, ``in`` or ``both``. Read a pinned ``revision``,
+    the branch ``as_of`` a recorded time, or the head. More than ``limit``
+    nodes plus edges fails with E_BUDGET; nothing is truncated.
+    """
+    seeds = list(seeds)
+    if not seeds or not all(isinstance(seed, str) and seed for seed in seeds):
+        raise ValueError("expand needs at least one seed node ID")
+    if isinstance(hops, bool) or not isinstance(hops, int) or not 1 <= hops <= 16:
+        raise ValueError("hops must be an integer from 1 to 16")
+    if direction not in {"out", "in", "both"}:
+        raise ValueError("direction must be out, in or both")
+    if revision is not None and as_of is not None:
+        raise ValueError("choose revision or as_of")
+    plan: dict[str, Any] = {"kind": "expand", "graph_id": graph_id, "branch_id": branch_id,
+                            "seeds": seeds, "hops": hops, "direction": direction, "limit": limit}
+    predicates = list(predicates)
+    if predicates:
+        plan["predicates"] = predicates
+    for key, value in (("valid_at", valid_at), ("revision", revision), ("as_of", as_of)):
+        if value is not None:
+            plan[key] = value
+    return plan
+
+
+def _bound(time: int | None, cursor: str | None, *, default_head: bool) -> dict[str, Any]:
+    if time is not None and cursor is not None:
+        raise ValueError("choose a recorded time or a cursor for each end")
+    if time is not None:
+        _time(time, "recorded time")
+        return {"kind": "as_of", "unix_millis": time}
+    if cursor is not None:
+        return {"kind": "cursor", "revision": cursor}
+    if default_head:
+        return {"kind": "head"}
+    raise ValueError("changes needs since_ms or since_cursor")
+
+
+def changes(graph_id: str, *, since_ms: int | None = None, since_cursor: str | None = None,
+            until_ms: int | None = None, until_cursor: str | None = None,
+            entities: Iterable[str] = (), predicates: Iterable[str] = (),
+            branch_id: str = "main", limit: int = 10_000) -> dict[str, Any]:
+    """Facts asserted, retracted or corrected between two states of a branch.
+
+    The ``from`` state is the branch as known at ``since_ms`` or the exact
+    revision ``since_cursor`` (a previous change set's ``cursor``); the ``to``
+    state is ``until_ms``, ``until_cursor`` or the head. The result is the
+    fact-by-fact difference of the two authorized states.
+    """
+    plan: dict[str, Any] = {"kind": "changes", "graph_id": graph_id, "branch_id": branch_id,
+                            "from": _bound(since_ms, since_cursor, default_head=False),
+                            "to": _bound(until_ms, until_cursor, default_head=True),
+                            "limit": limit}
+    entities, predicates = list(entities), list(predicates)
+    if entities:
+        plan["entities"] = entities
+    if predicates:
+        plan["predicates"] = predicates
+    return plan
+
+
+def _time(value: Any, name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{name} must be a nonnegative integer of Unix milliseconds")
 
 
 def program(value: Mapping[str, Any]) -> dict[str, Any]:

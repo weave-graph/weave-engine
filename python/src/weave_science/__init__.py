@@ -4,7 +4,10 @@ from .client import Engine, NativeError, OperationTimeout, ProtocolError, WeaveE
 from .data import edge, graph_data, node, read_csv
 from .expressions import (
     CONTRACT_VERSION,
+    as_of,
+    changes,
     diff,
+    expand,
     explain,
     join,
     program,
@@ -22,4 +25,5 @@ __all__ = [
     "AnalysisResult", "CommitReceipt", "Experiment", "QueryResult", "ReproducibilityError",
     "node", "edge", "graph_data", "read_csv", "query", "recorded_query",
     "program", "join", "union", "diff", "window", "explain", "CONTRACT_VERSION",
+    "as_of", "expand", "changes",
 ]

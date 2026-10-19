@@ -3,7 +3,8 @@
 //! Each helper runs ordinary engine programs under the caller's host
 //! authority, so per-record `readers` apply and hidden facts never appear.
 //! [`At`] selects the state read: the branch head, a pinned revision, or the
-//! graph as recorded at a Unix millisecond (`recorded_query`). The A3 operators
+//! graph as recorded at a Unix millisecond (`recorded_query`, or `as_of` for
+//! readers who cannot see every record). The A3 operators
 //! (`expand`, `changes`) will answer some of these questions in one plan;
 //! until then these helpers compose filtered reads.
 use crate::mapping::node_id;
@@ -28,8 +29,13 @@ pub enum At {
     /// The last head this replica recorded at or before this Unix
     /// millisecond (`recorded_query` with `local_time`). The engine admits
     /// it only for a reader who can see the whole selected revision
-    /// (ADR-0002); others get `E_HISTORY_UNAVAILABLE` and pin a revision.
+    /// (ADR-0002); others get `E_HISTORY_UNAVAILABLE`.
     Recorded(i64),
+    /// The same recorded-time selection through the A3 `as_of` expression:
+    /// the revision is authorized record by record, so a reader who cannot see
+    /// restricted units gets the visible subset as known at this millisecond.
+    /// No checkpoint witness is returned.
+    AsOf(i64),
 }
 
 /// One filtered read of `graph` on `branch`.
@@ -64,6 +70,9 @@ pub fn read(engine: &mut Engine, host: &HostContext, read: &Read<'_>) -> Result<
         At::Recorded(k) => json!({"op": "evaluate", "value": {
             "kind": "recorded_query", "query": plan,
             "selection": {"kind": "local_time", "unix_millis": k}
+        }}),
+        At::AsOf(k) => json!({"op": "evaluate", "value": {
+            "kind": "as_of", "query": plan, "unix_millis": k
         }}),
     };
     let program: Program =

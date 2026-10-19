@@ -182,6 +182,77 @@ Rule, metadata, accepted-history, clustering and geometry expressions retain the
 existing native selector and installed-state requirements; see the
 [native interface](SCIENCE_INTERFACE.md).
 
+## Traversal, as-of reads and change sets
+
+These helpers build the A3 graph expressions ([guide](TRAVERSAL.md)). Every
+result carries its coverage and the provenance of every fact it cites
+(`fact_provenance`). The example uses a small fleet in which one unit is
+restricted to `admin`:
+
+```python
+import time
+from weave_science import Engine, expand
+
+loader = Engine("fleet.db", actor="loader", write_graphs=["fleet"])
+unit = lambda i, readers=(): {"kind": "node", "id": i, "entity_id": i.upper(),
+                              "space_id": "fleet", "readers": list(readers)}
+at = lambda i, u: {"kind": "edge", "id": i, "predicate": "located_at",
+                   "from": u, "to": "site", "valid_time": {"start": 0}}
+first = loader.import_facts("fleet", [{"change": "assert", "fact": f} for f in [
+    unit("site"), unit("u1"), unit("u2", ["admin"]), at("a1", "u1"), at("a2", "u2")]])
+time.sleep(0.01)
+known = int(time.time() * 1000)  # "as known at K"
+time.sleep(0.01)
+loader.import_facts("fleet", [{"change": "assert", "fact": unit("u3")},
+                              {"change": "assert", "fact": at("a3", "u3")},
+                              {"change": "retract", "target": {"kind": "edge", "id": "a1"}}])
+
+analyst = Engine("fleet.db", actor="analyst")
+
+# How is it related? The 1-hop neighborhood of the site, edges into it.
+near = analyst.expand("fleet", ["site"], hops=1, direction="in")
+assert sorted(n["id"] for n in near.nodes) == ["site", "u3"]   # u2 is restricted
+assert len(near.fact_provenance) == len(near.nodes) + len(near.edges)
+
+# What did we know then? Any query as known at K: the visible subset.
+then = analyst.as_of("fleet", known, predicate="located_at")
+assert [e["id"] for e in then.edges] == ["a1"]
+earlier = analyst.expand("fleet", ["site"], hops=1, direction="in", as_of=known)
+
+# What changed? A change set since a revision, then the next pull.
+changed = analyst.changes("fleet", since_cursor=first.revision)
+assert sorted((c["change"], c["id"]) for c in changed.changes) == [
+    ("asserted", "a3"), ("asserted", "u3"), ("retracted", "a1")]
+assert analyst.changes("fleet", since_cursor=changed.cursor).changes == []
+about_u3 = analyst.changes("fleet", since_ms=known, entities=["U3"])
+
+# Why? An explicit derivation graph for an expansion.
+proof = analyst.explain(expand("fleet", ["site"], hops=1, direction="in"))
+```
+
+- `Engine.expand(graph_id, seeds, hops=..., direction="out"|"in"|"both",
+  predicates=(), valid_at=None, revision=None, as_of=None, limit=10_000)` is
+  the exact k-hop neighborhood. It returns an ordinary `QueryResult` that can
+  be analyzed (`engine.analyze(expand(...), algorithm="pagerank")`) or
+  composed with other expressions.
+- `Engine.as_of(graph_id, recorded_at_ms, **query_options)` reads any query as
+  this replica knew the branch then. It works for readers who cannot see
+  every record, and its coverage is that of a read pinned to the selected
+  revision: hidden records are absent, never reported. `recorded_query` still
+  needs the whole revision visible and returns a replayable checkpoint.
+- `Engine.changes(graph_id, since_ms=... | since_cursor=..., until_ms=None,
+  until_cursor=None, entities=(), predicates=(), limit=10_000)` returns a
+  change set. `QueryResult.changes` lists `{change, kind, id, before, after}`
+  entries and `QueryResult.cursor` is the revision to continue from. A change
+  set cannot be analyzed or used as another expression's input.
+- `Engine.explain(expression)` evaluates `explain` over any expression.
+- The same builders (`expand`, `as_of`, `changes`, `explain`) produce plain
+  expression dictionaries for `evaluate`, `program` or the JSON interface.
+
+`pinned_program` replays these results exactly: an `as_of` read becomes the
+query pinned to the revision it read, an expansion pins its revision, and a
+change set pins both ends as cursors.
+
 ## Results, exports and replay
 
 A `QueryResult` returned by `Engine` carries both the native envelope and the SDK

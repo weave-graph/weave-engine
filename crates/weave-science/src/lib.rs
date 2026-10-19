@@ -316,6 +316,12 @@ impl ScienceSession {
                         ))
                     }
                 };
+                if input.changes.is_some() {
+                    return Err(failure(
+                        "E_SCIENCE_RESULT",
+                        "a change set is not a graph; analyze an expand, as_of or query result",
+                    ));
+                }
                 if input.coverage != Coverage::Complete && !allow_partial {
                     return Err(failure("E_SCIENCE_PARTIAL", "analysis requires complete authorized input; explicitly opt into partial coverage"));
                 }
@@ -351,6 +357,8 @@ pub fn capabilities() -> Value {
         "algorithms":["degree","components","shortest_paths","pagerank","nearest_vectors"],
         "component_modes":["weak","strong"], "vector_metrics":["cosine","euclidean"],
         "clustering":"existing Program graph expression: cluster",
+        "query_operators":["query","recorded_query","as_of","expand","changes","explain","join","union","diff","filter","project","window"],
+        "traversal_semantics":"expand: exact k-hop neighborhood of visible seeds along visible matching edges (1-16 hops, limit on nodes plus edges, E_BUDGET beyond); as_of: any query read from the revision recorded at or before a time, authorized record by record like a pinned read; changes: fact-by-fact difference of two authorized states, cursor = to_revision; every cited fact in fact_provenance",
         "limits":Limits::default(), "max_input_bytes":MAX_INPUT_BYTES,
         "limit_maxima":{"max_nodes":1000000,"max_edges":5000000,"max_work":1000000000,"max_vector_dimensions":65536,"max_output_bytes":MAX_OUTPUT_BYTES},
         "snapshot_semantics":"immutable engine revisions; expected_head null creates a new branch only",

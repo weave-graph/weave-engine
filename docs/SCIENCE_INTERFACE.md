@@ -244,6 +244,32 @@ Failure envelope, with nonzero CLI exit status:
 Check both envelope and process status. Help is human-readable, and OS or stdout
 failures can terminate the process without a valid JSON envelope.
 
+## Traversal, as-of reads and change sets
+
+`execute` and `analyze` take the A3 expressions in 0.23.0 Programs
+([guide](TRAVERSAL.md)); `capabilities` lists them under `query_operators`.
+
+```sh
+target/debug/weave-science --db fleet.db --actor analyst <<'EOF'
+{"operation":"execute","program":{"version":"0.23.0","commands":[
+  {"op":"evaluate","value":{"kind":"expand","graph_id":"fleet","seeds":["site"],"hops":2,"direction":"in"}},
+  {"op":"evaluate","value":{"kind":"as_of","unix_millis":1759000000000,
+    "query":{"graph_id":"fleet","predicate":"located_at"}}},
+  {"op":"evaluate","value":{"kind":"changes","graph_id":"fleet",
+    "from":{"kind":"as_of","unix_millis":1759000000000}}},
+  {"op":"evaluate","value":{"kind":"explain","input":
+    {"kind":"expand","graph_id":"fleet","seeds":["site"],"hops":1,"direction":"in"}}}]}}
+EOF
+```
+
+Use a recorded time at or after the branch's first write for `as_of`: before
+it, the `as_of` read fails with `E_UNAVAILABLE`, while `changes` treats that
+state as empty. Each result is a `queried` query result. A change set is in its `changes`
+field (`from_revision`, `to_revision`, `entries`); pass `to_revision` as
+`{"kind":"cursor","revision":…}` to pull the next one. `analyze` accepts an
+`expand` or `as_of` result like any graph value and rejects a change set with
+`E_SCIENCE_RESULT`.
+
 ## Algorithms
 
 Topology algorithms accept optional `valid_at`, absent/null by default. They use

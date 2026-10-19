@@ -234,7 +234,13 @@ fn phase_a_fleet_scenario() {
                 let answer =
                     units_at_site_running(&mut engine, &host, GRAPH, &site, fw, d, &pinned)
                         .unwrap();
-                // Recorded-time selection needs the whole revision visible
+                // "As known at K" by recorded time for both readers (A3
+                // `as_of`): the analyst gets the visible subset.
+                let as_known =
+                    units_at_site_running(&mut engine, &host, GRAPH, &site, fw, d, &At::AsOf(k))
+                        .unwrap();
+                assert_eq!(as_known, answer, "as_of {k} as {who}");
+                // `recorded_query` still needs the whole revision visible
                 // (ADR-0002): the admin can use it, the analyst cannot.
                 let recorded = units_at_site_running(
                     &mut engine,

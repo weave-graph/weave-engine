@@ -719,3 +719,34 @@ authorized input, not the world, and a pinned read of the same revision is
 derivations a reader is denied (`E_DERIVATION_UNAVAILABLE`), as every read.
 The paired tests compare as-of output, coverage included, with and without
 hidden facts.
+
+### 2026-10-19 — #4 A3 — The JSON interface exposes the operators as Program expressions
+
+The science envelope gets no new `operation`. `expand`, `as_of`, `changes`
+and `explain` are graph expressions, so `execute` and `analyze` already carry
+them in 0.23.0 Programs, and `capabilities` now lists them under
+`query_operators` with their semantics. Separate operations would be a second
+request schema for the same plans and would have to repeat the engine's
+validation. `analyze` rejects a change set (`E_SCIENCE_RESULT`): it is not a
+graph, and analyzing its empty `graph` would silently report nothing.
+
+### 2026-10-19 — #4 A3 — Python helpers replay exactly through pinned programs
+
+`Engine.expand`, `Engine.as_of`, `Engine.changes` and `Engine.explain` wrap
+expression builders of the same names, which validate their arguments before
+any process starts. `pinned_program` rewrites each new kind to the exact state
+it read: an `as_of` read becomes the query pinned to the revision it selected
+(the two give the same result by construction), an expansion pins its revision
+in place of `as_of`, and a change set pins both ends as cursors. An end that
+was the empty state keeps its `as_of` time, which selects the same empty state
+on every replay. `QueryResult` gains `fact_provenance`, `changes` and `cursor`.
+
+### 2026-10-19 — #4 A3 — The fleet scenario uses `At::AsOf`; `At::Recorded` stays
+
+`weave-hardware`'s `At` gains `AsOf(k)`, which runs the A3 `as_of`
+expression. The scenario now checks for both readers that "as known at K" by
+recorded time equals the pinned-revision answer, coverage and provenance
+included, so the analyst gets the visible subset. `At::Recorded` keeps using
+`recorded_query`, and the scenario still checks that it returns witnesses to
+the admin and `E_HISTORY_UNAVAILABLE` to the analyst, so ADR-0002's rule
+stays covered.
