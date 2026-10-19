@@ -1,0 +1,28 @@
+{
+  "fixture": "unknown-version",
+  "concepts": [
+    "error.version"
+  ],
+  "type": "program",
+  "expect": {
+    "reject": "E_VERSION"
+  },
+  "input": {
+    "version": "0.22.0",
+    "commands": [
+      {
+        "op": "query",
+        "query": {
+          "graph_id": "g"
+        }
+      }
+    ]
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "error": "E_VERSION"
+  }
+}

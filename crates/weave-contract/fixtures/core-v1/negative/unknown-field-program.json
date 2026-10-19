@@ -1,0 +1,15 @@
+{
+  "fixture": "unknown-field-program",
+  "concepts": [
+    "error.unknown_field"
+  ],
+  "type": "program",
+  "expect": {
+    "reject": "E_UNKNOWN_FIELD"
+  },
+  "input": {
+    "version": "0.21.0",
+    "commands": [],
+    "comment": "not part of the contract"
+  }
+}

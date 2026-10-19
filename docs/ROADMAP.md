@@ -45,6 +45,12 @@ hybrid RAG.
 | A7 | Read-only MCP preview | new (#37) | A small local MCP server exposing `query`, `expand`, `as_of`, `hybrid_search` and `explain` over a local store, so the owner's agents can dogfood the core early. No writes, no authentication; B4 builds the full write-capable interface on top of it |
 | A6 | Phase A acceptance and release | E15 (#16), core part of E14 (#15) | An integrated scenario, fuzzing for the new write and query paths, store 29 migration, baseline benchmarks, a tagged release |
 
+**Progress.** A1 engine side: [core contract v1](contract/core-v1.md) is
+accepted, with golden fixtures, stable decode error codes, the compatibility
+policy, the 0.1–0.21 classification, and ADR-0005 and ADR-0006. The protocol
+stays 0.21.0. A1 closes when weave-language runs the vendored fixtures in its CI
+(LA0).
+
 **Phase A exit scenario:** import a fleet of 5,000 units with parts, firmware,
 sites, owners, sensor series references and maintenance notes with embeddings.
 Then:
@@ -218,8 +224,8 @@ Each needs an ADR in `docs/architecture/` before implementation merges:
 | ADR | Epic | Decision |
 |---|---|---|
 | ADR-0004 | A2 | Incremental fact log and index layout; the storage abstraction (trait boundary, transaction and recorded-time guarantees every backend must meet); how revision identity (ADR-0001) maps to log positions; store 29 migration |
-| ADR-0005 | A2 | Per-fact provenance model: recorded writer, claimed source, method/model version, evidence links |
-| ADR-0006 | A4 | Embedding facts and spaces: one model replacing the untyped `vector` property; candidate-relation semantics |
+| ADR-0005 | A2 | Per-fact provenance model: recorded writer, claimed source, method/model version, evidence links. **Accepted** 2026-10-19 in A1: [ADR-0005](architecture/ADR-0005-per-fact-provenance.md) |
+| ADR-0006 | A4 | Embedding facts and spaces: one model replacing the untyped `vector` property; candidate-relation semantics. **Accepted** 2026-10-19 in A1: [ADR-0006](architecture/ADR-0006-embedding-facts-and-spaces.md) |
 | ADR-0007 | B1/B3 | Identity, authentication and group resolution; the agent delegation model; tenancy as one store per tenant |
 | ADR-0008 | B2 | Write-time propagation and release policies |
 | ADR-0009 | C1 | Telemetry storage boundary. Leaning: raw series stay in external Parquet or a TSDB, linked by `SeriesRef` with time ranges; Weave stores references and derived facts, not raw samples |

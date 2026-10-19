@@ -1,0 +1,20 @@
+{
+  "fixture": "unknown-command",
+  "concepts": [
+    "error.unknown_variant",
+    "compat.reserved"
+  ],
+  "type": "program",
+  "expect": {
+    "reject": "E_UNKNOWN_VARIANT"
+  },
+  "input": {
+    "version": "0.21.0",
+    "commands": [
+      {
+        "op": "assert",
+        "graph_id": "g"
+      }
+    ]
+  }
+}

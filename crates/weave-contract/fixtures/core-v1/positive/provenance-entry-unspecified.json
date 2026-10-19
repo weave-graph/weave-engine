@@ -1,0 +1,25 @@
+{
+  "fixture": "provenance-entry-unspecified",
+  "concepts": [
+    "provenance.fact"
+  ],
+  "type": "provenance_entry",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "fact": {
+      "graph_id": "g",
+      "kind": "node",
+      "node_id": "a",
+      "revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "provenance": {
+      "method": {
+        "kind": "unspecified"
+      },
+      "recorded_at_ms": 10,
+      "writer": "alice"
+    }
+  }
+}

@@ -1,0 +1,243 @@
+{
+  "fixture": "selection-operators",
+  "concepts": [
+    "query.expression"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "data": {
+          "edges": [
+            {
+              "derived_from": [],
+              "from": "unit-7/physical",
+              "id": "located",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "located_at",
+              "properties": {},
+              "readers": [],
+              "to": "site-s",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            },
+            {
+              "derived_from": [],
+              "from": "unit-7/physical",
+              "id": "twin",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "same_entity",
+              "properties": {},
+              "readers": [],
+              "to": "unit-7/digital",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          ],
+          "nodes": [
+            {
+              "entity_id": "unit-7",
+              "id": "unit-7/physical",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "physical"
+            },
+            {
+              "entity_id": "unit-7",
+              "id": "unit-7/digital",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "digital"
+            },
+            {
+              "entity_id": "site-s",
+              "id": "site-s",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "physical"
+            }
+          ]
+        },
+        "expected_head": null,
+        "graph_id": "g",
+        "op": "commit"
+      },
+      {
+        "name": "all",
+        "op": "bind",
+        "value": {
+          "kind": "query",
+          "query": {
+            "branch_id": "main",
+            "from": null,
+            "graph_id": "g",
+            "include_metadata": false,
+            "max_depth": 8,
+            "predicate": null,
+            "revision": null,
+            "to": null,
+            "valid_at": null
+          }
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "input": {
+            "kind": "reference",
+            "name": "all"
+          },
+          "kind": "filter",
+          "predicate": "same_entity",
+          "valid_at": null
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "edge_ids": [],
+          "input": {
+            "kind": "reference",
+            "name": "all"
+          },
+          "kind": "project",
+          "node_ids": [
+            "site-s"
+          ]
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "kind": "union",
+          "left": {
+            "kind": "query",
+            "query": {
+              "branch_id": "main",
+              "from": null,
+              "graph_id": "g",
+              "include_metadata": false,
+              "max_depth": 8,
+              "predicate": "located_at",
+              "revision": null,
+              "to": null,
+              "valid_at": null
+            }
+          },
+          "right": {
+            "kind": "query",
+            "query": {
+              "branch_id": "main",
+              "from": null,
+              "graph_id": "g",
+              "include_metadata": false,
+              "max_depth": 8,
+              "predicate": "same_entity",
+              "revision": null,
+              "to": null,
+              "valid_at": null
+            }
+          }
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "input": {
+            "kind": "reference",
+            "name": "all"
+          },
+          "kind": "window",
+          "window": {
+            "end": 1000,
+            "start": 0
+          }
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "input": {
+            "kind": "query",
+            "query": {
+              "branch_id": "main",
+              "from": null,
+              "graph_id": "g",
+              "include_metadata": false,
+              "max_depth": 8,
+              "predicate": "located_at",
+              "revision": null,
+              "to": null,
+              "valid_at": null
+            }
+          },
+          "kind": "explain"
+        }
+      }
+    ],
+    "version": "0.21.0"
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "results": [
+      {
+        "kind": "committed"
+      },
+      {
+        "coverage": "complete",
+        "edges": [
+          "located",
+          "twin"
+        ],
+        "kind": "queried"
+      },
+      {
+        "coverage": "complete",
+        "edges": [
+          "twin"
+        ],
+        "kind": "queried"
+      },
+      {
+        "coverage": "complete",
+        "edges": [],
+        "kind": "queried",
+        "nodes": [
+          "site-s"
+        ]
+      },
+      {
+        "coverage": "complete",
+        "edges": [
+          "edge:aeaf865b03dcc0d9c2f4bd022880c41e58894316b18b5657756237a47d90c182",
+          "edge:b78f9407ea348f8c6f303e92162ca6e643a8569593012c31986366ba60de7fb1"
+        ],
+        "kind": "queried"
+      },
+      {
+        "coverage": "complete",
+        "kind": "queried"
+      },
+      {
+        "coverage": "complete",
+        "kind": "queried"
+      }
+    ]
+  }
+}

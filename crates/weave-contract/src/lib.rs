@@ -13,9 +13,13 @@ pub use view_registration::{
     AcceptedGraphSelection, CompiledViewTemplate, CurrentViewSelection, ViewClock, ViewReadTime,
 };
 pub mod decimal;
+pub mod embedding;
+pub mod provenance;
 pub mod quantity;
+pub mod wire;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+pub use wire::{decode, decode_program, is_supported_version, ContractError, SUPPORTED_VERSIONS};
 pub const VERSION: &str = "0.21.0";
 pub mod accepted_history;
 pub use accepted_history::{

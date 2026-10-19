@@ -311,16 +311,7 @@ impl Engine {
     }
     pub fn execute(&mut self, program: &Program, host: &HostContext) -> Result<Vec<CommandResult>> {
         let _read_scope = self.read_budget.enter();
-        if ![
-            VERSION, "0.20.0", "0.19.0", "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0",
-            "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0",
-            "0.4.0", "0.3.0",
-        ]
-        .contains(&program.version.as_str())
-            && program.version != "0.2.0"
-            && program.version != "0.3.0"
-            && program.version != LEGACY_VERSION
-        {
+        if !weave_contract::is_supported_version(&program.version) {
             return Err(err("E_VERSION", "unsupported contract version"));
         }
         if program.version == LEGACY_VERSION

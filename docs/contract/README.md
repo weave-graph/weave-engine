@@ -5,6 +5,12 @@ serializable schema is [`weave-contract`](../../crates/weave-contract/src/lib.rs
 and its modules. Native requests and Python expressions use these types; unknown
 or incompatible input fails at the runtime boundary.
 
+**Start with [core contract v1](core-v1.md).** It is the consolidated,
+normative specification of the core subset, and it holds the golden fixtures
+(`crates/weave-contract/fixtures/core-v1/`), the stable error codes, the
+compatibility policy and a table that classifies every feature of 0.1–0.21 as
+core v1, extension or deferred.
+
 Versioned documents describe the base contract and successive additions. They
 are not standalone copies of the whole current schema. Use the current types
 for exact fields and these documents for semantics and compatibility. The science

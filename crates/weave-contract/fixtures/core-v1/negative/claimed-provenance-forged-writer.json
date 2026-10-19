@@ -1,0 +1,17 @@
+{
+  "fixture": "claimed-provenance-forged-writer",
+  "concepts": [
+    "error.unknown_field",
+    "provenance.fact"
+  ],
+  "type": "claimed_provenance",
+  "expect": {
+    "reject": "E_UNKNOWN_FIELD"
+  },
+  "input": {
+    "method": {
+      "kind": "human"
+    },
+    "writer": "admin"
+  }
+}

@@ -35,12 +35,15 @@ identifies current science reports and older baselines.
 
 The science interface calls the existing engine. Its complete graph-expression
 schema is defined by the [canonical Rust contract](../crates/weave-contract/src/lib.rs)
-and related modules. [Contract history](contract/README.md) explains how to read
-the versioned documents, which describe additions rather than a single combined
-schema.
+and related modules. The consolidated specification is
+[core contract v1](contract/core-v1.md), with its golden fixtures, stable error
+codes, compatibility policy and the classification of every version 0.1–0.21.
+[Contract history](contract/README.md) explains how to read the versioned
+documents, which describe additions rather than a single combined schema.
 
 | Topic | References |
 |---|---|
+| Core contract and decisions | [Core contract v1](contract/core-v1.md), [ADR-0005 per-fact provenance](architecture/ADR-0005-per-fact-provenance.md), [ADR-0006 embedding facts and spaces](architecture/ADR-0006-embedding-facts-and-spaces.md) |
 | Immutable revisions and recorded history | [Revision identity ADR](architecture/ADR-0001-revision-identity-and-content.md), [recorded observations ADR](architecture/ADR-0002-recorded-head-observations.md), [0.20 recorded selection](contract/v0.20/README.md), [0.21 recorded/accepted history](contract/v0.21/README.md) |
 | Temporal graph values and evidence | [Temporal values](TEMPORAL_VALUES.md), [influence](INFLUENCE.md), [whole-snapshot authorization](WHOLE_SNAPSHOT_AUTHORIZATION.md) |
 | Spaces, identity and geometry | [Spaces](SPACES.md), [exact context/metadata](contract/v0.8/README.md), [geometry](contract/v0.9/README.md), [counterpart bridges](contract/v0.10/README.md), [exact quantities](EXACT_QUANTITIES.md) |

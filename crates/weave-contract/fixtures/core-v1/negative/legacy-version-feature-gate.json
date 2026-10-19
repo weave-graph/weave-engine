@@ -1,0 +1,50 @@
+{
+  "fixture": "legacy-version-feature-gate",
+  "concepts": [
+    "error.version",
+    "compat.versions"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "commands": [
+      {
+        "left": {
+          "branch_id": "main",
+          "from": null,
+          "graph_id": "g",
+          "include_metadata": false,
+          "max_depth": 8,
+          "predicate": null,
+          "revision": null,
+          "to": null,
+          "valid_at": null
+        },
+        "match_on": "entity_space_to_from",
+        "op": "join",
+        "output_predicate": "p2",
+        "right": {
+          "branch_id": "main",
+          "from": null,
+          "graph_id": "g",
+          "include_metadata": false,
+          "max_depth": 8,
+          "predicate": null,
+          "revision": null,
+          "to": null,
+          "valid_at": null
+        }
+      }
+    ],
+    "version": "0.1.0"
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "error": "E_VERSION"
+  }
+}

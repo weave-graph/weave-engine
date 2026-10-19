@@ -1,0 +1,36 @@
+{
+  "fixture": "reserved-node-provenance",
+  "concepts": [
+    "error.unknown_field",
+    "compat.reserved",
+    "provenance.fact"
+  ],
+  "type": "program",
+  "expect": {
+    "reject": "E_UNKNOWN_FIELD"
+  },
+  "input": {
+    "version": "0.21.0",
+    "commands": [
+      {
+        "op": "commit",
+        "graph_id": "g",
+        "data": {
+          "nodes": [
+            {
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s",
+              "provenance": {
+                "method": {
+                  "kind": "human"
+                }
+              }
+            }
+          ],
+          "edges": []
+        }
+      }
+    ]
+  }
+}

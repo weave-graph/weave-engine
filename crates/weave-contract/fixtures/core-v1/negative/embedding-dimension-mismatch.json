@@ -1,0 +1,57 @@
+{
+  "fixture": "embedding-dimension-mismatch",
+  "concepts": [
+    "embedding.space",
+    "embedding.fact"
+  ],
+  "type": "embedding_fact",
+  "expect": {
+    "reject": "E_SPACE"
+  },
+  "space": {
+    "id": "notes-text",
+    "revision": "1",
+    "encoder": "text-embedding-3-small",
+    "encoder_version": "2024-01-25",
+    "preprocessing": "weave-chunk/512-tokens/v1",
+    "dimensions": 4,
+    "metric": "cosine_distance"
+  },
+  "input": {
+    "id": "note-17-chunk-0-vec",
+    "space": {
+      "id": "notes-text",
+      "revision": "1"
+    },
+    "subject": {
+      "kind": "node",
+      "node_id": "note-17/chunk-0"
+    },
+    "vector": [
+      0.5,
+      -0.25,
+      0.125
+    ],
+    "valid_time": {
+      "start": 1757808000000,
+      "end": null
+    },
+    "readers": [
+      "team-a"
+    ],
+    "derived_from": [
+      {
+        "graph_id": "g",
+        "revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "assertion_id": "note-17-text"
+      }
+    ],
+    "provenance": {
+      "method": {
+        "kind": "model",
+        "model": "text-embedding-3-small",
+        "version": "2024-01-25"
+      }
+    }
+  }
+}

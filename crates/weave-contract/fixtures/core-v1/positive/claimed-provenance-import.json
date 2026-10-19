@@ -1,0 +1,18 @@
+{
+  "fixture": "claimed-provenance-import",
+  "concepts": [
+    "provenance.fact"
+  ],
+  "type": "claimed_provenance",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "method": {
+      "importer": "weave-csv",
+      "kind": "import",
+      "version": "1.0.0"
+    },
+    "source": "erp-export"
+  }
+}

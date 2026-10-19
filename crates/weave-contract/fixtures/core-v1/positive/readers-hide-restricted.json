@@ -1,0 +1,104 @@
+{
+  "fixture": "readers-hide-restricted",
+  "concepts": [
+    "fact.readers"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "commands": [
+      {
+        "op": "query",
+        "query": {
+          "branch_id": "main",
+          "from": null,
+          "graph_id": "g",
+          "include_metadata": false,
+          "max_depth": 8,
+          "predicate": null,
+          "revision": null,
+          "to": null,
+          "valid_at": null
+        }
+      }
+    ],
+    "version": "0.21.0"
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "setup": [
+      {
+        "principal": "alice",
+        "write_graphs": [
+          "g"
+        ],
+        "program": {
+          "commands": [
+            {
+              "data": {
+                "edges": [
+                  {
+                    "from": "a",
+                    "id": "public",
+                    "predicate": "p",
+                    "to": "b",
+                    "valid_time": {
+                      "end": null,
+                      "start": 0
+                    }
+                  },
+                  {
+                    "from": "a",
+                    "id": "secret",
+                    "predicate": "p",
+                    "readers": [
+                      "bob"
+                    ],
+                    "to": "b",
+                    "valid_time": {
+                      "end": null,
+                      "start": 0
+                    }
+                  }
+                ],
+                "nodes": [
+                  {
+                    "entity_id": "A",
+                    "id": "a",
+                    "space_id": "s"
+                  },
+                  {
+                    "entity_id": "B",
+                    "id": "b",
+                    "space_id": "s"
+                  }
+                ]
+              },
+              "graph_id": "g",
+              "op": "commit"
+            }
+          ],
+          "version": "0.21.0"
+        }
+      }
+    ],
+    "results": [
+      {
+        "coverage": "complete",
+        "edges": [
+          "public"
+        ],
+        "kind": "queried",
+        "nodes": [
+          "a",
+          "b"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "fixture": "candidate-relation",
+  "concepts": [
+    "embedding.candidate"
+  ],
+  "type": "candidate_relation",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "exactness": "exact",
+    "from": "unit-7/digital",
+    "id": "cand-1",
+    "origins": [
+      {
+        "embedding_id": "unit-7-vec",
+        "graph_id": "g",
+        "kind": "embedding",
+        "revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      {
+        "embedding_id": "unit-9-vec",
+        "graph_id": "g",
+        "kind": "embedding",
+        "revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "predicate": "weave:similar_to",
+    "score": 0.0625,
+    "space": {
+      "id": "notes-text",
+      "revision": "1"
+    },
+    "to": "unit-9/digital",
+    "valid_time": {
+      "end": null,
+      "start": 1757808000000
+    }
+  }
+}

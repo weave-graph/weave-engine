@@ -62,8 +62,10 @@ prerequisite for a documentation or science-only client edit.
 ## Contract and review boundaries
 
 Contract changes affect the companion language repository. Coordinate review,
-golden fixtures and vendor-manifest updates. Preserve compatibility explicitly
-or advance the contract version; do not silently reinterpret saved plans.
+golden fixtures and vendor-manifest updates. Follow the compatibility policy in
+[core contract v1](docs/contract/core-v1.md#11-compatibility-policy): preserve
+compatibility explicitly or advance the contract version, and never silently
+reinterpret saved plans.
 Contract, store, capsule and host-request versions identify different boundaries.
 
 Keep pull requests focused. Explain the concrete behavior change and include

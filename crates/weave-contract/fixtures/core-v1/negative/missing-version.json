@@ -1,0 +1,13 @@
+{
+  "fixture": "missing-version",
+  "concepts": [
+    "error.version"
+  ],
+  "type": "program",
+  "expect": {
+    "reject": "E_VERSION"
+  },
+  "input": {
+    "commands": []
+  }
+}

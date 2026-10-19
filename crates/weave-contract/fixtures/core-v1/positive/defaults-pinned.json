@@ -1,0 +1,103 @@
+{
+  "fixture": "defaults-pinned",
+  "concepts": [
+    "query.plan",
+    "fact.polarity",
+    "fact.readers",
+    "identity.graph"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "version": "0.21.0",
+    "commands": [
+      {
+        "op": "commit",
+        "graph_id": "g",
+        "data": {
+          "nodes": [
+            {
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s"
+            }
+          ],
+          "edges": [
+            {
+              "id": "e",
+              "predicate": "p",
+              "from": "a",
+              "to": "a",
+              "valid_time": {
+                "start": 0,
+                "end": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "op": "query",
+        "query": {
+          "graph_id": "g"
+        }
+      }
+    ]
+  },
+  "canonical": {
+    "version": "0.21.0",
+    "commands": [
+      {
+        "op": "commit",
+        "graph_id": "g",
+        "branch_id": "main",
+        "expected_head": null,
+        "data": {
+          "nodes": [
+            {
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s",
+              "properties": {},
+              "metadata": [],
+              "readers": []
+            }
+          ],
+          "edges": [
+            {
+              "id": "e",
+              "predicate": "p",
+              "from": "a",
+              "to": "a",
+              "valid_time": {
+                "start": 0,
+                "end": null
+              },
+              "polarity": "positive",
+              "properties": {},
+              "metadata": [],
+              "readers": [],
+              "derived_from": []
+            }
+          ]
+        }
+      },
+      {
+        "op": "query",
+        "query": {
+          "graph_id": "g",
+          "revision": null,
+          "branch_id": "main",
+          "predicate": null,
+          "from": null,
+          "to": null,
+          "valid_at": null,
+          "include_metadata": false,
+          "max_depth": 8
+        }
+      }
+    ]
+  }
+}
