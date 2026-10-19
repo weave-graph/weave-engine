@@ -110,6 +110,7 @@ mod retained_cluster;
 pub use retained_cluster::{HandlerSlotState, RetainedClusterCompletion};
 mod geometry;
 pub use weave_contract::{ClusterRequest, IdentityPolicyRef, IdentityResolve, ViewClock};
+pub mod fact_store;
 mod metadata;
 mod snapshot;
 mod typed;

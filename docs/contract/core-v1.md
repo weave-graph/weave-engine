@@ -428,6 +428,7 @@ meaning.
   | `expand`, `changes` | expression `kind` | A3 |
   | `nearest`, `similar_candidates` | expression `kind` | A4 |
   | `weave:` | predicate and ID namespace (`weave:similar_to`) | engine |
+  | `reader_groups` on every fact record | field (group references) | B1, room reserved by ADR-0004 section 11 |
 
   An epic MAY choose different names, in which case its PR releases the
   reservation here. Fixtures: `negative/reserved-node-provenance.json`,
