@@ -233,7 +233,7 @@ Each needs an ADR in `docs/architecture/` before implementation merges:
 | ADR-0004 | A2 | Incremental fact log and index layout; the storage abstraction (trait boundary, transaction and recorded-time guarantees every backend must meet); how revision identity (ADR-0001) maps to log positions; store 29 migration. **Accepted** 2026-10-19: [ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md) |
 | ADR-0005 | A2 | Per-fact provenance model: recorded writer, claimed source, method/model version, evidence links. **Accepted** 2026-10-19 in A1: [ADR-0005](architecture/ADR-0005-per-fact-provenance.md) |
 | ADR-0006 | A4 | Embedding facts and spaces: one model replacing the untyped `vector` property; candidate-relation semantics. **Accepted** 2026-10-19 in A1: [ADR-0006](architecture/ADR-0006-embedding-facts-and-spaces.md) |
-| ADR-0007 | B1/B3 | Identity, authentication and group resolution; the agent delegation model; tenancy as one store per tenant |
+| ADR-0007 | B1/B3 | Identity, authentication and group resolution; the agent delegation model; tenancy as one store per tenant. **Proposed** 2026-10-19 during A2; accepted when B1 implementation starts: [ADR-0007](architecture/ADR-0007-identity-groups-and-tenancy.md) |
 | ADR-0008 | B2 | Write-time propagation and release policies |
 | ADR-0009 | C1 | Telemetry storage boundary. Leaning: raw series stay in external Parquet or a TSDB, linked by `SeriesRef` with time ranges; Weave stores references and derived facts, not raw samples |
 
