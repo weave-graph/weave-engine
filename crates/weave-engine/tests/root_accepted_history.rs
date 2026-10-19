@@ -446,3 +446,73 @@ fn unused_expired_approval_does_not_invalidate_a_genuine_past_quorum() {
         selected
     );
 }
+
+/// Regression for the flaky live `check_history_source.py` run: accepted history reads
+/// the current head policy, so a reader fails closed once wall-clock time passes its
+/// expiry, even for a cut that a genuine past quorum accepted. Harnesses must give
+/// SystemClock policies a window longer than the whole run, not seconds.
+#[test]
+fn accepted_history_fails_closed_exactly_when_the_current_head_policy_expires() {
+    let clock = Arc::new(ManualClock::new(5));
+    let mut e = Engine::memory_with_clock(clock.clone()).unwrap();
+    e.install_governance_root(&policy()).unwrap();
+    let source = write(&mut e, 1, false);
+    let observer = observer(&e);
+    clock.set(10);
+    let first = accept(&e, "first", source);
+    let decision = AcceptedViewHistoryCut::Decision {
+        observer: observer.clone(),
+        decision_id: first.decision_id.clone(),
+    };
+    clock.set(9999);
+    let before = e
+        .query_accepted_history_for("team", &at(&observer, 10), &host())
+        .unwrap();
+    assert_eq!(before.observation.decision_id, first.decision_id);
+    assert_eq!(
+        e.query_accepted_history_for("team", &decision, &host())
+            .unwrap(),
+        before
+    );
+    clock.set(10000);
+    for cut in [at(&observer, 10), decision] {
+        let error = e
+            .query_accepted_history_for("team", &cut, &host())
+            .unwrap_err();
+        assert_eq!(error.code, "E_GOV_HISTORY_UNAVAILABLE");
+    }
+}
+
+/// The second half of the same harness flake: a later proposal must expire within the
+/// installed policy window, so anchoring it at the proposing process's own clock sample
+/// with a fixed offset refuses once that sample drifts past the slack.
+#[test]
+fn later_proposal_must_expire_within_the_installed_policy_window() {
+    let clock = Arc::new(ManualClock::new(5));
+    let mut e = Engine::memory_with_clock(clock.clone()).unwrap();
+    e.install_governance_root(&policy()).unwrap();
+    let source = write(&mut e, 1, false);
+    clock.set(10);
+    accept(&e, "first", source.clone());
+    clock.set(20);
+    let head = e.inspect_governance_head("team", &host()).unwrap();
+    let late = GovernanceProposal {
+        id: "late".into(),
+        view_id: "team".into(),
+        policy: head.policy,
+        expected_head: head.decision_id,
+        expires_at_ms: policy().expires_at_ms + 1,
+        action: GovernanceAction::Publish {
+            source,
+            branch_id: "main".into(),
+        },
+    };
+    let error = e.propose_governance(&late, &host()).unwrap_err();
+    assert_eq!(error.code, "E_GOV_POLICY");
+    let within = GovernanceProposal {
+        id: "within".into(),
+        expires_at_ms: policy().expires_at_ms,
+        ..late
+    };
+    e.propose_governance(&within, &host()).unwrap();
+}

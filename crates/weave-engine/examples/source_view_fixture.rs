@@ -41,12 +41,23 @@ fn write(e: &mut Engine, graph_id: &str, data: GraphData) -> weave_engine::Resul
         revision: e.head(graph_id, "main")?.unwrap(),
     })
 }
+/// Governance lifetimes: (base, policy window, proposal and approval window).
+/// The policy window is anchored at the seeding process; each proposal window is anchored
+/// at the process that proposes it and must end within the seeded policy window.
+type Lifetime = (i64, i64, i64);
+/// ManualClock modes. The `expired` mode samples exactly the end of this policy window.
+const MANUAL_LIFETIME: (i64, i64) = (10_000, 9_000);
+/// SystemClock `live_*` modes. Every `live_*` process reads the current head policy, which
+/// fails closed once wall-clock time passes its expiry, and `live_publish` must propose
+/// within it. Wall-clock windows of 10 s and 1 s made those runs flaky on slow runners;
+/// 60 and 30 minutes exceed any job timeout.
+const LIVE_LIFETIME: (i64, i64) = (3_600_000, 1_800_000);
 fn accept(
     e: &Engine,
     view: &str,
     source: GraphRef,
     id: &str,
-    lifetime_base: i64,
+    (lifetime_base, policy_lifetime, proposal_lifetime): Lifetime,
 ) -> weave_engine::Result<GovernanceReceipt> {
     let key = SigningKey::from_bytes(&[73; 32]);
     let reference = GovernancePolicyRef {
@@ -66,7 +77,7 @@ fn accept(
                 branch_id: "main".into(),
             }],
             not_before_ms: lifetime_base,
-            expires_at_ms: lifetime_base + 10000,
+            expires_at_ms: lifetime_base + policy_lifetime,
         })?;
     }
     let expected_head = e.inspect_governance_head(view, &host())?.decision_id;
@@ -75,7 +86,7 @@ fn accept(
         view_id: view.into(),
         policy: reference.clone(),
         expected_head: expected_head.clone(),
-        expires_at_ms: lifetime_base + 9000,
+        expires_at_ms: lifetime_base + proposal_lifetime,
         action: GovernanceAction::Publish {
             source,
             branch_id: "main".into(),
@@ -91,7 +102,7 @@ fn accept(
             expected_head,
             member: weave_policy::public_key(&key),
             issued_at_ms: lifetime_base,
-            expires_at_ms: lifetime_base + 9000,
+            expires_at_ms: lifetime_base + proposal_lifetime,
             nonce: format!("approval-{id}"),
         },
         &key,
@@ -123,18 +134,18 @@ fn run(a: &[String]) -> weave_engine::Result<Value> {
     } else {
         Arc::new(ManualClock::new(if a[2] == "expired" { 10000 } else { 20 }))
     };
-    let lifetime_base = if a[2].starts_with("live_") {
-        clock.unix_millis()?
+    let lifetime: Lifetime = if a[2].starts_with("live_") {
+        (clock.unix_millis()?, LIVE_LIFETIME.0, LIVE_LIFETIME.1)
     } else {
-        0
+        (0, MANUAL_LIFETIME.0, MANUAL_LIFETIME.1)
     };
     let mut e = Engine::open_with_clock(&a[1], clock)?;
     match a[2].as_str() {
         "seed" | "live_seed" => {
             let source = write(&mut e, "Fleet", graph(0))?;
             let empty = write(&mut e, "Empty", GraphData::default())?;
-            let accepted = accept(&e, "team", source.clone(), "initial", lifetime_base)?;
-            let empty_accepted = accept(&e, "empty", empty, "empty-initial", lifetime_base)?;
+            let accepted = accept(&e, "team", source.clone(), "initial", lifetime)?;
+            let empty_accepted = accept(&e, "empty", empty, "empty-initial", lifetime)?;
             Ok(json!({"accepted":accepted,"empty":empty_accepted,"source":source}))
         }
         "register" | "recorded_register" => {
@@ -184,11 +195,7 @@ fn run(a: &[String]) -> weave_engine::Result<Value> {
                 revision: e.head("Fleet", "main")?.unwrap(),
             };
             Ok(serde_json::to_value(accept(
-                &e,
-                "team",
-                source,
-                "next",
-                lifetime_base,
+                &e, "team", source, "next", lifetime,
             )?)?)
         }
         "refresh" | "recorded_refresh" => Ok(serde_json::to_value(e.refresh_view(
