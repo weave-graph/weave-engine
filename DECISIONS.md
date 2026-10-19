@@ -211,3 +211,85 @@ live at R. An identical re-assert is a no-op and records nothing. A changed
 claim is a new version. Facts of snapshot revisions are attributed to the
 snapshot's committer, because a snapshot commit restates the whole graph.
 This needs no data migration.
+
+### 2026-10-19 — #38 B1 — ADR-0007 written as Proposed during A2
+
+The roadmap asks for B1 design during A2 so the fact model leaves room for
+group readers. Writing ADR-0007 as Proposed fixes the semantics A2 must not
+foreclose (section 13: empty `reader_groups` omitted from canonical bytes,
+`writer` as a principal ID, a place for `on_behalf_of`, one visibility
+predicate) without committing B1 code before Phase A closes. It becomes
+Accepted when B1 implementation starts, and may be amended then.
+
+### 2026-10-19 — #38 B1 — Groups resolved at read time; history read under current authority
+
+Membership is resolved from the registry head pinned at request start, so
+revocation takes effect on the next request and rewrites nothing. As-of and
+recorded-time queries are authorized with the current registry, not the one
+at the selected time. Authorizing history with past membership would let a
+removed member keep reading everything up to the removal, which is what
+revocation must stop. The consequence, that a new member sees the group's
+history, is the intended meaning of joining a shared knowledge base. The
+registry's own history still answers the audit question "who could read F at
+time T".
+
+### 2026-10-19 — #38 B1 — `reader_groups` is a disjunction alongside `readers`; groups never authenticate
+
+A record is public only when both `readers` and `reader_groups` are empty. A
+group ID inside `readers` stays a literal and matches no one, because a group
+can never be a request principal. This keeps the A2 promise that `readers`
+never changes meaning. Principal and group IDs are never reused, because a
+reused ID would inherit every record naming the old one. Unknown or
+undiscoverable groups fail closed and are rejected on write with the same
+code as a nonexistent group.
+
+### 2026-10-19 — #38 B1 — Group-based restrictions are never flattened
+
+The engine intersects literal reader lists for derived records today. An
+intersection involving groups cannot be flattened without resolving
+membership at write time, which would freeze it. Derived records with any
+group input keep an AND of reader clauses through the influence carriers.
+Records without groups keep today's literal intersection byte for byte.
+ADR-0008 owns the write-time form.
+
+### 2026-10-19 — #38 B1 — Agent ceiling as a recursive predicate
+
+`can(agent) = can(owner) ∧ scope ∧ match(S_local)`, evaluated per request up
+an ownership chain of at most 8 links (the `weave-policy` chain bound). An
+agent therefore never exceeds its owner, even after the owner loses access.
+Owners see what their agents can see (agents are in the owner's identity
+set), so owners can audit their agents. Administer is not delegable to agents
+in B1, and group-owned agents are deferred. Both are open questions, not
+rejections.
+
+### 2026-10-19 — #38 B1 — Registry stored as facts in `weave:registry`; audit log separate
+
+Storing the registry as facts in a reserved graph of the tenant store gives
+registry history, audit and as-of reconstruction through the A2 fact log with
+no second mechanism. It also commits revocation atomically with the data it
+protects. The read and write audit log (B3) is a separate table, because read
+volume would dominate the fact log.
+
+### 2026-10-19 — #38 B1 — Permissions are ordered; branches are protected, not separately readable
+
+Discover ≤ Read ≤ Write ≤ Administer, mapped onto the existing
+`weave-policy` actions with no new action (Read = `read` + `traverse`,
+Write = `publish`). Branch ACLs only grant Write, on branches an administrator
+protects. Read stays per graph, because record restrictions already give
+finer read control. A missing Discover gives `E_UNAVAILABLE`, which is
+identical to a nonexistent graph and reuses the existing missing-or-denied
+code. Discover without the needed permission gives `E_FORBIDDEN`. Graph IDs
+in the service are engine-assigned unless the caller is a tenant
+administrator, so creation cannot probe for hidden graphs.
+
+### 2026-10-19 — #39 B3 — Registry authoritative over capability chains; HTTP/JSON transport
+
+A signed request must pass `weave-policy` and agree with the current
+registry, so a capability can only narrow registry authority. In the service,
+admission roots come from registry key bindings, and authority-reducing
+registry changes advance the admission epoch. IdP group claims are not live
+Weave groups, because their revocation depends on token lifetime and the IdP.
+They may be imported into the registry. B3 serves HTTP/JSON over TLS with
+core v1 bodies. gRPC is deferred until measured. Tenancy is one store per
+tenant, with the tenant taken from the credential, a per-tenant audience and
+a separate control store that holds no graph data.
