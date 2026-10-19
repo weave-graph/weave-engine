@@ -24,6 +24,7 @@ is scheduled.
 | [Python tutorial and reference](PYTHON_SCIENCE.md) | Scripts/notebooks, import, corrections, joins, analysis, CSV, export and saved experiments |
 | [Native JSON and Rust interface](SCIENCE_INTERFACE.md) | Python-free requests, responses, algorithms, defaults, errors and budgets |
 | [Scientific validation](SCIENCE_VALIDATION.md) | Run independent checks and reproduce measurements |
+| [Hardware reference model](HARDWARE_MODEL.md) | Fleet schema, `SeriesRef`, CSV/JSON importers and the seeded fleet generator |
 | [Current status](STATUS.md) | Supported versions, verified evidence and remaining work |
 
 The [example source](../examples/science/temporal_vectors.py) is an executable

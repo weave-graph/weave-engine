@@ -1,0 +1,13 @@
+assignment_id,serial,config_id,valid_from,readers
+CA-SN-000001-1,SN-000001,PX-40-standard,2021-06-05,
+CA-SN-000002-1,SN-000002,CX-200-high-duty,2023-11-08,
+CA-SN-000003-1,SN-000003,CX-200-high-duty,2022-01-05,
+CA-SN-000004-1,SN-000004,PX-60-cold-climate,2022-02-15,fleet-admin;customer:C003
+CA-SN-000005-1,SN-000005,TX-12-high-duty,2022-10-22,fleet-admin;customer:C003
+CA-SN-000006-1,SN-000006,CX-300-cold-climate,2022-12-15,fleet-admin;customer:C003
+CA-SN-000007-1,SN-000007,CX-200-high-duty,2022-09-29,
+CA-SN-000008-1,SN-000008,CX-200-standard,2023-06-14,
+CA-SN-000009-1,SN-000009,PX-60-high-duty,2024-01-08,
+CA-SN-000010-1,SN-000010,CX-200-cold-climate,2023-03-21,
+CA-SN-000011-1,SN-000011,TX-12-standard,2023-04-20,
+CA-SN-000012-1,SN-000012,CX-200-high-duty,2021-04-18,

@@ -1,0 +1,19 @@
+config_id,name,uri,digest
+CX-200-cold-climate,CX-200 cold-climate,git://configs/CX-200/cold-climate.toml,sha256:62ee336c8cd1c485fd4a667e28ddd7242355ee57e7e98b3f0641d47874b63645
+CX-200-high-duty,CX-200 high-duty,git://configs/CX-200/high-duty.toml,sha256:6b86b18e16425b796cf4049bf05be9e7ca7bc6f7efe8e602ab8be6468019c156
+CX-200-standard,CX-200 standard,git://configs/CX-200/standard.toml,sha256:ea35effa728d01b3b68d55cc44c10c28345cfb5f38823d120bbffb23be19495e
+CX-300-cold-climate,CX-300 cold-climate,git://configs/CX-300/cold-climate.toml,sha256:43bcada8a6e663df90affd5e9f4d14a52b6ec712918ef6afc0b98667f8666307
+CX-300-high-duty,CX-300 high-duty,git://configs/CX-300/high-duty.toml,sha256:424d32897c96d5b7123507dede17ea1ac8f5d82ad48846e868842316f477bf37
+CX-300-standard,CX-300 standard,git://configs/CX-300/standard.toml,sha256:b2946e01face6f6079f29280ea7e4e5b81fdefec0d7457ad547918712aeea6f2
+PX-40-cold-climate,PX-40 cold-climate,git://configs/PX-40/cold-climate.toml,sha256:b798b0538f294b8e223c6c5ffbdea346fd1ba51ec5049dc7ab9fece70e0e4d7c
+PX-40-high-duty,PX-40 high-duty,git://configs/PX-40/high-duty.toml,sha256:dc52b3de35cceaaa62846347879df884780643c6236e0e09fa7dfe6fb0e3ee09
+PX-40-standard,PX-40 standard,git://configs/PX-40/standard.toml,sha256:8b285cb286aacb9dfeda463ee862c7aa0efc9770b4eb575f390b0f404c0b1aee
+PX-60-cold-climate,PX-60 cold-climate,git://configs/PX-60/cold-climate.toml,sha256:6a6c340f5f8dc10115e988880add1afd59fc7b70ef4b82fdeaf91a43a7bfd605
+PX-60-high-duty,PX-60 high-duty,git://configs/PX-60/high-duty.toml,sha256:c38dea7f34c4298076390028dcc6be061edccf9683abed86dc875e9408714617
+PX-60-standard,PX-60 standard,git://configs/PX-60/standard.toml,sha256:4baa1d3446d1029373f2cfa72e1a2ced0a85055727866ebf8f7e91883592f3a4
+TX-12-cold-climate,TX-12 cold-climate,git://configs/TX-12/cold-climate.toml,sha256:dd17ae07d9d97d7d793eec76927de1dc9c39b466b9c6121ca2db596d16993795
+TX-12-high-duty,TX-12 high-duty,git://configs/TX-12/high-duty.toml,sha256:85d7fae5588fac62863973a843579d6d7cfe80330ddfbcb6269da3528be898ec
+TX-12-standard,TX-12 standard,git://configs/TX-12/standard.toml,sha256:6c6237cb25822134b746e61f1ecb29e4181fab714bcd9aaaf42786a88628cf4e
+TX-9-cold-climate,TX-9 cold-climate,git://configs/TX-9/cold-climate.toml,sha256:c0f751de02a190306af4243864737a6d3ceb2302ff5321c669b14a770dec94fa
+TX-9-high-duty,TX-9 high-duty,git://configs/TX-9/high-duty.toml,sha256:8367204aa3e9c1fc246edbdf9d0a8fe563f4d86660fd148da796b4c2cb62f78b
+TX-9-standard,TX-9 standard,git://configs/TX-9/standard.toml,sha256:8fccc0ad7ddab6b00b5bce2bc19ad429dfec6d357210c980527d2c4043632581

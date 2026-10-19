@@ -728,3 +728,90 @@ fn fact_writes_to_weave_graphs_are_rejected() {
     }
     assert_eq!(e.event_count().unwrap(), 0);
 }
+
+/// `reconcile_facts` (A5 importers): assert what is absent, correct what
+/// differs, omit what is identical; write authority required; the result
+/// applied with its head leaves nothing to reconcile.
+#[test]
+fn reconcile_facts_plans_an_idempotent_write() {
+    use weave_contract::facts::{Fact, FactChange};
+    let mut e = engine(&Arc::new(ManualClock::new(1)));
+    let fact = |v: Value| -> Fact { serde_json::from_value(v).unwrap() };
+    let writer = host("etl");
+    // Hidden from every reader but the owner, yet reconciled by the writer
+    // exactly as a write would treat it.
+    let mut restricted = node("r");
+    restricted["readers"] = json!(["owner"]);
+    let initial = vec![fact(node("a")), fact(node("b")), fact(restricted.clone())];
+    let plan = e.reconcile_facts("g", "main", &initial, &writer).unwrap();
+    assert_eq!(plan.head, None);
+    assert_eq!(plan.changes.len(), 3);
+    assert!(plan
+        .changes
+        .iter()
+        .all(|c| matches!(c, FactChange::Assert { .. })));
+    let changes = serde_json::to_value(&plan.changes).unwrap();
+    let r1 = committed(&run(&mut e, "etl", json!([write(changes)])).unwrap());
+
+    let mut b2 = node("b");
+    b2["properties"] = json!({"firmware": "2.0"});
+    let next = vec![
+        fact(node("a")),
+        fact(b2),
+        fact(restricted),
+        fact(edge("e", "a", "b")),
+    ];
+    let plan = e.reconcile_facts("g", "main", &next, &writer).unwrap();
+    assert_eq!(plan.head.as_deref(), Some(r1.as_str()));
+    let kinds: Vec<(&str, &str)> = plan
+        .changes
+        .iter()
+        .map(|c| match c {
+            FactChange::Assert { fact } => ("assert", fact.id()),
+            FactChange::Correct { fact, .. } => ("correct", fact.id()),
+            FactChange::Retract { target, .. } => ("retract", target.id.as_str()),
+        })
+        .collect();
+    assert_eq!(kinds, [("correct", "b"), ("assert", "e")]);
+    let mut command = write(serde_json::to_value(&plan.changes).unwrap());
+    command["expected_head"] = json!(plan.head);
+    let r2 = committed(&run(&mut e, "etl", json!([command])).unwrap());
+    let events = e.event_count().unwrap();
+    let plan = e.reconcile_facts("g", "main", &next, &writer).unwrap();
+    assert_eq!(plan.head.as_deref(), Some(r2.as_str()));
+    assert!(plan.changes.is_empty());
+    assert_eq!(
+        e.event_count().unwrap(),
+        events,
+        "reconciling writes nothing"
+    );
+
+    // Errors: no write grant, duplicates, identity changes, reserved graphs.
+    let code = |r: weave_engine::Result<weave_engine::FactReconciliation>| r.unwrap_err().code;
+    let reader = HostContext::new("etl", Vec::<String>::new());
+    assert_eq!(
+        code(e.reconcile_facts("g", "main", &next, &reader)),
+        "E_FORBIDDEN"
+    );
+    let twice = [fact(node("a")), fact(node("a"))];
+    assert_eq!(
+        code(e.reconcile_facts("g", "main", &twice, &writer)),
+        "E_CONFLICT"
+    );
+    let moved = [fact(edge("e", "b", "a"))];
+    assert_eq!(
+        code(e.reconcile_facts("g", "main", &moved, &writer)),
+        "E_CONFLICT"
+    );
+    let mut renamed = node("a");
+    renamed["entity_id"] = json!("OTHER");
+    assert_eq!(
+        code(e.reconcile_facts("g", "main", &[fact(renamed)], &writer)),
+        "E_CONFLICT"
+    );
+    let reserved = HostContext::new("etl", ["weave:x".to_string()]);
+    assert_eq!(
+        code(e.reconcile_facts("weave:x", "main", &[fact(node("a"))], &reserved)),
+        "E_RESERVED_NAMESPACE"
+    );
+}

@@ -302,6 +302,15 @@ enum Parent {
     },
 }
 
+/// The result of [`Engine::reconcile_facts`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct FactReconciliation {
+    /// The branch head the changes were computed against.
+    pub head: Option<String>,
+    /// Asserts and corrections, in input order. Identical facts are omitted.
+    pub changes: Vec<FactChange>,
+}
+
 /// One version of a fact as seen at some revision.
 struct Seen {
     fact: Fact,
@@ -802,6 +811,92 @@ impl Engine {
         self.validate_required_metadata(&neighborhood, host)?;
         self.record_structures(graph, &neighborhood)?;
         Ok((revision, Some(event_id)))
+    }
+
+    /// The changes that make the live facts of a branch equal `facts`, for
+    /// importers that re-send whole tables (A5): `assert` for a fact that is
+    /// not live, `correct` for a live fact of the same kind and ID that
+    /// differs, and nothing for an identical live fact. An empty result means
+    /// a write of these facts would change nothing.
+    ///
+    /// It needs write authority on the graph and discloses no more than a
+    /// `write` of the same facts would: whether each key is absent, identical
+    /// or different, never a stored version. Apply the changes with `write`
+    /// and `expected_head` set to the returned head, so a concurrent writer
+    /// makes the write fail with `E_CONFLICT` instead of being overwritten.
+    pub fn reconcile_facts(
+        &self,
+        graph: &str,
+        branch: &str,
+        facts: &[Fact],
+        host: &HostContext,
+    ) -> Result<FactReconciliation> {
+        identity_acceptance::require_external_graph(graph)?;
+        if graph.starts_with("weave:") {
+            return Err(err(
+                "E_RESERVED_NAMESPACE",
+                "fact writes to engine-reserved weave: graphs are rejected",
+            ));
+        }
+        if !host.writable_graphs.contains(graph) {
+            return Err(err(
+                "E_FORBIDDEN",
+                "host has not granted graph write authority",
+            ));
+        }
+        if !valid_id(graph) || !valid_id(branch) || !valid_id(&host.principal) {
+            return Err(err("E_ID", "identifiers must not be empty"));
+        }
+        if facts.len() > MAX_WRITE_CHANGES {
+            return Err(err(
+                "E_BUDGET",
+                "a reconciliation carries at most 100000 facts",
+            ));
+        }
+        let head = self.head(graph, branch)?;
+        let parent = match &head {
+            None => Parent::Empty,
+            Some(revision) if is_fact_revision(revision) => Parent::Fact {
+                revision: revision.clone(),
+            },
+            Some(revision) => Parent::Snapshot {
+                revision: revision.clone(),
+                data: Box::new(
+                    self.load(graph, revision)?
+                        .ok_or_else(|| err("E_UNAVAILABLE", "graph unavailable"))?,
+                ),
+            },
+        };
+        let mut seen: BTreeSet<Key> = BTreeSet::new();
+        let mut changes = Vec::new();
+        for fact in facts {
+            if !valid_id(fact.id()) {
+                return Err(err("E_ID", "fact identifiers require 1 to 512 bytes"));
+            }
+            let k = key(fact);
+            if !seen.insert(k.clone()) {
+                return Err(conflict("a fact occurs twice in one reconciliation"));
+            }
+            match self.parent_get(&parent, &k)? {
+                None => changes.push(FactChange::Assert { fact: fact.clone() }),
+                Some(live) if live.fact.kind() != fact.kind() => {
+                    return Err(conflict("a live fact with this ID has another kind"));
+                }
+                Some(live) if &live.fact == fact => {}
+                Some(live) => {
+                    if !same_identity(&live.fact, fact) {
+                        return Err(conflict(
+                            "a correction cannot change structural identity; write a new fact",
+                        ));
+                    }
+                    changes.push(FactChange::Correct {
+                        fact: fact.clone(),
+                        expected: None,
+                    });
+                }
+            }
+        }
+        Ok(FactReconciliation { head, changes })
     }
 
     /// The principal of the first commit event of a revision, if any.

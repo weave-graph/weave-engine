@@ -1,0 +1,4 @@
+site_id,name,region,timezone,org_id
+S001,Plant 001,us-east,America/New_York,C001
+S002,Plant 002,us-east,America/New_York,C002
+S003,Plant 003,eu-west,Europe/Paris,C003

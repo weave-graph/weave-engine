@@ -1,0 +1,10 @@
+user_id,name,principal,role,team_id,valid_from
+ADMIN,Fleet Administrator,fleet-admin,administrator,OPS-NORTH,
+ANALYST,Reliability Analyst,fleet-analyst,analyst,NWM-ENG,
+C001-U1,Operator 001,customer:C001,customer-operator,C001-OPS,2021-01-01
+C002-U1,Operator 002,customer:C002,customer-operator,C002-OPS,2021-01-01
+C003-U1,Operator 003,customer:C003,customer-operator,C003-OPS,2021-01-01
+C004-U1,Operator 004,customer:C004,customer-operator,C004-OPS,2021-01-01
+T0001,Technician 0001,tech-0001,technician,OPS-SOUTH,2021-05-23
+T0002,Technician 0002,tech-0002,technician,OPS-EAST,2021-01-07
+T0003,Technician 0003,tech-0003,technician,OPS-NORTH,2021-11-25

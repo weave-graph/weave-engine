@@ -61,6 +61,12 @@ node valid time, per-fact provenance in results and the crash-tested store
 head-observation caps, measures single-fact commits at 10k/100k/1M facts and
 adds incremental science import. A2 is complete.
 
+A5: the [hardware reference model](HARDWARE_MODEL.md) ships in the
+`weave-hardware` crate: the schema, `SeriesRef`, idempotent CSV/JSON
+importers through fact writes, and a seeded 5,000-unit generator with 1,000
+updates. Its fleet scenario covers exit questions 2 and 5 with the current
+operators; questions 3 and 4 wait for A4.
+
 **Phase A exit scenario:** import a fleet of 5,000 units with parts, firmware,
 sites, owners, sensor series references and maintenance notes with embeddings.
 Then:

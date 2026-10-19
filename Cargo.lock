@@ -713,6 +713,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "weave-hardware"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "weave-contract",
+ "weave-engine",
+]
+
+[[package]]
 name = "weave-host"
 version = "0.1.0"
 dependencies = [

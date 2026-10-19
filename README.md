@@ -92,6 +92,7 @@ use the [native JSON walkthrough and API reference](docs/SCIENCE_INTERFACE.md).
 | Analyze topology | Degree, weak/strong components, unweighted shortest paths and PageRank on authorized positive multigraph edges |
 | Retrieve vectors | Exhaustive cosine or Euclidean neighbors in one explicit space, retaining manifestation and entity IDs |
 | Record experiments | Parameters, selected input, provenance, coverage, versions and executable hash; replay under current authority |
+| Model a hardware fleet | `weave-hardware`: reference schema, series references, idempotent CSV/JSON importers and a seeded 5,000-unit fleet ([hardware model](docs/HARDWARE_MODEL.md)) |
 
 Read [the experiment concepts](docs/SCIENCE_CONCEPTS.md) before interpreting
 results. Filtering edge validity during analysis retains selected isolated nodes,

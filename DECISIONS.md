@@ -460,3 +460,97 @@ The compiler's emitted protocol label follows its vendored contract (0.22.0),
 since its commands are unchanged. `write` and fact provenance are classified
 core v1. The script comparisons check provenance by presence and ignore
 `recorded_at_ms`. There is no source syntax for fact writes yet.
+
+### 2026-10-19 — #36 A5 — `SeriesRef` is a typed literal on an attachment, with no contract change
+
+A `SeriesRef` is an `hw:series` metadata attachment on a sensor. Its value is
+a `literal` tagged `type: "weave.hw.series_ref"`, `version: 1`, with
+`store_uri`, `series_id`, `range` and `digest`. Its `valid_time` must equal
+the range. A new `MetadataValue` variant would have needed a protocol bump,
+golden fixtures and a vendor update in weave-language, while A3 is changing
+the same crate in parallel. Making the valid time the range means the
+engine's existing valid-time selection and indexes apply without new
+operators. The decoder in `weave-hardware` is strict, so the tag is a typed
+contract in practice. C1 (ADR-0009) can promote it to a contract variant
+later, with a migration from this tag.
+
+### 2026-10-19 — #36 A5 — `Engine::reconcile_facts` plans idempotent imports
+
+Idempotent re-import needs to know which facts are absent, identical or
+different. The engine's write path already decides that (an identical assert
+is a no-op), but one differing fact fails a whole write. Reading the current
+state through `query` would hide restricted facts from an importer that is
+not their reader, and a whole-graph read hits the result budget at fleet
+size. So the engine gets one public method, `reconcile_facts(graph, branch,
+facts, host)`. It needs write authority and returns the head plus `assert`
+and `correct` changes, omitting identical facts. It reveals no more than a
+`write` would: absent, identical or different, never a stored version. It is
+an engine API, not a contract command or query operator.
+
+### 2026-10-19 — #36 A5 — The reference schema is an engine graph schema
+
+The model is a `GraphSchema` (`weave.hardware`, revision 1) with twelve node
+types and fourteen edge types. The importer commits it as the graph's first
+(snapshot) revision, and every later fact write inherits and is validated
+against it, so the engine rejects records that do not fit the model, whoever
+writes them. Node and edge `type_id`s are the type names and predicates. All
+nodes are in space `hw`, and the entity ID equals the node ID, because the
+model has one manifestation per entity.
+
+### 2026-10-19 — #36 A5 — Row keys are the idempotency keys; a row is one claim
+
+Each table has a key column, and every fact ID the row produces derives from
+it (`unit:<serial>`, `runs:<install_id>`, `note:<host>`). Claimed provenance
+is part of fact content, so its fields are chosen to be stable. The source is
+the row's `source` column, else the batch source, else a per-table default
+(`erp`, `plm`, `fleet-ops`, ...), never a file name or run ID. The method is
+`import` with importer `weave-hardware` and version equal to the mapping
+revision, not the binary version. Re-sending a row with another source
+re-attributes every fact of that row, because the row is one claim. Readers
+are sorted and deduplicated, so their order in an export does not matter.
+
+### 2026-10-19 — #36 A5 — Interval relations are their own tables; no deletion by omission
+
+Placements, ownerships, configuration assignments, part installs, firmware
+installs and sensor mounts each have their own table, with one row per
+interval. That is how a firmware rollout, a move or a part replacement
+becomes a correction (`valid_to` set on the current row) plus an assertion
+(a new row), without rewriting history. Sensors started with an embedded
+mount, but were split into `sensor_mounts` so a sensor can move between
+units. The importer never retracts facts missing from an export: an export
+can be partial, and ending a relation is a valid-time fact. Imports above
+100,000 changes are written as several head-guarded revisions. Each is
+atomic, and re-running completes an interrupted import.
+
+### 2026-10-19 — #36 A5 — Restricted readers pin revisions instead of using recorded-time selection
+
+`recorded_query` admits an observation only for a reader who can see the
+whole selected revision (`authorize_observation`, ADR-0002). In a fleet with
+customer-restricted units, `fleet-analyst` therefore gets
+`E_HISTORY_UNAVAILABLE` for any "as known at K" read. A5 does not change that
+rule, because time travel is A3 scope. The query helpers take
+`At::Revision` as well as `At::Recorded`, and the scenario answers "as known
+at K" for the analyst by pinning the revision the trusted importer wrote at
+K. It checks that the admin gets identical answers both ways and that the
+analyst's recorded read fails with that code. This is flagged for A3 and A6
+exit check 5.
+
+### 2026-10-19 — #36 A5 — A deterministic generator with a pinned fixture; datasets stay out of git
+
+The generator uses its own SplitMix64, integer millisecond arithmetic and
+ordered maps, and writes `\n` line endings, so output is byte-identical on
+every platform. `fixtures/fleet-small` (seed 7, 12 units, 24 updates, about
+100 KB) is committed and must equal a fresh run, and the default 5,000-unit
+digest is pinned in a test. The default dataset (about 11 MB of CSV) is
+regenerated on demand, not committed. Each update has a `reported_at`, which
+is not recorded time. The scenario uses it to drive a `ManualClock`, so "as
+known at K" has an exact oracle. Every fifth customer (C003, C008, ...) is
+restricted to `fleet-admin` and its own principal, for A6 exit check 5.
+
+### 2026-10-19 — #36 A5 — The full-size scenario runs in its own CI job
+
+`tests/fleet_scenario.rs` runs at 150 units and 150 updates in the debug
+matrix, and at 5,000 units and 1,000 updates optimized in the
+`hardware-fleet-5k` job (about 90 s locally). That job is separate, as with
+`fact-scale-1m`, so a slow runner there cannot hide failures in the main
+matrix.

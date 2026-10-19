@@ -1,0 +1,7 @@
+org_id,name,kind
+C001,Customer 001 Logistics,customer
+C002,Customer 002 Foods,customer
+C003,Customer 003 Chemicals,customer
+C004,Customer 004 Utilities,customer
+NWM,Northwind Machines,manufacturer
+OPS,Northwind Fleet Services,service
