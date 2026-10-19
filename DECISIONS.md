@@ -140,3 +140,74 @@ every vendored file is still hash-checked.
 A1's "fixtures run in language CI" criterion was delivered by LA0 (weave-language#13). A1 closed
 when both #48 and weave-language#13 merged. Suggested AGENTS.md updates from both agents
 (test counts, harness command) are deferred to the owner, since AGENTS.md is agent instructions.
+
+### 2026-10-19 — #3 A2 — Delivery in three parts, one store bump
+
+Part 1 adds ADR-0004, the `FactBackend` trait, the SQLite and in-memory
+backends, their conformance suite and the CI SQL-boundary check. The engine
+does not install or use the fact tables yet, so part 1 changes no store or
+wire bytes. Part 2 wires fact writes, provenance and node valid time into the
+engine with the protocol bump and the single 29→30 store migration. Part 3
+adds the indexed read path, cap removal, the 1M-fact tests, benchmarks,
+incremental science import and the remaining docs. One migration instead of
+one per part keeps the crash-tested upgrade surface (and the compatibility
+scripts that pin the store marker) to a single change.
+
+### 2026-10-19 — #3 A2 — Snapshot revisions stay authoritative; fact revisions are new
+
+Existing and future full-snapshot revisions keep their stored payload and
+ADR-0001 IDs. Fact-level writes create `fact:sha256:…` revisions whose content
+is the parent plus the logged operations. Converting snapshots into log
+entries was rejected: retention may have erased old payloads, and snapshot
+array order is client-defined, so exact bytes could not be re-derived. Leaving
+every pre-A2 row untouched makes "pinned reads are byte-identical after
+migration" true by construction. The distinct prefix means no code can verify
+one kind as the other.
+
+### 2026-10-19 — #3 A2 — Lines copy their base instead of sharing ancestry
+
+A line is a linear chain of fact revisions. The first write after a snapshot
+or a fork copies the parent state once as base entries. Every read is then one
+range scan on one line, rather than a walk over ancestor lines. Snapshots are
+bounded at 16 MiB, and forks of large fact graphs are rare (E09 is deferred).
+C4 can replace this behind the trait.
+
+### 2026-10-19 — #3 A2 — The backend is semantics-free
+
+The trait stores opaque record bodies plus index keys that the engine
+extracts. Validation, authorization, provenance merging and revision IDs stay
+in the engine. A C4 backend therefore implements storage guarantees only and
+cannot drift semantically from SQLite. The conformance suite runs every check
+against both backends and adds a differential random-history test.
+
+### 2026-10-19 — #3 A2 — Checkpoints are explicit, never written by reads
+
+A read that wrote a cache would need a write lock and could fail for reasons
+unrelated to the read. Checkpoints are written only by an explicit
+maintenance call, and dropping them changes no result.
+
+### 2026-10-19 — #3 A2 — Time-varying node properties are attachment facts
+
+`Node.properties` stays the time-invariant map. A value that changes over
+valid time (such as firmware) is a node-hosted metadata attachment with a
+literal value, which already has valid time, readers and derivation carriers.
+Each value is one fact, so a change is one O(1) write. A separate property
+record type would duplicate the attachment's authorization and influence
+rules.
+
+### 2026-10-19 — #3 A2 — Room for B1 group readers
+
+The index stores no per-principal visibility, so group resolution can happen
+at read time without reindexing. `readers` entries stay literal principals
+forever, so no record changes meaning. The field name `reader_groups` is
+reserved in core v1 §11.6 for B1 group references. A `group:` reader prefix
+was rejected: pre-0.22 data could already use that string as a literal
+principal ID.
+
+### 2026-10-19 — #3 A2 — First recording is listed
+
+The provenance listed for a fact at revision R is the recording of the version
+live at R. An identical re-assert is a no-op and records nothing. A changed
+claim is a new version. Facts of snapshot revisions are attributed to the
+snapshot's committer, because a snapshot commit restates the whole graph.
+This needs no data migration.

@@ -51,6 +51,13 @@ policy, the 0.1–0.21 classification, and ADR-0005 and ADR-0006. The protocol
 stays 0.21.0. A1 closes when weave-language runs the vendored fixtures in its CI
 (LA0).
 
+A2 in progress: [ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)
+is accepted. The `FactBackend` storage trait, its SQLite backend, an in-memory
+reference backend and their conformance suite are merged, with a CI check that
+only the SQLite backend issues SQL against fact-store tables. The engine does
+not use the fact store yet; fact writes, provenance, node valid time and the
+store 30 migration follow in later A2 parts.
+
 **Phase A exit scenario:** import a fleet of 5,000 units with parts, firmware,
 sites, owners, sensor series references and maintenance notes with embeddings.
 Then:
@@ -223,7 +230,7 @@ Each needs an ADR in `docs/architecture/` before implementation merges:
 
 | ADR | Epic | Decision |
 |---|---|---|
-| ADR-0004 | A2 | Incremental fact log and index layout; the storage abstraction (trait boundary, transaction and recorded-time guarantees every backend must meet); how revision identity (ADR-0001) maps to log positions; store 29 migration |
+| ADR-0004 | A2 | Incremental fact log and index layout; the storage abstraction (trait boundary, transaction and recorded-time guarantees every backend must meet); how revision identity (ADR-0001) maps to log positions; store 29 migration. **Accepted** 2026-10-19: [ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md) |
 | ADR-0005 | A2 | Per-fact provenance model: recorded writer, claimed source, method/model version, evidence links. **Accepted** 2026-10-19 in A1: [ADR-0005](architecture/ADR-0005-per-fact-provenance.md) |
 | ADR-0006 | A4 | Embedding facts and spaces: one model replacing the untyped `vector` property; candidate-relation semantics. **Accepted** 2026-10-19 in A1: [ADR-0006](architecture/ADR-0006-embedding-facts-and-spaces.md) |
 | ADR-0007 | B1/B3 | Identity, authentication and group resolution; the agent delegation model; tenancy as one store per tenant |

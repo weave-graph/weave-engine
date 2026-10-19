@@ -34,6 +34,8 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo test --workspace --all-features --locked
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Fact-store SQL boundary (ADR-0004)
+        run: python scripts/check_fact_store_boundary.py
       - name: Build native experiment engine
         run: cargo build --locked -p weave-science
       - name: Install Python experiment client
