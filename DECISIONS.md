@@ -870,3 +870,11 @@ differ after any session even when nothing is written. The no-write test
 therefore compares every row of every table, with the table definitions,
 before and after a scripted session of the real binary that calls every
 listed tool, including calls whose arguments try to smuggle write commands.
+
+### 2026-10-20 — #37 A7 — Integration checks pin weave-language `bb5e559`
+
+At the coordinator's request this PR moves both weave-language checkouts in
+`integration.yml` to `bb5e559` (weave-language#17, LA1 part 1: time-travel,
+`expand` and `changes` syntax), and adds `check_traversal.py --compiler
+--engine` to the `compiler-runtime` job after `check_temporal.py`, which takes
+the same arguments.
