@@ -1486,6 +1486,7 @@ dependencies = [
  "tower",
  "weave-contract",
  "weave-engine",
+ "weave-mcp",
  "weave-policy",
 ]
 

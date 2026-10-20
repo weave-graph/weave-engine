@@ -6,6 +6,24 @@ defined in [docs/ROADMAP.md](docs/ROADMAP.md). The supported profile is in
 
 ## Unreleased
 
+### B4 part 1: the agent interface over MCP
+
+Part of [#40](https://github.com/weave-graph/weave-engine/issues/40)
+([guide](docs/AGENT_INTERFACE.md)). No protocol, engine store or control
+store change.
+
+- `weave-service` serves MCP (Streamable HTTP, no sessions) at
+  `POST /v1/mcp`, authenticated and audited per message, with nine tools:
+  `assert_fact`, `retract_fact`, `query`, `expand`, `as_of`, `what_changed`,
+  `hybrid_search`, `explain` and `describe_schema`.
+- Agent writes carry service-minted IDs, a required method and evidence,
+  and an explicit visibility; the engine records the writer and
+  `on_behalf_of`. Every tool runs through the `POST /v1/execute` path.
+- `weave-mcp`'s library becomes a transport-free tool layer (`Catalog`,
+  `parse_message`, `respond`, `envelope`, `agent`), shared by the local
+  read-only preview (unchanged) and the service.
+- New codes `E_MCP_CLAIM`, `E_MCP_ORIGIN` and `E_MCP_PROTOCOL_VERSION`.
+
 ### B3 part 3: 50-client load measurement
 
 Closes [#39](https://github.com/weave-graph/weave-engine/issues/39).

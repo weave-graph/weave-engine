@@ -1,0 +1,254 @@
+//! The agent interface (B4, #40): MCP over the authenticated service.
+//!
+//! `POST /v1/mcp` is an MCP Streamable HTTP endpoint without sessions or
+//! server-sent events: each POST carries one JSON-RPC message and gets one
+//! JSON response (or `202` for a notification). The request is
+//! authenticated like every other route, so the principal comes from its
+//! credential and the tenant from the control store, and each message is
+//! one audited request through the same driver as the rest of the API.
+//! Nothing is cached between messages, so revoking a token, suspending an
+//! agent or removing a membership applies to the next tool call.
+//!
+//! Every tool runs through [`run_program`], the path `POST /v1/execute`
+//! takes: writes are admitted with minted IDs, run as the caller and
+//! audited with their facts; reads are audited with the facts they cite.
+//! The tool catalog, its text and the untrusted-data envelope come from
+//! `weave-mcp`; nothing read from a store is placed outside `result`.
+use super::{
+    body_bytes, call, error_response, named_graphs, run_program, Caller, Ctx, Done, Service,
+};
+use crate::error::{codes, ApiError};
+use crate::ids::mint_record_id;
+use crate::tenant::TenantState;
+use axum::body::Bytes;
+use axum::extract::rejection::BytesRejection;
+use axum::extract::State;
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::Response;
+use axum::Extension;
+use serde_json::{json, Value};
+use weave_contract::CommandResult;
+use weave_mcp::agent::{describe_program, parse_describe, plan_assert, plan_retract, summarize};
+use weave_mcp::{Message, Tool, AGENT, PROTOCOL_VERSIONS};
+
+/// The audit operation of one message.
+fn operation(message: &Message) -> &'static str {
+    match message {
+        Message::Request { method, params, .. } => {
+            if let Some(tool) = weave_mcp::requested_tool(&AGENT, method, params) {
+                return tool.operation();
+            }
+            match method.as_str() {
+                "initialize" => "mcp.initialize",
+                "tools/list" => "mcp.tools_list",
+                "ping" => "mcp.ping",
+                "tools/call" => "mcp.unknown_tool",
+                _ => "mcp.unknown_method",
+            }
+        }
+        Message::Notification => "mcp.notification",
+        Message::Invalid(_) => "mcp.invalid",
+    }
+}
+
+pub(super) async fn post(
+    State(service): State<Service>,
+    Extension(caller): Extension<Caller>,
+    headers: HeaderMap,
+    body: Result<Bytes, BytesRejection>,
+) -> Response {
+    // A browser page can reach a service on the user's network; MCP asks
+    // servers to refuse cross-origin requests. Agents are not browsers.
+    if headers.contains_key(header::ORIGIN) {
+        return error_response(ApiError::new(
+            codes::MCP_ORIGIN,
+            "requests with an Origin header are refused",
+        ));
+    }
+    if let Some(version) = headers.get("mcp-protocol-version") {
+        let known = version
+            .to_str()
+            .is_ok_and(|v| PROTOCOL_VERSIONS.contains(&v));
+        if !known {
+            return error_response(ApiError::new(
+                codes::MCP_PROTOCOL,
+                format!(
+                    "unsupported MCP protocol version; supported: {}",
+                    PROTOCOL_VERSIONS.join(", ")
+                ),
+            ));
+        }
+    }
+    let bytes = match body_bytes(body) {
+        Ok(bytes) => bytes,
+        Err(error) => return error_response(error),
+    };
+    let message = weave_mcp::parse_message(&bytes);
+    let max_commands = service.limits().max_commands;
+    call(
+        &service,
+        caller,
+        operation(&message),
+        true,
+        Box::new(move |state, ctx| {
+            let mut done = Done::default();
+            match message {
+                Message::Request { id, method, params } => {
+                    let response =
+                        weave_mcp::respond(&AGENT, id, &method, &params, |tool, args| {
+                            call_tool(state, ctx, tool, args, max_commands, &mut done)
+                        });
+                    if response.get("error").is_some() {
+                        done.failure = Some(codes::INPUT.into());
+                    }
+                    done.body = response;
+                }
+                Message::Notification => {
+                    done.status = Some(StatusCode::ACCEPTED);
+                    done.empty = true;
+                }
+                Message::Invalid(response) => {
+                    done.status = Some(StatusCode::BAD_REQUEST);
+                    done.failure = Some(codes::INPUT.into());
+                    done.body = response;
+                }
+            }
+            Ok(done)
+        }),
+    )
+    .await
+}
+
+/// Run one tool call as the caller and return its `CallToolResult`. A
+/// failure is an `isError` result whose code the audit entry records.
+fn call_tool(
+    state: &mut TenantState,
+    ctx: &Ctx,
+    tool: Tool,
+    arguments: Value,
+    max_commands: usize,
+    done: &mut Done,
+) -> Value {
+    let mut named = Vec::new();
+    named_graphs(&arguments, &mut named, &mut 100_000);
+    let outcome = run_tool(state, ctx, tool, arguments, max_commands, done);
+    if let Err(error) = &outcome {
+        done.failure = Some(error.code.clone());
+        // As for `POST /v1/execute`: a failure records the graphs the
+        // request named, never what the engine knows.
+        done.graphs = named;
+        done.revisions.clear();
+        done.facts.clear();
+    }
+    weave_mcp::envelope(
+        tool,
+        outcome.map_err(|error| weave_engine::Error {
+            code: error.code,
+            message: error.message,
+        }),
+    )
+}
+
+fn input(error: weave_engine::Error) -> ApiError {
+    ApiError::new(&error.code, error.message)
+}
+
+/// The revision a write command committed (or found unchanged).
+fn written_revision(results: &[CommandResult]) -> Value {
+    results
+        .first()
+        .map(|result| match result {
+            CommandResult::Committed { revision, .. } | CommandResult::Unchanged { revision } => {
+                json!(revision)
+            }
+            _ => Value::Null,
+        })
+        .unwrap_or(Value::Null)
+}
+
+fn run_tool(
+    state: &mut TenantState,
+    ctx: &Ctx,
+    tool: Tool,
+    arguments: Value,
+    max_commands: usize,
+    done: &mut Done,
+) -> Result<Value, ApiError> {
+    match tool {
+        Tool::AssertFact => {
+            // A method is a claim, not an attestation; still, an agent's
+            // own facts never claim to be a person's.
+            if ctx.agent && arguments["provenance"]["method"]["kind"] == "human" {
+                return Err(ApiError::new(
+                    weave_mcp::codes::CLAIM,
+                    "an agent states a model, rule or import method",
+                ));
+            }
+            let planned = plan_assert(arguments, || {
+                mint_record_id(&ctx.id_key, &ctx.tenant_id, &ctx.principal)
+            })
+            .map_err(input)?;
+            let results = run_program(state, ctx, &planned.program(), max_commands, done)?;
+            Ok(json!({
+                "revision": written_revision(&results),
+                "facts": planned.facts,
+                "results": results,
+            }))
+        }
+        Tool::RetractFact => {
+            let planned = plan_retract(arguments).map_err(input)?;
+            let results = run_program(state, ctx, &planned.program(), max_commands, done)?;
+            Ok(json!({
+                "revision": written_revision(&results),
+                "facts": planned.facts,
+                "results": results,
+            }))
+        }
+        Tool::DescribeSchema => {
+            let arguments = parse_describe(arguments).map_err(input)?;
+            let graphs = state.engine.list_graphs(&ctx.host)?;
+            let groups = state.engine.registry_nameable_groups(&ctx.host)?;
+            let Some(graph_id) = arguments.graph_id else {
+                done.graphs = graphs.iter().map(|g| g.graph_id.clone()).collect();
+                let listed: Vec<Value> = graphs
+                    .iter()
+                    .map(|g| {
+                        json!({"graph_id": g.graph_id, "permission": g.permission,
+                            "branches": g.branches})
+                    })
+                    .collect();
+                return Ok(json!({"graphs": listed, "reader_groups": groups}));
+            };
+            let permission = graphs
+                .iter()
+                .find(|g| g.graph_id == graph_id)
+                .map(|g| json!(g.permission))
+                .unwrap_or(Value::Null);
+            let program = describe_program(&graph_id, &arguments.branch_id);
+            let results = run_program(state, ctx, &program, max_commands, done)?;
+            let first = results
+                .first()
+                .map(|r| serde_json::to_value(r).map_err(|_| ApiError::internal()))
+                .transpose()?
+                .unwrap_or(Value::Null);
+            Ok(summarize(
+                &graph_id,
+                &arguments.branch_id,
+                &first["result"],
+                permission,
+                json!(groups),
+            ))
+        }
+        Tool::Query
+        | Tool::Expand
+        | Tool::AsOf
+        | Tool::WhatChanged
+        | Tool::HybridSearch
+        | Tool::Explain => {
+            let expression = weave_mcp::expression(tool, arguments).map_err(input)?;
+            let program = weave_mcp::program(expression);
+            let results = run_program(state, ctx, &program, max_commands, done)?;
+            Ok(json!({"results": results}))
+        }
+    }
+}

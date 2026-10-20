@@ -29,6 +29,12 @@ pub mod codes {
     pub const METHOD: &str = "E_METHOD";
     /// An internal failure. The message never carries storage details.
     pub const INTERNAL: &str = "E_INTERNAL";
+    /// An MCP request carried an `Origin` header: browser pages may not
+    /// call the agent endpoint (DNS-rebinding protection, B4).
+    pub const MCP_ORIGIN: &str = "E_MCP_ORIGIN";
+    /// An MCP request named an `MCP-Protocol-Version` the service does not
+    /// speak.
+    pub const MCP_PROTOCOL: &str = "E_MCP_PROTOCOL_VERSION";
 }
 
 /// The exact message of every authentication failure.
@@ -95,7 +101,7 @@ impl From<weave_engine::Error> for ApiError {
 pub fn status_of(code: &str) -> StatusCode {
     match code {
         codes::UNAUTHENTICATED => StatusCode::UNAUTHORIZED,
-        "E_FORBIDDEN" => StatusCode::FORBIDDEN,
+        "E_FORBIDDEN" | codes::MCP_ORIGIN => StatusCode::FORBIDDEN,
         "E_UNAVAILABLE" | codes::NOT_FOUND => StatusCode::NOT_FOUND,
         codes::METHOD => StatusCode::METHOD_NOT_ALLOWED,
         "E_CONFLICT" | "E_HEAD_CONFLICT" | "E_REPLAY" => StatusCode::CONFLICT,

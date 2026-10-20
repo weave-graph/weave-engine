@@ -7,9 +7,10 @@ with the 0.24.0 feature set ([release notes](../CHANGELOG.md),
 the principal registry with users, groups and agents, group readers, graph
 ACLs and Discover, as protocol **1.1.0** and store 32
 ([below](#principals-groups-agents-and-graph-acls-b1)),
-B3 part 1 adds the authenticated multi-tenant `weave-service` ([below](#authenticated-service-b3)),
-and B2 part 1 adds a generated noninterference harness over every operator
-([below](#derived-fact-leakage-protection-b2)). The language reached Phase A parity in
+B3 is complete with the authenticated multi-tenant `weave-service` ([below](#authenticated-service-b3)),
+B2 part 1 adds a generated noninterference harness over every operator
+([below](#derived-fact-leakage-protection-b2)), and B4 part 1 serves the
+agent interface over MCP ([below](#agent-interface-b4)). The language reached Phase A parity in
 LA1 (weave-language#3): each of the five exit questions fits in at most 15
 lines of `.weave`, and engine CI runs all five through `check_phase_a.py`.
 Source writes cannot set `readers` until LB1. A source `correct` of a
@@ -29,7 +30,8 @@ white-paper requirements remain tracked separately in the
 | Science API and CLI | `weave-science` 0.1.0; native Rust and one-request JSON process |
 | Python client | `weave_science` 0.1.0; Python 3.10+, no mandatory runtime dependencies |
 | MCP preview | `weave-mcp` 0.1.0; read-only local stdio MCP server (A7, [guide](MCP_PREVIEW.md)) |
-| Service | `weave-service` 0.1.0; authenticated multi-tenant HTTP/JSON server over TLS, one store per tenant, API tokens and a read/write audit log (B3 part 1, [guide](SERVICE.md)) |
+| Service | `weave-service` 0.1.0; authenticated multi-tenant HTTP/JSON server over TLS, one store per tenant, API tokens and a read/write audit log (B3, [guide](SERVICE.md)) |
+| Agent interface | MCP at `weave-service` `POST /v1/mcp`, agent tools 1.0.0: assert, retract, query, expand, as-of, what changed, hybrid search, explain, describe schema (B4 part 1, [guide](AGENT_INTERFACE.md)) |
 | Engine contract | 1.1.0: core v1 as frozen in 1.0.0 with the 0.24.0 feature set ([1.0](contract/v1.0/README.md)), plus `reader_groups` and `FactProvenance.on_behalf_of` ([1.1](contract/v1.1/README.md)); 0.1.0–0.24.0 and 1.0.0 programs stay accepted with their published semantics. Existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)), and embedding facts with exact `nearest` and `similar_candidates` ([0.24](contract/v0.24/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
 | Native storage | Store 32; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)), which also holds embedding spaces and embeddings |
 | Platforms | Linux, macOS and Windows in the native CI profile |
@@ -502,6 +504,42 @@ broader readers than its inputs is still accepted, and the write path still
 compares changes with live versions the writer cannot read; ADR-0008
 sections 2 to 4, part 2); persisted analytics, rankings and embeddings with
 their inputs' restrictions, and release policies (sections 5 and 6, part 3).
+
+## Agent interface (B4)
+
+B4 ([#40](https://github.com/weave-graph/weave-engine/issues/40)) is in
+progress. Part 1 serves the agent interface as MCP over the authenticated
+service ([guide](AGENT_INTERFACE.md)):
+
+- **Endpoint.** `POST /v1/mcp`, MCP Streamable HTTP without sessions or
+  event streams: one JSON-RPC message per request, authenticated and audited
+  like every service request. The principal comes from the credential and
+  the tenant from the control store; revocation, suspension and membership
+  changes apply to the next tool call.
+- **Tools.** `assert_fact`, `retract_fact`, `query`, `expand`, `as_of`,
+  `what_changed`, `hybrid_search`, `explain` and `describe_schema`. Every
+  tool runs one program through the same path as `POST /v1/execute`; read
+  tools return exactly its result. The tool layer is the `weave-mcp`
+  library, shared with the read-only local preview.
+- **Writes.** `assert_fact` mints every record ID, requires a stated method
+  (model and version, rule, import or human; never `unspecified`, never
+  `human` from an agent), evidence references and an explicit visibility,
+  and the engine records the writer, `on_behalf_of` and recorded time.
+- **Schema.** `describe_schema` lists the caller's graphs and nameable
+  groups, and summarizes one graph's visible predicates, node spaces, types,
+  property and attachment keys and embedding spaces, with runnable example
+  calls.
+- **Data/code boundary.** Static tool text; store content only under
+  `result` in an untrusted-data envelope; closed argument types without
+  writer, grant, ID or record-reader fields; `Origin` headers refused.
+
+Evidence: `crates/weave-service/tests/agent_mcp.rs`, `agent_hidden.rs`
+(paired worlds for every tool, writes included, for an agent of another
+team and one without access) and `agent_injection.rs`.
+
+**Not yet:** per-agent quotas and rate limits, the Python SDK and a compile
+tool. Derived-fact restriction follows the engine's current propagation
+(B2).
 
 ## Verified evidence
 

@@ -4,9 +4,10 @@
 server over one Weave store
 ([#37](https://github.com/weave-graph/weave-engine/issues/37), A7). Agents can
 use it to query, traverse, time-travel, search by similarity and explain the
-store before the full
-agent interface (B4) exists. It has **no write tools and no authentication**,
-and it is meant for local, single-user use only.
+store. It has **no write tools and no authentication**, and it is meant for
+local, single-user use only. The full, authenticated agent interface (B4),
+with writes and `describe_schema`, is served by `weave-service`; see
+[AGENT_INTERFACE.md](AGENT_INTERFACE.md).
 
 The tools are `query`, `expand`, `as_of`, `what_changed`, `hybrid_search`
 (the A4 `nearest` and `similar_candidates` operators,
@@ -98,7 +99,8 @@ keeps that text on the data side:
 - Because there are no write tools and no grants, injected text that misleads
   an agent still cannot write or widen access through this server.
 
-B4 builds on this boundary for the write-capable interface.
+The agent interface ([AGENT_INTERFACE.md](AGENT_INTERFACE.md)) builds on
+this boundary for writes.
 
 ## Tools
 

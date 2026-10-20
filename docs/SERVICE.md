@@ -16,6 +16,8 @@ apply exactly as they do locally.
 signed admission for agent capabilities, tenants, the HTTP API, the audit
 log, TLS, limits, structured logs and a published 50-client load
 measurement ([benchmarks](benchmarks/README.md#authenticated-service-b3)).
+The service also serves the B4 agent interface, MCP at `POST /v1/mcp`
+([guide](AGENT_INTERFACE.md)).
 
 ## Run it
 
@@ -199,6 +201,7 @@ also in the audit entry and the log line of the request.
 | `GET /v1/whoami` | any principal | the caller's tenant, principal, `administrator` and `agent` flags, `on_behalf_of`, credential ID and expiry |
 | `GET /v1/manifest` | any principal | the caller's visible manifest, `weave-visible/1` of weave-language `docs/PERMISSIONS.md`: `{"format", "principal", "graphs": [{"graph_id", "permission", "branches"}], "reader_groups"}`. `graphs` are the graphs it can discover; `reader_groups` are exactly the groups a write by it may name. Embedding spaces and schemas are omitted (unknown to the compiler) |
 | `POST /v1/execute` | any principal | run a core v1 `Program` (below) |
+| `POST /v1/mcp` | any principal | one MCP JSON-RPC message: the agent interface's tools over the same program path, audited per message ([AGENT_INTERFACE.md](AGENT_INTERFACE.md)) |
 | `GET /v1/graphs` | any principal | `Engine::list_graphs`: the graphs the caller can discover, with branches and its permission. No total |
 | `POST /v1/graphs` | any active user (not agents) | create a graph (below) |
 | `GET /v1/graphs/{graph_id}/acl` | graph Administer | the graph's ACL and protected branches |
@@ -305,6 +308,8 @@ Engine codes (`E_UNAVAILABLE`, `E_FORBIDDEN`, `E_BUDGET`, `E_CONFLICT`,
 | `E_BACKPRESSURE` | 503 | the tenant's queue is full; retry later (`Retry-After: 1`) |
 | `E_AUDIT` | 503 | the audit entry could not be written; the response is withheld |
 | `E_NOT_FOUND`, `E_METHOD` | 404, 405 | no such route or method, after authentication |
+| `E_MCP_ORIGIN` | 403 | an MCP request carried an `Origin` header |
+| `E_MCP_PROTOCOL_VERSION` | 400 | an MCP request named an unsupported `MCP-Protocol-Version` |
 | `E_INTERNAL` | 500 | an internal failure; storage details are never returned |
 
 Statuses: `E_UNAVAILABLE` 404, `E_FORBIDDEN` 403, `E_CONFLICT` 409,

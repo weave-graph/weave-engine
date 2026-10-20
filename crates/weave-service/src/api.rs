@@ -27,6 +27,8 @@ use weave_engine::{
     Engine, HostContext, Permission, PrincipalKind, RegistryChange, ADMINISTRATORS, REGISTRY_GRAPH,
 };
 
+mod mcp;
+
 /// The authenticated caller of one request.
 #[derive(Clone)]
 pub(crate) struct Caller {
@@ -69,6 +71,12 @@ pub(crate) struct Done {
     graphs: Vec<String>,
     revisions: Vec<String>,
     facts: Vec<FactAccess>,
+    /// The error code of an operation that answered with a body of its own
+    /// rather than a service error (an MCP tool result with `isError`): the
+    /// audit entry records it as a denial or an error.
+    failure: Option<String>,
+    /// Send no body (an MCP notification's `202 Accepted`).
+    empty: bool,
 }
 
 impl Done {
@@ -119,6 +127,7 @@ fn routes() -> Vec<Route> {
         route(Method::GET, "/v1/whoami", get(whoami)),
         route(Method::GET, "/v1/manifest", get(manifest)),
         route(Method::POST, "/v1/execute", post(execute)),
+        route(Method::POST, "/v1/mcp", post(mcp::post)),
         route(Method::GET, "/v1/graphs", get(list_graphs)),
         route(Method::POST, "/v1/graphs", post(create_graph)),
         route(Method::GET, "/v1/graphs/{graph_id}/acl", get(graph_acl)),
@@ -394,11 +403,19 @@ async fn call(
             };
             let (status, body, code) = match result {
                 Ok(done) => {
-                    entry.outcome = Some(Outcome::Ok);
+                    entry.outcome = Some(match &done.failure {
+                        None => Outcome::Ok,
+                        Some(code) => failure_outcome(code),
+                    });
+                    entry.code = done.failure;
                     entry.graphs = done.graphs;
                     entry.revisions = done.revisions;
                     entry.facts = done.facts;
-                    let body = serde_json::to_vec(&done.body).map_err(|_| ApiError::internal());
+                    let body = if done.empty {
+                        Ok(Vec::new())
+                    } else {
+                        serde_json::to_vec(&done.body).map_err(|_| ApiError::internal())
+                    };
                     match body {
                         Ok(body) => (done.status.unwrap_or(StatusCode::OK), body, None),
                         Err(error) => (error.status, error.body(), Some(error.code)),
@@ -406,10 +423,7 @@ async fn call(
                 }
                 Err(failed) => {
                     let error = failed.error;
-                    entry.outcome = Some(match error.code.as_str() {
-                        "E_FORBIDDEN" | "E_UNAVAILABLE" | codes::UNAUTHENTICATED => Outcome::Denied,
-                        _ => Outcome::Error,
-                    });
+                    entry.outcome = Some(failure_outcome(&error.code));
                     entry.code = Some(error.code.clone());
                     entry.graphs = failed.graphs;
                     (error.status, error.body(), Some(error.code))
@@ -449,6 +463,14 @@ async fn call(
             response
         }
         Err(error) => error.into_response(),
+    }
+}
+
+/// How the audit log classifies a failure.
+fn failure_outcome(code: &str) -> Outcome {
+    match code {
+        "E_FORBIDDEN" | "E_UNAVAILABLE" | codes::UNAUTHENTICATED => Outcome::Denied,
+        _ => Outcome::Error,
     }
 }
 
@@ -741,6 +763,23 @@ fn admit_program(program: &Program, ctx: &Ctx, max_commands: usize) -> Result<()
     Ok(())
 }
 
+/// Run one program for the caller: the one path every graph read and fact
+/// write of the service takes (`POST /v1/execute` and every MCP tool). It
+/// admits the program, runs it as one engine call under the caller's host
+/// context, and records what it read and wrote in `done` for the audit log.
+pub(crate) fn run_program(
+    state: &mut TenantState,
+    ctx: &Ctx,
+    program: &Program,
+    max_commands: usize,
+    done: &mut Done,
+) -> Result<Vec<CommandResult>, ApiError> {
+    admit_program(program, ctx, max_commands)?;
+    let results = state.engine.execute(program, &ctx.host)?;
+    touched(program, &results, done);
+    Ok(results)
+}
+
 async fn execute(
     State(service): State<Service>,
     Extension(caller): Extension<Caller>,
@@ -770,13 +809,10 @@ async fn execute(
             };
             let program = weave_contract::decode_program(&bytes)
                 .map_err(|e| fail(ApiError::new(&e.code, e.message)))?;
-            admit_program(&program, ctx, max_commands).map_err(fail)?;
-            let results = state
-                .engine
-                .execute(&program, &ctx.host)
-                .map_err(|e| fail(e.into()))?;
-            let mut done = Done::json(json!({"results": results}));
-            touched(&program, &results, &mut done);
+            let mut done = Done::default();
+            let results =
+                run_program(state, ctx, &program, max_commands, &mut done).map_err(fail)?;
+            done.body = json!({"results": results});
             Ok(done)
         }),
     )
