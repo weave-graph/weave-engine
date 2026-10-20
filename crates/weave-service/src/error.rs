@@ -98,7 +98,7 @@ pub fn status_of(code: &str) -> StatusCode {
         "E_FORBIDDEN" => StatusCode::FORBIDDEN,
         "E_UNAVAILABLE" | codes::NOT_FOUND => StatusCode::NOT_FOUND,
         codes::METHOD => StatusCode::METHOD_NOT_ALLOWED,
-        "E_CONFLICT" | "E_HEAD_CONFLICT" => StatusCode::CONFLICT,
+        "E_CONFLICT" | "E_HEAD_CONFLICT" | "E_REPLAY" => StatusCode::CONFLICT,
         codes::BODY_LIMIT => StatusCode::PAYLOAD_TOO_LARGE,
         "E_BUDGET" => StatusCode::UNPROCESSABLE_ENTITY,
         codes::BACKPRESSURE | codes::AUDIT => StatusCode::SERVICE_UNAVAILABLE,

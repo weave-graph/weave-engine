@@ -74,7 +74,18 @@ async fn two_tenants_are_two_separate_databases() {
         .unwrap()
         .collect::<Result<_, _>>()
         .unwrap();
-    assert_eq!(tables, ["api_tokens", "control_meta", "tenants"]);
+    assert_eq!(
+        tables,
+        [
+            "api_tokens",
+            "control_meta",
+            "key_bindings",
+            "oidc_bindings",
+            "oidc_issuers",
+            "signed_nonces",
+            "tenants"
+        ]
+    );
 }
 
 /// A response with the graph ID the request named replaced, so responses

@@ -441,9 +441,20 @@ ADR-0007 sections 6 to 9) is in progress. Part 1 is implemented as the
   queues, programs, minted IDs and audit pages; JSON request logs without
   tokens, bodies or graph IDs (tested).
 
-Remaining for B3: OIDC sign-in, signed
-admission for agent capabilities with a per-tenant audience, and the
-50-client load measurement.
+- **OIDC (part 2).** ID and access tokens from operator-configured issuers
+  (RS256, ES256, EdDSA; keys from a configured JWKS, never fetched), mapped
+  to registry users through administrator-managed `(iss, sub)` bindings; the
+  tenant comes from the `(issuer, audience)` configuration. Group claims are
+  never live; an audited import turns an IdP snapshot into registry
+  memberships.
+- **Signed admission (part 2).** `POST /v1/admit` runs a program signed with
+  a `weave-policy` capability chain, under the tenant's own audience, with a
+  root derived from the registry and keys bound to the agent's ownership
+  chain; the program then runs as the agent under the registry ceiling.
+  Replays fail `E_REPLAY`; key revocation, suspension and owner permission
+  loss apply on the next request.
+
+Remaining for B3: the 50-client load measurement.
 
 ## Verified evidence
 

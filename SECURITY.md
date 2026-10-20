@@ -86,8 +86,19 @@ local process to the network. Its trust model:
   readable graph change when hidden records are added to it; retracting a
   fact with a hidden dependent (above); occupancy of chosen record IDs by
   hidden records for tenant administrators only (non-administrators assert
-  only service-minted IDs). OIDC and signed agent capabilities are not
-  implemented yet.
+  only service-minted IDs).
+- **OIDC.** ID tokens are verified against operator-configured key sets
+  (the service never fetches keys), and an `(issuer, audience)` pair names
+  one tenant. Only bound subjects authenticate, as registry users. IdP group
+  claims are never authority; only an administrator's audited import
+  changes memberships. A compromised IdP can sign in as any bound subject
+  of its issuer, within that user's registry authority.
+- **Signed agent capabilities.** A chain is admitted only when it verifies
+  under `weave-policy` with the tenant's audience and a registry-derived
+  root, and every key in it is bound to the acting agent's ownership chain;
+  the program then runs under the registry ceiling. Key bindings are
+  per-tenant and never reused after revocation. Nonces are reserved until
+  the request expires.
 
 ## Trust and limits
 

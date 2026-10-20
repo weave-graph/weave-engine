@@ -1,3 +1,10 @@
 [workspace]
 members = ["crates/weave-contract", "crates/weave-engine", "crates/weave-policy", "crates/weave-spaces", "crates/weave-cluster", "crates/weave-host", "crates/weave-native", "crates/weave-browser-host", "crates/weave-conformance", "crates/weave-science", "crates/weave-hardware", "crates/weave-mcp", "crates/weave-service"]
 resolver = "2"
+
+# RSA key generation in weave-service's OIDC tests is far too slow
+# unoptimized; this affects only these two dev-dependencies.
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+[profile.dev.package.rsa]
+opt-level = 3

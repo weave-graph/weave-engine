@@ -13,6 +13,7 @@ fn concrete(path: &str) -> String {
     path.replace("{graph_id}", "g")
         .replace("{id}", "alice")
         .replace("{token_id}", "tok-0")
+        .replace("{public_key}", "ed25519:00")
 }
 
 /// Every route the router serves, plus routes it does not serve.
@@ -38,21 +39,29 @@ fn the_endpoint_table_is_the_documented_api() {
     assert_eq!(
         endpoints,
         [
+            "DELETE /v1/keys/{public_key}",
+            "DELETE /v1/oidc/bindings",
             "DELETE /v1/tokens/{token_id}",
             "GET /v1/audit",
             "GET /v1/audit/facts",
             "GET /v1/graphs",
             "GET /v1/graphs/{graph_id}/acl",
             "GET /v1/health",
+            "GET /v1/keys",
             "GET /v1/manifest",
+            "GET /v1/oidc/bindings",
             "GET /v1/registry/groups/{id}/members",
             "GET /v1/registry/principals/{id}",
             "GET /v1/registry/principals/{id}/memberships",
             "GET /v1/tokens",
             "GET /v1/whoami",
+            "POST /v1/admit",
             "POST /v1/execute",
             "POST /v1/graphs",
             "POST /v1/ids",
+            "POST /v1/keys",
+            "POST /v1/oidc/bindings",
+            "POST /v1/oidc/groups/import",
             "POST /v1/registry",
             "POST /v1/tokens",
         ]
@@ -139,8 +148,12 @@ async fn every_endpoint_rejects_unauthenticated_requests_with_one_uniform_error(
     };
     assert_eq!(reply.0, StatusCode::UNAUTHORIZED);
     assert_eq!(Some(reply.1), first);
-    // The valid token reaches every endpoint (any status but 401).
+    // The valid token reaches every endpoint (any status but 401) except
+    // `POST /v1/admit`, which accepts only signed requests (tests/signed.rs).
     for (method, path) in every_path() {
+        if path == "/v1/admit" {
+            continue;
+        }
         let body = (method == Method::POST).then(|| b"{}".to_vec());
         let reply = h
             .send_raw(method.clone(), &path, Some(format!("Bearer {root}")), body)

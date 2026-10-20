@@ -6,6 +6,22 @@ defined in [docs/ROADMAP.md](docs/ROADMAP.md). The supported profile is in
 
 ## Unreleased
 
+### B3 part 2: OIDC and signed agent capabilities
+
+Part of [#39](https://github.com/weave-graph/weave-engine/issues/39)
+([guide](docs/SERVICE.md)). No protocol or engine store change; the
+service's control store moves to schema 2 in place.
+
+- OIDC bearer tokens (RS256, ES256, EdDSA) from operator-configured issuers
+  and key sets, mapped to registry users by `(iss, sub)` bindings; the
+  tenant comes from the `(issuer, audience)` configuration.
+- IdP group claims are never live; `POST /v1/oidc/groups/import` turns an
+  IdP snapshot into audited registry memberships.
+- `POST /v1/admit`: programs signed with a `weave-policy` capability chain
+  under the tenant's audience, with a registry-derived root and key bindings
+  (`/v1/keys`) checked against the agent's ownership chain; replay
+  protection by nonce.
+
 ### B3 part 1: authenticated multi-tenant service
 
 Part of [#39](https://github.com/weave-graph/weave-engine/issues/39)
