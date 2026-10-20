@@ -57,6 +57,10 @@ impl Access {
         }
         Arc::new(Self { clauses })
     }
+    /// The clauses, outermost owner first; the last is the principal's own.
+    pub(crate) fn clauses(&self) -> &[Clause] {
+        &self.clauses
+    }
     /// True when every clause can use `group` (ADR-0007 section 2: a write may
     /// name only groups the writer can discover).
     pub(crate) fn has_group(&self, group: &str) -> bool {

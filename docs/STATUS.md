@@ -3,9 +3,10 @@
 **Phase A is complete** (20 October 2026). The shared core is released as
 protocol **1.0.0**, which freezes [core contract v1](contract/core-v1.md)
 with the 0.24.0 feature set ([release notes](../CHANGELOG.md),
-[1.0 note](contract/v1.0/README.md)). **Phase B has started:** B1 part 1
-adds the principal registry, group readers, graph ACLs and Discover as
-protocol **1.1.0** and store 32 ([below](#principals-groups-and-graph-acls-b1)). The language reached Phase A parity in
+[1.0 note](contract/v1.0/README.md)). **Phase B has started:** B1 is complete:
+the principal registry with users, groups and agents, group readers, graph
+ACLs and Discover, as protocol **1.1.0** and store 32
+([below](#principals-groups-agents-and-graph-acls-b1)). The language reached Phase A parity in
 LA1 (weave-language#3): each of the five exit questions fits in at most 15
 lines of `.weave`, and engine CI runs all five through `check_phase_a.py`.
 Source writes cannot set `readers` until LB1. A source `correct` of a
@@ -349,11 +350,11 @@ A6 is complete ([#16](https://github.com/weave-graph/weave-engine/issues/16)):
 - **Release.** The [CHANGELOG](../CHANGELOG.md) has the 1.0.0 release notes,
   covering limits and deferred scope.
 
-## Principals, groups and graph ACLs (B1)
+## Principals, groups, agents and graph ACLs (B1)
 
 B1 ([#38](https://github.com/weave-graph/weave-engine/issues/38),
 [ADR-0007](architecture/ADR-0007-identity-groups-and-tenancy.md), accepted)
-is in progress. Part 1 is implemented ([guide](REGISTRY.md)):
+is complete ([guide](REGISTRY.md)):
 
 - **Registry.** An opt-in, one-way principal registry per store, stored as
   facts in the reserved graph `weave:registry`, with users, groups (a team
@@ -373,15 +374,24 @@ is in progress. Part 1 is implemented ([guide](REGISTRY.md)):
   the nonexistent-graph error for every operation and is absent from
   `Engine::list_graphs`; Discover without the needed permission gives
   `E_FORBIDDEN`.
+- **Agents.** Each agent has one owner (a user or an agent, at most 8
+  links to a user) and a delegation: graph scopes up to Write, exercised
+  owner identities, an optional expiry and `may_delegate`. Its authority on
+  every request is its owner's current authority ∧ its scope ∧ its own
+  identity, so it never exceeds its owner, also after the owner loses
+  access. Administer is not delegable. Escalating sub-agents and
+  delegations are refused at write time, and owners revoke, narrow or retire
+  agents with effect on the agent's next request. Agent fact writes record
+  `writer` and `on_behalf_of` (1.1.0 results only); agents cannot make
+  snapshot commits.
+- **Permission matrix.** User, group member and agent × Discover, Read,
+  Write and Administer × graph, protected branch and record
+  (`tests/registry_agents.rs`).
 - **Local stores** without a registry behave exactly as before; the existing
   authorization and influence suites pass unchanged.
 - **Store 32.** Store 31 upgrades by moving the marker; no row is rewritten
   and store-31 binaries refuse store 32 (`check_registry_store_migration.py`
   in the compatibility workflow, against the v1.0.0 binary).
-
-Remaining for B1: agents owned by a principal with a narrowed delegated
-scope, `on_behalf_of` on their writes, the escalation tests and the full
-permission matrix.
 
 ## Verified evidence
 
@@ -444,8 +454,8 @@ addresses:
 
 
 - **Sharing (Phase B).** There is no server and no authentication on the main
-  API. Users, groups and graph ACLs exist (B1 part 1); agent identities do not
-  yet, and leakage protection is enforced at read time only.
+  API. Users, groups, agents and graph ACLs exist (B1), and leakage
+  protection is enforced at read time only (write-time propagation is B2).
 - **Scale (Phase C).** There is no telemetry ingestion and no approximate vector
   index. Measured workloads are 10k–100k objects.
 

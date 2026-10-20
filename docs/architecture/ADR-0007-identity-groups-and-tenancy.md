@@ -569,5 +569,29 @@ Recorded on 2026-10-20 with B1 part 1. Each is also a `#38 B1` entry in
    request's principal.
 10. **Delegation chains in storage.** The reserved `on_behalf_of` column
     stores the chain as a JSON array of principal IDs; the result field is the
-    list itself (B1 part 2).
+    list itself.
+
+Recorded on 2026-10-20 with B1 part 2 (agents):
+
+11. **Scope shape.** A delegation scope is a list of `(graph, permission,
+    branches)` entries. `branches`, when nonempty, limits only Write;
+    Discover and Read stay per graph, as for users. The agent's permission
+    is the minimum of its owner's current permission, the scope entry and
+    Write.
+12. **Administer is not delegable, including for protected branches.** An
+    agent writes a protected branch only through its owner's branch entry,
+    never through its owner's Administer.
+13. **Default exercise is none.** An omitted `exercise` is `only` with no
+    identities: the agent reads only public records and records naming
+    itself or its own groups. `owner_all` must be asked for.
+14. **Agents write through fact writes only.** A snapshot commit records no
+    per-fact `on_behalf_of`, so it is refused for agents.
+15. **Who manages an agent.** Its ownership chain (never the agent itself)
+    and tenant administrators register it, change its delegation and change
+    its status. An agent may register sub-agents only with `may_delegate`,
+    and their delegation must fit inside its own; the request-time ceiling
+    still applies when the ancestor later narrows.
+16. **Owner visibility.** A user's identity includes its active agents,
+    transitively, as `A*(u)` in section 2; an agent's own clause includes the
+    agents below it.
 

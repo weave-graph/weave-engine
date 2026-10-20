@@ -1481,3 +1481,64 @@ store. The registry error for a store without one is `E_REGISTRY_DISABLED`.
 The science CLI reports `weave_contract::VERSION`. The client's strict
 version check, its expression constant and `check_science.py` move to
 1.1.0, as A2 did for 0.22.0. Its programs use no 1.1.0 feature.
+
+### 2026-10-20 — #38 B1 — Agents extend the part 1 API additively
+
+Agents are a new `PrincipalKind::Agent` with the new changes `add_agent` and
+`set_delegation`. `set_status` gains agent revocation by the ownership chain,
+and `Principal` gains optional `owner` and `delegation` fields. No part 1
+change, field or error code changed meaning, so B3 can build on both parts
+at once. An authenticating host passes the agent's principal ID as
+`HostContext.principal`, as it does for a user. Agent tokens therefore need
+no other engine API. `add_principal` refuses `kind: agent`, so an agent
+always has an owner and a delegation.
+
+### 2026-10-20 — #38 B1 — An agent's identity is the owner's clauses plus its own
+
+An agent's `Access` is its owner's clauses (recursively up the chain) plus
+one local clause: the agent, the agents below it, its own groups, and its
+exercised identities limited to what the owner holds now. Requiring every
+clause is the record half of `can(owner) ∧ S_local`. Graph permission is
+the minimum of the owner's permission, the agent's scope entry and Write,
+computed recursively. Everything is recomputed for each registry revision,
+and the expiry is checked against the request's trusted clock outside the
+cache. An owner that loses access therefore takes its agents' access with it
+on their next request.
+
+### 2026-10-20 — #38 B1 — Scopes limit Write by branch; Read stays per graph
+
+A scope entry is `(graph, permission, branches)`. A nonempty `branches`
+limits only Write, matching part 1's rule that branch ACLs grant only Write
+and Read is per graph. An agent writes a protected branch only through its
+owner's branch entry. Its owner's Administer would bypass the branch ACL,
+and Administer is not delegable.
+
+### 2026-10-20 — #38 B1 — Exercise defaults to none
+
+An omitted `exercise` is `only` with no identities. Such an agent reads
+public records and records that name the agent itself or its own groups.
+`owner_all` must be asked for explicitly, so a forgotten field never grants
+an agent its owner's whole identity. Exercised identities are checked
+against the owner's identity when the agent is registered (`E_FORBIDDEN`)
+and again on every request, where an identity the owner has lost is dropped.
+
+### 2026-10-20 — #38 B1 — Escalation errors and who manages an agent
+
+Delegations that exceed the owner fail with `E_FORBIDDEN`: Administer in a
+scope, identities the owner does not hold, and under an agent owner a
+graph, permission, branch set or expiry outside the parent, or a missing
+`may_delegate`. That is the registry's authorization code. A chain of more
+than 8 links fails with `E_BUDGET`. Only the agent's ownership chain and
+tenant administrators may register, re-delegate, suspend or retire an agent;
+the agent itself may not. Agents may make no other registry change, so they
+never change memberships, statuses of others, group administrators or ACLs.
+
+### 2026-10-20 — #38 B1 — Agents write through fact writes only
+
+`on_behalf_of` lives on fact-log recordings. Snapshot commit facts take
+their writer from the commit event and have no per-fact delegation. A
+snapshot `commit` or batch by an agent therefore fails with `E_FORBIDDEN`,
+rather than storing an agent write without its chain. The chain is the
+JSON-array encoding of the reserved `on_behalf_of` column. The store's
+bound for that column was raised from 512 bytes to fit 8 principal IDs. The
+column already existed (store 30), so no migration is needed.

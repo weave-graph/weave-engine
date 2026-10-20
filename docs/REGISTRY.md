@@ -1,15 +1,13 @@
-# Principals, groups and graph ACLs
+# Principals, groups, agents and graph ACLs
 
 The principal registry is how a store shares knowledge between people and
 teams (B1, [#38](https://github.com/weave-graph/weave-engine/issues/38),
 [ADR-0007](architecture/ADR-0007-identity-groups-and-tenancy.md)). It holds
-users and groups (a team is a group), group membership, graph ACLs and
-protected branches. Records name groups through `reader_groups`, and
+users, groups (a team is a group) and agents, group membership, agent
+delegation, graph ACLs and protected branches. Records name groups through `reader_groups`, and
 membership is resolved when each request runs, so a revocation takes effect on
 the next request and nothing stored is rewritten.
 
-Agents with an owner and a narrowed delegated scope are the second part of
-B1 and are not available yet.
 
 ## Local stores and registry stores
 
@@ -29,8 +27,9 @@ recorded: the host's principal becomes the first user and a member of the
 built-in group `weave:administrators` (the tenant administrators). From then
 on:
 
-- `HostContext.principal` must be an **active user** of the registry. An
-  unregistered, suspended or retired principal, or a group, can read only
+- `HostContext.principal` must be an **active user or agent** of the
+  registry. An unregistered, suspended, retired or expired principal, or a
+  group, can read only
   public records of graphs it can discover, which is none, so every request
   fails as if the graphs did not exist.
 - Graph ACLs decide every graph operation, and `writable_graphs` is no longer
@@ -59,7 +58,9 @@ earlier ones produced. At most 1,000 changes per call.
 | `change` | Fields | Who may make it |
 |---|---|---|
 | `add_principal` | `id`, `kind` (`user` or `group`), `display_name?` | tenant administrators |
-| `set_status` | `id`, `status` (`active`, `suspended`, `retired`) | tenant administrators |
+| `add_agent` | `id`, `owner`, `delegation`, `display_name?` | the owner, a principal above it in its ownership chain, or a tenant administrator; an agent owner needs `may_delegate` |
+| `set_delegation` | `agent`, `delegation` | a principal in the agent's ownership chain (never the agent itself) or a tenant administrator |
+| `set_status` | `id`, `status` (`active`, `suspended`, `retired`) | tenant administrators; for an agent, also any principal in its ownership chain |
 | `add_member`, `remove_member` | `group`, `member` | tenant administrators and the group's administrators |
 | `set_group_administrators` | `group`, `administrators` | tenant administrators |
 | `grant` | `graph_id`, `subject`, `permission` | holders of Administer on the graph |
@@ -91,17 +92,94 @@ Rules:
   only through it, from its members' closures.
 - **At least one administrator.** The last active tenant administrator
   cannot be removed or suspended (`E_CONFLICT`).
-- Additive changes (`add_principal`, `add_member`, `grant_branch_write`,
-  `unprotect_branch`) leave the signed-admission policy epoch alone. Every
+- Additive changes (`add_principal`, `add_agent`, `add_member`,
+  `grant_branch_write`, `unprotect_branch`) leave the signed-admission policy epoch alone. Every
   other change advances it to `registry:<revision>`, so pending signed
   requests and cached signed retries need a fresh request.
+
+## Agents
+
+An agent is a principal with exactly one owner, a user or another agent,
+and a **delegation**. Ownership never changes, and chains end at a user
+within 8 links (the `weave-policy` chain bound; a longer chain fails with
+`E_BUDGET`). An authenticating host maps an agent's credential to the
+agent's ID and passes it as `HostContext.principal`; an agent can never
+authenticate as its owner.
+
+```json
+{"change": "add_agent", "id": "alice-planner", "owner": "alice", "delegation": {
+  "scopes": [{"graph_id": "fleet", "permission": "write", "branches": ["draft"]},
+             {"graph_id": "manuals", "permission": "read"}],
+  "exercise": {"kind": "only", "identities": ["maintenance"]},
+  "expires_at_ms": 1767225600000,
+  "may_delegate": false}}
+```
+
+| Field | Meaning |
+|---|---|
+| `scopes` | The graphs the agent may reach, each with a permission (at most Write) and optional `branches` to which its Write is limited. A graph not listed does not exist for the agent |
+| `exercise` | Which of the owner's identities the agent reads with: `{"kind": "owner_all"}`, or `{"kind": "only", "identities": [...]}` (the default, with none). Exercised identities count only while the owner still holds them |
+| `expires_at_ms` | Optional; from this trusted-clock time the agent has no authority |
+| `may_delegate` | Whether the agent may register sub-agents |
+
+On every request the agent's authority is
+
+```
+can(agent, p, X) = can(owner, p, X) ∧ scope(agent) grants p on X's graph
+                   ∧ (p is not a record read, or X matches S_local(agent))
+```
+
+where `S_local(agent)` is the agent itself, its own groups and its exercised
+identities. The owner's authority is evaluated **now**, up the whole chain,
+so:
+
+- an agent never exceeds its owner: when the owner loses a grant, a group or
+  its active status, the agent loses it on its next request, whatever its
+  delegation says;
+- Administer is not delegable: an agent holds at most Write on any graph,
+  cannot write a protected branch through its owner's Administer (it needs
+  its owner's branch entry), cannot read or edit ACLs, and cannot change
+  memberships, statuses or group administrators;
+- a broad scope only lets the agent reach a graph. Records stay restricted:
+  the agent sees a record only if both its owner and its own `S_local`
+  match it. An agent added to a group its owner is not in gains nothing
+  from that group;
+- an agent may name in `reader_groups` only groups in every clause of its
+  identity, which means groups its owner holds and it exercises or is in.
+
+**Escalation is refused at write time too.** `add_agent` and
+`set_delegation` reject Administer in a scope, exercised identities the owner
+does not hold, and, under an agent owner, any scope, branch list or expiry
+outside the owner's own delegation (`E_FORBIDDEN`). An agent may register
+sub-agents only with `may_delegate`, and may change only agents below it in
+its ownership chain, never itself or its owner.
+
+**Revocation.** The owner (or anyone above it, or a tenant administrator)
+suspends, narrows or retires an agent with `set_status` or
+`set_delegation`; it takes effect on the agent's next request. Narrowing an
+agent also narrows every sub-agent below it at once, because the ceiling is
+re-evaluated per request.
+
+**Owner audit.** An owner's identity includes its active agents, so the
+owner reads every record its agents can read. `registry_principal(agent)` and
+`registry_agents(owner)` are readable by the agent itself, by every principal
+in its ownership chain and by tenant administrators.
+
+**Delegated writes.** A fact write by an agent records `writer` (the agent)
+and `on_behalf_of` (its ownership chain, owner first, ending at the root
+user), both engine-recorded and outside content. Results of 1.1.0 programs
+list `on_behalf_of` in `fact_provenance`; older programs never see it.
+Agents write through fact-level `write` only: a snapshot `commit` by an
+agent fails with `E_FORBIDDEN`, because snapshot facts carry no per-fact
+delegation.
 
 ## Reading records: `readers` and `reader_groups`
 
 A record is visible to a request when:
 
 1. `readers` and `reader_groups` are both empty (public), or
-2. some `readers` entry is the request's principal, or
+2. some `readers` entry is the request's principal (for a user, also one of
+   its active agents), or
 3. some `reader_groups` entry is an active group the principal is in,
    directly or through nested active groups.
 
@@ -110,7 +188,7 @@ empty `readers` and a nonempty `reader_groups` is **not** public.
 
 A write (`write` or `commit`) may name only active groups the writer can
 discover: groups it is in, groups it administers, or any group for a tenant
-administrator. Anything else (an unknown ID, a hidden group, a retired group,
+administrator. For an agent, see above. Anything else (an unknown ID, a hidden group, a retired group,
 a user) fails with the same `E_UNAVAILABLE` error, so a write cannot probe for
 groups. `reader_groups` needs protocol 1.1.0 (`E_VERSION` under older
 programs).
@@ -207,6 +285,7 @@ administrators or a tenant administrator) and `registry_graph_acl(graph)`
   readers, which match the request's principal as before.
 - Timing and response size are not protected channels. Writer identities
   are disclosed to a fact's readers, as before.
-- Agents (owned principals with delegated scope, `on_behalf_of` on their
-  writes) are the next B1 change. Authentication, tenants and the audit log
-  are B3.
+- Delegation expiry is checked against the trusted operation clock of the
+  request.
+- Authentication (mapping tokens, OIDC or keys to principals), tenants and
+  the read and write audit log are B3.

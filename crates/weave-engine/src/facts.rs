@@ -33,6 +33,12 @@ pub(crate) fn fact_reader_groups(fact: &Fact) -> &[String] {
 /// The stored `on_behalf_of` column: a JSON array of principal IDs, the
 /// agent writer's owner first (ADR-0007 section 8). Absent for every
 /// non-delegated write.
+pub(crate) fn encode_delegation(chain: &[String]) -> Result<Option<String>> {
+    if chain.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(serde_json::to_string(chain)?))
+}
 pub(crate) fn decode_delegation(stored: Option<&str>) -> Result<Vec<String>> {
     match stored {
         None => Ok(Vec::new()),
@@ -1151,7 +1157,7 @@ impl Engine {
         )?;
         self.fact_store().append(
             NewRevision {
-                on_behalf_of: None,
+                on_behalf_of: encode_delegation(&self.delegation_chain(host)?)?,
                 revision: revision.clone(),
                 graph_id: graph.into(),
                 branch_id: branch.into(),

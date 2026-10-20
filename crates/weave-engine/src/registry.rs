@@ -1,5 +1,16 @@
-//! The principal registry (B1, ADR-0007): users and groups, group
-//! membership, graph ACLs, protected branches and the Discover permission.
+//! The principal registry (B1, ADR-0007): users, groups and agents, group
+//! membership, agent delegation, graph ACLs, protected branches and the
+//! Discover permission.
+//!
+//! **Agents.** An agent is a principal with exactly one owner (a user or
+//! another agent, ending at a user within 8 links) and a [`Delegation`]: the
+//! graphs it may reach and with which permission, which of its owner's
+//! identities it may exercise, an optional expiry and whether it may create
+//! sub-agents. Its authority on every request is
+//! `can(owner) ∧ scope ∧ S_local(agent)` (ADR-0007 section 3), evaluated
+//! against the registry as it is when the request runs. An authenticating
+//! host maps an agent credential to the agent's principal ID and passes it
+//! as `HostContext.principal`, exactly as for a user; nothing else changes.
 //!
 //! The registry is stored as ordinary facts in the reserved graph
 //! `weave:registry` (branch `main`), written only through
@@ -41,6 +52,11 @@ const SPACE: &str = "weave:registry";
 const MEMBER: &str = "weave:member";
 const GRANT: &str = "weave:grant";
 const BRANCH_WRITER: &str = "weave:branch-writer";
+/// Most links in an ownership chain, matching the 8-token bound of
+/// `weave-policy` capability chains (ADR-0007 section 3).
+pub const MAX_OWNERSHIP_CHAIN: usize = weave_contract::provenance::MAX_DELEGATION_CHAIN;
+/// Most scope entries and exercised identities in one delegation.
+pub const MAX_DELEGATION_ENTRIES: usize = 256;
 
 /// True for the registry graph, which raw commits, fact writes, capsule
 /// receipt and branch acceptance reject.
@@ -48,12 +64,69 @@ pub(crate) fn reserved(graph: &str) -> bool {
     graph == REGISTRY_GRAPH
 }
 
-/// A principal's kind. A team is a group.
+/// A principal's kind. A team is a group. Users and agents authenticate;
+/// groups never do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PrincipalKind {
     User,
     Group,
+    /// Owned by a user or another agent, with a [`Delegation`]. Registered
+    /// with [`RegistryChange::AddAgent`].
+    Agent,
+}
+
+/// One graph an agent may reach (ADR-0007 section 3). The agent's
+/// permission on the graph is the lowest of this entry, its owner's current
+/// permission and Write: Administer is not delegable.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DelegatedScope {
+    pub graph_id: String,
+    pub permission: Permission,
+    /// When nonempty, Write applies only to these branches; Discover and
+    /// Read stay graph-wide.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub branches: Vec<String>,
+}
+
+/// Which of its owner's identities an agent acts with.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Exercise {
+    /// Every principal and group of the owner's identity, as resolved for
+    /// each request.
+    OwnerAll,
+    /// Only these principals or groups, and only while the owner still
+    /// holds them. Empty means the agent reads only records open to itself
+    /// (its own ID, its own groups) or public ones.
+    Only { identities: Vec<String> },
+}
+
+impl Default for Exercise {
+    fn default() -> Self {
+        Exercise::Only {
+            identities: Vec::new(),
+        }
+    }
+}
+
+/// An agent's narrowed delegated scope (ADR-0007 section 3).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Delegation {
+    /// Graphs the agent may reach. A graph not listed is invisible to it.
+    pub scopes: Vec<DelegatedScope>,
+    #[serde(default)]
+    pub exercise: Exercise,
+    /// Trusted operation-clock time (Unix milliseconds) from which the agent
+    /// has no authority.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at_ms: Option<i64>,
+    /// Whether the agent may register sub-agents, whose delegation must then
+    /// fit inside its own.
+    #[serde(default)]
+    pub may_delegate: bool,
 }
 
 /// A principal's status. Retirement is final and the ID is never reissued.
@@ -87,6 +160,12 @@ pub struct Principal {
     /// Groups only: principals (or groups) that may change the members.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub administrators: Vec<String>,
+    /// Agents only: the owning user or agent. Never changes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    /// Agents only: the delegated scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegation: Option<Delegation>,
 }
 
 /// One graph ACL entry.
@@ -120,14 +199,34 @@ pub struct GraphListing {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "change", rename_all = "snake_case", deny_unknown_fields)]
 pub enum RegistryChange {
-    /// Register a user or group (tenant administrators only).
+    /// Register a user or group (tenant administrators only). Agents are
+    /// registered with `add_agent`.
     AddPrincipal {
         id: String,
         kind: PrincipalKind,
         #[serde(default)]
         display_name: Option<String>,
     },
-    /// Suspend, reactivate or retire a principal (tenant administrators only).
+    /// Register an agent owned by `owner`. Made by the owner itself, by a
+    /// principal higher in the owner's ownership chain, or by a tenant
+    /// administrator. An agent owner needs `may_delegate`, and the new
+    /// delegation must fit inside the owner's.
+    AddAgent {
+        id: String,
+        owner: String,
+        delegation: Delegation,
+        #[serde(default)]
+        display_name: Option<String>,
+    },
+    /// Replace an agent's delegation. Made by a principal in the agent's
+    /// ownership chain (never the agent itself) or a tenant administrator.
+    SetDelegation {
+        agent: String,
+        delegation: Delegation,
+    },
+    /// Suspend, reactivate or retire a principal. Tenant administrators
+    /// change any status; a principal in an agent's ownership chain changes
+    /// that agent's status, which is how an owner revokes an agent.
     SetStatus { id: String, status: PrincipalStatus },
     /// Add a member (user or group) to a group.
     AddMember { group: String, member: String },
@@ -171,6 +270,7 @@ impl RegistryChange {
         matches!(
             self,
             RegistryChange::AddPrincipal { .. }
+                | RegistryChange::AddAgent { .. }
                 | RegistryChange::AddMember { .. }
                 | RegistryChange::GrantBranchWrite { .. }
                 | RegistryChange::UnprotectBranch { .. }
@@ -184,6 +284,8 @@ struct Entry {
     status: PrincipalStatus,
     display_name: Option<String>,
     administrators: Vec<String>,
+    owner: Option<String>,
+    delegation: Option<Delegation>,
 }
 
 /// The registry at one revision.
@@ -199,6 +301,8 @@ pub(crate) struct State {
     grants: BTreeMap<String, BTreeMap<String, Permission>>,
     /// (graph, branch) -> subjects allowed to write
     protected: BTreeMap<(String, String), BTreeSet<String>>,
+    /// owner -> agents it owns directly
+    owned: BTreeMap<String, BTreeSet<String>>,
     resolved: Mutex<HashMap<String, Arc<Resolved>>>,
 }
 
@@ -211,6 +315,7 @@ impl Clone for State {
             parents: self.parents.clone(),
             grants: self.grants.clone(),
             protected: self.protected.clone(),
+            owned: self.owned.clone(),
             resolved: Mutex::default(),
         }
     }
@@ -220,10 +325,25 @@ impl Clone for State {
 #[derive(Debug)]
 pub(crate) struct Resolved {
     pub(crate) access: Arc<Access>,
-    /// The principal and its active groups, for ACL entries.
-    subjects: BTreeSet<String>,
-    active_user: bool,
-    administrator: bool,
+    actor: Actor,
+}
+
+#[derive(Debug)]
+enum Actor {
+    /// Unregistered, inactive, a group, or an agent whose chain fails.
+    Nobody,
+    User {
+        /// The user and its active groups, for ACL entries.
+        subjects: BTreeSet<String>,
+        administrator: bool,
+    },
+    Agent {
+        owner: Arc<Resolved>,
+        scopes: Vec<DelegatedScope>,
+        /// The earliest expiry along the ownership chain.
+        expires_at_ms: Option<i64>,
+        may_delegate: bool,
+    },
 }
 
 /// Cache of the registry state, keyed by its head revision.
@@ -311,6 +431,9 @@ impl State {
         h
     }
     fn resolve(&self, principal: &str) -> Arc<Resolved> {
+        self.resolve_at(principal, 0)
+    }
+    fn resolve_at(&self, principal: &str, depth: usize) -> Arc<Resolved> {
         if let Some(hit) = self
             .resolved
             .lock()
@@ -319,30 +442,7 @@ impl State {
         {
             return hit;
         }
-        let resolved = Arc::new(match self.entry(principal) {
-            Some(entry)
-                if entry.status == PrincipalStatus::Active && entry.kind == PrincipalKind::User =>
-            {
-                match self.closure(principal) {
-                    Some(groups) => {
-                        let mut subjects = groups.clone();
-                        subjects.insert(principal.to_owned());
-                        Resolved {
-                            administrator: groups.contains(ADMINISTRATORS),
-                            access: Access::from_clauses(vec![Clause {
-                                principals: BTreeSet::from([principal.to_owned()]),
-                                groups,
-                            }]),
-                            subjects,
-                            active_user: true,
-                        }
-                    }
-                    None => Resolved::nobody(),
-                }
-            }
-            // Unregistered, suspended, retired and group principals fail closed.
-            _ => Resolved::nobody(),
-        });
+        let resolved = Arc::new(self.compute(principal, depth));
         if let Ok(mut map) = self.resolved.lock() {
             if map.len() >= 4096 {
                 map.clear();
@@ -351,12 +451,143 @@ impl State {
         }
         resolved
     }
+    /// Active agents owned by `owner`, directly or through active agents.
+    fn agents_of(&self, owner: &str) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        let mut queue = VecDeque::from([owner.to_owned()]);
+        while let Some(next) = queue.pop_front() {
+            for agent in self.owned.get(&next).into_iter().flatten() {
+                let active = self
+                    .entry(agent)
+                    .is_some_and(|e| e.status == PrincipalStatus::Active);
+                if active && out.insert(agent.clone()) {
+                    queue.push_back(agent.clone());
+                }
+            }
+        }
+        out
+    }
+    fn compute(&self, principal: &str, depth: usize) -> Resolved {
+        let Some(entry) = self.entry(principal) else {
+            return Resolved::nobody();
+        };
+        if entry.status != PrincipalStatus::Active || depth > MAX_OWNERSHIP_CHAIN {
+            return Resolved::nobody();
+        }
+        let Some(groups) = self.closure(principal) else {
+            return Resolved::nobody();
+        };
+        let mut principals = self.agents_of(principal);
+        principals.insert(principal.to_owned());
+        match entry.kind {
+            // Groups never authenticate.
+            PrincipalKind::Group => Resolved::nobody(),
+            PrincipalKind::User => {
+                let mut subjects = groups.clone();
+                subjects.insert(principal.to_owned());
+                Resolved {
+                    access: Access::from_clauses(vec![Clause { principals, groups }]),
+                    actor: Actor::User {
+                        administrator: subjects.contains(ADMINISTRATORS),
+                        subjects,
+                    },
+                }
+            }
+            PrincipalKind::Agent => {
+                let (Some(owner), Some(delegation)) = (&entry.owner, &entry.delegation) else {
+                    return Resolved::nobody();
+                };
+                let owner = self.resolve_at(owner, depth + 1);
+                if matches!(owner.actor, Actor::Nobody) {
+                    return Resolved::nobody();
+                }
+                // S_local(a) = {a} ∪ G*(a) ∪ exercise(a), with exercise
+                // limited to what the owner holds now.
+                let Some(held) = owner.access.clauses().last() else {
+                    return Resolved::nobody();
+                };
+                let mut local = Clause { principals, groups };
+                match &delegation.exercise {
+                    Exercise::OwnerAll => {
+                        local.principals.extend(held.principals.iter().cloned());
+                        local.groups.extend(held.groups.iter().cloned());
+                    }
+                    Exercise::Only { identities } => {
+                        for id in identities {
+                            if held.principals.contains(id) {
+                                local.principals.insert(id.clone());
+                            } else if held.groups.contains(id) {
+                                local.groups.insert(id.clone());
+                            }
+                        }
+                    }
+                }
+                let mut clauses = owner.access.clauses().to_vec();
+                clauses.push(local);
+                let expires_at_ms = match (owner.expires_at_ms(), delegation.expires_at_ms) {
+                    (Some(a), Some(b)) => Some(a.min(b)),
+                    (a, b) => a.or(b),
+                };
+                Resolved {
+                    access: Access::from_clauses(clauses),
+                    actor: Actor::Agent {
+                        owner,
+                        scopes: delegation.scopes.clone(),
+                        expires_at_ms,
+                        may_delegate: delegation.may_delegate,
+                    },
+                }
+            }
+        }
+    }
+    /// `resolve` with the delegation expiry checked against `now`.
+    fn effective(&self, principal: &str, now: i64) -> Arc<Resolved> {
+        let who = self.resolve(principal);
+        if who.expires_at_ms().is_some_and(|at| now >= at) {
+            return Arc::new(Resolved::nobody());
+        }
+        who
+    }
+    /// Record visibility of the registry API: administrators, the principal
+    /// itself, and principals in the target's ownership chain.
+    fn may_see_principal(&self, who: &Resolved, actor: &str, id: &str) -> bool {
+        !matches!(who.actor, Actor::Nobody)
+            && (who.administrator() || id == actor || self.chain(id).iter().any(|p| p == actor))
+    }
+    /// The ownership chain of an agent: its owner first, ending at the root
+    /// user. Empty for every other principal.
+    fn chain(&self, principal: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut cursor = self.entry(principal).and_then(|e| e.owner.clone());
+        while let Some(owner) = cursor {
+            if out.len() >= MAX_OWNERSHIP_CHAIN || out.contains(&owner) {
+                break;
+            }
+            cursor = self.entry(&owner).and_then(|e| e.owner.clone());
+            out.push(owner);
+        }
+        out
+    }
     /// The permission `who` holds on `graph`, if any.
     fn permission(&self, who: &Resolved, graph: &str) -> Option<Permission> {
-        if !who.active_user {
-            return None;
-        }
-        if who.administrator {
+        let (subjects, administrator) = match &who.actor {
+            Actor::Nobody => return None,
+            Actor::Agent { owner, scopes, .. } => {
+                // can(a) = can(owner) ∧ scope(a), and Administer is not delegable.
+                let held = self.permission(owner, graph)?;
+                let scoped = scopes
+                    .iter()
+                    .filter(|s| s.graph_id == graph)
+                    .map(|s| s.permission)
+                    .max()?;
+                return Some(held.min(scoped).min(Permission::Write));
+            }
+            Actor::User {
+                subjects,
+                administrator,
+            } => (subjects, *administrator),
+        };
+        if administrator {
             return Some(Permission::Administer);
         }
         if reserved(graph) {
@@ -369,31 +600,62 @@ impl State {
         }
         self.grants.get(graph).and_then(|acl| {
             acl.iter()
-                .filter(|(subject, _)| who.subjects.contains(*subject))
+                .filter(|(subject, _)| subjects.contains(*subject))
                 .map(|(_, p)| *p)
                 .max()
         })
     }
-    fn can_write_branch(&self, who: &Resolved, graph: &str, branch: &str) -> bool {
-        let Some(permission) = self.permission(who, graph) else {
-            return false;
-        };
-        if permission == Permission::Administer {
-            return true;
-        }
-        match self.protected.get(&(graph.to_owned(), branch.to_owned())) {
-            None => permission >= Permission::Write,
-            Some(writers) => {
-                permission >= Permission::Read && writers.iter().any(|w| who.subjects.contains(w))
+    /// Write on `graph` (branch `None`: any unprotected branch).
+    fn can_write(&self, who: &Resolved, graph: &str, branch: Option<&str>) -> bool {
+        self.write_authority(who, graph, branch, true)
+    }
+    /// Write authority. Administer writes protected branches, but only for
+    /// the holder itself: an agent needs its owner's branch entry, because
+    /// Administer is not delegable.
+    fn write_authority(
+        &self,
+        who: &Resolved,
+        graph: &str,
+        branch: Option<&str>,
+        administer_ok: bool,
+    ) -> bool {
+        match &who.actor {
+            Actor::Nobody => false,
+            Actor::Agent { owner, scopes, .. } => {
+                self.write_authority(owner, graph, branch, false)
+                    && scopes.iter().any(|s| {
+                        s.graph_id == graph
+                            && s.permission >= Permission::Write
+                            && (s.branches.is_empty()
+                                || branch.is_some_and(|b| s.branches.iter().any(|x| x == b)))
+                    })
+            }
+            Actor::User { .. } => {
+                let Some(permission) = self.permission(who, graph) else {
+                    return false;
+                };
+                let Some(branch) = branch else {
+                    return permission >= Permission::Write;
+                };
+                match self.protected.get(&(graph.to_owned(), branch.to_owned())) {
+                    None => permission >= Permission::Write,
+                    Some(_) if administer_ok && permission == Permission::Administer => true,
+                    Some(writers) => {
+                        permission >= Permission::Read
+                            && writers.iter().any(|w| who.subjects().contains(w))
+                    }
+                }
             }
         }
     }
+    /// Group administration is never delegated to agents.
     fn may_administer_group(&self, who: &Resolved, group: &str) -> bool {
-        who.administrator
-            || (group != ADMINISTRATORS
+        who.administrator()
+            || (who.is_user()
+                && group != ADMINISTRATORS
                 && self
                     .entry(group)
-                    .is_some_and(|e| e.administrators.iter().any(|a| who.subjects.contains(a))))
+                    .is_some_and(|e| e.administrators.iter().any(|a| who.subjects().contains(a))))
     }
 
     /// Every registry fact, keyed for diffing.
@@ -412,9 +674,16 @@ impl State {
             if !e.administrators.is_empty() {
                 properties["administrators"] = serde_json::json!(e.administrators);
             }
+            if let Some(owner) = &e.owner {
+                properties["owner"] = owner.clone().into();
+            }
+            if let Some(delegation) = &e.delegation {
+                properties["delegation"] = serde_json::to_value(delegation)?;
+            }
+            // An owner reads its agents' records: they are in its identity.
             let readers = match e.kind {
                 PrincipalKind::Group => restricted(vec![], vec![id.as_str()]),
-                PrincipalKind::User => restricted(vec![id.clone()], vec![]),
+                PrincipalKind::User | PrincipalKind::Agent => restricted(vec![id.clone()], vec![]),
             };
             put(
                 serde_json::json!({"kind": "node", "id": id, "entity_id": id, "space_id": SPACE,
@@ -507,7 +776,26 @@ impl State {
                             None => vec![],
                             Some(v) => serde_json::from_value(v.clone()).map_err(|_| corrupt())?,
                         },
+                        owner: text("owner"),
+                        delegation: match p.get("delegation") {
+                            None => None,
+                            Some(v) => {
+                                Some(serde_json::from_value(v.clone()).map_err(|_| corrupt())?)
+                            }
+                        },
                     };
+                    if (entry.kind == PrincipalKind::Agent)
+                        != (entry.owner.is_some() && entry.delegation.is_some())
+                    {
+                        return Err(corrupt());
+                    }
+                    if let Some(owner) = &entry.owner {
+                        state
+                            .owned
+                            .entry(owner.clone())
+                            .or_default()
+                            .insert(node.id.clone());
+                    }
                     state.principals.insert(node.id, entry);
                 }
                 Fact::Edge(edge) => edges.push(edge),
@@ -561,10 +849,42 @@ impl Resolved {
     fn nobody() -> Self {
         Resolved {
             access: Access::nobody(),
-            subjects: BTreeSet::new(),
-            active_user: false,
-            administrator: false,
+            actor: Actor::Nobody,
         }
+    }
+    fn is_user(&self) -> bool {
+        matches!(self.actor, Actor::User { .. })
+    }
+    fn administrator(&self) -> bool {
+        matches!(
+            self.actor,
+            Actor::User {
+                administrator: true,
+                ..
+            }
+        )
+    }
+    fn subjects(&self) -> &BTreeSet<String> {
+        static NONE: BTreeSet<String> = BTreeSet::new();
+        match &self.actor {
+            Actor::User { subjects, .. } => subjects,
+            _ => &NONE,
+        }
+    }
+    fn expires_at_ms(&self) -> Option<i64> {
+        match &self.actor {
+            Actor::Agent { expires_at_ms, .. } => *expires_at_ms,
+            _ => None,
+        }
+    }
+    fn may_delegate(&self) -> bool {
+        matches!(
+            self.actor,
+            Actor::Agent {
+                may_delegate: true,
+                ..
+            }
+        )
     }
 }
 
@@ -631,10 +951,39 @@ impl Engine {
         Ok(self.registry_head()?.is_some())
     }
     fn resolved(&self, host: &HostContext) -> Result<Option<(Arc<State>, Arc<Resolved>)>> {
-        Ok(self.registry_state()?.map(|state| {
-            let who = state.resolve(&host.principal);
-            (state, who)
-        }))
+        let Some(state) = self.registry_state()? else {
+            return Ok(None);
+        };
+        let who = state.effective(&host.principal, self.trusted_now()?);
+        Ok(Some((state, who)))
+    }
+    /// The delegation chain recorded as `on_behalf_of` for a write by
+    /// `host.principal` (ADR-0007 section 8): the agent's owner first, ending
+    /// at the root user. Empty for users and in a store without a registry.
+    pub(crate) fn delegation_chain(&self, host: &HostContext) -> Result<Vec<String>> {
+        Ok(match self.registry_state()? {
+            None => Vec::new(),
+            Some(state) => match state.entry(&host.principal) {
+                Some(e) if e.kind == PrincipalKind::Agent => state.chain(&host.principal),
+                _ => Vec::new(),
+            },
+        })
+    }
+    /// Snapshot commits record no per-fact delegation, so an agent writes
+    /// through fact-level `write`, which records `on_behalf_of`.
+    pub(crate) fn refuse_agent_snapshot(&self, host: &HostContext) -> Result<()> {
+        if let Some(state) = self.registry_state()? {
+            if state
+                .entry(&host.principal)
+                .is_some_and(|e| e.kind == PrincipalKind::Agent)
+            {
+                return Err(err(
+                    "E_FORBIDDEN",
+                    "agents write through fact writes, which record their delegation",
+                ));
+            }
+        }
+        Ok(())
     }
     /// The request's identity (ADR-0007 section 2): the literal principal in
     /// a store without a registry, otherwise its resolved identity set.
@@ -695,12 +1044,7 @@ impl Engine {
     ) -> Result<bool> {
         Ok(match self.resolved(host)? {
             None => host.writable_graphs.contains(graph),
-            Some((state, who)) => match branch {
-                Some(branch) => state.can_write_branch(&who, graph, branch),
-                None => state
-                    .permission(&who, graph)
-                    .is_some_and(|p| p >= Permission::Write),
-            },
+            Some((state, who)) => state.can_write(&who, graph, branch),
         })
     }
     /// [`Engine::graph_writable`] for every graph of an adapter or handler.
@@ -756,8 +1100,8 @@ impl Engine {
             }
             // A group is discoverable by its members (through every clause of
             // the request's identity), its administrators and tenant administrators.
-            let discoverable = who.access.has_group(group)
-                || (who.active_user && state.may_administer_group(&who, group));
+            let discoverable =
+                who.access.has_group(group) || state.may_administer_group(&who, group);
             if !state.active_group(group) || !discoverable {
                 return Err(unavailable());
             }
@@ -788,6 +1132,8 @@ impl Engine {
                 status: PrincipalStatus::Active,
                 display_name: None,
                 administrators: vec![],
+                owner: None,
+                delegation: None,
             };
             state
                 .principals
@@ -818,9 +1164,10 @@ impl Engine {
             return Err(err("E_REGISTRY_DISABLED", "the store has no registry"));
         }
         self.registry_write(host, |state| {
+            let now = self.operation_time()?;
             let mut reducing = false;
             for change in changes {
-                apply_change(state, change, host)?;
+                apply_change(state, change, host, now)?;
                 reducing |= !change.additive();
             }
             Ok(reducing)
@@ -890,12 +1237,13 @@ impl Engine {
         }
     }
 
-    /// A principal's registry record. Readable by tenant administrators and
-    /// by the principal itself; any other request fails `E_UNAVAILABLE`.
+    /// A principal's registry record. Readable by tenant administrators, by
+    /// the principal itself and by every principal in an agent's ownership
+    /// chain (owner audit); any other request fails `E_UNAVAILABLE`.
     pub fn registry_principal(&self, id: &str, host: &HostContext) -> Result<Principal> {
         let _transaction = self.optional_read_transaction()?;
         let (state, who) = self.resolved(host)?.ok_or_else(unknown)?;
-        if !(who.administrator || (who.active_user && id == host.principal)) {
+        if !state.may_see_principal(&who, &host.principal, id) {
             return Err(unknown());
         }
         let entry = state.entry(id).ok_or_else(unknown)?;
@@ -905,14 +1253,31 @@ impl Engine {
             status: entry.status,
             display_name: entry.display_name.clone(),
             administrators: entry.administrators.clone(),
+            owner: entry.owner.clone(),
+            delegation: entry.delegation.clone(),
         })
+    }
+    /// The agents a principal owns directly. Readable as
+    /// [`Engine::registry_principal`] is for the owner.
+    pub fn registry_agents(&self, owner: &str, host: &HostContext) -> Result<Vec<String>> {
+        let _transaction = self.optional_read_transaction()?;
+        let (state, who) = self.resolved(host)?.ok_or_else(unknown)?;
+        if !state.may_see_principal(&who, &host.principal, owner) {
+            return Err(unknown());
+        }
+        state.entry(owner).ok_or_else(unknown)?;
+        Ok(state
+            .owned
+            .get(owner)
+            .map(|a| a.iter().cloned().collect())
+            .unwrap_or_default())
     }
     /// The groups a principal is directly in. Readable by tenant
     /// administrators and by the principal itself.
     pub fn registry_memberships(&self, id: &str, host: &HostContext) -> Result<Vec<String>> {
         let _transaction = self.optional_read_transaction()?;
         let (state, who) = self.resolved(host)?.ok_or_else(unknown)?;
-        if !(who.administrator || (who.active_user && id == host.principal)) {
+        if !state.may_see_principal(&who, &host.principal, id) {
             return Err(unknown());
         }
         state.entry(id).ok_or_else(unknown)?;
@@ -927,7 +1292,7 @@ impl Engine {
     pub fn registry_members(&self, group: &str, host: &HostContext) -> Result<Vec<String>> {
         let _transaction = self.optional_read_transaction()?;
         let (state, who) = self.resolved(host)?.ok_or_else(unknown)?;
-        if !who.active_user || !state.may_administer_group(&who, group) {
+        if !state.may_administer_group(&who, group) {
             return Err(unknown());
         }
         Ok(state
@@ -1087,15 +1452,133 @@ fn add_member(state: &mut State, group: &str, member: &str) -> Result<()> {
     Ok(())
 }
 
-fn apply_change(state: &mut State, change: &RegistryChange, host: &HostContext) -> Result<()> {
+/// Check that `delegation` fits under `owner` (ADR-0007 section 3): no
+/// Administer, and for an agent owner, scopes, exercised identities and
+/// expiry inside the owner's own delegation. The request-time conjunction
+/// enforces the same ceiling again on every request.
+fn check_delegation(state: &State, owner: &str, delegation: &Delegation, now: i64) -> Result<()> {
+    if delegation.scopes.len() > MAX_DELEGATION_ENTRIES {
+        return Err(err("E_BUDGET", "a delegation holds at most 256 scopes"));
+    }
+    for scope in &delegation.scopes {
+        check_id(&scope.graph_id)?;
+        if scope.branches.len() > MAX_DELEGATION_ENTRIES {
+            return Err(err("E_BUDGET", "a scope names at most 256 branches"));
+        }
+        for branch in &scope.branches {
+            check_id(branch)?;
+        }
+        if scope.permission == Permission::Administer {
+            return Err(registry_error(
+                "E_FORBIDDEN",
+                "Administer is not delegable to agents",
+            ));
+        }
+    }
+    if let Exercise::Only { identities } = &delegation.exercise {
+        if identities.len() > MAX_DELEGATION_ENTRIES {
+            return Err(err(
+                "E_BUDGET",
+                "a delegation exercises at most 256 identities",
+            ));
+        }
+        for id in identities {
+            check_id(id)?;
+        }
+    }
+    if delegation.expires_at_ms.is_some_and(|at| at < 0) {
+        return Err(err("E_REGISTRY", "expiry must be a nonnegative time"));
+    }
+    let owner_entry = state.entry(owner).ok_or_else(unknown)?;
+    let held = state.effective(owner, now);
+    if matches!(held.actor, Actor::Nobody) {
+        return Err(unknown());
+    }
+    // Exercised identities must be held by the owner now.
+    if let Exercise::Only { identities } = &delegation.exercise {
+        let mine = held.access.clauses().last().cloned().unwrap_or_default();
+        if identities
+            .iter()
+            .any(|id| !mine.principals.contains(id) && !mine.groups.contains(id))
+        {
+            return Err(registry_error(
+                "E_FORBIDDEN",
+                "an agent can exercise only identities its owner holds",
+            ));
+        }
+    }
+    if owner_entry.kind == PrincipalKind::Agent {
+        let parent = owner_entry.delegation.as_ref().ok_or_else(unknown)?;
+        if !parent.may_delegate {
+            return Err(registry_error(
+                "E_FORBIDDEN",
+                "the owning agent may not delegate",
+            ));
+        }
+        let exceeds = || {
+            registry_error(
+                "E_FORBIDDEN",
+                "a sub-agent's delegation cannot exceed its owner's",
+            )
+        };
+        for scope in &delegation.scopes {
+            let covered = parent.scopes.iter().any(|p| {
+                p.graph_id == scope.graph_id
+                    && p.permission >= scope.permission
+                    && (p.branches.is_empty()
+                        || scope.permission < Permission::Write
+                        || (!scope.branches.is_empty()
+                            && scope.branches.iter().all(|b| p.branches.contains(b))))
+            });
+            if !covered {
+                return Err(exceeds());
+            }
+        }
+        // `OwnerAll` under an agent owner is the owner's own S_local, which
+        // its exercise already bounds, so it never reaches past the parent.
+        if let Some(limit) = held.expires_at_ms() {
+            if delegation.expires_at_ms.is_none_or(|at| at > limit) {
+                return Err(exceeds());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn apply_change(
+    state: &mut State,
+    change: &RegistryChange,
+    host: &HostContext,
+    now: i64,
+) -> Result<()> {
     // Authority comes from the state the earlier changes of this write
     // produced, exactly as if each change were its own write.
     if let Ok(cache) = state.resolved.get_mut() {
         cache.clear();
     }
-    let who = state.resolve(&host.principal);
-    if !who.active_user {
+    let who = state.effective(&host.principal, now);
+    if matches!(who.actor, Actor::Nobody) {
         return Err(forbidden());
+    }
+    // Agents manage only agents below them (ADR-0007 section 3: an agent
+    // cannot change its own or its owner's entries, memberships or ACLs, and
+    // Administer is not delegable).
+    let below = |state: &State, id: &str| state.chain(id).iter().any(|p| p == &host.principal);
+    if !who.is_user() {
+        let allowed = match change {
+            RegistryChange::AddAgent { owner, .. } => {
+                owner == &host.principal || below(state, owner)
+            }
+            RegistryChange::SetDelegation { agent, .. } => below(state, agent),
+            RegistryChange::SetStatus { id, .. } => below(state, id),
+            _ => false,
+        };
+        if !allowed {
+            return Err(forbidden());
+        }
+        if matches!(change, RegistryChange::AddAgent { .. }) && !who.may_delegate() {
+            return Err(registry_error("E_FORBIDDEN", "the agent may not delegate"));
+        }
     }
     let reject_reserved = |id: &str| -> Result<()> {
         check_id(id)?;
@@ -1129,8 +1612,14 @@ fn apply_change(state: &mut State, change: &RegistryChange, host: &HostContext) 
             kind,
             display_name,
         } => {
-            if !who.administrator {
+            if !who.administrator() {
                 return Err(forbidden());
+            }
+            if *kind == PrincipalKind::Agent {
+                return Err(registry_error(
+                    "E_REGISTRY",
+                    "agents are registered with add_agent",
+                ));
             }
             reject_reserved(id)?;
             if let Some(name) = display_name {
@@ -1154,14 +1643,84 @@ fn apply_change(state: &mut State, change: &RegistryChange, host: &HostContext) 
                     status: PrincipalStatus::Active,
                     display_name: display_name.clone(),
                     administrators: vec![],
+                    owner: None,
+                    delegation: None,
                 },
             );
         }
-        RegistryChange::SetStatus { id, status } => {
-            if !who.administrator {
+        RegistryChange::AddAgent {
+            id,
+            owner,
+            delegation,
+            display_name,
+        } => {
+            reject_reserved(id)?;
+            check_id(owner)?;
+            if let Some(name) = display_name {
+                if name.len() > 512 {
+                    return Err(err("E_ID", "display names hold at most 512 bytes"));
+                }
+            }
+            let owner_entry = state.entry(owner).ok_or_else(unknown)?;
+            if owner_entry.kind == PrincipalKind::Group {
+                return Err(registry_error("E_REGISTRY", "a group cannot own an agent"));
+            }
+            if !(who.administrator() || owner == &host.principal || below(state, owner)) {
                 return Err(forbidden());
             }
+            if state.chain(owner).len() + 1 > MAX_OWNERSHIP_CHAIN {
+                return Err(err("E_BUDGET", "ownership chains have at most 8 links"));
+            }
+            check_delegation(state, owner, delegation, now)?;
+            if state.principals.contains_key(id) {
+                return Err(registry_error(
+                    "E_CONFLICT",
+                    "principal IDs are unique and never reused",
+                ));
+            }
+            if state.principals.len() >= MAX_REGISTRY_RECORDS / 2 {
+                return Err(err("E_BUDGET", "the registry principal bound is reached"));
+            }
+            state.principals.insert(
+                id.clone(),
+                Entry {
+                    kind: PrincipalKind::Agent,
+                    status: PrincipalStatus::Active,
+                    display_name: display_name.clone(),
+                    administrators: vec![],
+                    owner: Some(owner.clone()),
+                    delegation: Some(delegation.clone()),
+                },
+            );
+            state
+                .owned
+                .entry(owner.clone())
+                .or_default()
+                .insert(id.clone());
+        }
+        RegistryChange::SetDelegation { agent, delegation } => {
+            check_id(agent)?;
+            let entry = state.entry(agent).ok_or_else(unknown)?;
+            if entry.kind != PrincipalKind::Agent {
+                return Err(registry_error(
+                    "E_REGISTRY",
+                    "only agents have a delegation",
+                ));
+            }
+            if !(who.administrator() || below(state, agent)) {
+                return Err(forbidden());
+            }
+            let owner = entry.owner.clone().ok_or_else(unknown)?;
+            check_delegation(state, &owner, delegation, now)?;
+            if let Some(entry) = state.principals.get_mut(agent) {
+                entry.delegation = Some(delegation.clone());
+            }
+        }
+        RegistryChange::SetStatus { id, status } => {
             check_id(id)?;
+            if !(who.administrator() || below(state, id)) {
+                return Err(forbidden());
+            }
             if id == ADMINISTRATORS {
                 return Err(err(
                     "E_RESERVED_NAMESPACE",
@@ -1236,7 +1795,7 @@ fn apply_change(state: &mut State, change: &RegistryChange, host: &HostContext) 
             group,
             administrators,
         } => {
-            if !who.administrator {
+            if !who.administrator() {
                 return Err(forbidden());
             }
             check_id(group)?;

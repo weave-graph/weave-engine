@@ -134,7 +134,7 @@ protection, audit and optional review.
 
 | ID | Epic | Builds on | Summary |
 |---|---|---|---|
-| B1 | Principals, groups and agent identities | new (#38), split from E04 (#5) | A principal registry for users, groups, teams and agents (each owned by a principal, with narrowed delegated scope); group-resolved readers; graph-level ACLs; the Discover permission; membership revocation. **In progress:** part 1 (registry, groups, ACLs, Discover, revocation; protocol 1.1.0, store 32) is implemented; agents are next |
+| B1 | Principals, groups and agent identities | new (#38), split from E04 (#5) | A principal registry for users, groups, teams and agents (each owned by a principal, with narrowed delegated scope); group-resolved readers; graph-level ACLs; the Discover permission; membership revocation. **Complete:** registry, groups, agents with delegated scope, ACLs, Discover and revocation (protocol 1.1.0, store 32) |
 | B2 | Derived-fact leakage protection | E04 (#5) | Write-time restriction propagation; influence on analytics, kNN results and embeddings; release policies; a property-based noninterference harness covering every operator |
 | B3 | Authenticated Weave service | new (#39) | A long-running server with authentication mapped to principals; tenant isolation by one store per tenant (row-level tenant keys only if later needed); a read and write audit log, and reuse of signed admission for agent capabilities |
 | B4 | Agent interface (MCP and SDK) | new (#40) | Extends the A7 preview into the full write-capable interface: tools to assert, retract, query, time travel, ask what changed, run hybrid search and explain. Facts are stamped with agent identity and method; quotas; a data/code boundary against injected content |

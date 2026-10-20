@@ -34,6 +34,7 @@ impl Engine {
             identity_acceptance::require_external_graph(&commit.graph_id)?;
             identity_acceptance::require_external_schema(&commit.data)?;
             self.require_branch_write(host, &commit.graph_id, &commit.branch_id)?;
+            self.refuse_agent_snapshot(host)?;
             if !valid_id(&commit.graph_id)
                 || !valid_id(&commit.branch_id)
                 || !graphs.insert(&commit.graph_id)

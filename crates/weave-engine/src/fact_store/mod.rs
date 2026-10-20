@@ -368,6 +368,11 @@ pub trait FactBackend {
 pub(crate) fn bounded(value: &str) -> bool {
     !value.is_empty() && value.len() <= MAX_KEY_BYTES
 }
+/// The engine-recorded delegation chain: a JSON array of at most 8 bounded
+/// principal IDs (ADR-0007 section 8).
+pub(crate) fn bounded_delegation(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 8 * (MAX_KEY_BYTES * 6 + 3) + 2
+}
 
 /// Shared input validation, so every backend rejects the same malformed input.
 pub(crate) fn validate_new(revision: &NewRevision, base: Option<&BaseState>) -> Result<()> {
@@ -375,7 +380,10 @@ pub(crate) fn validate_new(revision: &NewRevision, base: Option<&BaseState>) -> 
         && bounded(&revision.graph_id)
         && bounded(&revision.branch_id)
         && bounded(&revision.writer)
-        && revision.on_behalf_of.as_deref().is_none_or(bounded)
+        && revision
+            .on_behalf_of
+            .as_deref()
+            .is_none_or(bounded_delegation)
         && revision.parent.as_deref().is_none_or(bounded)
         && revision.recorded_at_ms >= 0;
     if !ids_ok {
@@ -409,7 +417,7 @@ pub(crate) fn validate_new(revision: &NewRevision, base: Option<&BaseState>) -> 
                 || recording
                     .on_behalf_of
                     .as_deref()
-                    .is_some_and(|p| !bounded(p))
+                    .is_some_and(|p| !bounded_delegation(p))
                 || !bounded(&recording.revision)
                 || recording.recorded_at_ms < 0
             {
