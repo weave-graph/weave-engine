@@ -309,9 +309,24 @@ Delivered so far:
   (`vector_plans`) and MCP JSON-RPC input (`mcp_jsonrpc`) run as bounded
   smoke runs in `fuzz.yml` ([fuzzing](FUZZING.md)).
 
-Still open: store migration evidence from store 29, baseline benchmarks for
-the Phase A paths, the protocol 1.0.0 cut, the README quickstart, and the
-tagged release.
+- **Store 29 to the current store.** The `store29-to-current`
+  compatibility job upgrades a store 29, populated by the exact store-29
+  binary, along both routes: directly, and through the store-30 binary. Each
+  step is killed before and after its commit. Every older binary refuses the
+  result. Pinned queries stay byte-identical, and the Phase A operators work
+  over the migrated lines ([upgrade path](STORAGE_RECOVERY.md#phase-a-upgrade-path-store-29-to-the-current-store)).
+- **Baseline benchmarks.** Single-fact commit, `expand`, `as_of`, `changes`
+  and `nearest` at 100k and 1M facts were measured on one host, along with
+  the exit-scenario timings on Linux, macOS and Windows
+  ([results](benchmarks/README.md#phase-a-baseline-a6)). Commit, traversal
+  and change-set latencies stay flat from 100k to 1M facts. `nearest`,
+  including `nearest` restricted to an `expand` neighborhood, grows with the
+  size of the space.
+- **README quickstart.** Five commands cover the hardware model and hybrid
+  retrieval ([README](../README.md#quickstart-a-hardware-fleet-and-hybrid-retrieval)).
+  CI runs them on all three OSes.
+
+Still open: the protocol 1.0.0 cut, the release notes and the tagged release.
 
 ## Verified evidence
 

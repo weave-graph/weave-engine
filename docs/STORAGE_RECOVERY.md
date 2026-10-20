@@ -1,7 +1,8 @@
 # Storage integrity and recovery
 
-The current native profile uses **store 29 / contract 0.21.0**; see
-[STATUS.md](STATUS.md). This document collects storage integrity and recovery
+The current native profile uses **store 31 / contract 0.24.0**; see
+[STATUS.md](STATUS.md). The Phase A upgrade path from store 29 is described
+[below](#phase-a-upgrade-path-store-29-to-the-current-store). This document collects storage integrity and recovery
 profiles through store20, with later history, retention, lifecycle and causal
 extensions documented in their own references and verification records.
 Capsule0.4 is unchanged. Store20 protects canonical recorded-selection witnesses
@@ -31,6 +32,27 @@ protect against a database administrator replacing every anchor, rollback to an
 older internally valid database, altered wall-clock timestamps, or independent
 corruption of arbitrary cached view/receipt tables. Deployment backup encryption,
 retention, off-host anchors and full-store scrub are still host responsibilities.
+
+## Phase A upgrade path: store 29 to the current store
+
+Phase A added the fact log (store 30, [ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md))
+and embedding facts (store 31, [ADR-0006](architecture/ADR-0006-embedding-facts-and-spaces.md)).
+Opening an older store runs every pending step in the one immediate schema
+transaction described above. A store 29 database therefore reaches store 31
+in a single commit, or not at all. Three compatibility jobs check this with
+the exact old binaries:
+
+| Job | Script | What it proves |
+|---|---|---|
+| `store29-fact-store-migration` | `check_fact_store_migration.py` | A populated store 29 reaches the current store. A process killed before the commit leaves store 29 unchanged and readable by the store-29 binary. A process killed after the commit leaves the current store, with every revision and event row unchanged and empty fact tables. The store-29 binary refuses the result. Pinned queries are byte-identical |
+| `store30-embedding-store-migration` | `check_embedding_store_migration.py` | The same checks from a store 30 populated with fact writes, plus embeddings and `nearest` on the migrated fact line |
+| `store29-to-current` | `check_store29_to_current.py` | One store-29 population takes both routes. **Direct:** 29 to the current store in one step. **Stepwise:** the store-30 binary upgrades to store 30 and writes facts, then the current binary upgrades. Each step is killed before and after its commit. Every older binary on the path refuses each upgraded store. Pinned queries stay byte-identical, both those of store-29 snapshots and those of store-30 fact revisions. Every earlier row is unchanged, and SQLite `integrity_check` passes. Then, over the migrated lines: a fact `write` corrects a node of a store-29 snapshot, embeddings are written and ranked with `nearest`, `as_of` before the upgrade returns the migrated state, and `expand` and `changes` from a pinned store-29 revision keep that data's reader restrictions. The pinned queries are byte-identical again afterwards |
+
+Pinned queries are re-run with the program version of the binary that wrote
+the pins (0.21.0 or 0.23.0). Saved plans therefore keep their semantics: for
+example, a 0.21.0 query still returns no per-fact provenance. These checks run
+the CLI on Linux only. The upgrade itself is the same SQLite transaction on
+every platform.
 
 ## Backup acceptance
 

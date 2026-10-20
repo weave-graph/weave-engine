@@ -1154,3 +1154,51 @@ typed, in-plan operator is `Engine.nearest_embeddings` (builder
 revision of embedding rankings and of their nested inputs. The tutorial is a
 runnable example with a toy hashing encoder standing in for the caller's
 model, run by the native Python tests.
+
+### 2026-10-20 — #16 A6 — Store-29 evidence: a third job, covering both routes
+
+`store29-fact-store-migration` already upgrades a store 29, populated by the
+exact store-29 binary, to the current store. It checks kills before and after
+the one schema transaction, refusal by the store-29 binary, and byte-identical
+pinned queries. It does not cover the route through store 30, where a user ran
+the store-30 binary before upgrading again. It does not check that the
+store-30 binary refuses store 31 built from store-29 data. And it does not show
+the Phase A operators working on store-29 lines. The new `store29-to-current`
+job (`check_store29_to_current.py`) adds all three. It upgrades one store-29
+population directly and stepwise. It kills each step before and after its
+commit and checks every older binary's refusal. It reruns the pinned queries
+with the version of the binary that pinned them, then runs write, `nearest`,
+`as_of`, `expand` and `changes` over the migrated lines with the store-29
+reader restrictions. The two existing jobs stay as they are, because their
+scripts are the per-step evidence for ADR-0004 and ADR-0006. No engine change
+was needed: every check passed on the first run.
+
+### 2026-10-20 — #16 A6 — One Phase A benchmark example, recorded after streaming nearest
+
+`examples/phase_a_benchmark.rs` measures every Phase A path on one graph of
+each size, 100k and 1M facts. The paths are single-fact commit, 2-hop `expand`,
+`as_of` `expand`, `changes` over 1 and 199 facts, and `nearest` over the whole
+space and inside a 2-hop `expand`. The graph is two fifths nodes, two fifths
+edges and one fifth 32-dimensional embeddings. The A2 and A3 benchmarks stay,
+since they measure growth with history length, which this one does not. The
+recorded report was run after A4 part 2 (#62, streaming `nearest`) merged.
+A run before it gave the same `nearest` medians within 10%: with
+32-dimensional vectors the cost is per row, not per vector component. #62
+records its own 100k × 1,536 measurement. Exit-scenario timings come from
+the `phase-a-exit` CI reports of the merge commit on all three OSes, plus one
+local run. The CI times include the release build.
+
+### 2026-10-20 — #16 A6 — The README quickstart uses the hardware CLI and a stdlib script
+
+#16 asks for the hardware model plus hybrid retrieval in under 10 commands.
+The quickstart is five: build, `weave-hardware generate`, `import` and
+`apply-updates`, then `examples/hardware/hybrid_quickstart.py`. The script
+embeds the notes with the tests' word-hashing scheme and writes them through
+`weave-science import`. It then runs one `nearest`-over-`expand` plan and one
+`similar_candidates` plan, printing each hit's source. It speaks the
+`weave-science` JSON protocol directly and uses only the standard library, so
+it does not depend on the Python helpers that A4 part 2 is adding. Weave does
+not generate embeddings, so a model-free embedder is the only way to keep the
+quickstart offline. The main CI matrix runs the same commands on Linux, macOS
+and Windows at 60 units, as both readers, so the README cannot drift from a
+working path.

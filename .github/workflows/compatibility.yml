@@ -712,3 +712,38 @@ jobs:
       - name: Populated store30 upgrade to store31, both kill boundaries, old-binary refusal, byte-identical rows and pinned queries, embeddings on the migrated line
         working-directory: current
         run: python3 scripts/check_embedding_store_migration.py --old-cli ../previous/target/debug/weave-engine --report embedding-store-migration.json
+  store29-to-current:
+    # Phase A storage path (A6): a populated store 29 reaches the current
+    # store directly and through store 30, with kills at every step.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: f592709c19a19923492e76a1f8ba7e3f82aece99
+          path: store29
+      - uses: actions/checkout@v4
+        with:
+          repository: weave-graph/weave-engine
+          ref: 5976d47d6ab88823dd567265b1af077f82264605
+          path: store30
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build exact store29 engine CLI
+        run: cargo build --manifest-path store29/Cargo.toml --locked -p weave-engine --bin weave-engine
+      - name: Build exact store30 engine CLI and kill host
+        run: cargo build --manifest-path store30/Cargo.toml --locked -p weave-engine --features recovery-testing --bin weave-engine --example storage_probe
+      - name: Build current engine CLI and kill host
+        working-directory: current
+        run: cargo build --locked -p weave-engine --features recovery-testing --example storage_probe --bin weave-engine
+      - name: Populated store29 to the current store, direct and stepwise, kills at every step, refusals, byte-identical pins, Phase A operators
+        working-directory: current
+        run: python3 scripts/check_store29_to_current.py --store29-cli ../store29/target/debug/weave-engine --store30-cli ../store30/target/debug/weave-engine --store30-storage ../store30/target/debug/examples/storage_probe --report store29-to-current.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: store29-to-current
+          path: current/store29-to-current.json
+          if-no-files-found: ignore

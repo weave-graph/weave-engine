@@ -1,0 +1,165 @@
+{
+  "clauses": {
+    "every answer explains its source facts": {
+      "checked_by": [
+        "fleet_scenario:explain",
+        "fleet_hybrid:explain",
+        "fleet_exit_questions:explain"
+      ],
+      "passed": true
+    },
+    "every answer is reproducible after reopening the database": {
+      "checked_by": [
+        "fleet_scenario:reopen",
+        "fleet_hybrid:reopen",
+        "fleet_exit_questions:reopen"
+      ],
+      "passed": true
+    },
+    "fleet: 5,000 units with parts, firmware, sites, owners, series refs and notes": {
+      "checked_by": [
+        "fleet_scenario:import"
+      ],
+      "passed": true
+    },
+    "fleet: maintenance notes with embeddings": {
+      "checked_by": [
+        "fleet_hybrid:embeddings"
+      ],
+      "passed": true
+    },
+    "q1: 1,000 incremental corrections and rollouts as individual fact writes": {
+      "checked_by": [
+        "fleet_scenario:q1"
+      ],
+      "passed": true
+    },
+    "q2: units at site S on firmware F at D as known at K; changes of U between K1 and K2": {
+      "checked_by": [
+        "fleet_scenario:q2"
+      ],
+      "passed": true
+    },
+    "q3: notes similar to an incident, in the 2-hop neighborhood, valid at the incident": {
+      "checked_by": [
+        "fleet_hybrid:q3"
+      ],
+      "passed": true
+    },
+    "q4: two similar-unit candidate relations absent from the graph, with provenance": {
+      "checked_by": [
+        "fleet_hybrid:q4"
+      ],
+      "passed": true
+    },
+    "q5: per-record reader restrictions hide restricted units in every result": {
+      "checked_by": [
+        "fleet_scenario:q5",
+        "fleet_hybrid:q5",
+        "fleet_exit_questions:q5"
+      ],
+      "passed": true
+    },
+    "questions 2 to 4 answered by an agent through the A7 MCP preview": {
+      "checked_by": [
+        "fleet_exit_questions:mcp_q2",
+        "fleet_exit_questions:mcp_q3",
+        "fleet_exit_questions:mcp_q4"
+      ],
+      "passed": true
+    }
+  },
+  "commit": "473e301cc7a6cc25cf4872620d07ed08fe54a667",
+  "dataset": "sha256:a39c56df346194581c486edf5344a1320bb8f661e54c87f2516293c66427c4f3",
+  "failures": [],
+  "head_after_updates": "fact:sha256:a9790d9df89535d511eb0c00750275695f39e9d0904efcf14579b37c62000874",
+  "host": {
+    "machine": "x86_64",
+    "python": "3.12.3",
+    "release": "7.2.6-76070206-generic",
+    "system": "Linux"
+  },
+  "optimized": true,
+  "passed": true,
+  "scenario": "Phase A exit scenario (docs/ROADMAP.md)",
+  "tests": {
+    "fleet_exit_questions": {
+      "command": "cargo test --locked -p weave-mcp --test fleet_exit_questions --release -- --nocapture",
+      "exit_code": 0,
+      "result": {
+        "checks": [
+          "mcp_q2",
+          "mcp_q3",
+          "mcp_q4",
+          "q5",
+          "explain",
+          "reopen"
+        ],
+        "counts": {
+          "q2": 26,
+          "q3": 9,
+          "q4": 2,
+          "q5_hidden_changes": 1
+        },
+        "dataset": "sha256:a39c56df346194581c486edf5344a1320bb8f661e54c87f2516293c66427c4f3",
+        "head_after_updates": "fact:sha256:a9790d9df89535d511eb0c00750275695f39e9d0904efcf14579b37c62000874",
+        "test": "fleet_exit_questions",
+        "units": 5000,
+        "updates": 1000
+      },
+      "seconds": 69.9
+    },
+    "fleet_hybrid": {
+      "command": "cargo test --locked -p weave-hardware --test fleet_hybrid --release -- --nocapture",
+      "exit_code": 0,
+      "result": {
+        "checks": [
+          "embeddings",
+          "q3",
+          "q4",
+          "q5",
+          "explain",
+          "reopen"
+        ],
+        "counts": {
+          "q3_answers": 14,
+          "restricted_units": 900
+        },
+        "dataset": "sha256:a39c56df346194581c486edf5344a1320bb8f661e54c87f2516293c66427c4f3",
+        "embeddings": 11078,
+        "head_after_updates": "fact:sha256:a9790d9df89535d511eb0c00750275695f39e9d0904efcf14579b37c62000874",
+        "test": "fleet_hybrid",
+        "units": 5000,
+        "updates": 1000
+      },
+      "seconds": 130.6
+    },
+    "fleet_scenario": {
+      "command": "cargo test --locked -p weave-hardware --test fleet_scenario --release -- --nocapture",
+      "exit_code": 0,
+      "result": {
+        "checks": [
+          "import",
+          "q1",
+          "q2",
+          "q5",
+          "explain",
+          "reopen"
+        ],
+        "counts": {
+          "q2_answers": 48,
+          "restricted_units": 900
+        },
+        "dataset": "sha256:a39c56df346194581c486edf5344a1320bb8f661e54c87f2516293c66427c4f3",
+        "facts": 151622,
+        "head_after_updates": "fact:sha256:a9790d9df89535d511eb0c00750275695f39e9d0904efcf14579b37c62000874",
+        "test": "fleet_scenario",
+        "units": 5000,
+        "updates": 1000
+      },
+      "seconds": 100.6
+    }
+  },
+  "units": 5000,
+  "updates": 1000
+}

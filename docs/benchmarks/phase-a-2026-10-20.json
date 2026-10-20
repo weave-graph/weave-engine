@@ -1,0 +1,134 @@
+{
+  "date": "2026-10-20",
+  "source_base": "5e2a1d9bbf715e7d7d1d636595ab4c7e9e28406c",
+  "source_note": "main at the base commit plus examples/phase_a_benchmark.rs from this PR; no engine source changed",
+  "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "build": "cargo run --release --locked -p weave-engine --example phase_a_benchmark",
+  "kernel": "Linux 7.2.6",
+  "host": {
+    "arch": "x86_64",
+    "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+    "logical_cpus": 32,
+    "memory": "131533336 kB",
+    "os": "linux"
+  },
+  "profile": "weave-phase-a-benchmark/1",
+  "protocol": "0.24.0",
+  "results": [
+    {
+      "as_of_expand_2_hop_ms": {
+        "max": 1.985479,
+        "median": 1.689287,
+        "p95": 1.705427,
+        "samples": 200
+      },
+      "changes_199_facts_ms": {
+        "max": 67.80462,
+        "median": 67.453757,
+        "p95": 67.788891,
+        "samples": 30
+      },
+      "changes_one_fact_ms": {
+        "max": 0.771407,
+        "median": 0.4512,
+        "p95": 0.47356200000000004,
+        "samples": 200
+      },
+      "dimensions": 32,
+      "edges": 40000,
+      "embeddings": 20000,
+      "expand_2_hop_ms": {
+        "max": 1.7902250000000002,
+        "median": 1.632251,
+        "p95": 1.656366,
+        "samples": 200
+      },
+      "facts": 100000,
+      "load_seconds": 3.8256919700000003,
+      "mean_growth_bytes_per_single_fact_commit": 2457.6,
+      "nearest_k10_in_2_hop_expand_ms": {
+        "max": 23.63378,
+        "median": 23.014756000000002,
+        "p95": 23.444267,
+        "samples": 200
+      },
+      "nearest_k10_whole_space_ms": {
+        "max": 550.95359,
+        "median": 548.286702,
+        "p95": 550.773395,
+        "samples": 30
+      },
+      "nodes": 40000,
+      "peak_rss": "1249120 kB",
+      "single_fact_commit_ms": {
+        "max": 6.982458,
+        "median": 0.8406760000000001,
+        "p95": 1.150344,
+        "samples": 200
+      },
+      "store_bytes": 64483328
+    },
+    {
+      "as_of_expand_2_hop_ms": {
+        "max": 2.0595269999999997,
+        "median": 1.73358,
+        "p95": 1.7568130000000002,
+        "samples": 200
+      },
+      "changes_199_facts_ms": {
+        "max": 69.385144,
+        "median": 68.680161,
+        "p95": 68.967967,
+        "samples": 30
+      },
+      "changes_one_fact_ms": {
+        "max": 0.733497,
+        "median": 0.468332,
+        "p95": 0.482629,
+        "samples": 200
+      },
+      "dimensions": 32,
+      "edges": 400000,
+      "embeddings": 200000,
+      "expand_2_hop_ms": {
+        "max": 2.0454499999999998,
+        "median": 1.705187,
+        "p95": 1.732026,
+        "samples": 200
+      },
+      "facts": 1000000,
+      "load_seconds": 71.828557533,
+      "mean_growth_bytes_per_single_fact_commit": 2580.48,
+      "nearest_k10_in_2_hop_expand_ms": {
+        "max": 271.01655600000004,
+        "median": 249.117938,
+        "p95": 261.157909,
+        "samples": 200
+      },
+      "nearest_k10_whole_space_ms": {
+        "max": 5663.947077,
+        "median": 5599.343387,
+        "p95": 5651.964117,
+        "samples": 30
+      },
+      "nodes": 400000,
+      "peak_rss": "2143956 kB",
+      "single_fact_commit_ms": {
+        "max": 7.09103,
+        "median": 0.847208,
+        "p95": 1.194566,
+        "samples": 200
+      },
+      "store_bytes": 646623232
+    }
+  ],
+  "store": 31,
+  "workload": "two fifths nodes, two fifths located_at edges, one fifth 32-dimensional embeddings, loaded in 100k-change fact writes into an on-disk WAL store; then 200 single-fact commits; expand 2 hops both ways from a random node; the same expand as of a random commit's recorded time; changes between consecutive commits and across all 200; nearest k=10 over the whole space and within a 2-hop expand; each sample one Engine::execute including decoding, authorization and result construction, excluding JSON output",
+  "limitations": [
+    "one host, one run, warm OS caches, one process, no concurrent readers or writers",
+    "measured after A4 part 2 (#62, streaming exact nearest) merged; an earlier run before #62 gave the same nearest medians within 10%",
+    "nearest restricted to an expand neighborhood currently costs about a twentieth of a whole-space scan at both sizes, so it grows with the space, not with the neighborhood",
+    "peak_rss is the whole process, including loading",
+    "descriptions of what was measured, not capacity or latency promises"
+  ]
+}

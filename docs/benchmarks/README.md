@@ -19,6 +19,66 @@ and timing boundaries differ from the current science workload.
 | [Embedding upsert and exact nearest, 20 October 2026](embeddings-2026-10-20.json) | `cargo run --release --example embedding_benchmark -- 100000 1536 1000`; contract 0.24.0, store 31; 100,000 embeddings of 1,536 dimensions (cosine) on 100,000 nodes, written in 100 fact writes of 1,000, then 5 single-embedding writes; 5 exact top-10 `nearest` over the whole space by a reader who sees 90% of it, with and without `valid_at`; one AMD Ryzen 9 7950X Linux host | Load 34.7 s (330 ms per 1,000-embedding write, flat from first to last); single-embedding upsert 1.19 ms median at full size; whole-space exact top-10 7.09 s median, 3.62 s with `valid_at` selecting half; 2.1 GB store; peak RSS 265 MB, not raised by the rankings |
 | [As-of selection, 20 October 2026](as-of-selection-2026-10-20.json) | `cargo run --release --example as_of_benchmark`; contract 0.23.0, store 30; 10k and 1M single-fact revisions on one branch of an on-disk WAL store; 500 `expand` reads `as_of` uniformly random recorded times, each checked against the state recorded then, plus the same read pinned to the head; one AMD Ryzen 9 7950X Linux host | Median as-of read 0.43 ms at 10k and 0.46 ms at 1M revisions (pinned 0.46 and 0.48 ms): selection cost does not grow with history length beyond index depth |
 
+## Phase A baseline (A6)
+
+[Phase A paths, 20 October 2026](phase-a-2026-10-20.json) was recorded with
+`cargo run --release --locked -p weave-engine --example phase_a_benchmark`
+on contract 0.24.0 and store 31. The host was one AMD Ryzen 9 7950X (32
+logical CPUs, 125 GiB) running Linux, with rustc 1.98.1. The source was main
+at `5e2a1d9`, after A4 part 2 (#62, streaming exact `nearest`), plus the new
+example; no engine source was changed.
+
+Each graph is two fifths nodes, two fifths `located_at` edges and one fifth
+32-dimensional embeddings, loaded in 100k-change fact writes into an on-disk
+WAL store. Each sample is one `Engine::execute` call. It includes decoding,
+authorization and result construction, but not JSON output. Every result is
+checked for the expected shape.
+
+| Operation (median / p95, ms) | 100k facts | 1M facts |
+|---|---:|---:|
+| Single-fact commit (200 samples) | 0.84 / 1.15 | 0.85 / 1.20 |
+| `expand`, 2 hops both ways (200) | 1.63 / 1.66 | 1.71 / 1.73 |
+| The same `expand` `as_of` a recorded time (200) | 1.69 / 1.71 | 1.73 / 1.76 |
+| `changes` between consecutive commits, 1 fact (200) | 0.45 / 0.47 | 0.47 / 0.48 |
+| `changes` across 199 commits, 199 facts (30) | 67.5 / 67.8 | 68.7 / 69.0 |
+| `nearest` k=10, whole space: 20k / 200k vectors (30) | 548 / 551 | 5,599 / 5,652 |
+| `nearest` k=10 within a 2-hop `expand` (200) | 23.0 / 23.4 | 249 / 261 |
+
+The load took 3.8 s for 100k facts and 72 s for 1M facts. Each single-fact
+commit grew the store by about 2.5 KB. Peak process RSS was 1.2 GiB and
+2.0 GiB respectively, including the load. A run on `9eccd6b`, before #62,
+gave the same medians within 10%.
+
+Commit, `expand`, `as_of` and single-fact `changes` stay flat from 100k to 1M
+facts. `nearest` grows linearly with the space. This includes `nearest`
+restricted to a small `expand` neighborhood: it costs about a twentieth of a
+whole-space scan at both sizes, rather than scaling with the size of the
+neighborhood.
+
+The A2 and A3 reports above measure growth with history length. This report
+does not.
+
+## Phase A exit scenario timings (A6)
+
+The [exit scenario check](../PHASE_A_EXIT.md) runs at 5,000 units and 1,000
+updates. Each of the three tests imports the fleet, applies the updates and
+answers its questions. All four runs below passed. They all report dataset
+`sha256:a39c56df…c4f3` and head `fact:sha256:a9790d9d…0874` after the updates,
+on every OS.
+
+| Run | `fleet_scenario` | `fleet_hybrid` | `fleet_exit_questions` |
+|---|---:|---:|---:|
+| [Local Linux, AMD Ryzen 9 7950X](exit-scenario-2026-10-20-local-linux.json) | 101 s | 131 s | 70 s |
+| [CI `ubuntu-latest`](exit-scenario-2026-10-20-ci-ubuntu.json) | 322 s | 267 s | 165 s |
+| [CI `macos-latest` (arm64)](exit-scenario-2026-10-20-ci-macos.json) | 266 s | 229 s | 123 s |
+| [CI `windows-latest`](exit-scenario-2026-10-20-ci-windows.json) | 551 s | 392 s | 352 s |
+
+The CI reports come from the `phase-a-exit` job of PR #64, at `083d3a9`. The
+local run was at `473e301`, the same tree as merge `9eccd6b`. Each duration
+is the whole `cargo test` invocation. That includes the release build when
+the test binary was not yet built, which dominates the first test of each
+crate in CI. Shared runners vary from run to run.
+
 ## Current native science baseline
 
 | Report | Recorded scope | Result |
