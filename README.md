@@ -84,6 +84,43 @@ Continue with the [Python tutorial](docs/PYTHON_SCIENCE.md), including notebook
 setup, imports, temporal joins, export and replay. For a Python-free interface,
 use the [native JSON walkthrough and API reference](docs/SCIENCE_INTERFACE.md).
 
+## Quickstart: a hardware fleet and hybrid retrieval
+
+These five commands generate a synthetic fleet, import it with the
+[hardware model](docs/HARDWARE_MODEL.md), apply 100 field updates (each one a
+fact write), embed the maintenance notes and run hybrid retrieval over the
+graph. Run them from a checkout on macOS or Linux, with the same prerequisites
+as above:
+
+```sh
+cargo build --release --locked -p weave-hardware -p weave-science
+target/release/weave-hardware generate --out fleet --units 200 --updates 100
+target/release/weave-hardware import --db fleet.db --actor etl-importer --graph fleet --csv fleet/base
+target/release/weave-hardware apply-updates --db fleet.db --actor etl-importer --graph fleet --updates fleet/updates.jsonl
+python3 examples/hardware/hybrid_quickstart.py --science target/release/weave-science --db fleet.db --fleet fleet
+```
+
+On Windows, use `target\release\weave-hardware.exe`,
+`target\release\weave-science.exe` and `py -3`.
+
+The last command writes one embedding fact per maintenance note, incident and
+unit. Each fact keeps its row's readers. The command then answers two
+questions as `fleet-analyst`:
+
+- Which maintenance notes are similar to the latest incident, within two hops
+  of the affected unit and valid when the incident opened? This is one
+  `nearest` plan over an `expand` neighborhood.
+- Which two units are similar but not linked in the graph? This is one
+  `similar_candidates` plan.
+
+Each hit is printed with its source: the note text and the writer and method
+recorded for its embedding. Add `--reader fleet-admin` to see the
+customer-restricted units that the analyst cannot. The script embeds with a
+small word-hashing function so it needs no model or network. Weave stores
+and ranks the vectors you supply; it does not generate them. CI runs these
+steps on Linux, macOS and Windows. The same questions are also available to
+agents through the [MCP preview](docs/MCP_PREVIEW.md).
+
 ## What you can experiment with
 
 | Task | Interface and behavior |
