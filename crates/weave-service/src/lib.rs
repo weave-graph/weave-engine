@@ -25,6 +25,7 @@ pub mod error;
 pub mod ids;
 pub mod log;
 pub mod oidc;
+pub mod quota;
 pub mod signed;
 pub mod tenant;
 pub mod tls;
@@ -59,7 +60,15 @@ pub struct Limits {
     pub max_commands: usize,
     /// Most record IDs minted per request.
     pub max_ids: usize,
+    /// The quota of an agent with no quota row of its own and no tenant
+    /// default for agents ([`quota`]).
+    pub agent_quota: quota::Quota,
 }
+
+/// The default agent request rate: 600 requests per minute.
+pub const DEFAULT_AGENT_REQUESTS_PER_MINUTE: u64 = 600;
+/// The default agent write quota: 10,000 fact changes per hour.
+pub const DEFAULT_AGENT_WRITES_PER_HOUR: u64 = 10_000;
 
 impl Default for Limits {
     fn default() -> Self {
@@ -69,6 +78,10 @@ impl Default for Limits {
             queue_timeout: Duration::from_secs(10),
             max_commands: 64,
             max_ids: 1000,
+            agent_quota: quota::Quota {
+                requests_per_minute: Some(DEFAULT_AGENT_REQUESTS_PER_MINUTE),
+                writes_per_hour: Some(DEFAULT_AGENT_WRITES_PER_HOUR),
+            },
         }
     }
 }
@@ -280,6 +293,50 @@ impl Service {
     /// Remove an OIDC issuer of a tenant and its bindings.
     pub fn remove_oidc_issuer(&self, tenant_id: &str, issuer: &str) -> Result<bool, ApiError> {
         self.control(|c| c.remove_oidc_issuer(tenant_id, issuer))
+    }
+
+    /// The quota that applies to `principal` of `tenant_id`: its own row;
+    /// for an agent, the tenant's agent row, else [`Limits::agent_quota`];
+    /// otherwise unlimited.
+    pub fn effective_quota(
+        &self,
+        tenant_id: &str,
+        principal: &str,
+        agent: bool,
+    ) -> Result<quota::Quota, ApiError> {
+        self.control(|c| {
+            if let Some(own) = c.quota(tenant_id, principal)? {
+                return Ok(own);
+            }
+            if !agent {
+                return Ok(quota::Quota::default());
+            }
+            Ok(c.quota(tenant_id, quota::AGENTS)?
+                .unwrap_or(self.0.limits.agent_quota))
+        })
+    }
+
+    /// Set the quota of a principal, or with [`quota::AGENTS`] the default
+    /// for a tenant's agents. Trusted local administration
+    /// (`weave-service quota set`); effective on the next request.
+    pub fn set_quota(
+        &self,
+        tenant_id: &str,
+        subject: &str,
+        quota: quota::Quota,
+    ) -> Result<(), ApiError> {
+        let now = self.now()?;
+        self.control(|c| c.set_quota(tenant_id, subject, quota, now))
+    }
+
+    /// Remove a quota row. Trusted local administration.
+    pub fn remove_quota(&self, tenant_id: &str, subject: &str) -> Result<bool, ApiError> {
+        self.control(|c| c.remove_quota(tenant_id, subject))
+    }
+
+    /// Every quota row of a tenant. Trusted local administration.
+    pub fn quotas(&self, tenant_id: &str) -> Result<Vec<(String, quota::Quota)>, ApiError> {
+        self.control(|c| c.quotas(tenant_id))
     }
 
     /// Revoke a token by ID, in any tenant. Trusted local administration.

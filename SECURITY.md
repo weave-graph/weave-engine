@@ -97,9 +97,12 @@ local process to the network. Its trust model:
   its audit entry can lose that entry; the fact log still records the writer.
 - **Declared channels:** timing and response size; revision IDs of a
   readable graph change when hidden records are added to it; retracting a
-  fact with a hidden dependent (above); occupancy of chosen record IDs by
-  hidden records for tenant administrators only (non-administrators assert
-  only service-minted IDs).
+  fact with a hidden dependent (above). Occupancy of chosen record IDs by
+  hidden records is closed: every principal, tenant administrators
+  included, asserts only service-minted IDs.
+- **Quotas.** Each principal has a request rate and a fact-write quota
+  (agents by default); they bound what one credential can do, not what
+  the tenant can absorb. Usage is in memory and resets on restart.
 - **OIDC.** ID tokens are verified against operator-configured key sets
   (the service never fetches keys), and an `(issuer, audience)` pair names
   one tenant. Only bound subjects authenticate, as registry users. IdP group

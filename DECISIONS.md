@@ -2287,3 +2287,51 @@ audience, not records, so that hook would be a second declassification path
 with no threshold. It is removed: a write that is broader than its declared
 inputs always fails, and a wider audience only ever learns what a policy
 releases.
+
+### 2026-10-20 — #40 B4 — Administrators assert only minted IDs too
+The coordinator's decision on the part-1 finding. B3 let tenant
+administrators choose record IDs on the grounds that they read every
+record, but record readers and reader groups apply to administrators like
+anyone else, so a chosen ID held by a hidden record failed `E_CONFLICT` while
+a free one succeeded. Every principal now asserts only IDs minted for it;
+`tests/hidden.rs` shows an administrator gets byte-identical responses for
+a held and a free ID. Embedding spaces stay exempt: a space has no readers,
+so it is never hidden from a reader of its graph and its ID is no channel.
+Fixtures that need readable IDs are loaded through the trusted local engine
+path (an operator import), which the test harness exposes as `seed`. Graph
+IDs chosen by administrators are unchanged and outside this decision.
+
+### 2026-10-20 — #40 B4 — Quotas: a request rate and a fact-write quota per principal
+Two limits cover the issue's "quotas and rate limits": requests per minute,
+counted on every audited request (every route but `health`, every MCP
+message), and fact writes per hour, counted per committed change. Counting
+changes rather than calls makes a 256-fact assert cost what it writes. A
+write is checked before the engine runs and counted after it commits, in
+`run_program`, so `/v1/execute`, `/v1/admit` and the MCP write tools share
+it (signed admission now runs through `run_program` too), and a write over
+the quota writes nothing. Rejected requests are audited and not counted, so
+a throttled agent is not locked out longer by retrying.
+
+### 2026-10-20 — #40 B4 — Agents are limited by default; users only by their own row
+The issue asks for per-agent quotas. Agents get 600 requests per minute and
+10,000 fact writes per hour by default (`Limits::agent_quota`), which the
+50-client load measurement (about 710 requests/s per tenant) shows is far
+below what one agent can drive, so a runaway agent cannot monopolise a
+tenant's one-at-a-time queue. A tenant default for agents
+(`weave:agents`, in the reserved namespace so no principal can hold it)
+and per-principal rows override it; users are unlimited unless they have a
+row, so existing deployments are unaffected. Rows live in the control store
+(schema 3, a new table; schemas 1 and 2 upgrade in place) and are read on
+every request, so `weave-service quota set` applies to the next one.
+
+### 2026-10-20 — #40 B4 — Quota usage in memory, in fixed windows, under the tenant lock
+Usage is kept with the tenant's state, behind the lock that already
+serializes the tenant's requests, so a request's check, write and count are
+atomic: concurrent writes at the boundary commit exactly the permitted
+number and the rejected ones leave no fact, provenance or audit write
+(`tests/quota.rs`, 30 and 20 concurrent calls). Windows are fixed minutes
+and hours of the trusted clock, which allows up to twice a limit across a
+boundary; sliding windows or token buckets were not worth the state. Usage
+is not persisted, so a restart starts fresh windows; that bounds a
+credential's rate, not a tenant's long-term volume, and is documented. Over
+the limit the service answers `E_QUOTA` with `429` and `Retry-After`.

@@ -7,6 +7,7 @@
 //! ID used to list and revoke it, its tenant and principal, and its expiry.
 use crate::error::ApiError;
 use crate::ids::{hex, random, sha256_hex};
+use crate::quota::Quota;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use std::path::Path;
@@ -28,10 +29,10 @@ pub const MAX_TOKENS_PER_PRINCIPAL: i64 = 100;
 pub const MAX_LABEL_BYTES: usize = 256;
 
 /// Control store schema: 1 (B3 part 1: tenants and API tokens), 2 (part 2:
-/// OIDC issuers and bindings, ed25519 key bindings, signed-request nonces).
-/// Version 1 upgrades in place by adding tables; a version-1 binary refuses
-/// version 2.
-const SCHEMA_VERSION: i64 = 2;
+/// OIDC issuers and bindings, ed25519 key bindings, signed-request nonces),
+/// 3 (B4 part 2: quotas). Older versions upgrade in place by adding tables;
+/// an older binary refuses a newer version.
+const SCHEMA_VERSION: i64 = 3;
 /// Most unexpired signed-request nonces one tenant keeps.
 pub const MAX_NONCES_PER_TENANT: i64 = 1_000_000;
 /// Most OIDC issuers per tenant, bindings per tenant, and keys per principal.
@@ -152,7 +153,14 @@ impl ControlStore {
                tenant_id TEXT NOT NULL,
                replay_id TEXT NOT NULL,
                expires_at_ms INTEGER NOT NULL,
-               PRIMARY KEY(tenant_id, replay_id));",
+               PRIMARY KEY(tenant_id, replay_id));
+             CREATE TABLE IF NOT EXISTS quotas(
+               tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id),
+               subject TEXT NOT NULL,
+               requests_per_minute INTEGER,
+               writes_per_hour INTEGER,
+               updated_at_ms INTEGER NOT NULL,
+               PRIMARY KEY(tenant_id, subject));",
         )
         .map_err(storage)?;
         let version: Option<i64> = conn
@@ -172,8 +180,8 @@ impl ControlStore {
                 .map_err(storage)?;
             }
             Some(SCHEMA_VERSION) => {}
-            // Version 2 only added tables, created above.
-            Some(1) => {
+            // Versions 2 and 3 only added tables, created above.
+            Some(1) | Some(2) => {
                 conn.execute(
                     "UPDATE control_meta SET value=?1 WHERE key='schema_version'",
                     [SCHEMA_VERSION],
@@ -853,5 +861,90 @@ impl ControlStore {
             )
             .map_err(storage)?;
         Ok(inserted > 0)
+    }
+
+    /// Set the quota of `subject` in a tenant: a principal ID, or
+    /// [`crate::quota::AGENTS`] for the tenant's default for agents.
+    /// `None` in a field means unlimited.
+    pub fn set_quota(
+        &self,
+        tenant_id: &str,
+        subject: &str,
+        quota: Quota,
+        now_ms: i64,
+    ) -> Result<(), ApiError> {
+        if self.tenant(tenant_id)?.is_none() {
+            return Err(ApiError::new("E_UNAVAILABLE", "tenant unavailable"));
+        }
+        if subject.is_empty() || subject.len() > 512 {
+            return Err(ApiError::input("quota subjects require 1 to 512 bytes"));
+        }
+        let to_sql = |v: Option<u64>| v.map(|v| v.min(i64::MAX as u64) as i64);
+        self.conn
+            .execute(
+                "INSERT INTO quotas VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(tenant_id, subject) DO UPDATE SET
+                   requests_per_minute=excluded.requests_per_minute,
+                   writes_per_hour=excluded.writes_per_hour,
+                   updated_at_ms=excluded.updated_at_ms",
+                params![
+                    tenant_id,
+                    subject,
+                    to_sql(quota.requests_per_minute),
+                    to_sql(quota.writes_per_hour),
+                    now_ms
+                ],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    /// Remove a quota row; the subject falls back to the next default.
+    pub fn remove_quota(&self, tenant_id: &str, subject: &str) -> Result<bool, ApiError> {
+        let removed = self
+            .conn
+            .execute(
+                "DELETE FROM quotas WHERE tenant_id=?1 AND subject=?2",
+                params![tenant_id, subject],
+            )
+            .map_err(storage)?;
+        Ok(removed > 0)
+    }
+
+    /// The quota row of `subject`, if one is set.
+    pub fn quota(&self, tenant_id: &str, subject: &str) -> Result<Option<Quota>, ApiError> {
+        self.conn
+            .query_row(
+                "SELECT requests_per_minute, writes_per_hour FROM quotas
+                 WHERE tenant_id=?1 AND subject=?2",
+                params![tenant_id, subject],
+                |r| Ok(quota_row(r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(storage)
+    }
+
+    /// Every quota row of a tenant, by subject.
+    pub fn quotas(&self, tenant_id: &str) -> Result<Vec<(String, Quota)>, ApiError> {
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT subject, requests_per_minute, writes_per_hour FROM quotas
+                 WHERE tenant_id=?1 ORDER BY subject",
+            )
+            .map_err(storage)?;
+        let rows = statement
+            .query_map([tenant_id], |r| {
+                Ok((r.get::<_, String>(0)?, quota_row(r.get(1)?, r.get(2)?)))
+            })
+            .map_err(storage)?;
+        rows.collect::<Result<_, _>>().map_err(storage)
+    }
+}
+
+fn quota_row(requests: Option<i64>, writes: Option<i64>) -> Quota {
+    Quota {
+        requests_per_minute: requests.map(|v| v.max(0) as u64),
+        writes_per_hour: writes.map(|v| v.max(0) as u64),
     }
 }

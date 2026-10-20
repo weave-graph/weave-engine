@@ -98,10 +98,11 @@ async fn state(h: &Harness, t: &Teams) -> Value {
         .audit_entries(&t.root)
         .await
         .iter()
+        // Every write goes through one of these operations.
         .filter(|e| {
-            e["facts"]
-                .as_array()
-                .is_some_and(|f| f.iter().any(|f| f["access"] == "write"))
+            e["outcome"] == "ok"
+                && ["mcp.assert_fact", "mcp.retract_fact", "execute", "admit"]
+                    .contains(&e["operation"].as_str().unwrap_or(""))
         })
         .count();
     json!({"head": head, "registry": registry, "admins": admins.json, "acl": acl.json,

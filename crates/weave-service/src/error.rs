@@ -35,6 +35,8 @@ pub mod codes {
     /// An MCP request named an `MCP-Protocol-Version` the service does not
     /// speak.
     pub const MCP_PROTOCOL: &str = "E_MCP_PROTOCOL_VERSION";
+    /// The principal's request rate or fact-write quota is used up (B4).
+    pub const QUOTA: &str = "E_QUOTA";
 }
 
 /// The exact message of every authentication failure.
@@ -49,6 +51,8 @@ pub struct ApiError {
     pub status: StatusCode,
     pub code: String,
     pub message: String,
+    /// Seconds after which a retry can succeed, sent as `Retry-After`.
+    pub retry_after_s: Option<u64>,
 }
 
 impl ApiError {
@@ -57,6 +61,7 @@ impl ApiError {
             status: status_of(code),
             code: code.into(),
             message: message.into(),
+            retry_after_s: None,
         }
     }
     pub fn unauthenticated() -> Self {
@@ -87,12 +92,14 @@ impl From<weave_engine::Error> for ApiError {
                 status,
                 code: error.code,
                 message: "internal error".into(),
+                retry_after_s: None,
             };
         }
         Self {
             status,
             code: error.code,
             message: error.message,
+            retry_after_s: None,
         }
     }
 }
@@ -107,6 +114,7 @@ pub fn status_of(code: &str) -> StatusCode {
         "E_CONFLICT" | "E_HEAD_CONFLICT" | "E_REPLAY" => StatusCode::CONFLICT,
         codes::BODY_LIMIT => StatusCode::PAYLOAD_TOO_LARGE,
         "E_BUDGET" => StatusCode::UNPROCESSABLE_ENTITY,
+        codes::QUOTA => StatusCode::TOO_MANY_REQUESTS,
         codes::BACKPRESSURE | codes::AUDIT => StatusCode::SERVICE_UNAVAILABLE,
         codes::INTERNAL | "E_STORAGE" | "E_INTEGRITY" | "E_CLOCK_UNAVAILABLE" => {
             StatusCode::INTERNAL_SERVER_ERROR
@@ -126,7 +134,11 @@ impl IntoResponse for ApiError {
         if self.status == StatusCode::UNAUTHORIZED {
             headers.insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
         }
-        if self.status == StatusCode::SERVICE_UNAVAILABLE {
+        if let Some(seconds) = self.retry_after_s {
+            if let Ok(value) = HeaderValue::from_str(&seconds.to_string()) {
+                headers.insert(header::RETRY_AFTER, value);
+            }
+        } else if self.status == StatusCode::SERVICE_UNAVAILABLE {
             headers.insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
         }
         response.extensions_mut().insert(ErrorCode(self.code));

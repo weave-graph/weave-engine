@@ -50,6 +50,7 @@ fn the_endpoint_table_is_the_documented_api() {
             "GET /v1/keys",
             "GET /v1/manifest",
             "GET /v1/oidc/bindings",
+            "GET /v1/quota",
             "GET /v1/registry/groups/{id}/members",
             "GET /v1/registry/principals/{id}",
             "GET /v1/registry/principals/{id}/memberships",

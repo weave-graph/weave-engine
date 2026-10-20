@@ -110,31 +110,29 @@ pub async fn teams(h: &Harness) -> Teams {
         )
         .await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
-    let reply = h
-        .write(
-            &root,
-            GRAPH,
-            vec![
-                json!({"kind": "node", "id": "unit-7", "entity_id": "unit-7", "space_id": "unit",
+    h.seed(
+        "acme",
+        "root",
+        GRAPH,
+        vec![
+            json!({"kind": "node", "id": "unit-7", "entity_id": "unit-7", "space_id": "unit",
                     "properties": {"serial": "U-0007"}}),
-                json!({"kind": "node", "id": "site-1", "entity_id": "site-1", "space_id": "site",
+            json!({"kind": "node", "id": "site-1", "entity_id": "site-1", "space_id": "site",
                     "properties": {"name": "North"}}),
-                json!({"kind": "edge", "id": "unit-7-at", "predicate": "hw:located_at",
+            json!({"kind": "edge", "id": "unit-7-at", "predicate": "hw:located_at",
                     "from": "unit-7", "to": "site-1", "valid_time": {"start": 0}}),
-                json!({"kind": "embedding_space", "id": SPACE, "revision": "1",
+            json!({"kind": "embedding_space", "id": SPACE, "revision": "1",
                     "encoder": "test-encoder", "encoder_version": "1", "preprocessing": "none",
                     "dimensions": 3, "metric": "cosine_distance"}),
-                json!({"kind": "node", "id": "note-1", "entity_id": "note-1", "space_id": "note",
+            json!({"kind": "node", "id": "note-1", "entity_id": "note-1", "space_id": "note",
                     "properties": {"text": "Routine inspection, no findings"}}),
-                json!({"kind": "edge", "id": "note-1-about", "predicate": "maint:about",
+            json!({"kind": "edge", "id": "note-1-about", "predicate": "maint:about",
                     "from": "note-1", "to": "unit-7", "valid_time": {"start": 0}}),
-                json!({"kind": "embedding", "id": "note-1-vec", "space": {"id": SPACE, "revision": "1"},
+            json!({"kind": "embedding", "id": "note-1-vec", "space": {"id": SPACE, "revision": "1"},
                     "subject": {"kind": "node", "node_id": "note-1"}, "vector": [0.0, 1.0, 0.0],
                     "valid_time": {"start": 0}}),
-            ],
-        )
-        .await;
-    assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
+        ],
+    );
     let alice = h.token_for(&root, "alice").await;
     let carol = h.token_for(&root, "carol").await;
     let dave = h.token_for(&root, "dave").await;

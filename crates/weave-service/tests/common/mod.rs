@@ -55,6 +55,10 @@ impl Harness {
             router,
         }
     }
+    /// The router, for tests that send requests concurrently.
+    pub fn router(&self) -> Router {
+        self.router.clone()
+    }
     pub fn now(&self) -> i64 {
         self.clock.unix_millis().unwrap()
     }
@@ -167,6 +171,28 @@ impl Harness {
             json!([{"op": "write", "graph_id": graph, "changes": changes}]),
         )
         .await
+    }
+    /// Seed fixture facts with chosen IDs through the trusted local engine
+    /// path, as `principal` (an operator import). Over HTTP every principal,
+    /// administrators included, asserts only minted IDs; fixtures that need
+    /// readable IDs use this instead. Not audited.
+    pub fn seed(&self, tenant: &str, principal: &str, graph: &str, facts: Vec<Value>) {
+        self.advance(10);
+        let changes: Vec<Value> = facts
+            .into_iter()
+            .map(|f| json!({"change": "assert", "fact": f}))
+            .collect();
+        let program: weave_contract::Program = serde_json::from_value(json!({
+            "version": weave_contract::VERSION,
+            "commands": [{"op": "write", "graph_id": graph, "changes": changes}]}))
+        .unwrap();
+        let host = weave_engine::HostContext::new(principal, Vec::<String>::new());
+        self.service
+            .tenant(tenant)
+            .unwrap()
+            .with_state(|s| s.engine.execute(&program, &host))
+            .unwrap()
+            .unwrap();
     }
     pub async fn query(&self, token: &str, graph: &str) -> Reply {
         self.execute(

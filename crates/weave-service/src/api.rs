@@ -6,6 +6,7 @@ use crate::audit::{Access, FactAccess, NewEntry, Outcome, MAX_AUDIT_PAGE};
 use crate::control::{TokenBinding, DEFAULT_TOKEN_TTL_MS};
 use crate::error::{codes, ApiError, ErrorCode};
 use crate::ids::{hex, mint_record_id, minted_for, random};
+use crate::quota::Quota;
 use crate::tenant::{Tenant, TenantState};
 use crate::{standing, Service};
 use axum::body::Bytes;
@@ -61,6 +62,10 @@ pub(crate) struct Ctx {
     on_behalf_of: Vec<String>,
     token_id: String,
     expires_at_ms: i64,
+    /// The principal's effective quota ([`crate::quota`]).
+    quota: Quota,
+    /// The trusted clock when the request was admitted.
+    now_ms: i64,
 }
 
 /// A successful operation and what it touched.
@@ -132,6 +137,7 @@ fn routes() -> Vec<Route> {
         route(Method::POST, "/v1/graphs", post(create_graph)),
         route(Method::GET, "/v1/graphs/{graph_id}/acl", get(graph_acl)),
         route(Method::POST, "/v1/ids", post(mint_ids)),
+        route(Method::GET, "/v1/quota", get(own_quota)),
         route(Method::POST, "/v1/registry", post(apply_registry)),
         route(
             Method::GET,
@@ -380,8 +386,26 @@ async fn call(
                     } else {
                         is_administrator(&state.engine, &host)
                     };
-                    match administrator {
-                        Ok(administrator) => {
+                    // The principal's quota, read on every request; an
+                    // audited request counts against its request rate.
+                    let quota = administrator
+                        .map_err(ApiError::from)
+                        .and_then(|administrator| {
+                            let quota = clock.effective_quota(
+                                &binding.tenant_id,
+                                &binding.principal,
+                                agent,
+                            )?;
+                            let now = clock.now()?;
+                            if audited {
+                                state
+                                    .quotas
+                                    .admit_request(&binding.principal, &quota, now)?;
+                            }
+                            Ok((administrator, quota, now))
+                        });
+                    match quota {
+                        Ok((administrator, quota, now_ms)) => {
                             let ctx = Ctx {
                                 principal: binding.principal.clone(),
                                 tenant_id: binding.tenant_id.clone(),
@@ -392,6 +416,8 @@ async fn call(
                                 on_behalf_of: standing.on_behalf_of,
                                 token_id: binding.token_id.clone(),
                                 expires_at_ms: binding.expires_at_ms,
+                                quota,
+                                now_ms,
                             };
                             work(state, &ctx)
                         }
@@ -401,6 +427,7 @@ async fn call(
                 Ok(None) => Err(Failed::from(ApiError::unauthenticated())),
                 Err(failed) => Err(failed),
             };
+            let mut retry_after = None;
             let (status, body, code) = match result {
                 Ok(done) => {
                     entry.outcome = Some(match &done.failure {
@@ -423,6 +450,7 @@ async fn call(
                 }
                 Err(failed) => {
                     let error = failed.error;
+                    retry_after = error.retry_after_s;
                     entry.outcome = Some(failure_outcome(&error.code));
                     entry.code = Some(error.code.clone());
                     entry.graphs = failed.graphs;
@@ -439,14 +467,14 @@ async fn call(
                         json!({"request_id": entry.request_id}),
                     );
                     let error = ApiError::new(codes::AUDIT, "the request could not be audited");
-                    return (error.status, error.body(), Some(error.code));
+                    return (error.status, error.body(), Some(error.code), None);
                 }
             }
-            (status, body, code)
+            (status, body, code, retry_after)
         })
         .await;
     match outcome {
-        Ok((status, body, code)) => {
+        Ok((status, body, code, retry_after)) => {
             let mut response = (status, body).into_response();
             response.headers_mut().insert(
                 header::CONTENT_TYPE,
@@ -456,6 +484,11 @@ async fn call(
                 response
                     .headers_mut()
                     .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+            }
+            if let Some(seconds) = retry_after {
+                if let Ok(value) = HeaderValue::from_str(&seconds.to_string()) {
+                    response.headers_mut().insert(header::RETRY_AFTER, value);
+                }
             }
             if let Some(code) = code {
                 response.extensions_mut().insert(ErrorCode(code));
@@ -719,8 +752,11 @@ fn touched(program: &Program, results: &[CommandResult], done: &mut Done) {
 
 /// Check that a program is one the service runs: protocol 1.0.0 or later
 /// (so results carry `fact_provenance` for the audit log), only fact
-/// writes, queries and graph expressions, and for non-administrators only
-/// minted record IDs in `assert` changes.
+/// writes, queries and graph expressions, and only record IDs minted for
+/// the caller in `assert` changes. Tenant administrators are no exception:
+/// they cannot read every record either, so a chosen ID could reveal that a
+/// hidden record holds it. Embedding spaces are named freely, because a
+/// space has no readers and is never hidden from a reader of its graph.
 fn admit_program(program: &Program, ctx: &Ctx, max_commands: usize) -> Result<(), ApiError> {
     if !weave_contract::version_at_least(&program.version, "1.0.0") {
         return Err(ApiError::new(
@@ -737,11 +773,11 @@ fn admit_program(program: &Program, ctx: &Ctx, max_commands: usize) -> Result<()
     for command in &program.commands {
         match command {
             Command::Write { changes, .. } => {
-                if ctx.administrator {
-                    continue;
-                }
                 for change in changes {
                     if let FactChange::Assert { fact } = change {
+                        if matches!(fact, weave_contract::facts::Fact::EmbeddingSpace(_)) {
+                            continue;
+                        }
                         if !minted_for(&ctx.id_key, &ctx.tenant_id, &ctx.principal, fact.id()) {
                             return Err(ApiError::new(
                                 codes::ID_NOT_MINTED,
@@ -775,7 +811,27 @@ pub(crate) fn run_program(
     done: &mut Done,
 ) -> Result<Vec<CommandResult>, ApiError> {
     admit_program(program, ctx, max_commands)?;
+    // The fact-write quota: checked before the engine runs and counted after
+    // it commits, inside the tenant's one-request-at-a-time section, so
+    // concurrent requests at the boundary cannot overshoot it.
+    let changes: u64 = program
+        .commands
+        .iter()
+        .map(|command| match command {
+            Command::Write { changes, .. } => changes.len() as u64,
+            _ => 0,
+        })
+        .sum();
+    let now = ctx.now_ms;
+    if changes > 0 {
+        state
+            .quotas
+            .check_writes(&ctx.principal, &ctx.quota, changes, now)?;
+    }
     let results = state.engine.execute(program, &ctx.host)?;
+    if changes > 0 {
+        state.quotas.record_writes(&ctx.principal, changes, now);
+    }
     touched(program, &results, done);
     Ok(results)
 }
@@ -961,6 +1017,27 @@ async fn mint_ids(
                 .map(|_| mint_record_id(&ctx.id_key, &ctx.tenant_id, &ctx.principal))
                 .collect();
             Ok(Done::json(json!({"ids": ids})))
+        }),
+    )
+    .await
+}
+
+/// The caller's own quota and its use in the current windows. This request
+/// itself is counted first.
+async fn own_quota(
+    State(service): State<Service>,
+    Extension(caller): Extension<Caller>,
+) -> Response {
+    call(
+        &service,
+        caller,
+        "quota",
+        true,
+        Box::new(|state, ctx| {
+            let standing = state.quotas.standing(&ctx.principal, ctx.quota, ctx.now_ms);
+            let mut body = serde_json::to_value(&standing).map_err(|_| ApiError::internal())?;
+            body["principal"] = json!(ctx.principal);
+            Ok(Done::json(body))
         }),
     )
     .await
@@ -1447,10 +1524,9 @@ async fn admit(
             })? {
                 return Err(ApiError::new("E_REPLAY", "the request nonce was already used").into());
             }
-            admit_program(&program, ctx, max_commands)?;
-            let results = state.engine.execute(&program, &ctx.host)?;
-            let mut done = Done::json(json!({"results": results}));
-            touched(&program, &results, &mut done);
+            let mut done = Done::default();
+            let results = run_program(state, ctx, &program, max_commands, &mut done)?;
+            done.body = json!({"results": results});
             Ok(done)
         }),
     )

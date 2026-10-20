@@ -17,6 +17,9 @@ const USAGE: &str = "usage:
   weave-service token revoke --data DIR --token-id ID
   weave-service oidc set    --data DIR --tenant ID --issuer URL --audience CLIENT_ID --jwks FILE
   weave-service oidc remove --data DIR --tenant ID --issuer URL
+  weave-service quota set    --data DIR --tenant ID (--principal ID | --agents) --requests-per-minute N|unlimited --writes-per-hour N|unlimited
+  weave-service quota remove --data DIR --tenant ID (--principal ID | --agents)
+  weave-service quota list   --data DIR --tenant ID
   weave-service serve --data DIR --listen ADDR (--tls-cert PEM --tls-key PEM | --plaintext-loopback)";
 
 fn flags(args: &[String]) -> Result<HashMap<String, String>, String> {
@@ -26,7 +29,7 @@ fn flags(args: &[String]) -> Result<HashMap<String, String>, String> {
         let Some(name) = flag.strip_prefix("--") else {
             return Err(format!("unexpected argument {flag}"));
         };
-        if name == "plaintext-loopback" {
+        if name == "plaintext-loopback" || name == "agents" {
             out.insert(name.to_string(), String::new());
             continue;
         }
@@ -47,6 +50,15 @@ fn required<'a>(flags: &'a HashMap<String, String>, name: &str) -> Result<&'a st
         .ok_or_else(|| format!("--{name} is required"))
 }
 
+/// `--principal ID` or `--agents` (the tenant's default for agents).
+fn quota_subject(flags: &HashMap<String, String>) -> Result<&str, String> {
+    match (flags.get("principal"), flags.contains_key("agents")) {
+        (Some(principal), false) => Ok(principal),
+        (None, true) => Ok(weave_service::quota::AGENTS),
+        _ => Err("name exactly one of --principal ID and --agents".into()),
+    }
+}
+
 fn open(flags: &HashMap<String, String>, log: Logger) -> Result<Service, String> {
     let data = PathBuf::from(required(flags, "data")?);
     Service::open(&data, Arc::new(SystemClock), Limits::default(), log)
@@ -55,7 +67,7 @@ fn open(flags: &HashMap<String, String>, log: Logger) -> Result<Service, String>
 
 fn run(args: &[String]) -> Result<(), String> {
     let (command, rest) = match args {
-        [a, b, rest @ ..] if a == "tenant" || a == "token" || a == "oidc" => {
+        [a, b, rest @ ..] if a == "tenant" || a == "token" || a == "oidc" || a == "quota" => {
             (format!("{a} {b}"), rest)
         }
         [a, rest @ ..] => (a.clone(), rest),
@@ -138,6 +150,52 @@ fn run(args: &[String]) -> Result<(), String> {
             } else {
                 Err("no such issuer".into())
             }
+        }
+        "quota set" => {
+            let service = open(&flags, Logger::discard())?;
+            let limit = |name: &str| -> Result<Option<u64>, String> {
+                match required(&flags, name)? {
+                    "unlimited" => Ok(None),
+                    n => n
+                        .parse::<u64>()
+                        .map(Some)
+                        .map_err(|_| format!("--{name} must be a whole number or unlimited")),
+                }
+            };
+            let quota = weave_service::quota::Quota {
+                requests_per_minute: limit("requests-per-minute")?,
+                writes_per_hour: limit("writes-per-hour")?,
+            };
+            let tenant = required(&flags, "tenant")?;
+            let subject = quota_subject(&flags)?;
+            service.set_quota(tenant, subject, quota).map_err(api)?;
+            println!(
+                "{}",
+                json!({"tenant": tenant, "subject": subject, "quota": quota})
+            );
+            Ok(())
+        }
+        "quota remove" => {
+            let service = open(&flags, Logger::discard())?;
+            let removed = service
+                .remove_quota(required(&flags, "tenant")?, quota_subject(&flags)?)
+                .map_err(api)?;
+            println!("{}", json!({"removed": removed}));
+            if removed {
+                Ok(())
+            } else {
+                Err("no such quota".into())
+            }
+        }
+        "quota list" => {
+            let service = open(&flags, Logger::discard())?;
+            let rows = service.quotas(required(&flags, "tenant")?).map_err(api)?;
+            let rows: Vec<_> = rows
+                .into_iter()
+                .map(|(subject, quota)| json!({"subject": subject, "quota": quota}))
+                .collect();
+            println!("{}", json!({"quotas": rows}));
+            Ok(())
         }
         "serve" => {
             let log = Logger::stderr();

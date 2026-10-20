@@ -66,7 +66,7 @@ async fn world() -> World {
         )
         .await;
     assert_eq!(reply.status, StatusCode::CREATED, "{}", reply.json);
-    h.write(&root, "notes", vec![node("seed", &[], &[])]).await;
+    h.seed("acme", "root", "notes", vec![node("seed", &[], &[])]);
     let me = h.get("/v1/whoami", &alice).await.json;
     World {
         audience: me["admission_audience"].as_str().unwrap().into(),

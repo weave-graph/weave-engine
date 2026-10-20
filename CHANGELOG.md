@@ -65,6 +65,26 @@ Copy these files of `crates/weave-contract/` and update `vendor/manifest.json`:
 A compiler that emits 1.2.0 corrections must copy a fact's `readers` and
 `reader_groups`, or set `widen_readers`.
 
+### B4 part 2: quotas and rate limits
+
+Part of [#40](https://github.com/weave-graph/weave-engine/issues/40)
+([guide](docs/SERVICE.md#quotas-and-rate-limits)). The control store moves
+to schema 3 in place (a `quotas` table); no protocol or engine store
+change.
+
+- Per-principal request rates (per minute) and fact-write quotas (per
+  hour). Agents default to 600 requests per minute and 10,000 fact writes
+  per hour; operators set rows per principal or per tenant with
+  `weave-service quota set|remove|list`. `GET /v1/quota` reports the
+  caller's own.
+- `E_QUOTA` (`429` with `Retry-After`) refuses a request, or a whole write
+  before the engine runs it, so nothing over the quota is written.
+- **Behaviour change:** tenant administrators now assert only minted record
+  IDs too, like every principal, which closes the occupancy channel for
+  them. Embedding spaces are named freely.
+- Signed admission (`POST /v1/admit`) runs through the same program path as
+  `POST /v1/execute` and the MCP tools.
+
 ### B4 part 1: the agent interface over MCP
 
 Part of [#40](https://github.com/weave-graph/weave-engine/issues/40)

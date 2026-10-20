@@ -137,19 +137,12 @@ async fn describe_schema_is_enough_to_build_valid_calls() {
     let salt = format!("{:x}", h.now() % 0xfff_ffff);
     let predicate = format!("p{salt}:observed");
     let key = format!("k{salt}");
-    let reply = h
-        .write(
-            &t.root,
-            GRAPH,
-            vec![
+    h.seed("acme", "root", GRAPH, vec![
                 json!({"kind": "node", "id": "obs-1", "entity_id": "obs-1", "space_id": format!("s{salt}"),
                     "properties": {key.clone(): 41}}),
                 json!({"kind": "edge", "id": "obs-1-of", "predicate": predicate, "from": "obs-1",
                     "to": "unit-7", "valid_time": {"start": 0}, "properties": {"w": 1}}),
-            ],
-        )
-        .await;
-    assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
+            ]);
 
     let tools = rpc(&h, &t.y, 1, "tools/list", json!({})).await;
     let schemas: Vec<(String, Value)> = tools.json["result"]["tools"]

@@ -28,6 +28,9 @@ pub const AUDIT_FILE: &str = "audit.db";
 pub struct TenantState {
     pub engine: Engine,
     pub audit: AuditLog,
+    /// Quota usage of the tenant's principals, under the same lock, so a
+    /// request's check, write and count are atomic.
+    pub quotas: crate::quota::Quotas,
 }
 
 pub struct Tenant {
@@ -57,7 +60,11 @@ impl Tenant {
         Ok(Self {
             record,
             dir,
-            state: Mutex::new(TenantState { engine, audit }),
+            state: Mutex::new(TenantState {
+                engine,
+                audit,
+                quotas: Default::default(),
+            }),
             queue: Semaphore::new(queue.max(1)),
             checkouts: AtomicU64::new(0),
         })
