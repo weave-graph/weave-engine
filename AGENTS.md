@@ -27,8 +27,8 @@ other interface calls into it. There is no second implementation.
 | `crates/weave-engine` | Runtime: SQLite store (`lib.rs`, store version `STORAGE_VERSION`), queries and algebra, recorded history, authorization and influence, metadata, rules, views, governance, dispatch, capsules and more | Core (A2–A4) plus peripheral subsystems |
 | `crates/weave-science` | `weave-science` JSON CLI: `import`, `execute`, `analyze` (degree, components, paths, PageRank, exact kNN) | Current user-facing API |
 | `crates/weave-hardware` | Hardware reference model, `SeriesRef`, CSV/JSON importers, seeded fleet generator and CLI | A5 |
-| `crates/weave-mcp` | `weave-mcp` read-only stdio MCP server over one store, as a host-fixed reader; a thin adapter over `weave-science` | A7 (B4 builds on it) |
-| `crates/weave-service` | `weave-service` authenticated multi-tenant HTTP/JSON server over TLS: one store per tenant, API tokens, audit log; a thin adapter over the engine | B3 |
+| `crates/weave-mcp` | `weave-mcp` read-only stdio MCP server over one store, as a host-fixed reader; a thin adapter over `weave-science`. Its library is also the transport-free MCP tool layer of the agent interface | A7, B4 |
+| `crates/weave-service` | `weave-service` authenticated multi-tenant HTTP/JSON server over TLS: one store per tenant, API tokens, audit log, and the MCP agent interface at `POST /v1/mcp`; a thin adapter over the engine | B3, B4 |
 | `python/` | `weave_science` Python client (subprocess to the CLI), tables, experiments, replay | Current user-facing API |
 | `crates/weave-policy` | ed25519 capability chains and signed admission | B1/B3 building block |
 | `crates/weave-spaces` | Typed geometry and embedding spaces, descriptors, pairwise operations | A4 building block |

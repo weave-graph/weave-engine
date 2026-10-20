@@ -32,22 +32,27 @@ and Windows. That CI includes the whole
 [Phase A exit scenario](docs/PHASE_A_EXIT.md) on a 5,000-unit fleet. The
 optional [Weave language](https://github.com/weave-graph/weave-language) has
 reached Phase A parity: each of the five exit questions fits in at most 15
-lines of `.weave`, and engine CI runs all five. Phases B (multi-user,
-permissions and agents) and C (telemetry scale) are not started.
+lines of `.weave`, and engine CI runs all five. Phase B (multi-user,
+permissions and agents) is in progress: the principal registry, the
+authenticated service and the agent interface have landed. Phase C
+(telemetry scale) is not started.
 
 | Works today | Not yet (roadmap phase) |
 |---|---|
 | Immutable, durable graph revisions in SQLite with incremental fact-level writes; valid-time and recorded-time ("as known at") selection | |
-| k-hop traversal (`expand`), as-of reads and "what changed" change sets with a pull feed (`changes`) | Multi-user server, authentication, groups, agent interface (Phase B) |
+| k-hop traversal (`expand`), as-of reads and "what changed" change sets with a pull feed (`changes`) | Write-time leakage protection for derived facts, agent quotas, optional review (Phase B) |
 | Per-record read permissions, re-checked through derived results | High-volume telemetry ingestion, approximate vector index (Phase C) |
 | Joins, rules, metadata graphs, per-fact provenance and explanations | |
 | Embeddings as temporal, permissioned facts in typed spaces; exact `nearest` composed with traversal; similarity candidate relations with provenance ([guide](docs/EMBEDDINGS.md)) | |
 | Exact vector neighbors and graph analytics (PageRank, components, paths) from Python, JSON or Rust | |
 | A read-only local MCP preview for agents (`weave-mcp`: query, expand, as-of, what changed, hybrid search, explain) as a fixed reader ([guide](docs/MCP_PREVIEW.md)) | |
+| Users, groups, agents and graph ACLs; an authenticated multi-tenant service with an audit log ([guide](docs/SERVICE.md)) | |
+| An MCP agent interface on the service: agents assert, retract, query, time-travel, search and explain with their own identity and provenance ([guide](docs/AGENT_INTERFACE.md)) | |
 
 The supported profile is described in [docs/STATUS.md](docs/STATUS.md): science
-**0.1.0**, contract **1.0.0**, store **31**. It runs locally. There is no
-server, and the CLI trusts its caller (see [SECURITY.md](SECURITY.md)).
+**0.1.0**, contract **1.1.0**, store **32**. The CLI and the science
+interface run locally and trust their caller; `weave-service` is the
+authenticated network interface (see [SECURITY.md](SECURITY.md)).
 
 ## Run your first experiment
 

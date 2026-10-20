@@ -2044,3 +2044,107 @@ Two fixes, and the property is unchanged:
 - Every write world ends by retracting a public node that only a hidden edge
   depends on. The assertion is now that every world reached the dependent
   refusal, which holds by construction rather than by chance.
+
+### 2026-10-20 — #40 B4 — Delivery in three parts
+Part 1 is the MCP interface on the service with all nine tools, identity
+and provenance on writes, the data/code boundary, revocation and audit; it
+covers acceptance criteria 1 to 5. Part 2 adds per-agent quotas and rate
+limits, which change the control store. Part 3 adds the Python SDK and
+closes the epic. Each part says "Part of #40"; the last says "Closes #40".
+
+### 2026-10-20 — #40 B4 — MCP is served by `weave-service`, not by a bridge
+The agent interface is an endpoint of the service, `POST /v1/mcp`, rather
+than a `weave-mcp --remote` process that forwards to it. Inside the service
+every message passes the same authentication middleware, standing check,
+tenant queue and audit append as every other request, and each tool runs
+through the one program path of `POST /v1/execute` (`run_program`: admit,
+minted-ID check, engine call as the caller, audit facts). So an agent's
+principal comes from its token, its tenant from the control store, writes
+cannot bypass minting or audit, and revocation applies to the next call by
+construction. A bridge would need an HTTP and TLS client and a second
+place where credentials live, for clients that only speak stdio; current
+clients (Claude Code, Cursor, VS Code) speak HTTP with a static header.
+The local stdio `weave-mcp` stays the read-only preview and never gains a
+write path.
+
+### 2026-10-20 — #40 B4 — Streamable HTTP without sessions, event streams or OAuth discovery
+Each POST carries one JSON-RPC message and gets one `application/json`
+response (a notification gets `202`), which the MCP Streamable HTTP
+transport allows. No `Mcp-Session-Id` is issued, `GET` and `DELETE` are
+`405`, and there is no server-to-client traffic, because every tool is one
+bounded request and a session would be state that outlives revocation.
+Requests with an `Origin` header are refused (`E_MCP_ORIGIN`), which is the
+DNS-rebinding protection the transport asks for: agents are not browsers,
+and a bearer token is not enough if a page can be made to carry one. An
+`MCP-Protocol-Version` header must name a supported revision. The service
+does not offer OAuth authorization-server metadata; clients send a
+configured API or OIDC token, as for the rest of the API.
+
+### 2026-10-20 — #40 B4 — The tool layer stays a hand-written subset in the `weave-mcp` library
+The A7 decision against `rmcp` still holds: the HTTP side is already axum
+in the service, and the protocol subset is four methods. The `weave-mcp`
+library now separates the tool layer from the stdio transport: a `Catalog`
+(the preview's six read tools or the agent's nine), `parse_message` and
+`respond` for JSON-RPC, `envelope` for the untrusted-data result, and the
+`agent` module for the tools that are not one expression. The preview's
+behaviour, text and tests are unchanged; the service depends on the
+library. One implementation of the protocol and the boundary serves both.
+
+### 2026-10-20 — #40 B4 — `assert_fact` takes an agent-facing fact shape, not contract records
+`assert_fact` accepts four kinds (node, edge, attachment, embedding) with
+only their content fields, and the tool turns them into contract facts.
+The service mints every ID; facts of one call refer to each other by `ref`
+labels. Contract records were rejected as arguments: they carry fields an
+agent has no business setting (record IDs, per-record readers, derivation
+gates, context scopes), and minted IDs would have to be fetched first with
+`POST /v1/ids`. Visibility is stated once per call and is required: named
+readers or groups, or `{"public": true}`, so nothing is public by omission
+(the LB1 `--untrusted` rule). Embedding spaces are not created through the
+tool: a space is an immutable public descriptor that a team sets up once.
+There is no `correct` tool, because facts are immutable and "retract, then
+assert" keeps both in history; it can be added if agents need atomicity.
+
+### 2026-10-20 — #40 B4 — The method is required, and an agent never claims `human`
+"Every agent write records agent identity, method and model version, and
+evidence references". Identity is recorded by the engine from the
+credential. The method is a claim, so the tool requires one and refuses
+`unspecified` (`E_MCP_CLAIM`); an agent principal may not claim `human`,
+which would otherwise let a model's output pass as a person's. `model`
+requires a model and a version. Evidence is optional, because not every
+fact cites a document, and the issue's document case uses an `artifact`
+reference with a digest.
+
+### 2026-10-20 — #40 B4 — `describe_schema` summarizes one change set read as the caller
+A graph description is computed from the A3 change set from the empty
+state to the head, run as the caller through the normal program path. It
+therefore contains only visible facts, is audited as reads of exactly
+those facts, and needs no engine change. It lists predicates (with property
+keys), node spaces and types, node property keys with JSON types,
+attachment keys and embedding spaces (descriptors with dimensions), each
+with a count of visible facts, plus runnable example calls; without a
+graph it lists the caller's graphs and nameable groups, the same data as
+`GET /v1/manifest`. It reads at most 200,000 facts (`E_BUDGET` beyond,
+never truncated) and keeps at most 1,000 entries per list, reporting how
+many it left out. A per-graph schema index is left for later if graphs
+outgrow that.
+
+### 2026-10-20 — #40 B4 — `explain` of a search is an `expand` seeded by it
+The engine's `explain` derives explanations from edges and assertions, so
+`explain` of a `nearest` alone is an empty derivation with complete
+coverage. The criterion "explain shows X as the source" is met by
+explaining an `expand` with the search as `seeds_from`, which cites X's
+edge with its writer, chain, method and evidence; the hit's own
+`fact_provenance` already names X too. The engine is not changed here; an
+explanation form for ranked hits is a candidate for B2 or B6.
+
+### 2026-10-20 — #40 B4 — No compile tool on the engine MCP server yet
+LB1 expects an engine compile tool that runs the language SDK with the
+`untrusted` policy against the caller's manifest. The engine does not
+depend on weave-language (the language vendors the engine contract), and
+the compiler is exposed as a Rust library, a C/WASM ABI and a file-based
+CLI, none of which the service can call without a cross-repository
+dependency or a subprocess on agent input. The issue does not list a
+compile tool, so it is left out and noted for LB1: a `weave sdk` mode that
+reads one `weave-compiler-request/1` on stdin would let the service run it
+as a sandboxed subprocess, and `describe_schema` now provides the embedding
+spaces the manifest omits.

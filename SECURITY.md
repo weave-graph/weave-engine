@@ -14,6 +14,17 @@ same boundary: whoever starts it or writes to its stdin reads as its
 `--actor`. It has no write tools and no write grants, and it marks store
 content in its results as untrusted data for the agent.
 
+The write-capable agent interface (B4, [guide](docs/AGENT_INTERFACE.md)) is
+served by `weave-service` at `POST /v1/mcp`, inside the service boundary
+below: the agent's principal comes from its credential, writes go through
+the service's audited, minted-ID write path, and no tool changes
+permissions. Store content stays data: tool text is static, results are
+marked untrusted, and tool arguments have no field for a writer, a grant
+or record readers. Requests with an `Origin` header are refused, so a
+browser page cannot drive the endpoint. Text in the store can still
+mislead an agent into calling a tool with the agent's own authority; that
+call is authorized and audited like any other.
+
 ## What the runtime enforces
 
 Request plans cannot grant themselves host authority. Reads apply object readers,

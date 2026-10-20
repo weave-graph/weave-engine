@@ -97,6 +97,10 @@ impl Harness {
                 .unwrap(),
             None => request.body(Body::empty()).unwrap(),
         };
+        self.request(request).await
+    }
+    /// Send a request built by the test, with any headers.
+    pub async fn request(&self, request: Request<Body>) -> Reply {
         let response = self.router.clone().oneshot(request).await.unwrap();
         let status = response.status();
         let headers = response.headers().clone();

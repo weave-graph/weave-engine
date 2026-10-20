@@ -60,6 +60,7 @@ fn the_endpoint_table_is_the_documented_api() {
             "POST /v1/graphs",
             "POST /v1/ids",
             "POST /v1/keys",
+            "POST /v1/mcp",
             "POST /v1/oidc/bindings",
             "POST /v1/oidc/groups/import",
             "POST /v1/registry",
