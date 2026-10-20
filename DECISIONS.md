@@ -1024,3 +1024,43 @@ those entries. The change-set `limit` is applied before that, so such a
 program can still fail with `E_BUDGET` because of embedding changes; this is
 documented in the 0.24 note rather than computing a second, version-specific
 change set.
+
+### 2026-10-20 — #37 A7 — `hybrid_search` takes a `nearest` or `similar_candidates` expression
+
+`hybrid_search` is one tool whose arguments are one A4 expression with its
+`kind`: `nearest` (optionally restricted to a neighborhood through
+`candidates`, valid at `valid_at`, as known at `as_of`) or
+`similar_candidates`. Both are parsed with the contract types, so the tool
+adds no semantics and its result equals the science `execute` result, like
+the other tools. Vector-to-graph composition stays on `expand`, through
+`seeds_from`. One tool keeps the surface the issue names, and the `kind`
+makes the mode explicit to the agent. `E_UNSUPPORTED` is gone, since no
+listed tool lacks its operator.
+
+### 2026-10-20 — #37 A7 — Nested expressions are limited to the preview's read operators
+
+A4 added `ExpandPlan.seeds_from`, a nested `GraphExpression`. Without a check,
+the `expand` tool would have accepted any expression there, including ones
+the preview does not offer (references, rules, views). Every nested
+expression (`seeds_from`, `candidates`, `sources`, `targets` and the `explain`
+input) must now be `query`, `as_of`, `expand`, `nearest` or
+`similar_candidates`, at most 4 levels deep, or the call fails with
+`E_MCP_INPUT`. `changes` stays out because no operator takes a change set.
+
+### 2026-10-20 — #37 A7 — The preview has no encoder
+
+Weave does not generate embeddings (EMBEDDINGS.md), and neither does the
+preview. An agent passes a query vector from the space's encoder, or names a
+stored embedding with `{kind: "embedding", embedding_id}`. A text-to-vector
+tool would put a model choice inside a read-only adapter, which belongs to
+the host or to B4.
+
+### 2026-10-20 — #37 A7 — The exit-scenario test drives the real binary
+
+`fleet_exit_questions.rs` spawns `weave-mcp` and speaks JSON-RPC to it, as an
+agent's MCP client would, rather than calling the server in-process. Scores
+read back from the wire are compared with a tolerance of 1e-12: `serde_json`
+without `float_roundtrip` can parse a printed `f64` one unit in the last place
+off, as the first run showed (`1.1102230246251563e-16` against
+`…565e-16`). IDs and their order are compared exactly. In-process tests keep
+comparing scores exactly.

@@ -3,13 +3,16 @@
 `weave-mcp` is a small local [Model Context Protocol](https://modelcontextprotocol.io)
 server over one Weave store
 ([#37](https://github.com/weave-graph/weave-engine/issues/37), A7). Agents can
-use it to query, traverse, time-travel and explain the store before the full
+use it to query, traverse, time-travel, search by similarity and explain the
+store before the full
 agent interface (B4) exists. It has **no write tools and no authentication**,
 and it is meant for local, single-user use only.
 
-Status: part 1. `query`, `expand`, `as_of`, `what_changed` and `explain` work.
-`hybrid_search` is listed but fails with `E_UNSUPPORTED` until the A4 operator
-([#13](https://github.com/weave-graph/weave-engine/issues/13)) ships.
+The tools are `query`, `expand`, `as_of`, `what_changed`, `hybrid_search`
+(the A4 `nearest` and `similar_candidates` operators,
+[EMBEDDINGS.md](EMBEDDINGS.md)) and `explain`. An agent connected to the A5
+fleet answers Phase A exit questions 2 to 4 with them (see the
+[examples](#examples-phase-a-exit-questions-2-to-4)).
 
 ## Quickstart
 
@@ -100,24 +103,46 @@ B4 builds on this boundary for the write-capable interface.
 ## Tools
 
 Each tool takes the same JSON as the matching contract expression
-([TRAVERSAL.md](TRAVERSAL.md), [core contract v1](contract/core-v1.md)), and
+([TRAVERSAL.md](TRAVERSAL.md), [EMBEDDINGS.md](EMBEDDINGS.md),
+[core contract v1](contract/core-v1.md)), and
 its `result` is exactly the science `execute` result
 ([SCIENCE_INTERFACE.md](SCIENCE_INTERFACE.md)) for the same program under the
 same principal. The equivalent request is:
 
 ```json
-{"operation": "execute", "program": {"version": "0.23.0",
+{"operation": "execute", "program": {"version": "0.24.0",
   "commands": [{"op": "evaluate", "value": <expression>}]}}
 ```
 
 | Tool | Arguments | Expression |
 |---|---|---|
 | `query` | A `QueryPlan`: `graph_id`, optional `branch_id`, `revision`, `predicate`, `from`, `to`, `valid_at`, `include_metadata`, `max_depth` | `{"kind": "query", "query": <arguments>}` |
-| `expand` | An `ExpandPlan`: `graph_id`, `seeds`, `hops`, optional `branch_id`, `revision` or `as_of`, `direction`, `predicates`, `valid_at`, `limit` | `{"kind": "expand", ...}` |
+| `expand` | An `ExpandPlan`: `graph_id`, `hops`, `seeds` and/or `seeds_from` (an expression whose nodes are also seeds, for example a `nearest`), optional `branch_id`, `revision` or `as_of`, `direction`, `predicates`, `valid_at`, `limit` | `{"kind": "expand", ...}` |
 | `as_of` | `unix_millis` (recorded time) and `query` (a `QueryPlan`) | `{"kind": "as_of", ...}` |
 | `what_changed` | A `ChangesPlan`: `graph_id`, `from`, optional `to` (default head), `entities`, `predicates`, `limit`, `branch_id` | `{"kind": "changes", ...}` |
-| `explain` | `input`: a `query`, `as_of` or `expand` expression, with its `kind` | `{"kind": "explain", "input": ...}` |
-| `hybrid_search` | Any | None yet: fails with `E_UNSUPPORTED` |
+| `hybrid_search` | A `nearest` or `similar_candidates` expression, with its `kind` | The arguments |
+| `explain` | `input`: a `query`, `as_of`, `expand`, `nearest` or `similar_candidates` expression, with its `kind` | `{"kind": "explain", "input": ...}` |
+
+Expressions nested in arguments (`seeds_from`, `candidates`, `sources`,
+`targets`, the `explain` input) are limited to those five read operators, at
+most 4 levels deep. A nested `query` is `{"kind": "query", "query": {...}}` and
+a nested `as_of` is `{"kind": "as_of", "unix_millis", "query"}`, as in the
+contract.
+
+**`hybrid_search`.** With `kind: "nearest"`, it ranks the embeddings of one
+space by exact distance to a query vector or a stored embedding (`k` 1 to
+1,000). `valid_at` keeps embeddings valid at an instant, `as_of` reads the
+store as known at a recorded time, and `candidates` restricts the ranking to
+the subjects of another expression, typically an `expand` neighborhood. The
+result lists `neighbors` (`rank`, `embedding_id`, `subject`, `score`, lower is
+closer) and returns the hit subjects with their attachments, such as the note
+text. With `kind: "similar_candidates"`, it proposes `weave:similar_to`
+candidate relations between embeddings of different subjects, each with both
+embeddings as `origins`; `exclude_linked` keeps only pairs not already joined
+by a visible edge. Candidates are proposals, never facts and never
+identities. Hidden embeddings never change a visible rank, score or count.
+The preview supplies no encoder: the agent passes a vector from the same
+encoder as the space, or a stored `embedding_id`.
 
 `tools/list` gives each tool's JSON Schema. Every tool is annotated
 `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true` and
@@ -139,7 +164,9 @@ A successful call returns:
 A failed call has `isError: true` and `error: {code, message}` in place of
 `result`.
 
-### Example: exit question 2
+### Examples: Phase A exit questions 2 to 4
+
+Question 2:
 
 "Which units at site S ran firmware F on date D, as we knew it on date K?"
 Two `as_of` calls, intersected by unit:
@@ -159,18 +186,46 @@ Two `as_of` calls, intersected by unit:
   "entities": ["unit:U"]}}
 ```
 
-`crates/weave-mcp/tests/fleet_question_2.rs` runs these calls on the A5
-fleet and checks them against the `weave-hardware` helpers.
+Question 3: "maintenance notes similar to an incident, restricted to the
+2-hop neighborhood of the affected unit and valid at the incident time":
+
+```json
+{"name": "hybrid_search", "arguments": {"kind": "nearest", "graph_id": "fleet",
+  "space": {"id": "hw-notes", "revision": "1"},
+  "query": {"kind": "vector", "vector": [/* the incident's embedding */]},
+  "k": 10, "valid_at": T,
+  "candidates": {"kind": "expand", "graph_id": "fleet", "seeds": ["unit:U"],
+                 "hops": 2, "direction": "both"}}}
+```
+
+Question 4: "two similar-unit candidate relations absent from the graph, with
+provenance":
+
+```json
+{"name": "hybrid_search", "arguments": {"kind": "similar_candidates",
+  "graph_id": "fleet", "space": {"id": "hw-units", "revision": "1"},
+  "k": 1, "valid_at": T, "exclude_linked": true}}
+```
+
+Each candidate's `origins` name its two embedding facts, which
+`fact_provenance` explains (writer, method, model). A `query` with `from` and
+`to` shows that no edge joins the pair.
+
+`crates/weave-mcp/tests/fleet_exit_questions.rs` drives the real binary as a
+scripted MCP client on the A5 fleet, with the hashing test embedder of
+`weave-hardware/tests/fleet_hybrid.rs`, for the admin and the restricted
+analyst. It checks question 2 against the `weave-hardware` helpers and
+questions 3 and 4 against an independent ranking of the vectors it wrote.
 
 ## Errors and limits
 
 Engine error codes pass through unchanged (for example `E_BUDGET`,
-`E_EXPAND`, `E_UNAVAILABLE`, `E_HISTORY_TIME`). The preview adds:
+`E_EXPAND`, `E_UNAVAILABLE`, `E_HISTORY_TIME`, and `E_NEAREST` and `E_SPACE`
+from the A4 operators). The preview adds:
 
 | Code | Where | Meaning |
 |---|---|---|
-| `E_MCP_INPUT` | tool result | Arguments are not an object, have an unknown field or a wrong type, nest deeper than 32 levels or hold a string over 4,096 bytes, or `explain` was given an input other than `query`, `as_of` or `expand` |
-| `E_UNSUPPORTED` | tool result | The tool's operator has not shipped (`hybrid_search`) |
+| `E_MCP_INPUT` | tool result | Arguments are not an object, have an unknown field or a wrong type, nest deeper than 32 levels or hold a string over 4,096 bytes, or carry an expression other than the five read operators (or more than 4 nested expressions) |
 | `E_MCP_UNKNOWN_TOOL` | JSON-RPC error `-32602`, `data.code` | `tools/call` named a tool that is not listed |
 | `E_MCP_MESSAGE_SIZE` | JSON-RPC error `-32600`, `data.code` | A message over 1 MiB; it is discarded and the session continues |
 
@@ -188,6 +243,10 @@ batch (batches are not supported), and `-32601` for an unknown method.
 - Output: at most 16 MiB per result (the science output budget,
   `E_SCIENCE_OUTPUT`). Narrow the selection or lower `limit` for large graphs.
 - Engine bounds apply: 1 to 1,000 seeds, 1 to 16 hops, `limit` up to 200,000,
-  and the 128 MiB read budget per operation.
+  `k` up to 1,000, at most 100,000 candidates, and the 128 MiB read budget per
+  operation. Ranking is exact; a whole-space scan of large vectors can hit
+  the read budget (`E_BUDGET`), so restrict it with `candidates`.
+- A query vector is sent as JSON text, so it is parsed on the server side;
+  it is rounded to binary32 like any stored vector.
 - One request at a time; calls are not cancellable once started.
 - `changes` is offered as `what_changed`, the name B4 uses.
