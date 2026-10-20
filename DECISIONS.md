@@ -750,3 +750,27 @@ included, so the analyst gets the visible subset. `At::Recorded` keeps using
 `recorded_query`, and the scenario still checks that it returns witnesses to
 the admin and `E_HISTORY_UNAVAILABLE` to the analyst, so ADR-0002's rule
 stays covered.
+
+### 2026-10-20 — weave-language#16 — The compiler emits 0.23.0
+
+The compiler's emitted protocol label follows its vendored contract, now
+0.23.0. Its commands are unchanged and the engine accepts every earlier
+version, so emitting the vendored version keeps both repositories on one
+label. The engine's integration checks pin weave-language `5729212`.
+
+### 2026-10-20 — weave-language#16 — `expand`, `as_of` and `changes` are classified core v1
+
+`weave describe --contract` classifies the three A3 expression kinds as
+core v1, matching core-v1.md §12. The classification is an exhaustive match,
+so the vendored variants had to be classified before the build passed.
+
+### 2026-10-20 — weave-language#16 — No script tolerance added
+
+The language scripts needed no version tolerance or special case for 0.23.0.
+Every compiler-runtime and Linux compiler-host check passed unchanged against
+engine `5976d47`.
+
+### 2026-10-20 — weave-language#16 — Source syntax for the A3 operators is deferred to LA1
+
+The vendor sync adds no source syntax for `expand`, `as_of` or `changes`.
+Programs can carry them; the query language that lowers to them is LA1.
