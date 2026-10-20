@@ -1,0 +1,33 @@
+{
+  "fixture": "fact-provenance-review",
+  "concepts": [
+    "provenance.fact",
+    "provenance.review"
+  ],
+  "type": "fact_provenance",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "writer": "alice-bot",
+    "on_behalf_of": [
+      "alice"
+    ],
+    "recorded_at_ms": 1757808060000,
+    "method": {
+      "kind": "model",
+      "model": "extractor",
+      "version": "2"
+    },
+    "review": {
+      "proposal_id": "proposal:5f0c2a9e1b7d4c3a8e6f1d2b3c4a5e6f",
+      "decision_id": "decision:0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+      "reviewers": [
+        "bob",
+        "carol"
+      ],
+      "proposed_at_ms": 1757808000000,
+      "decided_at_ms": 1757808060000
+    }
+  }
+}

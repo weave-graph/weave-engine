@@ -85,7 +85,7 @@ fn downgrade_to_30(path: &std::path::Path) {
 
 #[test]
 fn populated_store_30_upgrades_without_rewriting_facts() {
-    assert_eq!(STORAGE_VERSION, 32);
+    assert_eq!(STORAGE_VERSION, 33);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("store.db");
     let clock = Arc::new(ManualClock::new(10));

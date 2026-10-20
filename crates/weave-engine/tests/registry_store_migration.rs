@@ -96,7 +96,7 @@ fn downgrade_to_31(path: &std::path::Path) {
 
 #[test]
 fn populated_store_31_upgrades_without_rewriting_rows_and_takes_a_registry() {
-    assert_eq!(STORAGE_VERSION, 32);
+    assert_eq!(STORAGE_VERSION, 33);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("store.db");
     let clock = Arc::new(ManualClock::new(10));
@@ -109,7 +109,7 @@ fn populated_store_31_upgrades_without_rewriting_rows_and_takes_a_registry() {
     assert_eq!(old.0, 31);
     let mut e = Engine::open_with_clock(&path, clock.clone()).unwrap();
     let new = rows(&path);
-    assert_eq!(new.0, 32);
+    assert_eq!(new.0, STORAGE_VERSION);
     assert_eq!(new.1, old.1, "no row changes");
     assert_eq!(pinned(&mut e, &revisions), before, "pinned reads unchanged");
     // The upgraded store enables the registry and takes group readers on its line.
@@ -155,7 +155,7 @@ fn populated_store_31_upgrades_without_rewriting_rows_and_takes_a_registry() {
     assert_eq!(nodes(&mut e, "alice"), ["a"]);
     assert_eq!(nodes(&mut e, "bob"), ["a", "b", "t"]);
     drop(e);
-    assert_eq!(rows(&path).0, 32);
+    assert_eq!(rows(&path).0, STORAGE_VERSION);
 }
 
 #[cfg(feature = "recovery-testing")]
@@ -175,7 +175,7 @@ fn interrupted_upgrade_leaves_store_31_untouched() {
     assert!(crashed.is_err());
     assert_eq!(rows(&path), old, "nothing of the upgrade is visible");
     let mut e = Engine::open_with_clock(&path, Arc::new(ManualClock::new(10))).unwrap();
-    assert_eq!(rows(&path).0, 32);
+    assert_eq!(rows(&path).0, STORAGE_VERSION);
     assert_eq!(pinned(&mut e, &revisions), before);
 }
 

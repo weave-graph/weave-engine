@@ -1062,8 +1062,70 @@ impl Engine {
     ) -> Result<bool> {
         Ok(match self.resolved(host)? {
             None => host.writable_graphs.contains(graph),
-            Some((state, who)) => state.can_write(&who, graph, branch),
+            // A reviewed graph publishes only through accepted proposals
+            // (B5), so no direct write path holds write authority on it.
+            Some((state, who)) => {
+                state.can_write(&who, graph, branch) && !self.review_required(graph)?
+            }
         })
+    }
+    /// Graph write authority under the registry alone, whatever the graph's
+    /// review mode: who may propose to a branch, and whether an accepted
+    /// proposal's proposer still may write it (B5). False in a store
+    /// without a registry.
+    pub(crate) fn branch_write_authority(
+        &self,
+        host: &HostContext,
+        graph: &str,
+        branch: &str,
+    ) -> Result<bool> {
+        Ok(match self.resolved(host)? {
+            None => false,
+            Some((state, who)) => state.can_write(&who, graph, Some(branch)),
+        })
+    }
+    /// The permission `host` holds on `graph` under the registry, if any.
+    pub(crate) fn graph_permission(
+        &self,
+        host: &HostContext,
+        graph: &str,
+    ) -> Result<Option<Permission>> {
+        Ok(match self.resolved(host)? {
+            None => None,
+            Some((state, who)) => state.permission(&who, graph),
+        })
+    }
+    /// The identity of `principal` as a reviewer of `graph` (B5): an active
+    /// user (never an agent) named in `reviewers` directly or through a group
+    /// it is in, with Read on the graph. `None` otherwise.
+    pub(crate) fn reviewer_access(
+        &self,
+        principal: &str,
+        graph: &str,
+        reviewers: &[String],
+    ) -> Result<Option<Arc<Access>>> {
+        let Some(state) = self.registry_state()? else {
+            return Ok(None);
+        };
+        let who = state.effective(principal, self.trusted_now()?);
+        if !who.is_user()
+            || !reviewers.iter().any(|r| who.subjects().contains(r))
+            || state
+                .permission(&who, graph)
+                .is_none_or(|p| p < Permission::Read)
+        {
+            return Ok(None);
+        }
+        Ok(Some(who.access.clone()))
+    }
+    /// The kind of a registered, active principal, if any.
+    pub(crate) fn active_principal_kind(&self, id: &str) -> Result<Option<PrincipalKind>> {
+        Ok(self.registry_state()?.and_then(|state| {
+            state
+                .entry(id)
+                .filter(|e| e.status == PrincipalStatus::Active)
+                .map(|e| e.kind)
+        }))
     }
     /// [`Engine::graph_writable`] for every graph of an adapter or handler.
     pub(crate) fn all_writable(&self, host: &HostContext, graphs: &[String]) -> Result<bool> {
@@ -1084,6 +1146,13 @@ impl Engine {
     ) -> Result<()> {
         if self.registry_head()?.is_some() {
             self.require_graph(host, graph, Permission::Discover)?;
+            // A writer of a reviewed graph learns that it must propose (B5).
+            if self.branch_write_authority(host, graph, branch)? && self.review_required(graph)? {
+                return Err(err(
+                    "E_REVIEW_REQUIRED",
+                    "the graph publishes through review; propose the change",
+                ));
+            }
         }
         if !self.graph_writable(host, graph, Some(branch))? {
             return Err(err(

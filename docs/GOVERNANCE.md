@@ -38,4 +38,10 @@ The API now also exposes a native accepted graph result through genuine immutabl
 - [Process-death acceptance](../scripts/check_governance_recovery.py): feature-only local test host exits after acceptance SQL before commit (all acceptance rows roll back), and after commit before response (restart returns one durable receipt/event), with changed-body and expired-quorum rejection.
 - [Test host](../crates/weave-engine/examples/governance_probe.rs) uses fixed local keys and is built only with `recovery-testing`.
 
+[Optional review](REVIEW.md) (B5) applies these rules (immutable approval
+subjects, distinct-member thresholds, predecessor-approved policy
+transitions, atomic decisions) to fact proposals in registry stores, with
+registry users and groups instead of signed member keys and graph ACLs
+instead of host write grants.
+
 This does not complete E11 governance or E05 event delivery. Required follow-ups include signed remote collector admission, portable governed transport, broader merge/review policies, effect execution and operational retention. The full white-paper scope remains mapped in the project workflow.

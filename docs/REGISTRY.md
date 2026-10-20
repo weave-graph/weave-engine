@@ -294,7 +294,10 @@ administrators or a tenant administrator) and `registry_graph_acl(graph)`
   holds at most 4,096 entries; a group has at most 256 administrators.
 - Peripheral subsystems that write graphs (dispatch adapters, compiled
   handlers, capsules, integration, retention) check graph Write under the
-  registry and fail with `E_FORBIDDEN` otherwise. Governance and identity
+  registry and fail with `E_FORBIDDEN` otherwise. A graph in `reviewed`
+  mode grants no direct write authority to anyone: writes are proposals that
+  reviewers accept ([REVIEW.md](REVIEW.md)), and `write` and `commit` fail
+  with `E_REVIEW_REQUIRED` for principals with Write. Governance and identity
   graphs (`weave:governance:`, `weave:identity:`) keep their own policy
   readers, which match the request's principal as before.
 - Timing and response size are not protected channels. Writer identities

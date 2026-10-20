@@ -660,6 +660,8 @@ fn setup(world: &mut World, spec: &Spec) {
         governance(world);
         identity(world);
     }
+    // B5: a reviewed `g` with proposals that were never accepted.
+    world.review(spec);
     views(world, spec);
     world.at(FINAL_TIME);
 }
@@ -1141,6 +1143,72 @@ fn proof_conjunctions_do_not_depend_on_hidden_records() {
     let b = outcome(&mut mixed, "alice", &plan);
     assert!(!a.starts_with("error"), "{a}");
     assert!(a == b, "{}", difference(&a, &b));
+}
+
+/// B5 (#12): the proposals of the review stage are not vacuous hidden input.
+/// Accepting the store's pending proposal (public facts) changes what the
+/// readers under test see from `query`, `changes`, `nearest` and `expand`,
+/// so the harness's equality on those operators is what keeps pending,
+/// rejected and withdrawn proposals out of every read.
+#[test]
+fn pending_proposals_would_change_reader_outputs_once_accepted() {
+    let spec = Spec::new(3, Profile::Registry);
+    let mut plain = World::build(&spec, false);
+    let mut mixed = World::build(&spec, true);
+    setup(&mut plain, &spec);
+    setup(&mut mixed, &spec);
+    let plans = [
+        evaluate(json!({"kind": "query", "query": {"graph_id": "g"}})),
+        evaluate(json!({"kind": "changes", "graph_id": "g",
+            "from": {"kind": "as_of", "unix_millis": 0}, "to": {"kind": "head"}})),
+        evaluate(json!({"kind": "nearest", "graph_id": "g",
+            "space": {"id": "sp", "revision": "1"},
+            "query": {"kind": "vector", "vector": spec.vectors[0]}, "k": 20})),
+        evaluate(json!({"kind": "expand", "graph_id": "g", "seeds": [LONELY], "hops": 1})),
+    ];
+    let before: Vec<String> = plans
+        .iter()
+        .map(|p| outcome(&mut mixed, "alice", p))
+        .collect();
+    for (plan, b) in plans.iter().zip(&before) {
+        assert_eq!(&outcome(&mut plain, "alice", plan), b, "{plan}");
+    }
+    let admin = mixed.writer.clone();
+    let pending = mixed
+        .e
+        .list_review_proposals(
+            &ReviewProposalFilter {
+                graph_id: "g".into(),
+                status: Some(ReviewStatus::Pending),
+                ..Default::default()
+            },
+            &admin,
+        )
+        .unwrap();
+    let public = pending
+        .iter()
+        .find(|p| {
+            serde_json::to_string(&p.content)
+                .unwrap()
+                .contains("\"rpn\"")
+        })
+        .expect("the review stage leaves a public pending proposal");
+    mixed.at(FINAL_TIME + 1);
+    mixed
+        .e
+        .vote_review(
+            &ReviewVote {
+                proposal_id: public.id.clone(),
+                digest: public.digest.clone(),
+                verdict: ReviewVerdict::Approve,
+                note: None,
+            },
+            &admin,
+        )
+        .unwrap();
+    for (plan, b) in plans.iter().zip(&before) {
+        assert_ne!(&outcome(&mut mixed, "alice", plan), b, "{plan}");
+    }
 }
 
 // ---------------------------------------------------------------- write outcomes

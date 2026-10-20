@@ -29,6 +29,7 @@ is scheduled.
 | [Authenticated service](SERVICE.md) | Run `weave-service`: tenants, API tokens, the HTTP API, audit log, limits |
 | [Agent interface](AGENT_INTERFACE.md) | Connect an MCP client to `weave-service`: the nine agent tools, identity and provenance, the data/code boundary, quickstart |
 | [Principals, groups and graph ACLs](REGISTRY.md) | The registry a tenant's requests are authorized by |
+| [Optional review](REVIEW.md) | Reviewed team graphs: proposals, reviewers, thresholds, policy changes and review provenance |
 | [Current status](STATUS.md) | Supported versions, verified evidence and remaining work |
 
 The [example source](../examples/science/temporal_vectors.py) is an executable

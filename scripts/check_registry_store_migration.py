@@ -143,7 +143,7 @@ def main():
         r = subprocess.run([str(a.storage.resolve()), str(db), "after_commit", "20"], capture_output=True, timeout=60)
         assert r.returncode == 83, r
         upgraded, new_tables = rows()
-        assert upgraded == store_marker() == 32, upgraded
+        assert upgraded == store_marker(), upgraded
         assert new_tables == tables
 
         # The store-31 binary refuses the upgraded store.

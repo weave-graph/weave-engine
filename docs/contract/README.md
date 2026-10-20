@@ -1,6 +1,6 @@
 # Engine contract reference
 
-The current science client emits **contract 1.2.0** Programs. 1.0.0 froze core v1 with the 0.24.0 feature set ([note](v1.0/README.md)), 1.1.0 adds group readers ([note](v1.1/README.md)), and 1.2.0 adds write-time propagation ([note](v1.2/README.md)); every older version stays accepted with its published semantics. The canonical
+The current science client emits **contract 1.3.0** Programs. 1.0.0 froze core v1 with the 0.24.0 feature set ([note](v1.0/README.md)), 1.1.0 adds group readers ([note](v1.1/README.md)), 1.2.0 adds write-time propagation ([note](v1.2/README.md)), and 1.3.0 adds review provenance ([note](v1.3/README.md)); every older version stays accepted with its published semantics. The canonical
 serializable schema is [`weave-contract`](../../crates/weave-contract/src/lib.rs)
 and its modules. Native requests and Python expressions use these types; unknown
 or incompatible input fails at the runtime boundary.
@@ -45,6 +45,7 @@ request envelope is separate: see [SCIENCE_INTERFACE.md](../SCIENCE_INTERFACE.md
 | [1.0](v1.0/README.md) | Core v1 frozen at the Phase A release; one version table for feature gates |
 | [1.1](v1.1/README.md) | `reader_groups` on fact records and `FactProvenance.on_behalf_of` (B1) |
 | [1.2](v1.2/README.md) | `widen_readers`, widening and declared-derivation rules, hidden live versions on the write path (B2) |
+| [1.3](v1.3/README.md) | `review` in engine-recorded provenance for facts published through review (B5) |
 
 Each version states its finite support and remaining work. Contract version,
 store schema version, capsule format and host request version identify different
