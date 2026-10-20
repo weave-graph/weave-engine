@@ -1,0 +1,18 @@
+[package]
+name = "weave-mcp"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Read-only local MCP preview over a Weave store (A7)"
+
+[dependencies]
+weave-engine = { path = "../weave-engine", version = "0.23.0" }
+weave-contract = { path = "../weave-contract", version = "0.23.0" }
+weave-science = { path = "../weave-science", version = "0.1.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+rusqlite = { version = "0.38", features = ["bundled"] }
+weave-hardware = { path = "../weave-hardware", version = "0.1.0" }

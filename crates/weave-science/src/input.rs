@@ -72,12 +72,18 @@ impl<'de> Deserialize<'de> for StrictValue {
     }
 }
 
+/// Parse JSON that rejects duplicate object keys and non-finite numbers. The
+/// caller bounds the input size. Other hosts over the same engine (the MCP
+/// preview) use it so a request means the same thing on every interface.
+pub fn parse_strict_json(bytes: &[u8]) -> std::result::Result<Value, serde_json::Error> {
+    serde_json::from_slice::<StrictValue>(bytes).map(|StrictValue(value)| value)
+}
+
 /// Parse bounded, strict JSON before invoking storage or any graph mutation.
 pub fn parse_request(bytes: &[u8]) -> Result<Request> {
     if bytes.len() > MAX_INPUT_BYTES {
         return Err(failure("E_INPUT", "request exceeds 16 MiB"));
     }
-    let StrictValue(value) =
-        serde_json::from_slice(bytes).map_err(|error| failure("E_INPUT", &error.to_string()))?;
+    let value = parse_strict_json(bytes).map_err(|error| failure("E_INPUT", &error.to_string()))?;
     serde_json::from_value(value).map_err(|error| failure("E_INPUT", &error.to_string()))
 }

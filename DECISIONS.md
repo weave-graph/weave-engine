@@ -781,3 +781,92 @@ not run because its path filter excluded the workflow file itself; the orchestra
 it manually before merging. `integration.yml`, `compatibility.yml` and `fuzz.yml` now also trigger on
 their own workflow file and `Cargo.lock`, and integration/compatibility on `scripts/**` (they run
 engine check scripts such as `check_history_source.py`, changed in #55 without triggering them).
+
+### 2026-10-20 — #37 A7 — A minimal hand-written MCP subset, not an SDK
+
+`weave-mcp` implements the part of MCP a tools-only stdio server needs:
+newline-delimited JSON-RPC 2.0 with `initialize`, `ping`, `tools/list`,
+`tools/call` and ignored notifications, in a few hundred lines over `serde_json`.
+The official Rust SDK (`rmcp`, on crates.io, MIT/Apache-2.0) is mature
+enough, but it is async, needs `tokio` and brings a large dependency tree into
+a workspace that has none of it, to serve four synchronous methods. A small
+subset is also easier to bound: every message, argument and result has an
+explicit limit and a stable code. B4 can move to `rmcp` if it needs the HTTP
+transport or authorization flows; the tool layer (`Tool`, `expression`,
+`Server::call_tool`) does not depend on the transport.
+
+### 2026-10-20 — #37 A7 — Each tool is one read-only `evaluate` through `ScienceSession`
+
+A tool call parses its arguments into one contract `GraphExpression` and runs
+`{"version": "0.23.0", "commands": [{"op": "evaluate", "value": …}]}` through
+the same `ScienceSession::handle` as the science `execute` operation. The
+`result` field of a tool result is that operation's result, and engine errors
+pass through with their code and message. The criterion "every tool result
+matches the equivalent JSON API result" therefore holds by construction, and
+`tests/mcp.rs` checks it on every tool for two readers, errors included. The
+preview has no semantics of its own to drift.
+
+### 2026-10-20 — #37 A7 — Tool arguments are the contract JSON
+
+`query` takes a `QueryPlan`, `expand` an `ExpandPlan`, `what_changed` a
+`ChangesPlan`, `as_of` `{unix_millis, query}` and `explain` `{input}` with a
+`query`, `as_of` or `expand` expression. They are parsed with the contract's
+`deny_unknown_fields` types, so an argument can express nothing the tool does
+not offer, and the guides for those expressions apply unchanged. The preview
+adds only envelope bounds (1 MiB messages, 32 levels of nesting, 4,096-byte
+strings, `E_MCP_INPUT`). Seeds, hops and limits are left to the engine, so a
+bound fails with the same code (`E_BUDGET`, `E_EXPAND`) as in the JSON API.
+
+### 2026-10-20 — #37 A7 — `what_changed` is a sixth tool
+
+Exit question 2 asks "what changed for unit U between K1 and K2", which only
+the `changes` expression answers. None of the five listed tools can carry it
+without becoming a general expression evaluator, so the preview adds
+`what_changed` with exactly the `ChangesPlan` arguments. The name is the one
+B4 uses for the same tool. `explain` does not take a change set, because the
+engine rejects one as an operand (`E_CHANGES_OPERAND`).
+
+### 2026-10-20 — #37 A7 — `hybrid_search` is listed and fails with `E_UNSUPPORTED`
+
+The issue asks that a tool whose operator has not landed reports itself
+unavailable rather than approximating. The preview lists `hybrid_search`, so
+an agent can see the full intended surface, says so in its description and
+fails every call with `E_UNSUPPORTED`. It is not approximated by exact kNN plus
+`expand`. The A4 part replaces it with the A4 operator.
+
+### 2026-10-20 — #37 A7 — The reader is required, and the server cannot write or create
+
+`--actor` is required and has no default. It must be nonempty, at most 256
+bytes, without control characters and outside the reserved `weave:`
+namespace. The engine has no all-seeing principal, but a default would make
+the preview silently read as whoever the default is. There is no `--write`
+flag: the session's `HostContext` has no write grants, so even a write
+command, which no tool can produce, would fail with `E_FORBIDDEN`. `--db` must
+name an existing file; a read-only preview never creates a store.
+
+### 2026-10-20 — #37 A7 — The data/code boundary of the preview
+
+Tool names, descriptions, schemas and the `initialize` instructions are
+static strings; nothing from the store is placed in them. Store content is
+returned only as JSON under `result` (or in `error.message`) in an envelope
+with `"trust": "untrusted_data"` and a fixed notice, both as
+`structuredContent` and as the same JSON in one text block for older clients.
+Tool failures are `isError` results so an agent can correct its arguments;
+an unknown tool is a JSON-RPC `-32602` error with `data.code:
+E_MCP_UNKNOWN_TOOL`. B4 extends this boundary to writes: there, injected text
+must also be unable to trigger writes or change permissions.
+
+### 2026-10-20 — #37 A7 — Strict JSON shared with the science CLI
+
+Messages are parsed with the science interface's strict parser, now exported
+as `weave_science::parse_strict_json`, which rejects duplicate object keys.
+Otherwise one message could mean different things to the client, which might
+keep the first key, and to the server, which would keep the last.
+
+### 2026-10-20 — #37 A7 — "No tool writes" compares store rows
+
+Opening a store bumps the SQLite file change counter, so the file bytes
+differ after any session even when nothing is written. The no-write test
+therefore compares every row of every table, with the table definitions,
+before and after a scripted session of the real binary that calls every
+listed tool, including calls whose arguments try to smuggle write commands.

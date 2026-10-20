@@ -7,6 +7,11 @@ The Python SDK inherits the same boundary. Do not expose these interfaces as
 untrusted multi-user endpoints without a separate host authentication and
 admission design.
 
+The read-only MCP preview (`weave-mcp`, [guide](docs/MCP_PREVIEW.md)) has the
+same boundary: whoever starts it or writes to its stdin reads as its
+`--actor`. It has no write tools and no write grants, and it marks store
+content in its results as untrusted data for the agent.
+
 ## What the runtime enforces
 
 Request plans cannot grant themselves host authority. Reads apply object readers,

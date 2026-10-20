@@ -2,7 +2,7 @@
 //! Analysis never accepts a caller-supplied graph as a substitute for an authorized query.
 mod algorithms;
 mod input;
-pub use input::parse_request;
+pub use input::{parse_request, parse_strict_json};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

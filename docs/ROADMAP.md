@@ -72,6 +72,10 @@ through `fact_provenance`, explicit coverage and paired hidden-input tests
 ([guide](TRAVERSAL.md)). They are available from Rust, the science JSON
 interface and Python ([tutorial](PYTHON_SCIENCE.md#traversal-as-of-reads-and-change-sets)),
 and the A5 fleet scenario answers "as known at K" for restricted readers.
+A7 part 1: the [read-only MCP preview](MCP_PREVIEW.md) (`weave-mcp`) serves
+`query`, `expand`, `as_of`, `what_changed` and `explain` over stdio as a fixed
+reader, and answers exit question 2 on the fleet. `hybrid_search` reports
+`E_UNSUPPORTED` until A4 lands; questions 3 and 4 through the preview follow it.
 
 **Phase A exit scenario:** import a fleet of 5,000 units with parts, firmware,
 sites, owners, sensor series references and maintenance notes with embeddings.
