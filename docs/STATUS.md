@@ -255,7 +255,7 @@ Protocol 0.24.0 and store 31 activate the embedding records of
 
 Evidence: `tests/embeddings.rs` compares `nearest` with an exhaustive oracle
 on 24 random stores with exact duplicates, positive multiples (cosine ties)
-and one-ulp neighbors (5,184 rankings, over 13,000 adjacent ties), checks valid
+and one-ulp neighbors (2,592 rankings, over 6,000 adjacent ties), checks valid
 and recorded time, space mismatches on each descriptor field, both
 compositions against a BFS oracle, candidate provenance, and paired stores
 whose hidden embeddings (duplicates of visible vectors, closer vectors,

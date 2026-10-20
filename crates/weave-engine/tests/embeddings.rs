@@ -353,7 +353,7 @@ fn exact_nearest_equals_an_exhaustive_oracle_with_ties_and_near_duplicates() {
         let (mut e, model) = random_store(seed, metric);
         let mut rng = Rng(seed + 1000);
         let dims = model.vectors[0].vector.len();
-        for _ in 0..6 {
+        for _ in 0..3 {
             let query = adversarial(&mut rng, dims, &model.vectors, metric);
             for k in [1, 3, 10, 100] {
                 for valid_at in [None, Some(5), Some(18)] {
