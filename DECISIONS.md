@@ -2346,3 +2346,10 @@ fails `E_DERIVED_READERS`, and the engine's codes pass through unchanged
 (`tests/agent_mcp.rs`). The tools issue no corrections, so they never set
 `widen_readers`; a correction tool, if one is added, would copy the stored
 readers and set `widen_readers` only on an explicit argument.
+
+### 2026-10-21 — process — Roadmap paused by the owner
+The owner paused development to save token quota. In-flight work was pushed to its branches
+without merging (B4 part 3 on #79, B5 part 1 on draft #78). The resume point, blockers and next
+steps are in docs/RESUME.md. #40 was found closed prematurely: a "not in this PR" note in #74
+contained a closing keyword. Rule going forward: closing keywords appear only in the final PR of
+an epic.
