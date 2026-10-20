@@ -799,6 +799,54 @@ fn changed_keys_between_states(b: &mut dyn FactBackend) {
     assert_eq!(code(b.changed_keys(None, "nope", 10)), "E_UNAVAILABLE");
 }
 
+fn scan_visits_exactly_what_select_returns(b: &mut dyn FactBackend) {
+    two_revisions(b);
+    for revision in ["r1", "r2"] {
+        for filter in [
+            FactFilter::default(),
+            FactFilter {
+                entity: Some("E1".into()),
+                ..FactFilter::default()
+            },
+            FactFilter {
+                valid_at: Some(15),
+                ..FactFilter::default()
+            },
+            FactFilter {
+                graph_only: true,
+                ..FactFilter::default()
+            },
+        ] {
+            let mut scanned = vec![];
+            b.scan(revision, &filter, &mut |fact| {
+                scanned.push(fact);
+                Ok(())
+            })
+            .unwrap();
+            scanned.sort_by(|a, b| {
+                (a.version.kind, &a.version.id).cmp(&(b.version.kind, &b.version.id))
+            });
+            assert_eq!(scanned, b.select(revision, &filter, 1000).unwrap());
+        }
+    }
+    // A visitor error stops the scan and is returned.
+    let mut seen = 0;
+    let error = b
+        .scan("r2", &FactFilter::default(), &mut |_| {
+            seen += 1;
+            Err(weave_engine::Error {
+                code: "E_STOP".into(),
+                message: "stop".into(),
+            })
+        })
+        .unwrap_err();
+    assert_eq!((error.code.as_str(), seen), ("E_STOP", 1));
+    assert_eq!(
+        code(b.scan("missing", &FactFilter::default(), &mut |_| Ok(()))),
+        "E_UNAVAILABLE"
+    );
+}
+
 macro_rules! conformance {
     ($($name:ident),* $(,)?) => {
         mod memory_backend {
@@ -835,6 +883,7 @@ conformance!(
     malformed_input_is_rejected,
     select_carriers_and_unanchored,
     changed_keys_between_states,
+    scan_visits_exactly_what_select_returns,
 );
 
 /// Deterministic pseudo-random operation sequence, replayed on both backends.

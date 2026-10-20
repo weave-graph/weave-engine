@@ -68,8 +68,11 @@ revision IDs are unchanged. The store moves to 31. The user guide is
 
 ## Limits
 
-- Ranking is exhaustive. The read budget (128 MiB) counts the stored
-  embeddings a ranking reads, including hidden ones, as every read does.
+- Ranking is exhaustive. `nearest` streams with O(k) memory under its own
+  scan budget, `MAX_SCAN_COMPONENTS` (2^28 vector components, about 174,000
+  vectors of 1,536 dimensions); `similar_candidates` is bounded by the read
+  budget (128 MiB). Both count the stored embeddings they read, including
+  hidden ones, as every read does.
 - Ordinary reads never return embeddings; another operator that takes a
   `nearest` or `similar_candidates` value as input takes only its graph
   records.

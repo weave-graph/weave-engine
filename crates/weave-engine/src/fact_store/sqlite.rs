@@ -506,58 +506,12 @@ impl FactBackend for SqliteFactStore<'_> {
         row.map(stored).transpose()
     }
     fn select(&self, revision: &str, filter: &FactFilter, limit: usize) -> Result<Vec<StoredFact>> {
-        let info = self.info(revision)?;
-        let mut sql = format!(
-            "SELECT {FACT_COLUMNS} FROM fact_index i JOIN fact_log l ON l.position=i.position WHERE {LIVE}"
-        );
-        let mut values: Vec<Value> = vec![info.line.into(), info.seq.into()];
-        // Each `?` in a clause refers to the one value bound with it.
-        let mut bind = |sql: &mut String, clause: &str, value: Value| {
-            values.push(value);
-            sql.push_str(&clause.replace('?', &format!("?{}", values.len())));
-        };
-        if let Some(kind) = filter.kind {
-            bind(&mut sql, " AND i.kind=?", kind.as_str().to_string().into());
-        }
-        for (column, value) in [
-            ("entity", &filter.entity),
-            ("subject", &filter.subject),
-            ("object", &filter.object),
-            ("predicate", &filter.predicate),
-        ] {
-            if let Some(value) = value {
-                bind(
-                    &mut sql,
-                    &format!(" AND i.{column}=?"),
-                    value.clone().into(),
-                );
-            }
-        }
-        if let Some(t) = filter.valid_at {
-            // No valid time means valid at every instant.
-            bind(
-                &mut sql,
-                " AND (i.valid_from IS NULL OR (i.valid_from<=? AND (i.valid_to IS NULL OR i.valid_to>?)))",
-                t.into(),
-            );
-        }
-        if filter.carrier {
-            sql.push_str(" AND i.carrier=1");
-        }
-        if filter.unanchored {
-            sql.push_str(" AND i.subject IS NULL AND i.entity IS NULL");
-        }
-        if filter.graph_only {
-            sql.push_str(" AND i.kind NOT IN ('embedding_space','embedding')");
-        }
-        if let Some((start, end)) = filter.recorded {
-            bind(&mut sql, " AND i.recorded_at_ms>=?", start.into());
-            bind(&mut sql, " AND i.recorded_at_ms<?", end.into());
-        }
+        let (mut sql, mut values) = self.filter_sql(revision, filter)?;
         let cap = i64::try_from(limit)
             .unwrap_or(i64::MAX - 1)
             .saturating_add(1);
-        bind(&mut sql, " LIMIT ?", cap.into());
+        values.push(cap.into());
+        sql.push_str(&format!(" LIMIT ?{}", values.len()));
         let mut statement = self.conn.prepare(&sql)?;
         let rows = statement.query_map(rusqlite::params_from_iter(values.iter()), fact_row)?;
         let mut facts = Vec::new();
@@ -569,6 +523,20 @@ impl FactBackend for SqliteFactStore<'_> {
         }
         order(&mut facts);
         Ok(facts)
+    }
+    fn scan(
+        &self,
+        revision: &str,
+        filter: &FactFilter,
+        visit: &mut dyn FnMut(StoredFact) -> Result<()>,
+    ) -> Result<()> {
+        let (sql, values) = self.filter_sql(revision, filter)?;
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(rusqlite::params_from_iter(values.iter()), fact_row)?;
+        for row in rows {
+            visit(stored(row?)?)?;
+        }
+        Ok(())
     }
     fn ops(&self, revision: &str) -> Result<Vec<LoggedOp>> {
         let info = self.info(revision)?;
@@ -708,5 +676,60 @@ impl FactBackend for SqliteFactStore<'_> {
             .conn
             .execute("DELETE FROM fact_checkpoints WHERE revision=?1", [revision])?
             > 0)
+    }
+}
+
+impl SqliteFactStore<'_> {
+    /// The SQL and bound values that select the live versions matching `filter`.
+    fn filter_sql(&self, revision: &str, filter: &FactFilter) -> Result<(String, Vec<Value>)> {
+        let info = self.info(revision)?;
+        let mut sql = format!(
+            "SELECT {FACT_COLUMNS} FROM fact_index i JOIN fact_log l ON l.position=i.position WHERE {LIVE}"
+        );
+        let mut values: Vec<Value> = vec![info.line.into(), info.seq.into()];
+        // Each `?` in a clause refers to the one value bound with it.
+        let mut bind = |sql: &mut String, clause: &str, value: Value| {
+            values.push(value);
+            sql.push_str(&clause.replace('?', &format!("?{}", values.len())));
+        };
+        if let Some(kind) = filter.kind {
+            bind(&mut sql, " AND i.kind=?", kind.as_str().to_string().into());
+        }
+        for (column, value) in [
+            ("entity", &filter.entity),
+            ("subject", &filter.subject),
+            ("object", &filter.object),
+            ("predicate", &filter.predicate),
+        ] {
+            if let Some(value) = value {
+                bind(
+                    &mut sql,
+                    &format!(" AND i.{column}=?"),
+                    value.clone().into(),
+                );
+            }
+        }
+        if let Some(t) = filter.valid_at {
+            // No valid time means valid at every instant.
+            bind(
+                &mut sql,
+                " AND (i.valid_from IS NULL OR (i.valid_from<=? AND (i.valid_to IS NULL OR i.valid_to>?)))",
+                t.into(),
+            );
+        }
+        if filter.carrier {
+            sql.push_str(" AND i.carrier=1");
+        }
+        if filter.unanchored {
+            sql.push_str(" AND i.subject IS NULL AND i.entity IS NULL");
+        }
+        if filter.graph_only {
+            sql.push_str(" AND i.kind NOT IN ('embedding_space','embedding')");
+        }
+        if let Some((start, end)) = filter.recorded {
+            bind(&mut sql, " AND i.recorded_at_ms>=?", start.into());
+            bind(&mut sql, " AND i.recorded_at_ms<?", end.into());
+        }
+        Ok((sql, values))
     }
 }

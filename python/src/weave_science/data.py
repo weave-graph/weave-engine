@@ -55,7 +55,69 @@ def edge(id: str, from_id: str, to_id: str, *, predicate: str = "related",
             "properties": deepcopy(dict(properties or {})), **deepcopy(fields)}
 
 
+def embedding_space(id: str, *, revision: str, encoder: str, encoder_version: str,
+                    preprocessing: str, dimensions: int,
+                    metric: str = "cosine_distance") -> dict[str, Any]:
+    """An embedding space fact (contract 0.24) for ``Engine.import_facts``.
+
+    Two vectors are comparable only when their spaces are equal in every
+    field; a new encoder version is a new space ``revision`` (no ``@``).
+    Weave does not generate embeddings: the encoder is the caller's.
+    """
+    if metric not in {"cosine_distance", "euclidean"}:
+        raise ValueError("metric must be cosine_distance or euclidean")
+    if isinstance(dimensions, bool) or not isinstance(dimensions, int) or not 1 <= dimensions <= 4096:
+        raise ValueError("dimensions must be an integer from 1 to 4096")
+    if "@" in revision:
+        raise ValueError("a space revision cannot contain '@'")
+    return {"kind": "embedding_space", "id": id, "revision": revision, "encoder": encoder,
+            "encoder_version": encoder_version, "preprocessing": preprocessing,
+            "dimensions": dimensions, "metric": metric}
+
+
+def embedding(id: str, space: Mapping[str, Any], subject: str, vector: Iterable[float], *,
+              subject_kind: str = "node", valid_from: int = 0, valid_to: int | None = None,
+              readers: Iterable[str] = (), evidence: Iterable[Mapping[str, Any]] = (),
+              source: str | None = None) -> dict[str, Any]:
+    """An embedding fact of ``space`` (an ``embedding_space`` fact) on a subject.
+
+    The vector is rounded to binary32 by the engine. Its provenance claims
+    ``method: model`` with the space's encoder and version; ``evidence`` may
+    cite the embedded text (for example an attachment as an ``assertion``).
+    Give restricted text's ``readers`` so the vector is restricted with it.
+    """
+    values = list(vector)
+    if len(values) != space["dimensions"] or any(
+            isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
+            for v in values):
+        raise ValueError("vector must have the space's dimensions and finite components")
+    if subject_kind not in {"node", "entity", "edge", "assertion"}:
+        raise ValueError("subject_kind must be node, entity, edge or assertion")
+    start = _integer(valid_from, "valid_from")
+    end = None if valid_to is None else _integer(valid_to, "valid_to")
+    if end is not None and end <= start:
+        raise ValueError("valid_to must be greater than valid_from")
+    claim: dict[str, Any] = {"method": {"kind": "model", "model": space["encoder"],
+                                        "version": space["encoder_version"]}}
+    evidence = [deepcopy(dict(e)) for e in evidence]
+    if evidence:
+        claim["evidence"] = evidence
+    if source is not None:
+        claim["source"] = source
+    return {"kind": "embedding", "id": id,
+            "space": {"id": space["id"], "revision": space["revision"]},
+            "subject": {"kind": subject_kind, f"{subject_kind}_id": subject},
+            "vector": values, "valid_time": {"start": start, "end": end},
+            "readers": list(readers), "provenance": claim}
+
+
+def asserts(facts: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """``assert`` changes for ``Engine.import_facts``."""
+    return [{"change": "assert", "fact": deepcopy(dict(fact))} for fact in facts]
+
+
 def _records(values: Any) -> list[dict[str, Any]]:
+
     # pandas is optional and imported only by result conversion helpers.
     if hasattr(values, "to_dict") and not isinstance(values, Mapping):
         values = values.to_dict(orient="records")

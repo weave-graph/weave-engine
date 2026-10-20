@@ -16,6 +16,7 @@ and timing boundaries differ from the current science workload.
 
 | Report | Recorded scope | Result |
 |---|---|---|
+| [Embedding upsert and exact nearest, 20 October 2026](embeddings-2026-10-20.json) | `cargo run --release --example embedding_benchmark -- 100000 1536 1000`; contract 0.24.0, store 31; 100,000 embeddings of 1,536 dimensions (cosine) on 100,000 nodes, written in 100 fact writes of 1,000, then 5 single-embedding writes; 5 exact top-10 `nearest` over the whole space by a reader who sees 90% of it, with and without `valid_at`; one AMD Ryzen 9 7950X Linux host | Load 34.7 s (330 ms per 1,000-embedding write, flat from first to last); single-embedding upsert 1.19 ms median at full size; whole-space exact top-10 7.09 s median, 3.62 s with `valid_at` selecting half; 2.1 GB store; peak RSS 265 MB, not raised by the rankings |
 | [As-of selection, 20 October 2026](as-of-selection-2026-10-20.json) | `cargo run --release --example as_of_benchmark`; contract 0.23.0, store 30; 10k and 1M single-fact revisions on one branch of an on-disk WAL store; 500 `expand` reads `as_of` uniformly random recorded times, each checked against the state recorded then, plus the same read pinned to the head; one AMD Ryzen 9 7950X Linux host | Median as-of read 0.43 ms at 10k and 0.46 ms at 1M revisions (pinned 0.46 and 0.48 ms): selection cost does not grow with history length beyond index depth |
 
 ## Current native science baseline

@@ -78,14 +78,17 @@ serves `query`, `expand`, `as_of`, `what_changed`, `hybrid_search` (A4
 `nearest` and `similar_candidates`) and `explain` over stdio as a fixed
 reader, and a scripted MCP client answers exit questions 2 to 4 on the fleet
 through it.
-A4 in progress: protocol 0.24.0 and store 31 activate embedding facts and
+A4 is complete: protocol 0.24.0 and store 31 activate embedding facts and
 spaces (ADR-0006) and add the exact `nearest` operator with time and
 permission filters, graph-to-vector and vector-to-graph composition
 (`candidates`, `seeds_from`), `similar_candidates` candidate relations with
 provenance, an explicit migration from the untyped `vector` property, and
-answers to exit questions 3 and 4 on the fleet ([guide](EMBEDDINGS.md)). The
-100k × 1,536-dimension upsert measurement and the Python tutorial follow in
-the next part.
+answers to exit questions 3 and 4 on the fleet ([guide](EMBEDDINGS.md)).
+`nearest` streams with O(k) memory under its own scan budget; 100,000
+embeddings of 1,536 dimensions are measured for upsert and exact top-10
+([report](benchmarks/embeddings-2026-10-20.json)), and Python has helpers
+and a hybrid-retrieval tutorial.
+
 
 **Phase A exit scenario:** import a fleet of 5,000 units with parts, firmware,
 sites, owners, sensor series references and maintenance notes with embeddings.

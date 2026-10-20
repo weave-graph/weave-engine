@@ -71,6 +71,10 @@ jobs:
         env:
           WEAVE_A3_FACTS: '100000'
         run: cargo test --release --locked -p weave-engine --test traversal_scale -- --nocapture
+      - name: Whole-space exact nearest over 20k vectors of 1,536 dimensions, past the read budget (release)
+        env:
+          WEAVE_A4_VECTORS: '20000'
+        run: cargo test --release --locked -p weave-engine --test embedding_scale -- --nocapture
   phase-a-exit:
     # The whole Phase A exit scenario (docs/ROADMAP.md) at its exit size, 5,000
     # units and 1,000 updates, on every supported OS, in its own job so a slow

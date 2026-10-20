@@ -1,7 +1,7 @@
 """Native Weave temporal graph experiments, with no required Python dependencies."""
 
 from .client import Engine, NativeError, OperationTimeout, ProtocolError, WeaveError
-from .data import edge, graph_data, node, read_csv
+from .data import asserts, edge, embedding, embedding_space, graph_data, node, read_csv
 from .expressions import (
     CONTRACT_VERSION,
     as_of,
@@ -10,9 +10,11 @@ from .expressions import (
     expand,
     explain,
     join,
+    nearest_embeddings,
     program,
     query,
     recorded_query,
+    similar_candidates,
     union,
     window,
 )
@@ -26,4 +28,6 @@ __all__ = [
     "node", "edge", "graph_data", "read_csv", "query", "recorded_query",
     "program", "join", "union", "diff", "window", "explain", "CONTRACT_VERSION",
     "as_of", "expand", "changes",
+    "embedding_space", "embedding", "asserts", "nearest_embeddings", "similar_candidates",
 ]
+

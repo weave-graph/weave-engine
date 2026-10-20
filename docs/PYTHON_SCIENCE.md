@@ -253,7 +253,72 @@ proof = analyst.explain(expand("fleet", ["site"], hops=1, direction="in"))
 query pinned to the revision it read, an expansion pins its revision, and a
 change set pins both ends as cursors.
 
+## Hybrid retrieval with caller-supplied embeddings
+
+Weave stores your vectors as temporal, permissioned facts in a typed space and
+ranks them exactly inside a plan ([guide](EMBEDDINGS.md)). It does not run an
+encoder: embed with your own model and write the vectors.
+[`examples/science/hybrid_retrieval.py`](../examples/science/hybrid_retrieval.py)
+is the complete runnable tutorial (the native tests run it); its core:
+
+```python
+from weave_science import (Engine, asserts, embedding, embedding_space, expand,
+                           nearest_embeddings)
+
+writer = Engine("fleet.db", actor="loader", write_graphs=["fleet"])
+# ... nodes for units, sites and maintenance notes, as in the traversal example ...
+
+space = embedding_space("notes", revision="1", encoder="my-model", encoder_version="2024-06",
+                        preprocessing="lowercase-words/v1", dimensions=32)
+vectors = [embedding(f"vec-{wo}", space, wo, my_model(text), valid_from=written_at,
+                     readers=readers_of(wo))       # restricted text, restricted vector
+           for wo, text, written_at in notes]
+writer.import_facts("fleet", asserts([space] + vectors))   # one incremental fact write
+
+analyst = Engine("fleet.db", actor="analyst")
+incident = my_model("Vibration alarm: bearing noise reported on unit-1")
+
+# Graph to vector: notes nearest the incident, within the affected unit's
+# 2-hop neighborhood, valid at the incident time.
+near = analyst.nearest_embeddings("fleet", ("notes", "1"), vector=incident, k=10,
+                                  valid_at=incident_time,
+                                  candidates=expand("fleet", ["unit-1"], hops=2, direction="both"))
+for hit in near.neighbors:          # rank order: rank, embedding_id, subject, score
+    print(hit["rank"], hit["subject"]["node_id"], hit["score"])
+assert near.exactness == "exact"    # hits' nodes, their attachments and fact_provenance come too
+
+# Vector to graph: the units and sites behind the nearest notes, in one plan.
+behind = analyst.expand("fleet", hops=2, direction="out", predicates=["performed_on", "located_at"],
+                        seeds_from=nearest_embeddings("fleet", ("notes", "1"), vector=incident, k=10))
+
+# Relations the graph does not have yet: similarity candidates with provenance.
+similar = analyst.similar_candidates("fleet", ("notes", "1"), k=1, exclude_linked=True)
+for c in similar.candidates:        # from, to, score, valid_time, origins
+    print(c["from"], c["to"], c["score"])
+```
+
+- `embedding_space(...)` and `embedding(id, space, subject, vector, ...)` build
+  the fact records for `import_facts`; `asserts(facts)` wraps them as
+  `assert` changes. Re-embedding with a new model is a new space `revision`.
+- `Engine.nearest_embeddings(graph_id, (space_id, revision), vector=... |
+  embedding_id=..., k=10, valid_at=None, candidates=None, revision=None,
+  as_of=None)` returns a `QueryResult` with `neighbors`, `embeddings` and
+  `exactness`. Hidden vectors never change a visible rank, score or count, and
+  restricted subjects never appear.
+- `Engine.similar_candidates(graph_id, space, k=1, max_score=None,
+  valid_at=None, sources=None, targets=None, exclude_linked=False,
+  limit=1000)` returns `QueryResult.candidates`. Candidates are never written;
+  persisting one is your own `import_facts` of an edge citing the two
+  embeddings (`{"kind": "embedding", ...}` evidence).
+- `expand(..., seeds_from=expression)` seeds a traversal from another
+  expression's nodes.
+- `Engine.nearest` remains the science analysis over the untyped `vector`
+  property; `nearest_embeddings` is the typed, in-plan operator.
+- `pinned_program` pins the revision of `nearest_embeddings` and
+  `similar_candidates` (and of their nested inputs) for exact replay.
+
 ## Results, exports and replay
+
 
 A `QueryResult` returned by `Engine` carries both the native envelope and the SDK
 request context needed for reuse. These are the main inspection fields:

@@ -255,7 +255,7 @@ Protocol 0.24.0 and store 31 activate the embedding records of
 
 Evidence: `tests/embeddings.rs` compares `nearest` with an exhaustive oracle
 on 24 random stores with exact duplicates, positive multiples (cosine ties)
-and one-ulp neighbors (5,184 rankings, over 13,000 adjacent ties), checks valid
+and one-ulp neighbors (2,592 rankings, over 6,000 adjacent ties), checks valid
 and recorded time, space mismatches on each descriptor field, both
 compositions against a BFS oracle, candidate provenance, and paired stores
 whose hidden embeddings (duplicates of visible vectors, closer vectors,
@@ -264,14 +264,31 @@ vectors on hidden subjects, a hidden edge) change no output, error or tie.
 generated fleet (in CI at 5,000 units) against an independent oracle, with
 restricted units hidden from the analyst.
 
+- **Scale.** `nearest` streams through the selected embeddings with O(k)
+  memory under its own scan budget (2^28 vector components, about 174,000
+  vectors of 1,536 dimensions). **Measured** on one AMD Ryzen 9 7950X Linux
+  host ([report](benchmarks/embeddings-2026-10-20.json)): 100,000 embeddings
+  of 1,536 dimensions load in 100 writes of 1,000 at about 330 ms each, flat
+  from first to last; one more embedding is a 1.2 ms write; an exact top-10
+  over the whole space takes about 7.1 s (3.6 s with `valid_at` selecting
+  half), without raising peak memory.
+- **Python.** `embedding_space`, `embedding`, `Engine.nearest_embeddings`,
+  `Engine.similar_candidates` and `expand(seeds_from=...)`, with exact replay,
+  and an end-to-end [tutorial](PYTHON_SCIENCE.md#hybrid-retrieval-with-caller-supplied-embeddings)
+  (`examples/science/hybrid_retrieval.py`, run by the native tests). The
+  science `capabilities` list both operators.
+
 **Limits.**
-- Ranking is exhaustive; approximate indexes are C5. The 128 MiB read budget
-  counts the stored embeddings a ranking reads (hidden ones too), so a
-  whole-space ranking reaches roughly 7,000 vectors of 1,536 dimensions;
-  candidate sets and smaller spaces rank more.
-- Upsert of 100,000 vectors of 1,536 dimensions is not yet measured, and
-  the Python helpers and tutorial for hybrid retrieval are not yet written
-  (next A4 part). Python reaches the operators through `execute` programs.
+- Ranking is exhaustive. An exact whole-space top-10 over 100,000 vectors
+  of 1,536 dimensions takes about 7.1 s on the measured host, mostly
+  decoding vectors stored as JSON (about 2.1 GB for that space). A binary
+  vector encoding is C4 (storage backend) and approximate indexes are C5;
+  until then, restrict large rankings with a candidate set or `valid_at`.
+- The scan budget counts every stored embedding a ranking streams, hidden
+  ones included, as the read budget does for every read.
+  `similar_candidates` holds its vectors in memory and stays bounded by the
+  read budget and its comparison limit.
+
 - Candidate relations are never persisted by the engine; persisting one is
   an explicit write of an ordinary edge citing the embeddings as evidence.
 - Views and handler recipes reject `nearest` and `similar_candidates`.
@@ -349,11 +366,12 @@ addresses:
 - **Queries (Phase A).** Addressed by A3: k-hop `expand`, indexed `as_of`
   selection and `changes` change sets with a pull feed (see
   [traversal](#traversal-time-travel-and-change-sets-a3)).
-- **Embeddings (Phase A).** Addressed by A4 in part: temporal, permissioned
-  embedding facts in typed spaces, an exact `nearest` operator in the plan
-  algebra and candidate relations (see
-  [embeddings](#embeddings-and-hybrid-retrieval-a4)). The 1,536-dimension
-  upsert measurement and the Python tutorial remain.
+- **Embeddings (Phase A).** Addressed by A4: temporal, permissioned
+  embedding facts in typed spaces, a streaming exact `nearest` operator in
+  the plan algebra, candidate relations, and Python helpers (see
+  [embeddings](#embeddings-and-hybrid-retrieval-a4)). Approximate indexes
+  remain for C5.
+
 
 - **Sharing (Phase B).** There is no server, no authentication on the main API,
   no groups or agent identities, and leakage protection is enforced at read time

@@ -120,7 +120,46 @@ class NativeIntegration(unittest.TestCase):
                 self.assertEqual(replayed.raw["graph"], result.raw["graph"])
                 self.assertEqual(replayed.changes, result.changes)
 
+    def test_hybrid_retrieval_tutorial_end_to_end(self):
+        import importlib.util
+        import io
+        import sys
+        from contextlib import redirect_stdout
+        path = Path(__file__).resolve().parents[2] / "examples/science/hybrid_retrieval.py"
+        spec = importlib.util.spec_from_file_location("hybrid_retrieval", path)
+        tutorial = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tutorial)
+        with tempfile.TemporaryDirectory() as directory:
+            argv = sys.argv
+            sys.argv = [str(path), "--output", directory, "--binary", os.environ["WEAVE_SCIENCE_BINARY"]]
+            try:
+                with redirect_stdout(io.StringIO()):
+                    summary = tutorial.main()
+            finally:
+                sys.argv = argv
+            # Graph to vector: only notes in unit-1's 2-hop neighborhood, valid at the incident.
+            self.assertEqual([hit for hit, _ in summary["nearest_notes_in_neighborhood"]], ["vec-wo-1", "vec-wo-2"])
+            self.assertEqual(summary["exactness"], "exact")
+            self.assertIn("bearing", summary["note_text"]["wo-1"])
+            # Vector to graph in one plan.
+            self.assertTrue({"unit-1", "site-a"} <= set(summary["units_and_sites_behind_nearest_notes"]))
+            # The restricted unit's note is a candidate for the admin only.
+            ends = lambda who: {end for c in summary["candidates"][who] for end in c[:2]}
+            self.assertNotIn("wo-4", ends("analyst"))
+            self.assertIn("wo-4", ends("admin"))
+            self.assertIn("model", summary["provenance_methods"])
+            # Rankings replay exactly from their pinned program.
+            analyst = Engine(Path(directory) / "hybrid.sqlite", actor="analyst")
+            from weave_science import nearest_embeddings
+            ranked = analyst.nearest_embeddings("fleet", ("notes", "1"), vector=tutorial.encode("bearing vibration"), k=2)
+            again = analyst.evaluate(ranked.pinned_program)
+            self.assertEqual(again.neighbors, ranked.neighbors)
+            with self.assertRaises(NativeError) as unknown:
+                analyst.evaluate(nearest_embeddings("fleet", ("missing", "1"), vector=[1.0] * 32))
+            self.assertEqual(unknown.exception.code, "E_SPACE")
+
     def test_hidden_vectors_and_topology_are_authorized_before_analysis(self):
+
         with tempfile.TemporaryDirectory() as directory:
             db = Path(directory) / "restricted.db"
             owner = Engine(db, actor="owner", write_graphs=["g"])

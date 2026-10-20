@@ -24,6 +24,11 @@ pub const MAX_K: u32 = 1_000;
 pub const DEFAULT_CANDIDATE_LIMIT: u32 = 1_000;
 /// Largest `limit` of `similar_candidates`.
 pub const MAX_CANDIDATE_LIMIT: u32 = 100_000;
+/// Scan budget of one `nearest`: the most vector components (stored
+/// embeddings scanned times the space's dimensions) it may read, 2^28. That
+/// is about 174,000 vectors of 1,536 dimensions; more fails with `E_BUDGET`.
+/// It replaces the read budget for the vectors a ranking streams through.
+pub const MAX_SCAN_COMPONENTS: u64 = 1 << 28;
 /// Most source-target comparisons one `similar_candidates` may make.
 pub const MAX_COMPARISONS: u64 = 50_000_000;
 /// Separator of a space's fact key (`id@revision`). A space revision never contains it.

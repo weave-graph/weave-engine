@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from .data import graph_data, read_csv
-from .expressions import (as_of, changes, expand, explain, program, query, recorded_query,
-                          validate_read_only)
+from .expressions import (as_of, changes, expand, explain, nearest_embeddings, program, query,
+                          recorded_query, similar_candidates, validate_read_only)
 from .results import AnalysisResult, CommitReceipt, QueryResult, assert_same_input, canonical_json
 
 
@@ -231,7 +231,7 @@ class Engine:
         """Query the branch as this replica knew it at a recorded time (visible subset)."""
         return self.evaluate(as_of(graph_id, recorded_at_ms, **selection))
 
-    def expand(self, graph_id: str, seeds: Iterable[str], **options: Any) -> QueryResult:
+    def expand(self, graph_id: str, seeds: Iterable[str] = (), **options: Any) -> QueryResult:
         """The exact k-hop neighborhood of seed nodes; see expressions.expand."""
         return self.evaluate(expand(graph_id, seeds, **options))
 
@@ -239,7 +239,22 @@ class Engine:
         """A change set between two states; see expressions.changes and QueryResult.changes."""
         return self.evaluate(changes(graph_id, **options))
 
+    def nearest_embeddings(self, graph_id: str, space: Any, **options: Any) -> QueryResult:
+        """Exact k nearest embedding facts (contract 0.24); see expressions.nearest_embeddings.
+
+        The result's ``neighbors`` are in rank order; its nodes are the hits'
+        subjects with their attachments, and ``fact_provenance`` explains the
+        embeddings. Unlike ``nearest`` (the science analysis of the untyped
+        ``vector`` property), this ranks typed, temporal, permissioned facts.
+        """
+        return self.evaluate(nearest_embeddings(graph_id, space, **options))
+
+    def similar_candidates(self, graph_id: str, space: Any, **options: Any) -> QueryResult:
+        """Candidate similarity relations (contract 0.24); see expressions.similar_candidates."""
+        return self.evaluate(similar_candidates(graph_id, space, **options))
+
     def explain(self, expression: Mapping[str, Any]) -> QueryResult:
+
         """The derivation graph explaining every record of a graph expression."""
         return self.evaluate(explain(expression))
 

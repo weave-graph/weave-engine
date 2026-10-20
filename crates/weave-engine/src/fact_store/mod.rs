@@ -328,6 +328,21 @@ pub trait FactBackend {
     fn get(&self, revision: &str, namespace: Namespace, id: &str) -> Result<Option<StoredFact>>;
     /// Every version live at a revision that matches `filter`, at most `limit`.
     fn select(&self, revision: &str, filter: &FactFilter, limit: usize) -> Result<Vec<StoredFact>>;
+    /// Visit every version live at a revision that matches `filter`, in no
+    /// particular order, without materializing them (store 31, A4). A visitor
+    /// error stops the scan and is returned. The default materializes; a
+    /// production backend streams.
+    fn scan(
+        &self,
+        revision: &str,
+        filter: &FactFilter,
+        visit: &mut dyn FnMut(StoredFact) -> Result<()>,
+    ) -> Result<()> {
+        for fact in self.select(revision, filter, usize::MAX - 1)? {
+            visit(fact)?;
+        }
+        Ok(())
+    }
     /// The revision's own operations, in position order.
     fn ops(&self, revision: &str) -> Result<Vec<LoggedOp>>;
     /// Every key asserted or retracted between two states of `to`'s line, in

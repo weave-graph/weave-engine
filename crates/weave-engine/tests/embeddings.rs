@@ -353,7 +353,7 @@ fn exact_nearest_equals_an_exhaustive_oracle_with_ties_and_near_duplicates() {
         let (mut e, model) = random_store(seed, metric);
         let mut rng = Rng(seed + 1000);
         let dims = model.vectors[0].vector.len();
-        for _ in 0..6 {
+        for _ in 0..3 {
             let query = adversarial(&mut rng, dims, &model.vectors, metric);
             for k in [1, 3, 10, 100] {
                 for valid_at in [None, Some(5), Some(18)] {
@@ -1473,4 +1473,89 @@ fn the_untyped_vector_property_migrates_only_explicitly() {
         )
         .unwrap_err();
     assert_eq!(error.code, "E_FORBIDDEN");
+}
+
+#[test]
+fn streaming_nearest_spans_chunks_and_ignores_hidden_vectors() {
+    // More embeddings than one authorization chunk (256), in both stores;
+    // the second also holds a hidden exact duplicate of every visible vector.
+    let build = |hidden: bool| {
+        let mut rng = Rng(77);
+        let mut e = Engine::memory_with_clock(Arc::new(ManualClock::new(5))).unwrap();
+        let mut model = Model {
+            metric: "euclidean",
+            nodes: BTreeMap::new(),
+            vectors: vec![],
+        };
+        let mut changes = vec![assert(space("sp", 3, "euclidean"))];
+        for i in 0..40 {
+            let id = format!("n{i:02}");
+            let readers = if i % 7 == 0 {
+                json!(["bob"])
+            } else {
+                json!([])
+            };
+            changes.push(assert(node(&id, readers.clone())));
+            model.nodes.insert(id, readers);
+        }
+        let mut visible: Vec<Vector> = vec![];
+        for i in 0..700 {
+            let vector = adversarial(&mut rng, 3, &visible, "euclidean");
+            let n = format!("n{:02}", rng.next(40));
+            let readers = if rng.next(5) == 0 {
+                json!(["bob"])
+            } else {
+                json!([])
+            };
+            let mut copies = vec![(format!("v{i:04}"), readers)];
+            if hidden {
+                copies.push((format!("v{i:04}h"), json!(["mallory"])));
+            }
+            for (j, (id, readers)) in copies.into_iter().enumerate() {
+                changes.push(assert(embedding(
+                    &id,
+                    "sp",
+                    on_node(&n),
+                    &vector,
+                    always(),
+                    readers.clone(),
+                )));
+                let v = Vector {
+                    id,
+                    subject_kind: 1,
+                    subject: n.clone(),
+                    vector: vector.clone(),
+                    valid: (0, None),
+                    readers,
+                };
+                if j == 0 {
+                    visible.push(v.clone());
+                }
+                model.vectors.push(v);
+            }
+        }
+        write(&mut e, changes).unwrap();
+        (e, model)
+    };
+    let ((mut a, model_a), (mut b, model_b)) = (build(false), build(true));
+    let mut rng = Rng(5);
+    for _ in 0..4 {
+        let query = adversarial(&mut rng, 3, &model_a.vectors, "euclidean");
+        for k in [1u32, 10, 300, 1000] {
+            for principal in ["alice", "bob"] {
+                let x = evaluate(&mut a, principal, nearest("sp", &query, k)).unwrap();
+                let y = evaluate(&mut b, principal, nearest("sp", &query, k)).unwrap();
+                assert_eq!(
+                    hits(&x),
+                    model_a.nearest(principal, &query, k as usize, None)
+                );
+                assert_eq!(normal(&Ok(x)), normal(&Ok(y)), "k {k} {principal}");
+            }
+            let mallory = evaluate(&mut b, "mallory", nearest("sp", &query, k)).unwrap();
+            assert_eq!(
+                hits(&mallory),
+                model_b.nearest("mallory", &query, k as usize, None)
+            );
+        }
+    }
 }

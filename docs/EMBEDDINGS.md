@@ -10,7 +10,8 @@ with graph traversal in one plan. The normative rules are in
 [0.24](contract/v0.24/README.md). Store 31 holds the new fact kinds.
 
 Weave does not generate embeddings. The caller owns the encoder and writes
-its vectors, as with any other fact.
+its vectors, as with any other fact. From Python, see the
+[hybrid retrieval tutorial](PYTHON_SCIENCE.md#hybrid-retrieval-with-caller-supplied-embeddings).
 
 ## Spaces and embedding facts
 
@@ -90,6 +91,12 @@ sets (`changes`) list them like every other fact.
 - `candidates` restricts the ranking to the subjects of another value: its
   nodes, their entities and its edges, by origin in the same graph.
 - `k` is 1 to 1,000 (`E_NEAREST` for 0, `E_BUDGET` above).
+- The ranking streams: it reads the selected embeddings through the fact
+  index in chunks, authorizes each chunk with its subjects and keeps only the
+  best `k`, so memory is O(k) plus one chunk whatever the space size. The
+  vectors it streams are counted against a scan budget of 268,435,456
+  components (`MAX_SCAN_COMPONENTS`, about 174,000 vectors of 1,536
+  dimensions) instead of the 128 MiB read budget; more fails with `E_BUDGET`.
 
 **Selection comes before ranking.** Space, valid time, candidate set and the
 authorization of every embedding and its subject are applied first. A hidden
@@ -191,14 +198,21 @@ conversion plans nothing.
 
 - Ranking is exhaustive (`exact`). An approximate index is C5; it will sit
   behind the same ranking boundary and fall back to the exact scan.
-- The 128 MiB read budget counts the stored embeddings a ranking reads,
-  including ones the reader cannot see, as every read does. Stored vectors are
-  JSON, about 10 to 12 bytes per component, so one whole-space scan reaches
-  roughly 7,000 vectors of 1,536 dimensions (`E_BUDGET` beyond); a candidate
-  set or a smaller space ranks far more. Revision IDs change with hidden
+- **Measured** ([report](benchmarks/embeddings-2026-10-20.json), one AMD
+  Ryzen 9 7950X Linux host, optimized build): 100,000 embeddings of 1,536
+  dimensions load in 100 writes of 1,000 at about 330 ms each, flat from the
+  first write to the last; one more embedding is a 1.2 ms write on the full
+  store; an exact top-10 over the whole space takes about 7.1 s (3.6 s when
+  `valid_at` selects half), with peak memory unchanged by the ranking. The
+  store is about 2.1 GB, because vectors are stored as JSON.
+- The scan budget of `nearest` counts every stored embedding it streams,
+  including ones the reader cannot see, as the read budget counts every read
+  record; `similar_candidates` keeps its vectors in memory and is bounded by
+  the read budget and its comparison limit. Revision IDs change with hidden
   writes.
 - Every read of a fact revision recomputes its ID from its own operations,
   so write large embedding loads in batches of a few thousand.
+
 - Results include the hit vectors; `k` times the dimension is bounded by the
   32 MiB result budget.
 - Views and handler recipes reject `nearest` and `similar_candidates`.

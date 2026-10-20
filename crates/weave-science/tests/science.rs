@@ -404,7 +404,14 @@ fn json_api_exposes_expand_as_of_changes_and_explain() {
     let capabilities = s
         .handle(request(json!({"operation":"capabilities"})))
         .unwrap();
-    for operator in ["expand", "as_of", "changes", "explain"] {
+    for operator in [
+        "expand",
+        "as_of",
+        "changes",
+        "explain",
+        "nearest",
+        "similar_candidates",
+    ] {
         assert!(capabilities["query_operators"]
             .as_array()
             .unwrap()
