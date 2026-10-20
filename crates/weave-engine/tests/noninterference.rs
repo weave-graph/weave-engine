@@ -1011,10 +1011,7 @@ fn hidden_facts_never_change_any_operators_output() {
     let todo: Vec<usize> = (0..OPERATORS.len()).collect();
     let counts = Mutex::new(BTreeMap::new());
     let next = AtomicUsize::new(0);
-    let threads = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(2)
-        .min(8);
+    let threads = threads();
     let base = first_seed();
     let started = std::time::Instant::now();
     std::thread::scope(|scope| {
@@ -1151,6 +1148,8 @@ fn proof_conjunctions_do_not_depend_on_hidden_records() {
 /// The error of a retraction with a live dependent, which the store with
 /// hidden facts may return where the other succeeds (the declared
 /// dependent channel, ADR-0008 section 4).
+/// Write cases per world; the last retracts the lonely node.
+const WRITE_CASES: usize = 20;
 const DEPENDENT: &str = "error E_DEPENDENT_FACT a retracted fact still has live dependent facts";
 
 /// One generated write by `alice`, who has Write on `g` in registry stores.
@@ -1159,6 +1158,11 @@ const DEPENDENT: &str = "error E_DEPENDENT_FACT a retracted fact still has live 
 /// those compare with hidden versions in every store until B2 part 2
 /// (ADR-0008 section 4).
 fn plan_write(g: &mut Gen, case: usize) -> Value {
+    if case == WRITE_CASES - 1 {
+        // Every world ends on the node only a hidden record depends on.
+        return json!([{"op": "write", "graph_id": "g", "changes": [
+            {"change": "retract", "target": {"kind": "node", "id": LONELY}}]}]);
+    }
     let mut changes = vec![];
     let mut used = std::collections::BTreeSet::new();
     for j in 0..g.rng.range(1, 3) {
@@ -1222,97 +1226,119 @@ fn plan_write(g: &mut Gen, case: usize) -> Value {
 /// exactly as for a missing fact.
 #[test]
 fn hidden_facts_never_change_a_writers_outcome_in_registry_stores() {
+    // The set of worlds depends only on the target, never on the number of
+    // threads or their timing: worlds run in batches of seeds, and a batch is
+    // added only after the previous one is complete. (The first version
+    // stopped on a shared running count, so a 3-core CI host ran fewer worlds
+    // than an 8-core one.)
     let target = cases_per_operator();
-    let cases = AtomicUsize::new(0);
-    let next = AtomicUsize::new(0);
-    let counts = Mutex::new(Counts::default());
-    let threads = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(2)
-        .min(8);
     let base = first_seed() | 1;
-    std::thread::scope(|scope| {
-        for _ in 0..threads {
-            scope.spawn(|| {
-                while cases.load(Ordering::SeqCst) < target {
+    let mut counts = Counts::default();
+    let mut started = 0usize;
+    while counts.cases < target {
+        let batch = (target - counts.cases).div_ceil(WRITE_CASES).max(1);
+        let next = AtomicUsize::new(started);
+        let end = started + batch;
+        let results = Mutex::new(Vec::new());
+        std::thread::scope(|scope| {
+            for _ in 0..threads() {
+                scope.spawn(|| loop {
+                    let index = next.fetch_add(1, Ordering::SeqCst);
+                    if index >= end {
+                        break;
+                    }
                     // Registry worlds are the odd seeds.
-                    let seed = base + 2 * next.fetch_add(1, Ordering::SeqCst) as u64;
-                    let spec = Spec::new(seed, Profile::Registry);
-                    let mut plain = World::build(&spec, false);
-                    let mut mixed = World::build(&spec, true);
-                    plain.at(FINAL_TIME);
-                    mixed.at(FINAL_TIME);
-                    let mut local = Counts::default();
-                    for case in 0..20 {
-                        let mut gen = Gen {
-                            spec: &spec,
-                            rng: Rng::new(seed.wrapping_mul(9_176_219) ^ case as u64),
-                        };
-                        let commands = plan_write(&mut gen, case);
-                        let host = HostContext::new("alice", Vec::<String>::new());
-                        let a = plain.e.execute(&program(commands.clone()), &host);
-                        let b = mixed.e.execute(&program(commands.clone()), &host);
-                        // A new revision of the same visible state gets one label.
-                        for (world, result) in [(&mut plain, &a), (&mut mixed, &b)] {
-                            if let Ok(results) = result {
-                                if let Some(
-                                    CommandResult::Committed { revision, .. }
-                                    | CommandResult::Unchanged { revision },
-                                ) = results.last()
-                                {
-                                    world.token(&format!("W{case}"), revision.clone());
-                                }
-                            }
-                        }
-                        let text = |world: &World, r: weave_engine::Result<Vec<CommandResult>>| {
-                            canonical(
-                                world,
-                                r.map(|v| serde_json::to_value(v).unwrap())
-                                    .map_err(|e| (e.code, e.message)),
-                            )
-                        };
-                        let (a, b) = (text(&plain, a), text(&mixed, b));
-                        local.cases += 1;
-                        if a != b {
-                            assert!(
-                                b == DEPENDENT && commands.to_string().contains("retract"),
-                                "hidden facts changed alice's write outcome (seed {seed}, case {case})\nplan {commands}\n{}",
-                                difference(&a, &b)
-                            );
-                            // The stores now differ in visible state: stop this world.
-                            local.declared += 1;
-                            break;
-                        }
-                        if a.starts_with("error") {
-                            let code = a.split(' ').nth(1).unwrap_or_default().to_string();
-                            *local.error_codes.entry(code).or_default() += 1;
-                            local.errors += 1;
-                        } else {
-                            local.ok += 1;
-                        }
-                    }
-                    cases.fetch_add(local.cases, Ordering::SeqCst);
-                    let mut counts = counts.lock().unwrap();
-                    counts.cases += local.cases;
-                    counts.ok += local.ok;
-                    counts.errors += local.errors;
-                    counts.declared += local.declared;
-                    for (code, n) in local.error_codes {
-                        *counts.error_codes.entry(code).or_default() += n;
-                    }
-                }
-            });
+                    let local = write_world(base + 2 * index as u64);
+                    results.lock().unwrap().push(local);
+                });
+            }
+        });
+        started = end;
+        for local in results.into_inner().unwrap() {
+            counts.cases += local.cases;
+            counts.ok += local.ok;
+            counts.errors += local.errors;
+            counts.declared += local.declared;
+            for (code, n) in local.error_codes {
+                *counts.error_codes.entry(code).or_default() += n;
+            }
         }
-    });
-    let counts = counts.into_inner().unwrap();
-    println!("NONINTERFERENCE_WRITES {}", json!(counts));
+    }
+    println!(
+        "NONINTERFERENCE_WRITES {}",
+        json!({"worlds": started, "counts": counts})
+    );
     assert!(counts.cases >= target);
     assert!(counts.ok > 0 && counts.errors > 0);
     assert!(
         counts.error_codes.contains_key("E_CONFLICT"),
         "corrections and retractions of hidden facts were exercised"
     );
-    assert!(counts.declared > 0, "the hidden dependents were reached");
+    // Every world ends on the lonely node, so every world reaches the
+    // dependent refusal at least once.
+    assert!(
+        counts.declared >= started,
+        "the hidden dependents were reached in every world"
+    );
+}
+
+/// One registry world of generated writes by `alice`.
+fn write_world(seed: u64) -> Counts {
+    let spec = Spec::new(seed, Profile::Registry);
+    let mut plain = World::build(&spec, false);
+    let mut mixed = World::build(&spec, true);
+    plain.at(FINAL_TIME);
+    mixed.at(FINAL_TIME);
+    let mut local = Counts::default();
+    let host = HostContext::new("alice", Vec::<String>::new());
+    for case in 0..WRITE_CASES {
+        let mut gen = Gen {
+            spec: &spec,
+            rng: Rng::new(seed.wrapping_mul(9_176_219) ^ case as u64),
+        };
+        let commands = plan_write(&mut gen, case);
+        let a = plain.e.execute(&program(commands.clone()), &host);
+        let b = mixed.e.execute(&program(commands.clone()), &host);
+        // A new revision of the same visible state gets one label.
+        for (world, result) in [(&mut plain, &a), (&mut mixed, &b)] {
+            if let Ok(results) = result {
+                if let Some(
+                    CommandResult::Committed { revision, .. }
+                    | CommandResult::Unchanged { revision },
+                ) = results.last()
+                {
+                    world.token(&format!("W{case}"), revision.clone());
+                }
+            }
+        }
+        let text = |world: &World, r: weave_engine::Result<Vec<CommandResult>>| {
+            canonical(
+                world,
+                r.map(|v| serde_json::to_value(v).unwrap())
+                    .map_err(|e| (e.code, e.message)),
+            )
+        };
+        let (a, b) = (text(&plain, a), text(&mixed, b));
+        local.cases += 1;
+        if a != b {
+            assert!(
+                b == DEPENDENT && commands.to_string().contains("retract"),
+                "hidden facts changed alice's write outcome (seed {seed}, case {case})\nplan {commands}\n{}",
+                difference(&a, &b)
+            );
+            // The stores now differ in visible state: stop this world.
+            local.declared += 1;
+            break;
+        }
+        if a.starts_with("error") {
+            let code = a.split(' ').nth(1).unwrap_or_default().to_string();
+            *local.error_codes.entry(code).or_default() += 1;
+            local.errors += 1;
+        } else {
+            local.ok += 1;
+        }
+    }
+    local
 }
 
 /// The dependent channel is exactly one bit: a hidden dependent and a

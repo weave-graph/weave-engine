@@ -202,10 +202,7 @@ fn hidden_facts_never_change_any_science_analysis() {
     let worlds = target.div_ceil(plans).max(2);
     let counts = Mutex::new(BTreeMap::new());
     let next = AtomicUsize::new(0);
-    let threads = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(2)
-        .min(8);
+    let threads = threads();
     let base = first_seed();
     let started = std::time::Instant::now();
     std::thread::scope(|scope| {

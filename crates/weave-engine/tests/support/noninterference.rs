@@ -66,6 +66,8 @@ pub const SPACES: [&str; 2] = ["s0", "s1"];
 pub const PREDICATES: [&str; 3] = ["p", "q", "twin"];
 pub const KEYS: [&str; 2] = ["note", "tag"];
 pub const DIMS: usize = 3;
+/// A visible node of `g` with no visible dependents and one hidden one.
+pub const LONELY: &str = "lonely";
 /// Recorded times of the visible steps. Hidden facts are written as their own
 /// revision right after each visible step, at the same recorded time, so every
 /// time and every label selects one revision per store (see `World::alias`).
@@ -226,6 +228,17 @@ impl Spec {
             hidden_nodes.insert(hid.clone(), node.clone());
             hidden.push(assert_change(node));
             spec.hidden_nodes.push(hid.clone());
+            if step == 0 {
+                // A public node that only a hidden edge depends on, so the
+                // write harness always reaches the dependent refusal.
+                visible.push(assert_change(json!({"kind": "node", "id": LONELY,
+                    "entity_id": "lonely", "space_id": "s0"})));
+                let mut edge = json!({"kind": "edge", "id": "he-lonely", "predicate": "p",
+                    "from": LONELY, "to": hid, "valid_time": {"start": 0}});
+                spec.restrict_hidden(&mut rng, &mut edge);
+                hidden.push(assert_change(edge));
+                spec.hidden_edges.push("he-lonely".into());
+            }
             if step > 0 && rng.chance(1, 2) {
                 let previous = format!("h{}", step - 1);
                 let mut node = hidden_nodes[&previous].clone();
@@ -1141,6 +1154,22 @@ pub fn cases_per_operator() -> usize {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(40)
+}
+
+/// Worker threads: `WEAVE_NI_THREADS`, else the host's parallelism up to 8.
+/// Every harness chooses its worlds independently of this number, so a run
+/// on any host checks the same cases.
+pub fn threads() -> usize {
+    std::env::var("WEAVE_NI_THREADS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(2)
+                .min(8)
+        })
 }
 
 /// A first seed, so a failing case can be rerun alone (`WEAVE_NI_SEED`).

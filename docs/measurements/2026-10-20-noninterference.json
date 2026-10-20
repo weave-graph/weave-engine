@@ -6,22 +6,22 @@
   "operators": {
    "accepted_graph": {
     "cases": 10000,
-    "declared": 592,
+    "declared": 456,
     "error_codes": {
-     "E_GOV_UNAVAILABLE": 12806
+     "E_GOV_UNAVAILABLE": 12942
     },
-    "errors": 12806,
-    "ok": 7194,
+    "errors": 12942,
+    "ok": 7058,
     "sensitive": 3358
    },
    "accepted_history": {
     "cases": 10000,
-    "declared": 503,
+    "declared": 411,
     "error_codes": {
-     "E_GOV_HISTORY_UNAVAILABLE": 10579
+     "E_GOV_HISTORY_UNAVAILABLE": 10671
     },
-    "errors": 10579,
-    "ok": 9421,
+    "errors": 10671,
+    "ok": 9329,
     "sensitive": 2716
    },
    "as_of": {
@@ -32,18 +32,18 @@
     },
     "errors": 4040,
     "ok": 15960,
-    "sensitive": 5175
+    "sensitive": 5305
    },
    "changes": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 1108,
+     "E_BUDGET": 1103,
      "E_UNAVAILABLE": 800
     },
-    "errors": 1908,
-    "ok": 18092,
-    "sensitive": 4827
+    "errors": 1903,
+    "ok": 18097,
+    "sensitive": 4857
    },
    "cluster": {
     "cases": 10000,
@@ -58,105 +58,105 @@
     "declared": 0,
     "error_codes": {
      "E_BUDGET": 160,
-     "E_SPACE": 92,
-     "E_UNAVAILABLE": 1983
+     "E_SPACE": 88,
+     "E_UNAVAILABLE": 1987
     },
     "errors": 2235,
     "ok": 17765,
-    "sensitive": 5636
+    "sensitive": 5721
    },
    "counterparts": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 137,
-     "E_IDENTITY": 15,
-     "E_SPACE": 77,
-     "E_UNAVAILABLE": 2089
+     "E_BUDGET": 149,
+     "E_IDENTITY": 19,
+     "E_SPACE": 80,
+     "E_UNAVAILABLE": 2080
     },
-    "errors": 2318,
-    "ok": 17682,
-    "sensitive": 4920
+    "errors": 2328,
+    "ok": 17672,
+    "sensitive": 5012
    },
    "current_view": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_UNAVAILABLE": 16588
+     "E_UNAVAILABLE": 16583
     },
-    "errors": 16588,
-    "ok": 3412,
-    "sensitive": 1170
+    "errors": 16583,
+    "ok": 3417,
+    "sensitive": 1199
    },
    "diff": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 168,
-     "E_SPACE": 112,
-     "E_UNAVAILABLE": 1993
+     "E_BUDGET": 154,
+     "E_SPACE": 119,
+     "E_UNAVAILABLE": 1988
     },
-    "errors": 2273,
-    "ok": 17727,
-    "sensitive": 8577
+    "errors": 2261,
+    "ok": 17739,
+    "sensitive": 8609
    },
    "expand": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 808,
-     "E_SPACE": 114,
-     "E_UNAVAILABLE": 2533
+     "E_BUDGET": 757,
+     "E_SPACE": 108,
+     "E_UNAVAILABLE": 2541
     },
-    "errors": 3455,
-    "ok": 16545,
-    "sensitive": 7251
+    "errors": 3406,
+    "ok": 16594,
+    "sensitive": 7304
    },
    "explain": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 181,
-     "E_SPACE": 104,
-     "E_UNAVAILABLE": 2193
+     "E_BUDGET": 175,
+     "E_SPACE": 101,
+     "E_UNAVAILABLE": 2206
     },
-    "errors": 2478,
-    "ok": 17522,
-    "sensitive": 4899
+    "errors": 2482,
+    "ok": 17518,
+    "sensitive": 4961
    },
    "filter": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 161,
-     "E_SPACE": 96,
-     "E_UNAVAILABLE": 1998
+     "E_BUDGET": 160,
+     "E_SPACE": 87,
+     "E_UNAVAILABLE": 2002
     },
-    "errors": 2255,
-    "ok": 17745,
-    "sensitive": 3707
+    "errors": 2249,
+    "ok": 17751,
+    "sensitive": 3790
    },
    "geometry": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_GEOMETRY_UNAVAILABLE": 15888
+     "E_GEOMETRY_UNAVAILABLE": 15995
     },
-    "errors": 15888,
-    "ok": 4112,
-    "sensitive": 4669
+    "errors": 15995,
+    "ok": 4005,
+    "sensitive": 4652
    },
    "join": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 212,
-     "E_SPACE": 124,
-     "E_UNAVAILABLE": 3193
+     "E_BUDGET": 209,
+     "E_SPACE": 142,
+     "E_UNAVAILABLE": 3199
     },
-    "errors": 3529,
-    "ok": 16471,
-    "sensitive": 2517
+    "errors": 3550,
+    "ok": 16450,
+    "sensitive": 2582
    },
    "metadata": {
     "cases": 10000,
@@ -166,32 +166,32 @@
     },
     "errors": 708,
     "ok": 19292,
-    "sensitive": 735
+    "sensitive": 737
    },
    "nearest": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 106,
-     "E_SPACE": 871,
-     "E_UNAVAILABLE": 7497
+     "E_BUDGET": 103,
+     "E_SPACE": 837,
+     "E_UNAVAILABLE": 7514
     },
-    "errors": 8474,
-    "ok": 11526,
-    "sensitive": 6724
+    "errors": 8454,
+    "ok": 11546,
+    "sensitive": 6736
    },
    "project": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 82,
-     "E_PROJECT_MEMBER": 15329,
-     "E_SPACE": 45,
-     "E_UNAVAILABLE": 987
+     "E_BUDGET": 79,
+     "E_PROJECT_MEMBER": 15296,
+     "E_SPACE": 55,
+     "E_UNAVAILABLE": 992
     },
-    "errors": 16443,
-    "ok": 3557,
-    "sensitive": 5214
+    "errors": 16422,
+    "ok": 3578,
+    "sensitive": 5218
    },
    "query": {
     "cases": 10000,
@@ -201,42 +201,42 @@
     },
     "errors": 648,
     "ok": 19352,
-    "sensitive": 6911
+    "sensitive": 7024
    },
    "reason": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 170,
-     "E_SPACE": 104,
-     "E_UNAVAILABLE": 2035
+     "E_BUDGET": 159,
+     "E_SPACE": 105,
+     "E_UNAVAILABLE": 2036
     },
-    "errors": 2309,
-    "ok": 17691,
-    "sensitive": 6424
+    "errors": 2300,
+    "ok": 17700,
+    "sensitive": 6517
    },
    "recorded_query": {
     "cases": 10000,
-    "declared": 960,
+    "declared": 935,
     "error_codes": {
-     "E_HISTORY_UNAVAILABLE": 15270,
+     "E_HISTORY_UNAVAILABLE": 15295,
      "E_UNAVAILABLE": 698
     },
-    "errors": 15968,
-    "ok": 4032,
-    "sensitive": 5467
+    "errors": 15993,
+    "ok": 4007,
+    "sensitive": 5571
    },
    "reference": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 247,
-     "E_SPACE": 146,
-     "E_UNAVAILABLE": 3012
+     "E_BUDGET": 236,
+     "E_SPACE": 156,
+     "E_UNAVAILABLE": 3021
     },
-    "errors": 3405,
-    "ok": 16595,
-    "sensitive": 6784
+    "errors": 3413,
+    "ok": 16587,
+    "sensitive": 6783
    },
    "resolve_identity": {
     "cases": 10000,
@@ -250,79 +250,79 @@
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 302,
-     "E_INFLUENCE_BUDGET": 3,
-     "E_SPACE": 193,
-     "E_UNAVAILABLE": 3821
+     "E_BUDGET": 308,
+     "E_INFLUENCE_BUDGET": 2,
+     "E_SPACE": 189,
+     "E_UNAVAILABLE": 3841
     },
-    "errors": 4319,
-    "ok": 15681,
-    "sensitive": 6595
+    "errors": 4340,
+    "ok": 15660,
+    "sensitive": 6695
    },
    "similar_candidates": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 430,
-     "E_SPACE": 33,
-     "E_UNAVAILABLE": 1577
+     "E_BUDGET": 450,
+     "E_SPACE": 29,
+     "E_UNAVAILABLE": 1586
     },
-    "errors": 2040,
-    "ok": 17960,
-    "sensitive": 6132
+    "errors": 2065,
+    "ok": 17935,
+    "sensitive": 6114
    },
    "support": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 174,
-     "E_SPACE": 99,
-     "E_UNAVAILABLE": 2115
+     "E_BUDGET": 153,
+     "E_SPACE": 101,
+     "E_UNAVAILABLE": 2127
     },
-    "errors": 2388,
-    "ok": 17612,
-    "sensitive": 6486
+    "errors": 2381,
+    "ok": 17619,
+    "sensitive": 6531
    },
    "typed_context": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 134,
-     "E_CONTEXT_UNAVAILABLE": 8280,
-     "E_SPACE": 95,
-     "E_UNAVAILABLE": 2029
+     "E_BUDGET": 139,
+     "E_CONTEXT_UNAVAILABLE": 8265,
+     "E_SPACE": 96,
+     "E_UNAVAILABLE": 2026
     },
-    "errors": 10538,
-    "ok": 9462,
-    "sensitive": 5070
+    "errors": 10526,
+    "ok": 9474,
+    "sensitive": 5108
    },
    "union": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 326,
-     "E_SPACE": 194,
-     "E_UNAVAILABLE": 3731
+     "E_BUDGET": 333,
+     "E_SPACE": 191,
+     "E_UNAVAILABLE": 3737
     },
-    "errors": 4251,
-    "ok": 15749,
-    "sensitive": 7270
+    "errors": 4261,
+    "ok": 15739,
+    "sensitive": 7316
    },
    "window": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 155,
-     "E_INFLUENCE_BUDGET": 3,
-     "E_SPACE": 123,
-     "E_UNAVAILABLE": 2057
+     "E_BUDGET": 154,
+     "E_INFLUENCE_BUDGET": 5,
+     "E_SPACE": 105,
+     "E_UNAVAILABLE": 2071
     },
-    "errors": 2338,
-    "ok": 17662,
-    "sensitive": 6394
+    "errors": 2335,
+    "ok": 17665,
+    "sensitive": 6448
    }
   },
-  "seconds": 682.230818792,
+  "seconds": 655.792167298,
   "worlds": 1000
  },
  "host": {
@@ -330,79 +330,82 @@
   "os": "Linux",
   "threads_used": 8
  },
- "notes": "writes: declared counts the uniform E_DEPENDENT_FACT refusals (a world stops after one); sensitivity does not apply to writes.",
+ "notes": "writes: declared counts the uniform E_DEPENDENT_FACT refusals; every world ends on one by construction and stops there; sensitivity does not apply to writes. World sets do not depend on the thread count.",
  "result": "pass: every operator and analysis reached 10,000 cases, with no interference and nonzero sensitivity",
  "science": {
   "analyses": {
    "components": {
     "cases": 10000,
     "error_codes": {
-     "E_SCIENCE_PARTIAL": 993,
+     "E_SCIENCE_PARTIAL": 999,
      "E_UNAVAILABLE": 196
     },
-    "errors": 1189,
-    "ok": 18811,
-    "sensitive": 9490
+    "errors": 1195,
+    "ok": 18805,
+    "sensitive": 9573
    },
    "degree": {
     "cases": 10000,
     "error_codes": {
-     "E_SCIENCE_PARTIAL": 907,
+     "E_SCIENCE_PARTIAL": 908,
      "E_UNAVAILABLE": 192
     },
-    "errors": 1099,
-    "ok": 18901,
-    "sensitive": 9520
+    "errors": 1100,
+    "ok": 18900,
+    "sensitive": 9599
    },
    "nearest_vectors": {
     "cases": 10000,
     "error_codes": {
-     "E_SCIENCE_PARTIAL": 944,
+     "E_SCIENCE_PARTIAL": 936,
      "E_UNAVAILABLE": 184
     },
-    "errors": 1128,
-    "ok": 18872,
-    "sensitive": 9497
+    "errors": 1120,
+    "ok": 18880,
+    "sensitive": 9552
    },
    "pagerank": {
     "cases": 10000,
     "error_codes": {
-     "E_SCIENCE_PARTIAL": 1047,
+     "E_SCIENCE_PARTIAL": 1019,
      "E_UNAVAILABLE": 152
     },
-    "errors": 1199,
-    "ok": 18801,
-    "sensitive": 9509
+    "errors": 1171,
+    "ok": 18829,
+    "sensitive": 9591
    },
    "shortest_paths": {
     "cases": 10000,
     "error_codes": {
-     "E_SCIENCE_PARTIAL": 938,
-     "E_SCIENCE_SOURCE": 14786,
-     "E_SCIENCE_TARGET": 1137,
+     "E_SCIENCE_PARTIAL": 916,
+     "E_SCIENCE_SOURCE": 14873,
+     "E_SCIENCE_TARGET": 1090,
      "E_UNAVAILABLE": 202
     },
-    "errors": 17063,
-    "ok": 2937,
-    "sensitive": 4995
+    "errors": 17081,
+    "ok": 2919,
+    "sensitive": 5076
    }
   },
   "cases_per_analysis_target": 10000,
-  "seconds": 229.201906761,
+  "seconds": 179.722094976,
   "worlds": 1000
  },
  "source_commit": "origin/main 4440843 + B2 part 1",
  "what": "B2 noninterference harness, full-count tier (ADR-0008 section 7)",
  "writes_registry_stores": {
-  "cases": 10146,
-  "declared": 27,
-  "error_codes": {
-   "E_CONFLICT": 6613,
-   "E_DEPENDENT_FACT": 496,
-   "E_SCHEMA_ENDPOINT": 9
+  "counts": {
+   "cases": 10000,
+   "declared": 515,
+   "error_codes": {
+    "E_CONFLICT": 6197,
+    "E_DEPENDENT_FACT": 457,
+    "E_SCHEMA_ENDPOINT": 3
+   },
+   "errors": 6657,
+   "ok": 2828,
+   "sensitive": 0
   },
-  "errors": 7118,
-  "ok": 3001,
-  "sensitive": 0
+  "worlds": 515
  }
 }

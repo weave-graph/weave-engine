@@ -1999,7 +1999,9 @@ records, corrections and retractions of visible, hidden and missing records.
 It covers the B3 rule (#70) that correcting or retracting a fact the writer
 cannot read fails exactly as for a missing one. A case whose outcomes differ
 must be the uniform dependent refusal, which ends that world, because the two
-stores' visible states then differ. Assertions of hidden IDs, references to
+stores' visible states then differ. Every world ends by retracting a public
+node that only a hidden edge depends on, so each world reaches the refusal
+and the check is never vacuous. Assertions of hidden IDs, references to
 hidden records and local stores are left out for now. They still compare with
 hidden versions, which ADR-0008 section 4 fixes in part 2, and part 2 adds
 them to the generator.
@@ -2021,3 +2023,24 @@ every profile is ADR-0008 section 4 (part 2): an `assert` of an ID that a
 hidden record holds fails with one `E_CONFLICT`, whatever the hidden record's
 kind or content, so a writer who chooses IDs learns occupancy and nothing
 else. That remaining bit is declared.
+
+### 2026-10-20 — #5 B2 — The macOS write-harness failure was a vacuity check, not a leak
+
+The first CI run of the write-outcome harness failed on macOS only, at the
+final `declared > 0` assertion. No case had different outcomes in the two
+stores. The harness stopped when a shared running count of cases reached
+its target, so the set of worlds it ran depended on the number of threads.
+The 3-core macOS runner ran 4 worlds (seeds 1, 3, 5 and 7, 80 cases), and none
+of them happened to retract a record with a hidden dependent. Replaying that
+commit on Linux with 3 threads reproduced the same counts exactly
+(`{"cases":80,"declared":0,...}`) three times out of three.
+
+Two fixes, and the property is unchanged:
+
+- Every harness now chooses its worlds from the target alone. The write
+  harness runs batches of seeds and adds a batch only after the last one
+  completes. `WEAVE_NI_THREADS` sets the number of threads, so any host can
+  replay any run. With 1, 3 and 8 threads it gives identical counts.
+- Every write world ends by retracting a public node that only a hidden edge
+  depends on. The assertion is now that every world reached the dependent
+  refusal, which holds by construction rather than by chance.
