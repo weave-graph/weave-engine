@@ -30,6 +30,19 @@ pub(crate) fn fact_reader_groups(fact: &Fact) -> &[String] {
     }
 }
 
+/// The `readers` of a fact record (spaces have none).
+fn fact_readers(fact: &Fact) -> &[String] {
+    match fact {
+        Fact::Node(n) => &n.readers,
+        Fact::Edge(e) => &e.readers,
+        Fact::StructuralEdge(e) => &e.readers,
+        Fact::Assertion(a) => &a.readers,
+        Fact::Attachment(a) => &a.readers,
+        Fact::EmbeddingSpace(_) => &[],
+        Fact::Embedding(e) => &e.readers,
+    }
+}
+
 /// The stored `on_behalf_of` column: a JSON array of principal IDs, the
 /// agent writer's owner first (ADR-0007 section 8). Absent for every
 /// non-delegated write.
@@ -738,6 +751,34 @@ impl Engine {
         )
     }
 
+    /// True when `access` admits a live parent fact: its own `readers` and
+    /// `reader_groups`, and for an edge both live endpoint nodes'.
+    fn writer_reads(
+        &self,
+        parent: &Parent,
+        fact: &Fact,
+        access: &visibility::Access,
+    ) -> Result<bool> {
+        let admits =
+            |f: &Fact| visibility::record_admits(fact_readers(f), fact_reader_groups(f), access);
+        if !admits(fact) {
+            return Ok(false);
+        }
+        let endpoints: [&str; 2] = match fact {
+            Fact::Edge(e) => [&e.from, &e.to],
+            Fact::StructuralEdge(e) => [&e.from, &e.to],
+            _ => return Ok(true),
+        };
+        for node in endpoints {
+            if let Some(seen) = self.parent_get(parent, &(store::Namespace::Node, node.into()))? {
+                if !admits(&seen.fact) {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
+    }
+
     fn check_expectation(
         &self,
         graph: &str,
@@ -845,6 +886,15 @@ impl Engine {
             },
         };
         let header = self.parent_header(&parent)?;
+        // In a registry store, correcting or retracting a fact needs Read on
+        // it (ADR-0007 section 4). A live fact the writer cannot read is
+        // treated as absent, so the write fails exactly as for a missing
+        // fact. The registry's own writes are exempt.
+        let reader = if self.registry_head()?.is_some() && !registry::reserved(graph) {
+            Some(self.access(host)?)
+        } else {
+            None
+        };
         // Effective operations: key -> Some(new version) or None (retract).
         let mut ops: BTreeMap<Key, Option<Fact>> = BTreeMap::new();
         let mut live_before: BTreeMap<Key, Option<Fact>> = BTreeMap::new();
@@ -863,7 +913,14 @@ impl Engine {
             if live_before.contains_key(&k) {
                 return Err(conflict("a fact occurs twice in one write"));
             }
-            let live = self.parent_get(&parent, &k)?;
+            let mut live = self.parent_get(&parent, &k)?;
+            if let (Some(access), Some(seen)) = (&reader, &live) {
+                if !matches!(change, FactChange::Assert { .. })
+                    && !self.writer_reads(&parent, &seen.fact, access)?
+                {
+                    live = None;
+                }
+            }
             if live.as_ref().is_some_and(|l| l.fact.kind() != kind) {
                 return Err(conflict("a live fact with this ID has another kind"));
             }

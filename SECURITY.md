@@ -1,6 +1,8 @@
 # Security boundary
 
-The engine and science CLI are trusted local interfaces. A caller controlling
+The engine and science CLI are trusted local interfaces. The authenticated
+service (`weave-service`, [below](#the-authenticated-service-b3)) is the
+interface meant for untrusted network clients. A caller controlling
 CLI flags, the SQLite database or the embedding `HostContext` controls host
 authority. `--actor` selects a principal; it does not authenticate a remote user.
 The Python SDK inherits the same boundary. Do not expose these interfaces as
@@ -42,7 +44,49 @@ occupancy of client-chosen record IDs by hidden records (`E_CONFLICT`, see
 `on_behalf_of` identities disclosed to a fact's readers. Agents act with at
 most their owner's current authority, narrowed by their delegation, and
 never with Administer. Authentication and tenant isolation
-are B3.
+are B3. In a registry store a writer can correct or retract only facts it
+can read; retracting a fact with a hidden live dependent fails
+`E_DEPENDENT_FACT`, which is a further declared channel until B2.
+
+## The authenticated service (B3)
+
+`weave-service` ([guide](docs/SERVICE.md)) moves the trust boundary from the
+local process to the network. Its trust model:
+
+- **Trusted:** the operator who runs the binary and owns its data
+  directory. The control store (`control.db`), each tenant's store and audit
+  log, the TLS private key and the operator CLI (`tenant create`, `token
+  issue`, `token revoke`) are host authority. Anyone who can write those
+  files controls the service; backups must be protected like credentials.
+- **Untrusted:** every network client. A client is authenticated by a bearer
+  API token, and the token alone decides its tenant and principal; no path,
+  header or body can name a tenant or a principal. The principal must be an
+  active user of its tenant's registry on every request, and the registry
+  then authorizes every operation exactly as in a local registry store.
+  Authentication failures are one uniform `401` on every route, including
+  unknown ones, so routes cannot be enumerated without a credential.
+- **Secrets.** API tokens are 256 random bits, shown once and stored only as
+  SHA-256 digests. Tokens, request bodies and headers are never logged and
+  never written to the audit log (which stores a digest of each response).
+  The per-tenant key that tags minted record IDs is stored in the control
+  store; it authenticates no one.
+- **Tenant isolation.** Each tenant is a separate SQLite store and audit
+  database. A request is served only from its token's tenant: another
+  tenant's graph IDs answer like IDs that exist nowhere, and the other
+  tenant's store is never opened for the request. Row-level tenant keys are
+  not used.
+- **Transport.** TLS 1.2 or 1.3 through rustls with the ring provider.
+  Plaintext is refused on any non-loopback address.
+- **Audit.** Every authenticated request except `health` is recorded in its
+  tenant's append-only, hash-chained audit log before the response is sent.
+  Only tenant administrators read it. A crash between a committed write and
+  its audit entry can lose that entry; the fact log still records the writer.
+- **Declared channels:** timing and response size; revision IDs of a
+  readable graph change when hidden records are added to it; retracting a
+  fact with a hidden dependent (above); occupancy of chosen record IDs by
+  hidden records for tenant administrators only (non-administrators assert
+  only service-minted IDs). OIDC, agent tokens and signed agent capabilities
+  are not implemented yet.
 
 ## Trust and limits
 

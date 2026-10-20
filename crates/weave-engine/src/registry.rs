@@ -48,6 +48,9 @@ pub const MAX_GROUP_CLOSURE: usize = 1024;
 pub const MAX_REGISTRY_CHANGES: usize = 1000;
 /// Most records the registry holds.
 pub const MAX_REGISTRY_RECORDS: usize = 100_000;
+mod create;
+pub use create::CREATED_GRAPH_PREFIX;
+
 const SPACE: &str = "weave:registry";
 const MEMBER: &str = "weave:member";
 const GRANT: &str = "weave:grant";

@@ -6,7 +6,8 @@ with the 0.24.0 feature set ([release notes](../CHANGELOG.md),
 [1.0 note](contract/v1.0/README.md)). **Phase B has started:** B1 is complete:
 the principal registry with users, groups and agents, group readers, graph
 ACLs and Discover, as protocol **1.1.0** and store 32
-([below](#principals-groups-agents-and-graph-acls-b1)). The language reached Phase A parity in
+([below](#principals-groups-agents-and-graph-acls-b1)),
+and B3 part 1 adds the authenticated multi-tenant `weave-service` ([below](#authenticated-service-b3)). The language reached Phase A parity in
 LA1 (weave-language#3): each of the five exit questions fits in at most 15
 lines of `.weave`, and engine CI runs all five through `check_phase_a.py`.
 Source writes cannot set `readers` until LB1. A source `correct` of a
@@ -26,6 +27,7 @@ white-paper requirements remain tracked separately in the
 | Science API and CLI | `weave-science` 0.1.0; native Rust and one-request JSON process |
 | Python client | `weave_science` 0.1.0; Python 3.10+, no mandatory runtime dependencies |
 | MCP preview | `weave-mcp` 0.1.0; read-only local stdio MCP server (A7, [guide](MCP_PREVIEW.md)) |
+| Service | `weave-service` 0.1.0; authenticated multi-tenant HTTP/JSON server over TLS, one store per tenant, API tokens and a read/write audit log (B3 part 1, [guide](SERVICE.md)) |
 | Engine contract | 1.1.0: core v1 as frozen in 1.0.0 with the 0.24.0 feature set ([1.0](contract/v1.0/README.md)), plus `reader_groups` and `FactProvenance.on_behalf_of` ([1.1](contract/v1.1/README.md)); 0.1.0–0.24.0 and 1.0.0 programs stay accepted with their published semantics. Existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)), and embedding facts with exact `nearest` and `similar_candidates` ([0.24](contract/v0.24/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
 | Native storage | Store 32; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)), which also holds embedding spaces and embeddings |
 | Platforms | Linux, macOS and Windows in the native CI profile |
@@ -387,11 +389,52 @@ is complete ([guide](REGISTRY.md)):
 - **Permission matrix.** User, group member and agent × Discover, Read,
   Write and Administer × graph, protected branch and record
   (`tests/registry_agents.rs`).
+- **Writes need Read on what they change.** In a registry store, a
+  `correct` or `retract` of a fact the writer cannot read (its own
+  `readers` and `reader_groups`, and for an edge its endpoints') fails
+  exactly as for a fact that does not exist. The B3 paired HTTP tests found
+  that part 1 let a writer change such facts.
 - **Local stores** without a registry behave exactly as before; the existing
   authorization and influence suites pass unchanged.
 - **Store 32.** Store 31 upgrades by moving the marker; no row is rewritten
   and store-31 binaries refuse store 32 (`check_registry_store_migration.py`
   in the compatibility workflow, against the v1.0.0 binary).
+
+## Authenticated service (B3)
+
+B3 ([#39](https://github.com/weave-graph/weave-engine/issues/39),
+ADR-0007 sections 6 to 9) is in progress. Part 1 is implemented as the
+`weave-service` crate and binary ([guide](SERVICE.md)):
+
+- **Server.** A long-running HTTP/1.1 server over TLS (axum on hyper, rustls
+  with the ring provider), serving the core v1 JSON contract: `write`,
+  `query`, `evaluate` and `bind` programs of protocol 1.0.0 and later, graph
+  listing and creation, the registry API and token management. Plaintext is
+  served only on loopback, for development.
+- **Authentication.** Bearer API tokens (256 random bits, stored only as a
+  SHA-256 digest in the control store, with expiry and revocation) mapped to
+  an active registry user of one tenant. Every route, including unknown
+  ones, rejects unauthenticated requests with one byte-identical `401`.
+  Revocation, expiry and registry suspension apply on the next request.
+- **Tenants.** One store per tenant (its own engine database and audit
+  database), with the tenant taken from the token, never the request. A
+  request of one tenant never opens another tenant's store.
+- **Audit.** A per-tenant append-only, hash-chained audit log of every
+  authenticated request: principal, operation, outcome, graphs, revisions,
+  the digest of the response, and the facts read (from `fact_provenance`) or
+  written. `GET /v1/audit/facts` answers "who read fact F" and "who wrote
+  fact F". Responses are withheld when their entry cannot be written.
+- **No ID probing.** Graphs get engine-assigned IDs unless a tenant
+  administrator chooses one, and non-administrators may assert only record
+  IDs the service minted for them, which closes the `E_CONFLICT` occupancy
+  channel for them.
+- **Limits and logs.** Bounded bodies, request heads, connections, per-tenant
+  queues, programs, minted IDs and audit pages; JSON request logs without
+  tokens, bodies or graph IDs (tested).
+
+Remaining for B3: OIDC sign-in, agent tokens (after B1 agents), signed
+admission for agent capabilities with a per-tenant audience, and the
+50-client load measurement.
 
 ## Verified evidence
 
@@ -425,7 +468,8 @@ production capacity requires separate evidence.
   revisions and unchanged selected input, including live metadata and policy.
   Some service/view expressions are recordable but are not eligible for exact SDK replay.
 - The native host supplies actor identity and graph write grants. It is a local
-  trusted interface; CPU/RSS process isolation and remote authentication need a host design.
+  trusted interface. Remote authentication is `weave-service` ([guide](SERVICE.md));
+  CPU/RSS process isolation is not provided.
 - Browser/mobile applications, portable source actors, distributed networking,
   approximate indexes and the full formal/cryptographic assurance program remain
   outside this delivery's acceptance scope.
@@ -453,9 +497,11 @@ addresses:
   remain for C5.
 
 
-- **Sharing (Phase B).** There is no server and no authentication on the main
-  API. Users, groups, agents and graph ACLs exist (B1), and leakage
-  protection is enforced at read time only (write-time propagation is B2).
+- **Sharing (Phase B).** `weave-service` (B3 part 1) serves the engine to
+  authenticated users and agents of isolated tenants with API tokens and an
+  audit log. Users, groups, agents and graph ACLs exist (B1); OIDC and signed
+  agent capabilities do not yet, and leakage protection is enforced at read
+  time only (write-time propagation is B2).
 - **Scale (Phase C).** There is no telemetry ingestion and no approximate vector
   index. Measured workloads are 10k–100k objects.
 

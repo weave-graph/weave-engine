@@ -237,7 +237,18 @@ Permissions are ordered: **Discover ≤ Read ≤ Write ≤ Administer**.
 - Writing a graph that does not exist yet needs an ACL entry for it, so an
   administrator grants first. A write to a graph the writer cannot discover
   fails like a write to a nonexistent one.
+- `Engine::create_graph(entropy, host)` lets any active user create a graph
+  without choosing its ID: the engine derives `g-` and 32 hex digits from 32
+  bytes of host-supplied randomness and grants the creator Administer, in
+  one registry revision written by the creator. The B3 service uses it, so
+  graph creation cannot probe for hidden graph IDs.
 - Record restrictions still apply inside a readable graph.
+- **Correcting or retracting needs Read on the fact.** A `correct` or
+  `retract` of a live fact the writer cannot read (its own `readers` and
+  `reader_groups`, and for an edge its endpoint nodes') fails exactly as for
+  a fact that does not exist, expectations included. An `assert` of an ID a
+  hidden live record holds still fails `E_CONFLICT` (a declared channel; the
+  B3 service closes it with minted record IDs).
 
 ## The registry graph
 
@@ -289,3 +300,7 @@ administrators or a tenant administrator) and `registry_graph_acl(graph)`
   request.
 - Authentication (mapping tokens, OIDC or keys to principals), tenants and
   the read and write audit log are B3.
+- Retracting a fact that a hidden live fact depends on (for example a node
+  with a hidden edge) fails with `E_DEPENDENT_FACT`, which reveals that a
+  dependent exists. It is a declared channel until B2's noninterference
+  harness decides the rule.

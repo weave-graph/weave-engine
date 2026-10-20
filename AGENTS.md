@@ -28,6 +28,7 @@ other interface calls into it. There is no second implementation.
 | `crates/weave-science` | `weave-science` JSON CLI: `import`, `execute`, `analyze` (degree, components, paths, PageRank, exact kNN) | Current user-facing API |
 | `crates/weave-hardware` | Hardware reference model, `SeriesRef`, CSV/JSON importers, seeded fleet generator and CLI | A5 |
 | `crates/weave-mcp` | `weave-mcp` read-only stdio MCP server over one store, as a host-fixed reader; a thin adapter over `weave-science` | A7 (B4 builds on it) |
+| `crates/weave-service` | `weave-service` authenticated multi-tenant HTTP/JSON server over TLS: one store per tenant, API tokens, audit log; a thin adapter over the engine | B3 |
 | `python/` | `weave_science` Python client (subprocess to the CLI), tables, experiments, replay | Current user-facing API |
 | `crates/weave-policy` | ed25519 capability chains and signed admission | B1/B3 building block |
 | `crates/weave-spaces` | Typed geometry and embedding spaces, descriptors, pairwise operations | A4 building block |
