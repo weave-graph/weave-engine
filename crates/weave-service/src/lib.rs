@@ -253,6 +253,30 @@ impl Service {
         self.control(|c| c.set_oidc_issuer(tenant_id, issuer, audience, jwks, now))
     }
 
+    /// Bind an IdP subject of a configured issuer to an active user.
+    /// Trusted local administration; tenant administrators use
+    /// `POST /v1/oidc/bindings`.
+    pub fn bind_oidc_subject(
+        &self,
+        tenant_id: &str,
+        issuer: &str,
+        subject: &str,
+        principal: &str,
+    ) -> Result<(), ApiError> {
+        if !self.control(|c| c.oidc_issuer_configured(tenant_id, issuer))? {
+            return Err(ApiError::new("E_UNAVAILABLE", "issuer unavailable"));
+        }
+        let tenant = self.tenant(tenant_id)?;
+        let now = self.now()?;
+        let standing = tenant.with_state(|state| {
+            standing(&state.engine, principal, now).map_err(ApiError::from)
+        })??;
+        if !standing.is_some_and(|s| s.kind == PrincipalKind::User) {
+            return Err(ApiError::new("E_UNAVAILABLE", "principal unavailable"));
+        }
+        self.control(|c| c.bind_oidc(tenant_id, issuer, subject, principal, now))
+    }
+
     /// Remove an OIDC issuer of a tenant and its bindings.
     pub fn remove_oidc_issuer(&self, tenant_id: &str, issuer: &str) -> Result<bool, ApiError> {
         self.control(|c| c.remove_oidc_issuer(tenant_id, issuer))

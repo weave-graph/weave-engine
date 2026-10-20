@@ -403,8 +403,8 @@ is complete ([guide](REGISTRY.md)):
 ## Authenticated service (B3)
 
 B3 ([#39](https://github.com/weave-graph/weave-engine/issues/39),
-ADR-0007 sections 6 to 9) is in progress. Part 1 is implemented as the
-`weave-service` crate and binary ([guide](SERVICE.md)):
+ADR-0007 sections 6 to 9) is complete, as the `weave-service` crate and
+binary ([guide](SERVICE.md)):
 
 - **Server.** A long-running HTTP/1.1 server over TLS (axum on hyper, rustls
   with the ring provider), serving the core v1 JSON contract: `write`,
@@ -454,7 +454,14 @@ ADR-0007 sections 6 to 9) is in progress. Part 1 is implemented as the
   Replays fail `E_REPLAY`; key revocation, suspension and owner permission
   loss apply on the next request.
 
-Remaining for B3: the 50-client load measurement.
+- **Load (part 3).** 50 concurrent TLS clients on the full authentication
+  path: one tenant serves about 710 requests/s at 20% writes (p99 about
+  90 ms), the same with OIDC; five tenants serve 2,300 requests/s. A tenant
+  runs one request at a time, so per-tenant throughput does not grow with
+  clients ([report](benchmarks/README.md#authenticated-service-b3)). A CI
+  smoke test runs the same harness with 50 clients.
+
+B3 is complete.
 
 ## Verified evidence
 

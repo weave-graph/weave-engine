@@ -6,6 +6,18 @@ defined in [docs/ROADMAP.md](docs/ROADMAP.md). The supported profile is in
 
 ## Unreleased
 
+### B3 part 3: 50-client load measurement
+
+Closes [#39](https://github.com/weave-graph/weave-engine/issues/39).
+
+- `examples/load.rs`: N concurrent TLS clients on the full authentication
+  path (API tokens or OIDC), reads and writes, per-operation latency and
+  throughput, audit-chain verification; a 50-client smoke test in CI.
+- [Recorded results](docs/benchmarks/README.md#authenticated-service-b3):
+  about 710 requests/s for one tenant (one request at a time per tenant),
+  2,300 requests/s across five tenants, no errors.
+- The listener sets `TCP_NODELAY` on accepted connections.
+
 ### B3 part 2: OIDC and signed agent capabilities
 
 Part of [#39](https://github.com/weave-graph/weave-engine/issues/39)
