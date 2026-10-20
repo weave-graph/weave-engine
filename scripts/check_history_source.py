@@ -25,8 +25,8 @@ def main():
     parser.add_argument('--report', type=Path)
     args = parser.parse_args()
     protocol = tomllib.loads((Path(__file__).parents[1]/'crates/weave-contract/Cargo.toml').read_text())['package']['version']
-    wire = (Path(__file__).parents[1]/'crates/weave-contract/src/wire.rs').read_text()
-    supported = {protocol, *__import__('re').findall(r'"(0\.\d+\.0)"', wire.split('SUPPORTED_VERSIONS', 1)[1].split('];', 1)[0])}
+    wire = (Path(__file__).parents[1]/'crates/weave-contract/src/versions.rs').read_text()
+    supported = {protocol, *__import__('re').findall(r'"(\d+\.\d+\.0)"', wire.split('pub const SUPPORTED_VERSIONS', 1)[1].split('];', 1)[0])}
     started = time.monotonic(); compilers = []; runtimes = []
     with tempfile.TemporaryDirectory(prefix='weave-source-history-') as temporary:
         root = Path(temporary); db = root/'store.db'; plan = root/'plan.json'
