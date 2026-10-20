@@ -50,10 +50,10 @@ commit grew the store by about 2.5 KB. Peak process RSS was 1.2 GiB and
 gave the same medians within 10%.
 
 Commit, `expand`, `as_of` and single-fact `changes` stay flat from 100k to 1M
-facts. `nearest` grows linearly with the space. This includes `nearest`
-restricted to a small `expand` neighborhood: it costs about a twentieth of a
-whole-space scan at both sizes, rather than scaling with the size of the
-neighborhood.
+facts. `nearest` grows linearly with the space. In this run, `nearest`
+restricted to a small `expand` neighborhood did too, at about a twentieth of
+a whole-space scan at both sizes. That was an index-choice problem, fixed
+since; see [scoped nearest](#scoped-nearest-a6).
 
 The A2 and A3 reports above measure growth with history length. This report
 does not.
@@ -78,6 +78,28 @@ local run was at `473e301`, the same tree as merge `9eccd6b`. Each duration
 is the whole `cargo test` invocation. That includes the release build when
 the test binary was not yet built, which dominates the first test of each
 crate in CI. Shared runners vary from run to run.
+## Scoped nearest (A6)
+
+[Scoped nearest, 20 October 2026](scoped-nearest-2026-10-20.json) was
+recorded with `cargo run --release --locked -p weave-engine --example
+scoped_nearest_benchmark` on contract 0.24.0 and store 31. The host was one
+AMD Ryzen 9 7950X Linux machine. The graph has one node, one edge and one
+32-dimensional embedding per vector. There are 200 samples each; whole-space
+scans have 10.
+
+| Median ms | 20k before | 20k after | 200k before | 200k after |
+|---|---:|---:|---:|---:|
+| `nearest` k=10 within a 2-hop `expand` (about 5 nodes) | 23.9 | 2.65 | 251 | 2.74 |
+| `nearest` k=10 within a `query` of one node's edges | 8.66 | 0.96 | 89.3 | 0.98 |
+| `nearest` k=10 over the whole space | 543 | 544 | 5,521 | 5,609 |
+
+"Before" is main at `5e2a1d9`. "After" adds the subject and entity index
+hint to the SQLite fact store. A restricted ranking already looked up each
+candidate subject's embeddings, but without statistics SQLite served each
+lookup from the `predicate` (space) index, which walks the whole space. The
+same report shows the separate cost of verifying a large head revision: a
+read at a head written as one 50k-change batch takes 0.2–0.5 s, against
+0.4 ms at a single-fact head.
 
 ## Current native science baseline
 

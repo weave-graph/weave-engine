@@ -1202,3 +1202,82 @@ not generate embeddings, so a model-free embedder is the only way to keep the
 quickstart offline. The main CI matrix runs the same commands on Linux, macOS
 and Windows at 60 units, as both readers, so the README cannot drift from a
 working path.
+### 2026-10-20 — weave-language#18 — The compiler vendors and emits 0.24.0
+
+weave-language#18 vendored the 0.24.0 contract from engine `5e2a1d9`, the A4
+embedding facts and operators. The vendored crate has 98 files, including 29
+positive and 25 negative fixtures. The compiler now emits 0.24.0, and its
+emitted commands and data are otherwise unchanged. `nearest`,
+`similar_candidates` and the embedding fact kinds are classified core v1, as
+§12 of the core contract says. `describe --contract` walks the nested
+candidate values (`candidates`, `sources`, `targets`, `seeds_from`), so an
+extension operator inside one is still reported.
+
+### 2026-10-20 — weave-language#19 — LA1 complete; `check_phase_a.py` runs in engine CI
+
+weave-language#19 (`4634485`) adds source syntax for fact `write`s, embedding
+spaces, `nearest`, `similar_candidates` and `expand ... seeds from`. With it,
+all five Phase A exit questions fit in at most 15 lines of `.weave` each.
+`scripts/check_phase_a.py` runs them on a real engine and compares them with
+JSON references and independent oracles. Engine `integration.yml` now pins
+both weave-language checkouts to `4634485` and runs `check_phase_a.py` in
+`compiler-runtime`. Before the bump, the language agent ran all 44
+compiler-runtime lines, `check_phase_a.py` and the 4 Linux compiler-host lines
+against engine `5e2a1d9`, and they passed. **Known risk:** source writes cannot
+set `readers` until LB1. A source `correct` of a restricted fact therefore
+writes it without its readers, which publishes it to every reader. This is
+logged on engine #5 and language #5. Until LB1, writes of restricted facts
+must go through the JSON or Rust interfaces.
+
+### 2026-10-20 — #16 A6 — Scoped `nearest` follows the candidates: an index hint, not a new path
+
+A6's baseline showed that a `nearest` restricted to a 2-hop `expand` costs
+about a twentieth of a whole-space scan at every size (249 ms at 200k
+vectors). The engine already looked up each visible candidate subject's
+embeddings through `FactFilter.subject` and `entity`. The cause was SQLite's
+plan. With no `ANALYZE` statistics, a filter with both a subject and a space
+(`predicate`) used the `fact_index_predicate` index, so every per-subject
+lookup walked the whole space. `EXPLAIN QUERY PLAN` confirms it: both
+two-column indexes match equally, and the planner takes the predicate
+index. Any selection that names both a subject (or an entity) and a
+predicate has the same tie. With a subject and a kind only, the planner
+already uses the subject index.
+
+`filter_sql` now adds `INDEXED BY fact_index_subject` when a subject is set,
+or `fact_index_entity` when only an entity is set. A subject or entity is one
+record's anchor, so its index is the selective one in every engine use. A
+node with very many facts costs in proportion to its own facts, never to the
+whole graph. The hint changes the plan only: the WHERE clause, and so the
+rows, the results and `E_BUDGET` at the selection limit, are the same. No
+schema change and no `ANALYZE` are needed. Statistics would be data-dependent
+and could change the plan again later. Measured at 32 dimensions, a top-10 in
+a 2-hop `expand` drops from 23.9 to 2.65 ms at 20k vectors and from 251 to
+2.74 ms at 200k, now flat with the size of the space. The whole-space scan is
+unchanged.
+
+**Path choice and hidden input.** A plan with `candidates` always uses the
+lookups, and a plan without them always scans. There is no candidate-count
+threshold, so nothing visibility-dependent picks the path. The lookups run
+over the subjects of the already-authorized candidate value, so hidden
+candidates add no lookups. Embeddings that the lookups read are authorized in
+the same chunks and count against `MAX_SCAN_COMPONENTS`, hidden ones
+included, as before. That is the documented exception and is now bounded by
+the candidates' embeddings.
+
+**Equivalence.** The reference for the lookups is a full scan that keeps the
+rows whose subject or entity key names a candidate. That is the same row set
+the lookups select, so coverage reflects only the candidates' embeddings. A
+full scan that authorized every embedding in the space before filtering would
+mark a result partial for a derivation-gated embedding outside the candidate
+set. That contradicts the A3 rule that coverage is attributed to the output's
+own region. A `cfg(test)` switch runs this reference inside `nearest`. The
+unit test `restricted_nearest_index_lookups_equal_a_full_scan_on_random_stores`
+compares the two paths byte for byte. It uses 12 random stores, on both the
+SQLite and the in-memory backend, with node, entity and edge subjects, ties,
+valid times, reader restrictions and derivation gates, and covers `expand` and
+`query` candidates, vector and embedding queries, and both readers. Removing
+the entity lookups makes it fail. The paired test
+`hidden_candidates_never_change_a_scoped_nearest` covers hidden input. One
+known difference remains outside both paths' tested range: a single candidate
+subject with more embeddings than the selection limit fails with `E_BUDGET`
+in the lookup. That is unchanged from before this PR.

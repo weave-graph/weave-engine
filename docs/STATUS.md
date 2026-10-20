@@ -319,12 +319,16 @@ Delivered so far:
   and `nearest` at 100k and 1M facts were measured on one host, along with
   the exit-scenario timings on Linux, macOS and Windows
   ([results](benchmarks/README.md#phase-a-baseline-a6)). Commit, traversal
-  and change-set latencies stay flat from 100k to 1M facts. `nearest`,
-  including `nearest` restricted to an `expand` neighborhood, grows with the
-  size of the space.
+  and change-set latencies stay flat from 100k to 1M facts. A whole-space
+  `nearest` grows with the size of the space. A restricted `nearest` did
+  too when that baseline was recorded; it has since been fixed (next item).
 - **README quickstart.** Five commands cover the hardware model and hybrid
   retrieval ([README](../README.md#quickstart-a-hardware-fleet-and-hybrid-retrieval)).
   CI runs them on all three OSes.
+- **Scoped `nearest`.** A `nearest` with `candidates` now costs in proportion
+  to its candidates: 2.7 ms for a 2-hop neighborhood at 20k and at 200k
+  vectors, down from 24 and 251 ms
+  ([report](benchmarks/scoped-nearest-2026-10-20.json)).
 
 Still open: the protocol 1.0.0 cut, the release notes and the tagged release.
 

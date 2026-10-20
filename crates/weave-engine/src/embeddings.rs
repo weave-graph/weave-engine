@@ -138,6 +138,35 @@ impl Subjects {
     fn len(&self) -> usize {
         self.nodes.len() + self.entities.len() + self.records.len()
     }
+    /// True when the per-subject index lookups select this stored
+    /// embedding: its subject key names a candidate node or record, or its
+    /// entity key a candidate entity.
+    #[cfg_attr(not(test), allow(dead_code))]
+    fn selects(&self, stored: &StoredFact) -> bool {
+        let keys = &stored.version.keys;
+        keys.subject
+            .as_ref()
+            .is_some_and(|s| self.nodes.contains(s) || self.records.contains(s))
+            || keys
+                .entity
+                .as_ref()
+                .is_some_and(|e| self.entities.contains(e))
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Makes a restricted `nearest` select by a full scan, as the reference
+    /// for the differential test of the index lookups.
+    static SCAN_RESTRICTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+#[cfg(test)]
+fn scan_restricted_for_tests() -> bool {
+    SCAN_RESTRICTED.with(|s| s.get())
+}
+#[cfg(not(test))]
+fn scan_restricted_for_tests() -> bool {
+    false
 }
 
 /// Embeddings authorized together by a streaming ranking.
@@ -513,8 +542,23 @@ impl Engine {
             valid_at: plan.valid_at,
             ..FactFilter::default()
         };
+        // A restricted ranking looks up each visible candidate subject's
+        // embeddings through the subject and entity index, so its cost
+        // follows the candidates, not the space. The choice depends only on
+        // whether the plan has candidates, never on what the reader can see:
+        // `subjects` holds only the authorized candidate value's subjects.
         match subjects.as_ref() {
             None => source.scan(&filter(None, None), &mut |stored| ranking.offer(stored))?,
+            // Test-only reference path: the same selection by a full scan.
+            Some(subjects) if scan_restricted_for_tests() => {
+                source.scan(&filter(None, None), &mut |stored| {
+                    if subjects.selects(&stored) {
+                        ranking.offer(stored)
+                    } else {
+                        Ok(())
+                    }
+                })?
+            }
             Some(subjects) => {
                 let limit = self.materialization_limit();
                 let mut seen: HashSet<String> = HashSet::new();
@@ -1071,5 +1115,179 @@ mod tests {
         );
         assert_eq!(MAX_SCAN_COMPONENTS, 268_435_456);
         const { assert!(100_000 * 1_536 < MAX_SCAN_COMPONENTS) };
+    }
+
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self, n: u64) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (self.0 >> 33) % n
+        }
+        fn pick<'a>(&mut self, items: &'a [&'a str]) -> &'a str {
+            items[self.next(items.len() as u64) as usize]
+        }
+    }
+
+    fn run(
+        engine: &mut Engine,
+        principal: &str,
+        writes: bool,
+        commands: serde_json::Value,
+    ) -> String {
+        let program: weave_contract::Program = serde_json::from_value(
+            serde_json::json!({"version": weave_contract::VERSION, "commands": commands}),
+        )
+        .unwrap();
+        let grants: Vec<String> = if writes {
+            vec!["g".into(), "h".into()]
+        } else {
+            vec![]
+        };
+        match engine.execute(&program, &HostContext::new(principal, grants)) {
+            Ok(out) => serde_json::to_string(&out).unwrap(),
+            Err(e) => format!("error {} {}", e.code, e.message),
+        }
+    }
+
+    /// A random store: nodes sharing entities, edges, and embeddings on
+    /// nodes, entities and edges, with ties, valid times, reader
+    /// restrictions and derivation gates on a hidden node, over three
+    /// recorded writes.
+    fn random_store(engine: &mut Engine, rng: &mut Rng) {
+        use serde_json::json;
+        let hidden = json!(["admin"]);
+        let readers = |rng: &mut Rng| {
+            if rng.next(4) == 0 {
+                hidden.clone()
+            } else {
+                json!([])
+            }
+        };
+        let w = |engine: &mut Engine, graph: &str, changes: Vec<serde_json::Value>| {
+            let out = run(
+                engine,
+                "writer",
+                true,
+                json!([{"op": "write", "graph_id": graph, "changes": changes}]),
+            );
+            assert!(!out.starts_with("error"), "{out}");
+            out
+        };
+        let gate = w(
+            engine,
+            "h",
+            vec![
+                json!({"change": "assert", "fact": {"kind": "node", "id": "text",
+            "entity_id": "T", "space_id": "s", "readers": hidden}}),
+            ],
+        );
+        let gate: serde_json::Value = serde_json::from_str(&gate).unwrap();
+        let gate = gate[0]["revision"].as_str().unwrap().to_string();
+        let mut changes = vec![
+            json!({"change": "assert", "fact": {"kind": "embedding_space", "id": "sp",
+            "revision": "1", "encoder": "t", "encoder_version": "1", "preprocessing": "none",
+            "dimensions": 3, "metric": if rng.next(2) == 0 { "cosine_distance" } else { "euclidean" }}}),
+        ];
+        for i in 0..30 {
+            changes.push(
+                json!({"change": "assert", "fact": {"kind": "node", "id": format!("n{i}"),
+                "entity_id": format!("E{}", i % 10), "space_id": "s", "readers": readers(rng)}}),
+            );
+        }
+        for i in 0..40 {
+            changes.push(
+                json!({"change": "assert", "fact": {"kind": "edge", "id": format!("e{i}"),
+                "predicate": rng.pick(&["p", "q"]), "from": format!("n{}", rng.next(30)),
+                "to": format!("n{}", rng.next(30)), "valid_time": {"start": rng.next(3) as i64},
+                "readers": readers(rng)}}),
+            );
+        }
+        w(engine, "g", changes);
+        for round in 0..2 {
+            let mut changes = vec![];
+            for j in 0..40 {
+                let subject = match rng.next(5) {
+                    0 => json!({"kind": "entity", "entity_id": format!("E{}", rng.next(10))}),
+                    1 => json!({"kind": "edge", "edge_id": format!("e{}", rng.next(40))}),
+                    _ => json!({"kind": "node", "node_id": format!("n{}", rng.next(30))}),
+                };
+                let vector: Vec<f32> = (0..3).map(|_| 1.0 + rng.next(3) as f32).collect();
+                let start = rng.next(4) as i64;
+                let end = if rng.next(3) == 0 {
+                    json!(start + 1 + rng.next(4) as i64)
+                } else {
+                    json!(null)
+                };
+                let mut fact = json!({"kind": "embedding", "id": format!("v{round}-{j}"),
+                    "space": {"id": "sp", "revision": "1"}, "subject": subject, "vector": vector,
+                    "valid_time": {"start": start, "end": end}, "readers": readers(rng)});
+                if rng.next(10) == 0 {
+                    fact["derived_nodes"] =
+                        json!([{"graph_id": "h", "revision": gate, "node_id": "text"}]);
+                }
+                changes.push(json!({"change": "assert", "fact": fact}));
+            }
+            w(engine, "g", changes);
+        }
+    }
+
+    #[test]
+    fn restricted_nearest_index_lookups_equal_a_full_scan_on_random_stores() {
+        use serde_json::json;
+        let (mut nonempty, mut partial, mut errors, mut plans) = (0, 0, 0, 0);
+        for seed in 0..12u64 {
+            let dir = tempfile::tempdir().unwrap();
+            let mut engines = vec![Engine::memory().unwrap()];
+            engines.push(Engine::open(dir.path().join("s.db")).unwrap());
+            for engine in &mut engines {
+                let mut rng = Rng(seed * 7919 + 13);
+                random_store(engine, &mut rng);
+                let mut rng = Rng(seed * 104_729 + 1);
+                for _ in 0..25 {
+                    let seeds: Vec<String> = (0..1 + rng.next(3))
+                        .map(|_| format!("n{}", rng.next(31)))
+                        .collect();
+                    let candidates = match rng.next(3) {
+                        0 => json!({"kind": "query", "query": {"graph_id": "g", "from": seeds[0]}}),
+                        _ => {
+                            json!({"kind": "expand", "graph_id": "g", "seeds": seeds, "hops": rng.next(3),
+                            "direction": rng.pick(&["out", "in", "both"])})
+                        }
+                    };
+                    let k = [1u32, 3, 10, 50][rng.next(4) as usize];
+                    let mut plan = json!({"kind": "nearest", "graph_id": "g", "space": {"id": "sp", "revision": "1"},
+                        "k": k, "candidates": candidates});
+                    plan["query"] = if rng.next(3) == 0 {
+                        json!({"kind": "embedding", "embedding_id": format!("v{}-{}", rng.next(2), rng.next(40))})
+                    } else {
+                        json!({"kind": "vector", "vector": (0..3).map(|_| 1.0 + rng.next(3) as f32).collect::<Vec<_>>()})
+                    };
+                    if rng.next(2) == 0 {
+                        plan["valid_at"] = json!(rng.next(6));
+                    }
+                    for principal in ["admin", "analyst"] {
+                        let commands = json!([{"op": "evaluate", "value": plan}]);
+                        let lookup = run(engine, principal, false, commands.clone());
+                        SCAN_RESTRICTED.with(|s| s.set(true));
+                        let scan = run(engine, principal, false, commands);
+                        SCAN_RESTRICTED.with(|s| s.set(false));
+                        assert_eq!(lookup, scan, "seed {seed} {principal} {plan}");
+                        plans += 1;
+                        errors += usize::from(lookup.starts_with("error"));
+                        nonempty += usize::from(lookup.contains("\"neighbors\""));
+                        partial += usize::from(lookup.contains("\"partial\""));
+                    }
+                }
+            }
+        }
+        assert!(nonempty > plans / 3, "{nonempty} of {plans} have hits");
+        assert!(partial > 0, "derivation gates make some results partial");
+        assert!(
+            errors > 0 && errors < plans,
+            "errors are compared too: {errors}"
+        );
     }
 }
