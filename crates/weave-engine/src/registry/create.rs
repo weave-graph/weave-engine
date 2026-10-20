@@ -33,7 +33,7 @@ impl Engine {
             |r| r.get(0),
         )?;
         self.registry_write(host, |state| {
-            if !state.resolve(&host.principal).active_user {
+            if !state.resolve(&host.principal).is_user() {
                 return Err(forbidden());
             }
             if exists

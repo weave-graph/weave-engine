@@ -19,7 +19,8 @@ sections 6 to 9; [guide](docs/SERVICE.md)). No protocol or store change.
 - One store per tenant, with the tenant taken from the credential; a
   control store with tenants and SHA-256 digests of API tokens.
 - Bearer API tokens with expiry and revocation, checked with the registry on
-  every request; one uniform `401` on every route.
+  every request; one uniform `401` on every route. Agent tokens authenticate
+  B1 agents under their owner's ceiling, issued and revoked by their owners.
 - A per-tenant append-only, hash-chained read and write audit log;
   `GET /v1/audit/facts` answers who read and who wrote a fact.
 - Engine-assigned graph IDs (`Engine::create_graph`) and service-minted

@@ -1545,11 +1545,11 @@ column already existed (store 30), so no migration is needed.
 
 ### 2026-10-20 — #39 B3 — Delivery in parts; agents wait for B1 part 2
 
-Part 1 is the server, API tokens, tenants, the audit log, TLS, limits and
-logs. It covers the criteria on unauthenticated endpoints, cross-tenant
-isolation, the audit log and SECURITY.md. Part 2 adds OIDC and signed
-admission for agent capabilities, and agent tokens once B1 part 2 lands
-agent principals. The 50-client load measurement closes the epic, because
+Part 1 is the server, API tokens for users and agents, tenants, the audit
+log, TLS, limits and logs. It covers the criteria on unauthenticated
+endpoints, cross-tenant isolation, the audit log and SECURITY.md. Agent
+tokens joined part 1 after B1 part 2 merged. Part 2 adds OIDC and signed
+admission for agent capabilities. The 50-client load measurement closes the epic, because
 it should measure the final authentication path. Each part says "Part of
 #39"; the last says "Closes #39".
 
@@ -1666,3 +1666,21 @@ may move it when it threads `on_behalf_of` through the write path.
 Retracting a visible fact with a hidden live dependent still fails
 `E_DEPENDENT_FACT`. That is declared for B2, because allowing the
 retraction would leave a dangling hidden fact.
+
+### 2026-10-20 — #39 B3 — Agent tokens: the chain must be able to act, owners manage tokens
+
+An agent token is an API token whose principal is the agent; the service
+passes the agent's ID as `HostContext.principal`, as B1 specifies, and needs
+no other engine API. Authentication requires the agent record to be
+active and readable by the agent itself, which the registry allows only
+while the whole ownership chain can act, and every delegation along the
+chain to be unexpired at the trusted clock. A suspended owner or an expired
+delegation therefore fails the agent's next request with the uniform `401`,
+not with empty results, so a cut-off agent learns nothing new and the
+denial is audited. A user may issue and revoke tokens for agents it owns,
+directly or through other agents, because the registry already lets it
+suspend them; any other non-administrator request gets one `E_FORBIDDEN`,
+whether or not the principal exists. Agents cannot issue tokens, create
+graphs or read the audit log, because Administer is not delegable. The
+audit entry's `on_behalf_of` is the agent's chain, read record by record as
+each principal itself.

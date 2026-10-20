@@ -7,7 +7,7 @@ use crate::control::{TokenBinding, DEFAULT_TOKEN_TTL_MS};
 use crate::error::{codes, ApiError, ErrorCode};
 use crate::ids::{hex, mint_record_id, minted_for, random};
 use crate::tenant::{Tenant, TenantState};
-use crate::{active_user, Service};
+use crate::{standing, Service};
 use axum::body::Bytes;
 use axum::extract::rejection::{BytesRejection, QueryRejection};
 use axum::extract::{DefaultBodyLimit, MatchedPath, Path, Query, Request, State};
@@ -24,7 +24,7 @@ use std::time::Instant;
 use weave_contract::provenance::FactRef;
 use weave_contract::{Command, CommandResult, FactChange, Program};
 use weave_engine::{
-    Engine, HostContext, Permission, RegistryChange, ADMINISTRATORS, REGISTRY_GRAPH,
+    Engine, HostContext, Permission, PrincipalKind, RegistryChange, ADMINISTRATORS, REGISTRY_GRAPH,
 };
 
 /// The authenticated caller of one request.
@@ -53,6 +53,10 @@ pub(crate) struct Ctx {
     id_key: [u8; 32],
     host: HostContext,
     administrator: bool,
+    /// The principal is an agent (B1): it acts with at most its owner's
+    /// authority, and `on_behalf_of` is its ownership chain.
+    agent: bool,
+    on_behalf_of: Vec<String>,
     token_id: String,
     expires_at_ms: i64,
 }
@@ -307,9 +311,20 @@ async fn call(
                 operation: operation.into(),
                 ..NewEntry::default()
             };
-            let result = match active_user(&state.engine, &binding.principal) {
-                Ok(true) => {
-                    let administrator = is_administrator(&state.engine, &host);
+            let standing = clock.now().map_err(Failed::from).and_then(|now| {
+                standing(&state.engine, &binding.principal, now).map_err(Failed::from)
+            });
+            let result = match standing {
+                Ok(Some(standing)) => {
+                    entry.on_behalf_of = standing.on_behalf_of.clone();
+                    let agent = standing.kind == PrincipalKind::Agent;
+                    let administrator = if agent {
+                        // Administer is not delegable: agents are never tenant
+                        // administrators.
+                        Ok(false)
+                    } else {
+                        is_administrator(&state.engine, &host)
+                    };
                     match administrator {
                         Ok(administrator) => {
                             let ctx = Ctx {
@@ -318,6 +333,8 @@ async fn call(
                                 id_key: caller.tenant.record.id_key,
                                 host,
                                 administrator,
+                                agent,
+                                on_behalf_of: standing.on_behalf_of,
                                 token_id: binding.token_id.clone(),
                                 expires_at_ms: binding.expires_at_ms,
                             };
@@ -326,8 +343,8 @@ async fn call(
                         Err(error) => Err(Failed::from(error)),
                     }
                 }
-                Ok(false) => Err(Failed::from(ApiError::unauthenticated())),
-                Err(error) => Err(Failed::from(error)),
+                Ok(None) => Err(Failed::from(ApiError::unauthenticated())),
+                Err(failed) => Err(failed),
             };
             let (status, body, code) = match result {
                 Ok(done) => {
@@ -467,6 +484,8 @@ async fn whoami(State(service): State<Service>, Extension(caller): Extension<Cal
                 "tenant": ctx.tenant_id,
                 "principal": ctx.principal,
                 "administrator": ctx.administrator,
+                "agent": ctx.agent,
+                "on_behalf_of": ctx.on_behalf_of,
                 "credential": ctx.token_id,
                 "expires_at_ms": ctx.expires_at_ms,
             })))
@@ -966,16 +985,21 @@ async fn issue_token(
         "tokens.issue",
         true,
         Box::new(move |state, ctx| {
-            if !ctx.administrator {
-                return Err(
-                    ApiError::forbidden("issuing tokens requires tenant administration").into(),
-                );
-            }
             check_id(&request.principal, "principal")?;
-            if !active_user(&state.engine, &request.principal)? {
-                return Err(ApiError::new("E_UNAVAILABLE", "principal unavailable").into());
+            // Tenant administrators issue tokens for any user or agent; a
+            // user issues them for agents it owns, directly or through other
+            // agents. Anything else, whether or not the principal exists, is
+            // the same refusal.
+            if !ctx.administrator && !owns_agent(&state.engine, ctx, &request.principal)? {
+                return Err(ApiError::forbidden(
+                    "issuing tokens requires tenant administration or ownership of the agent",
+                )
+                .into());
             }
             let now = control.now()?;
+            if standing(&state.engine, &request.principal, now)?.is_none() {
+                return Err(ApiError::new("E_UNAVAILABLE", "principal unavailable").into());
+            }
             let issued = control.control(|c| {
                 c.issue_token(
                     &ctx.tenant_id,
@@ -1006,15 +1030,22 @@ async fn revoke_token(
         caller,
         "tokens.revoke",
         true,
-        Box::new(move |_, ctx| {
+        Box::new(move |state, ctx| {
             let unavailable = || ApiError::new("E_UNAVAILABLE", "token unavailable");
             if token_id.len() > 128 {
                 return Err(unavailable().into());
             }
-            let owner = control.control(|c| c.token_principal(&ctx.tenant_id, &token_id))?;
-            match owner {
-                Some(owner) if ctx.administrator || owner == ctx.principal => {}
-                _ => return Err(unavailable().into()),
+            let holder = control.control(|c| c.token_principal(&ctx.tenant_id, &token_id))?;
+            let allowed = match &holder {
+                None => false,
+                Some(holder) => {
+                    ctx.administrator
+                        || holder == &ctx.principal
+                        || owns_agent(&state.engine, ctx, holder)?
+                }
+            };
+            if !allowed {
+                return Err(unavailable().into());
             }
             let now = control.now()?;
             control.control(|c| c.revoke_token(&ctx.tenant_id, &token_id, now))?;
@@ -1022,6 +1053,21 @@ async fn revoke_token(
         }),
     )
     .await
+}
+
+/// True when the caller is a user that owns `agent`, directly or through
+/// other agents. The registry lets a principal read an agent's record only
+/// when it is the agent itself, in its ownership chain, or a tenant
+/// administrator.
+fn owns_agent(engine: &Engine, ctx: &Ctx, agent: &str) -> Result<bool, Failed> {
+    if ctx.agent || agent == ctx.principal {
+        return Ok(false);
+    }
+    match engine.registry_principal(agent, &ctx.host) {
+        Ok(p) => Ok(p.kind == PrincipalKind::Agent),
+        Err(e) if e.code == "E_UNAVAILABLE" => Ok(false),
+        Err(e) => Err(e.into()),
+    }
 }
 
 fn require_auditor(ctx: &Ctx) -> Result<(), Failed> {

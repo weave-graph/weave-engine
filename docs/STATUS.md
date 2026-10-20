@@ -413,7 +413,10 @@ ADR-0007 sections 6 to 9) is in progress. Part 1 is implemented as the
   served only on loopback, for development.
 - **Authentication.** Bearer API tokens (256 random bits, stored only as a
   SHA-256 digest in the control store, with expiry and revocation) mapped to
-  an active registry user of one tenant. Every route, including unknown
+  an active registry user or agent of one tenant. An agent token
+  authenticates only the agent, under its owner's current ceiling; owners
+  issue and revoke their agents' tokens, and suspending, retiring or
+  expiring an agent, or suspending its owner, fails its next request. Every route, including unknown
   ones, rejects unauthenticated requests with one byte-identical `401`.
   Revocation, expiry and registry suspension apply on the next request.
 - **Tenants.** One store per tenant (its own engine database and audit
@@ -432,7 +435,7 @@ ADR-0007 sections 6 to 9) is in progress. Part 1 is implemented as the
   queues, programs, minted IDs and audit pages; JSON request logs without
   tokens, bodies or graph IDs (tested).
 
-Remaining for B3: OIDC sign-in, agent tokens (after B1 agents), signed
+Remaining for B3: OIDC sign-in, signed
 admission for agent capabilities with a per-tenant audience, and the
 50-client load measurement.
 

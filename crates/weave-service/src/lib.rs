@@ -173,7 +173,7 @@ impl Service {
         )
     }
 
-    /// Issue an API token for an active user of a tenant. Trusted local
+    /// Issue an API token for an active user or agent of a tenant. Trusted local
     /// administration; tenant administrators use `POST /v1/tokens`.
     pub fn issue_token(
         &self,
@@ -184,12 +184,13 @@ impl Service {
         label: Option<&str>,
     ) -> Result<IssuedToken, ApiError> {
         let tenant = self.tenant(tenant_id)?;
-        let active = tenant
-            .with_state(|state| active_user(&state.engine, principal).map_err(ApiError::from))??;
-        if !active {
+        let now = self.now()?;
+        let standing = tenant.with_state(|state| {
+            standing(&state.engine, principal, now).map_err(ApiError::from)
+        })??;
+        if standing.is_none() {
             return Err(ApiError::new("E_UNAVAILABLE", "principal unavailable"));
         }
-        let now = self.now()?;
         self.control(|c| c.issue_token(tenant_id, principal, issued_by, ttl_ms, label, now))
     }
 
@@ -210,18 +211,83 @@ impl Service {
     }
 }
 
-/// True when `principal` is an active user of the engine's registry, read as
-/// that principal (a principal can read its own registry record).
-pub(crate) fn active_user(
+/// A principal that may authenticate, as its own registry record shows it.
+#[derive(Debug, Clone)]
+pub(crate) struct Standing {
+    pub kind: PrincipalKind,
+    /// An agent's ownership chain, owner first, ending at the root user.
+    pub on_behalf_of: Vec<String>,
+}
+
+fn self_host(principal: &str) -> HostContext {
+    HostContext::new(principal, Vec::<String>::new())
+}
+
+/// The standing of `principal` when it may authenticate at `now_ms`: an
+/// active user, or an active agent whose whole ownership chain is active and
+/// whose delegations have not expired. Each record is read as the principal
+/// itself, which the registry allows only while that principal can act, so
+/// a suspended owner anywhere up the chain also fails here. `None` for
+/// everything else (unregistered, inactive, groups, expired agents).
+pub(crate) fn standing(
     engine: &weave_engine::Engine,
     principal: &str,
-) -> weave_engine::Result<bool> {
-    match engine.registry_principal(
-        principal,
-        &HostContext::new(principal, Vec::<String>::new()),
-    ) {
-        Ok(p) => Ok(p.status == PrincipalStatus::Active && p.kind == PrincipalKind::User),
-        Err(e) if e.code == "E_UNAVAILABLE" => Ok(false),
+    now_ms: i64,
+) -> weave_engine::Result<Option<Standing>> {
+    let read = |id: &str| match engine.registry_principal(id, &self_host(id)) {
+        Ok(p) => Ok(Some(p)),
+        Err(e) if e.code == "E_UNAVAILABLE" => Ok(None),
         Err(e) => Err(e),
+    };
+    let Some(me) = read(principal)? else {
+        return Ok(None);
+    };
+    if me.status != PrincipalStatus::Active {
+        return Ok(None);
+    }
+    match me.kind {
+        PrincipalKind::User => Ok(Some(Standing {
+            kind: PrincipalKind::User,
+            on_behalf_of: vec![],
+        })),
+        PrincipalKind::Agent => {
+            let mut chain = Vec::new();
+            let mut current = me;
+            loop {
+                if current
+                    .delegation
+                    .as_ref()
+                    .and_then(|d| d.expires_at_ms)
+                    .is_some_and(|expiry| now_ms >= expiry)
+                {
+                    return Ok(None);
+                }
+                let Some(owner) = current.owner.clone() else {
+                    return Ok(None);
+                };
+                if chain.len() >= weave_contract::provenance::MAX_DELEGATION_CHAIN
+                    || chain.contains(&owner)
+                {
+                    return Ok(None);
+                }
+                chain.push(owner.clone());
+                let Some(next) = read(&owner)? else {
+                    return Ok(None);
+                };
+                if next.status != PrincipalStatus::Active {
+                    return Ok(None);
+                }
+                match next.kind {
+                    PrincipalKind::User => break,
+                    PrincipalKind::Agent => current = next,
+                    PrincipalKind::Group => return Ok(None),
+                }
+            }
+            Ok(Some(Standing {
+                kind: PrincipalKind::Agent,
+                on_behalf_of: chain,
+            }))
+        }
+        PrincipalKind::Group => Ok(None),
     }
 }

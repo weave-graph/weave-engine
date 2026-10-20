@@ -61,7 +61,8 @@ local process to the network. Its trust model:
 - **Untrusted:** every network client. A client is authenticated by a bearer
   API token, and the token alone decides its tenant and principal; no path,
   header or body can name a tenant or a principal. The principal must be an
-  active user of its tenant's registry on every request, and the registry
+  active user, or an active agent with an active ownership chain and an
+  unexpired delegation, of its tenant's registry on every request, and the registry
   then authorizes every operation exactly as in a local registry store.
   Authentication failures are one uniform `401` on every route, including
   unknown ones, so routes cannot be enumerated without a credential.
@@ -85,8 +86,8 @@ local process to the network. Its trust model:
   readable graph change when hidden records are added to it; retracting a
   fact with a hidden dependent (above); occupancy of chosen record IDs by
   hidden records for tenant administrators only (non-administrators assert
-  only service-minted IDs). OIDC, agent tokens and signed agent capabilities
-  are not implemented yet.
+  only service-minted IDs). OIDC and signed agent capabilities are not
+  implemented yet.
 
 ## Trust and limits
 

@@ -12,9 +12,10 @@ the [principal registry](REGISTRY.md) of the caller's tenant authorizes it:
 graph ACLs, Discover, protected branches, `readers` and `reader_groups`
 apply exactly as they do locally.
 
-**Status.** Part 1 of B3: API tokens, tenants, the HTTP API, the audit log,
-TLS, limits and structured logs. OIDC, agent tokens and signed admission
-for agent capabilities are the next parts (see [Limits](#limits-and-non-guarantees)).
+**Status.** Part 1 of B3: API tokens for users and agents, tenants, the
+HTTP API, the audit log, TLS, limits and structured logs. OIDC and signed
+admission for agent capabilities are the next parts (see
+[Limits](#limits-and-non-guarantees)).
 
 ## Run it
 
@@ -70,11 +71,18 @@ with status `401` and `WWW-Authenticate: Bearer`.
   body field names a tenant.
 - **Checked on every request.** Each request looks the token up and checks
   its expiry against the trusted clock, then checks in the tenant's registry
-  that its principal is an active user. A revoked or expired token, or a
-  suspended or retired principal, fails on the next request. Nothing is
-  cached.
-- **Only users authenticate** in this part. Groups never do. Agent tokens,
-  bound to agent principals, come with B1 agents.
+  that its principal can act: an active user, or an active agent whose
+  whole ownership chain is active and whose delegations have not expired. A
+  revoked or expired token, a suspended or retired principal, an expired
+  delegation, or a suspended owner anywhere up an agent's chain fails on the
+  next request. Nothing is cached.
+- **Agent tokens.** A token issued for an agent ([REGISTRY.md](REGISTRY.md#agents))
+  authenticates the agent, never its owner: the agent's ID is the request's
+  principal, so the registry gives it at most its owner's current authority,
+  narrowed by its delegation, and never Administer. The agent's writes record
+  `on_behalf_of`, and so do its audit entries. Agents cannot create graphs,
+  issue tokens or read the audit log.
+- **Groups never authenticate.**
 
 ## Tenants
 
@@ -99,10 +107,10 @@ also in the audit entry and the log line of the request.
 | Endpoint | Who | Does |
 |---|---|---|
 | `GET /v1/health` | any principal | `{"status": "ok", "service", "version", "protocol"}`. The only route that is not audited |
-| `GET /v1/whoami` | any principal | the caller's tenant, principal, `administrator` flag, credential ID and expiry |
+| `GET /v1/whoami` | any principal | the caller's tenant, principal, `administrator` and `agent` flags, `on_behalf_of`, credential ID and expiry |
 | `POST /v1/execute` | any principal | run a core v1 `Program` (below) |
 | `GET /v1/graphs` | any principal | `Engine::list_graphs`: the graphs the caller can discover, with branches and its permission. No total |
-| `POST /v1/graphs` | any active user | create a graph (below) |
+| `POST /v1/graphs` | any active user (not agents) | create a graph (below) |
 | `GET /v1/graphs/{graph_id}/acl` | graph Administer | the graph's ACL and protected branches |
 | `POST /v1/ids` | any principal | `{"count": n}` (1 to 1,000): mint record IDs for the caller (below) |
 | `POST /v1/registry` | per change | `{"changes": [RegistryChange, ...]}`: `Engine::apply_registry`, see [REGISTRY.md](REGISTRY.md). Returns `{"revision"}` |
@@ -110,8 +118,8 @@ also in the audit entry and the log line of the request.
 | `GET /v1/registry/principals/{id}/memberships` | the principal itself, tenant administrators | the groups it is directly in |
 | `GET /v1/registry/groups/{id}/members` | the group's administrators, tenant administrators | its direct members |
 | `GET /v1/tokens` | any principal | its own tokens; a tenant administrator sees every token of the tenant. Never the secret or its digest |
-| `POST /v1/tokens` | tenant administrators | `{"principal", "expires_in_ms"?, "label"?}`: issue a token for an active user. `201` with the token, shown once |
-| `DELETE /v1/tokens/{token_id}` | the token's principal, tenant administrators | revoke it. Effective on the next request. Anyone else gets `E_UNAVAILABLE`, as for a token that does not exist |
+| `POST /v1/tokens` | tenant administrators; a user for the agents it owns | `{"principal", "expires_in_ms"?, "label"?}`: issue a token for an active user or agent. `201` with the token, shown once. A user naming anything but its own agent gets `E_FORBIDDEN`, whether or not the principal exists |
+| `DELETE /v1/tokens/{token_id}` | the token's principal, the owners of its agent, tenant administrators | revoke it. Effective on the next request. Anyone else gets `E_UNAVAILABLE`, as for a token that does not exist |
 | `GET /v1/audit` | tenant administrators | `?after=SEQ&limit=N` (1 to 1,000): audit entries in order |
 | `GET /v1/audit/facts` | tenant administrators | `?graph_id=G&fact_id=F[&access=read\|write][&after][&limit]`: who read and who wrote fact F |
 
@@ -163,7 +171,7 @@ cannot be written, the response is withheld and the request fails with
 `E_AUDIT` (`503`).
 
 An entry holds the sequence number, recorded time, request ID, principal,
-`on_behalf_of` (empty until agents), credential ID, operation, outcome
+`on_behalf_of` (an agent's ownership chain, owner first), credential ID, operation, outcome
 (`ok`, `denied` or `error`) and error code, the graphs and revisions read or
 written, the number of fact rows, and `result_digest`, the SHA-256 of the
 exact response body. Its fact rows name:
@@ -237,6 +245,6 @@ graph or record IDs, so denied topology stays out of the log.
 - The ID key that tags minted record IDs is stored in the control store. It
   authenticates no one; if it leaked, the occupancy channel above would
   reopen for writers of a graph, nothing more.
-- Not yet: OIDC, agent tokens, signed admission for agent capabilities
+- Not yet: OIDC, signed admission for agent capabilities
   (ADR-0007 section 8), the 50-client load measurement, gRPC (deferred until
   a measured need), tenant deletion, and online JWKS rotation.
