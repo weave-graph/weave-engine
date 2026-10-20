@@ -10,8 +10,10 @@ ACLs and Discover, as protocol 1.1.0 and store 32
 B3 is complete with the authenticated multi-tenant `weave-service` ([below](#authenticated-service-b3)),
 B2 is complete with a generated noninterference harness over every operator,
 write-time propagation as protocol **1.2.0**, and audited release policies
-([below](#derived-fact-leakage-protection-b2)), and B4 part 1 serves the
-agent interface over MCP ([below](#agent-interface-b4)). The language reached Phase A parity in
+([below](#derived-fact-leakage-protection-b2)), B4 part 1 serves the
+agent interface over MCP ([below](#agent-interface-b4)), and B5 part 1 adds
+optional review of shared knowledge in the engine, as protocol **1.3.0** and
+store **33** ([below](#optional-review-b5)). The language reached Phase A parity in
 LA1 (weave-language#3): each of the five exit questions fits in at most 15
 lines of `.weave`, and engine CI runs all five through `check_phase_a.py`.
 Source writes cannot set `readers` until LB1. A source `correct` of a
@@ -33,8 +35,8 @@ white-paper requirements remain tracked separately in the
 | MCP preview | `weave-mcp` 0.1.0; read-only local stdio MCP server (A7, [guide](MCP_PREVIEW.md)) |
 | Service | `weave-service` 0.1.0; authenticated multi-tenant HTTP/JSON server over TLS, one store per tenant, API tokens and a read/write audit log (B3, [guide](SERVICE.md)) |
 | Agent interface | MCP at `weave-service` `POST /v1/mcp`, agent tools 1.0.0: assert, retract, query, expand, as-of, what changed, hybrid search, explain, describe schema (B4 part 1, [guide](AGENT_INTERFACE.md)) |
-| Engine contract | 1.1.0: core v1 as frozen in 1.0.0 with the 0.24.0 feature set ([1.0](contract/v1.0/README.md)), plus `reader_groups` and `FactProvenance.on_behalf_of` ([1.1](contract/v1.1/README.md)); 0.1.0–0.24.0 and 1.0.0 programs stay accepted with their published semantics. Existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)), and embedding facts with exact `nearest` and `similar_candidates` ([0.24](contract/v0.24/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
-| Native storage | Store 32; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)), which also holds embedding spaces and embeddings |
+| Engine contract | 1.3.0: core v1 as frozen in 1.0.0 with the 0.24.0 feature set ([1.0](contract/v1.0/README.md)), plus `reader_groups` and `FactProvenance.on_behalf_of` ([1.1](contract/v1.1/README.md)), write-time propagation ([1.2](contract/v1.2/README.md)) and `FactProvenance.review` ([1.3](contract/v1.3/README.md)); 0.1.0–0.24.0 and 1.0.0–1.2.0 programs stay accepted with their published semantics. Existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)), and embedding facts with exact `nearest` and `similar_candidates` ([0.24](contract/v0.24/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
+| Native storage | Store 33; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)), which also holds embedding spaces and embeddings |
 | Platforms | Linux, macOS and Windows in the native CI profile |
 
 Experiments support durable import and correction with optimistic concurrency,
@@ -572,6 +574,47 @@ team and one without access) and `agent_injection.rs`.
 **Not yet:** per-agent quotas and rate limits, the Python SDK and a compile
 tool. Derived-fact restriction follows the engine's current propagation
 (B2).
+
+## Optional review (B5)
+
+B5 ([#12](https://github.com/weave-graph/weave-engine/issues/12)) is in
+progress. Part 1 is the engine side ([guide](REVIEW.md)):
+
+- **Modes.** Each graph of a registry store is `direct` (the default:
+  writes publish immediately) or `reviewed`: every direct write path fails
+  with `E_REVIEW_REQUIRED` or has no write authority, and principals with
+  Write (agents included) propose fact changes instead.
+- **Reviewers.** A policy names users or groups and a threshold. Eligible
+  reviewers are active users with graph Read, never agents and never the
+  proposer. A vote binds the exact version digest (`E_REVIEW_CHANGED`
+  otherwise); a rejection decides at once; the threshold of approvals
+  publishes the proposal as its proposer, atomically, or fails with
+  `E_REVIEW_STALE` and records nothing.
+- **Provenance.** Accepted facts keep `writer` and `on_behalf_of` and add
+  `review` (proposal, decision, approving reviewers, times) in protocol
+  1.3.0 results.
+- **Visibility.** Proposals live outside every graph: pending, rejected and
+  withdrawn proposals never reach a graph read. A reviewer sees a proposal
+  only within its own read scope, which is otherwise identical to a missing
+  one; the proposer and its owner chain see their own.
+- **Policy changes.** Tightening a direct graph is immediate for an
+  Administer holder; any change of a reviewed graph is a proposal decided by
+  the policy it replaces, so a policy never authorizes itself.
+- **Store 33.** Five append-only review tables; store 32 upgrades by creating
+  them, and store-32 binaries refuse store 33
+  (`check_review_store_migration.py`, against the B2 binary).
+
+Evidence: `crates/weave-engine/tests/review.rs`,
+`tests/review_store_migration.rs`, and the noninterference harness, whose
+registry worlds now include a reviewed graph with an accepted proposal in
+both stores and pending, rejected and withdrawn proposals of public facts
+in the store with hidden input
+(`pending_proposals_would_change_reader_outputs_once_accepted` shows they
+are not vacuous).
+
+**Not yet:** the service endpoints and MCP tools to propose, list and review
+(part 2). Proposals do not expire, and decided ones are kept without
+retention.
 
 ## Verified evidence
 

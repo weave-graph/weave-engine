@@ -162,6 +162,28 @@ cannot read (ADR-0008 section 4, every protocol version): such a version is
 absent for `correct`, `retract` and expectations, and an `assert` of its ID
 fails with one uniform `E_CONFLICT`.
 
+**Optional review** (B5, [REVIEW.md](docs/REVIEW.md)) keeps proposals out of
+every graph. Pending, rejected and withdrawn proposals live in separate,
+append-only review tables that no graph read consults, so they change no
+reader's results, counts, change sets, rankings, embeddings or errors; the
+harness's registry worlds include such proposals, with public facts, as
+hidden input. A reviewer sees a proposal only if it can read every record
+the proposal writes or replaces and the records those depend on; any other
+proposal behaves exactly like a missing one. Declared channels of review:
+
+- **Stale proposals.** An approval that would publish a proposal that no
+  longer applies fails with one `E_REVIEW_STALE`, whatever the cause, so a
+  reviewer learns one bit: that the graph changed under the proposal in a
+  way it may not be able to see (the occupancy and dependent bits above,
+  for the proposer's write).
+- **Disclosed reviewers.** An accepted fact's `review.reviewers` are shown
+  to its readers, as the writer is. Proposers see who voted on their
+  proposals.
+- **Reviewer groups.** Whoever manages a reviewer group's membership (group
+  and tenant administrators) decides who may review.
+- **Budgets.** A proposal listing's read budget and its 100,000-proposal scan
+  bound count proposals the caller cannot see.
+
 **Release policies** are deliberate declassifications. A tenant
 administrator (the trusted host in a store without a registry) installs a
 policy that lets an audience read the number of distinct entities in a graph

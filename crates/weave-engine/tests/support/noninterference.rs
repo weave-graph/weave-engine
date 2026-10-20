@@ -22,8 +22,11 @@
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use weave_contract::{CommandResult, Program, VERSION};
-use weave_engine::{Engine, HostContext, ManualClock, RegistryChange};
+use weave_contract::{CommandResult, FactChange, Program, VERSION};
+use weave_engine::{
+    Engine, HostContext, ManualClock, RegistryChange, ReviewMode, ReviewProposalReceipt,
+    ReviewVerdict, ReviewVote,
+};
 
 /// SplitMix64: deterministic on every platform.
 #[derive(Clone)]
@@ -701,6 +704,126 @@ impl World {
         world
     }
 
+    /// B5 review in registry worlds: graph `g` becomes reviewed by `admin`.
+    /// Both stores publish one accepted proposal from `alice` (public facts
+    /// with review provenance). The store with hidden facts also has a
+    /// hidden accepted proposal and pending, rejected and withdrawn
+    /// proposals whose facts are *public*: proposals that were not accepted
+    /// are hidden input for every reader of the graph.
+    pub fn review(&mut self, spec: &Spec) {
+        if self.profile != Profile::Registry {
+            return;
+        }
+        let admin = self.writer.clone();
+        let alice = HostContext::new("alice", Vec::<String>::new());
+        self.at(60);
+        let mode = ReviewMode::Reviewed {
+            reviewers: vec!["admin".into()],
+            threshold: 1,
+        };
+        self.e.set_review_policy("g", &mode, 0, &admin).unwrap();
+        let changes = |facts: Value| -> Vec<FactChange> {
+            let changes: Vec<Value> = facts
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|f| json!({"change": "assert", "fact": f}))
+                .collect();
+            serde_json::from_value(Value::Array(changes)).unwrap()
+        };
+        let accept = |world: &mut World, receipt: &ReviewProposalReceipt, verdict| {
+            world
+                .e
+                .vote_review(
+                    &ReviewVote {
+                        proposal_id: receipt.proposal_id.clone(),
+                        digest: receipt.digest.clone(),
+                        verdict,
+                        note: None,
+                    },
+                    &admin,
+                )
+                .unwrap()
+        };
+        // `alice` proposes, so references go to the public node she reads.
+        let target = LONELY.to_string();
+        let vector = spec.vectors[0].clone();
+        let facts = |prefix: &str| {
+            let mut vector_fact =
+                embedding(&format!("{prefix}m"), "sp", &format!("{prefix}n"), &vector);
+            vector_fact["valid_time"] = json!({"start": 0});
+            json!([
+                {"kind": "node", "id": format!("{prefix}n"), "entity_id": "E0", "space_id": "s0",
+                    "properties": {"x": 4}},
+                {"kind": "edge", "id": format!("{prefix}e"), "predicate": "p",
+                    "from": format!("{prefix}n"), "to": target, "valid_time": {"start": 0}},
+                vector_fact,
+            ])
+        };
+        let visible = self
+            .e
+            .propose_review("g", "main", &changes(facts("rv")), &alice)
+            .unwrap();
+        let accepted = accept(self, &visible, ReviewVerdict::Approve);
+        let decision = accepted.decision.unwrap();
+        self.label_revision("g", "R5", decision.revision.unwrap());
+        self.token("RVP", visible.proposal_id);
+        self.token("RVD", decision.decision_id);
+        if !self.hidden {
+            return;
+        }
+        // A hidden accepted proposal, at the same recorded time.
+        let mut secret = facts("rh");
+        for record in secret.as_array_mut().unwrap() {
+            record["readers"] = json!(["mallory", "admin"]);
+        }
+        let hidden = self
+            .e
+            .propose_review("g", "main", &changes(secret), &alice)
+            .unwrap();
+        let accepted = accept(self, &hidden, ReviewVerdict::Approve);
+        let revision = accepted.decision.unwrap().revision.unwrap();
+        self.relabel_revision("g", &revision);
+        // Public facts that never became accepted facts.
+        let pending = self
+            .e
+            .propose_review("g", "main", &changes(facts("rp")), &alice)
+            .unwrap();
+        let _ = pending;
+        let rejected = self
+            .e
+            .propose_review("g", "main", &changes(facts("rr")), &alice)
+            .unwrap();
+        accept(self, &rejected, ReviewVerdict::Reject);
+        let withdrawn = self
+            .e
+            .propose_review("g", "main", &changes(facts("rw")), &alice)
+            .unwrap();
+        self.e
+            .withdraw_review(&withdrawn.proposal_id, &alice)
+            .unwrap();
+        // Pending changes to visible records: a correction of a visible
+        // node and a retraction of a visible edge.
+        let public = spec
+            .node_records
+            .values()
+            .find(|n| n.get("readers").is_none() && n.get("reader_groups").is_none());
+        if let Some(node) = public {
+            let mut corrected = node.clone();
+            corrected["properties"]["x"] = json!(77);
+            let correction: Vec<FactChange> =
+                serde_json::from_value(json!([{"change": "correct", "fact": corrected}])).unwrap();
+            self.e
+                .propose_review("g", "main", &correction, &alice)
+                .unwrap();
+        }
+        let retraction: Vec<FactChange> = serde_json::from_value(json!([{"change": "retract",
+            "target": {"kind": "edge", "id": spec.visible_edges[0]}}]))
+        .unwrap();
+        // A retraction a dependent refuses is simply not proposed.
+        let _ = self.e.propose_review("g", "main", &retraction, &alice);
+    }
+
     fn registry(&mut self, hidden: bool) {
         self.at(2);
         let revision = self.e.enable_registry(&self.writer).unwrap();
@@ -803,6 +926,18 @@ impl World {
         let revision = revision_of(results, label);
         self.tokens.insert(format!("~{label}~"), revision);
         self.last.insert(graph.into(), label.into());
+    }
+    /// Record a visible revision produced outside a program (an accepted
+    /// review proposal, B5) under `label`.
+    pub fn label_revision(&mut self, graph: &str, label: &str, revision: String) {
+        self.tokens.insert(format!("~{label}~"), revision);
+        self.last.insert(graph.into(), label.into());
+    }
+    /// A revision produced outside a program by hidden facts stands for the
+    /// visible state it extends.
+    pub fn relabel_revision(&mut self, graph: &str, revision: &str) {
+        let label = self.last[graph].clone();
+        self.alias(revision, &label);
     }
     /// A revision produced by hidden facts stands for the visible state it extends.
     fn relabel(&mut self, graph: &str, results: weave_engine::Result<Vec<CommandResult>>) {

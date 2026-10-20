@@ -40,7 +40,7 @@ authenticated service and the agent interface have landed. Phase C
 | Works today | Not yet (roadmap phase) |
 |---|---|
 | Immutable, durable graph revisions in SQLite with incremental fact-level writes; valid-time and recorded-time ("as known at") selection | |
-| k-hop traversal (`expand`), as-of reads and "what changed" change sets with a pull feed (`changes`) | Write-time leakage protection for derived facts, agent quotas, optional review (Phase B) |
+| k-hop traversal (`expand`), as-of reads and "what changed" change sets with a pull feed (`changes`) | Agent quotas (Phase B) |
 | Per-record read permissions, re-checked through derived results | High-volume telemetry ingestion, approximate vector index (Phase C) |
 | Joins, rules, metadata graphs, per-fact provenance and explanations | |
 | Embeddings as temporal, permissioned facts in typed spaces; exact `nearest` composed with traversal; similarity candidate relations with provenance ([guide](docs/EMBEDDINGS.md)) | |
@@ -48,9 +48,10 @@ authenticated service and the agent interface have landed. Phase C
 | A read-only local MCP preview for agents (`weave-mcp`: query, expand, as-of, what changed, hybrid search, explain) as a fixed reader ([guide](docs/MCP_PREVIEW.md)) | |
 | Users, groups, agents and graph ACLs; an authenticated multi-tenant service with an audit log ([guide](docs/SERVICE.md)) | |
 | An MCP agent interface on the service: agents assert, retract, query, time-travel, search and explain with their own identity and provenance ([guide](docs/AGENT_INTERFACE.md)) | |
+| Optional review per graph: team graphs take proposals that reviewers accept, personal graphs publish at once, accepted facts name their reviewers ([guide](docs/REVIEW.md)) | Review tools on the service and MCP (Phase B) |
 
 The supported profile is described in [docs/STATUS.md](docs/STATUS.md): science
-**0.1.0**, contract **1.1.0**, store **32**. The CLI and the science
+**0.1.0**, contract **1.3.0**, store **33**. The CLI and the science
 interface run locally and trust their caller; `weave-service` is the
 authenticated network interface (see [SECURITY.md](SECURITY.md)).
 

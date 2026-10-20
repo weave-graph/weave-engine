@@ -21,8 +21,11 @@ use crate::{LEGACY_VERSION, VERSION};
 /// and `on_behalf_of` in engine-recorded provenance. 1.2.0 (B2) adds
 /// `widen_readers` on corrections and the write-time rules of ADR-0008
 /// section 3 (declared derivations and readers widened by a correction).
+/// 1.3.0 (B5) adds `review` in engine-recorded provenance: the proposal,
+/// decision and reviewers of a fact published through review.
 pub const SUPPORTED_VERSIONS: &[&str] = &[
     VERSION,
+    "1.2.0",
     "1.1.0",
     "1.0.0",
     "0.24.0",
@@ -117,7 +120,7 @@ mod tests {
             }
         }
         assert!(
-            !version_at_least("1.3.0", "0.1.0"),
+            !version_at_least("1.4.0", "0.1.0"),
             "unknown versions have no features"
         );
         assert!(!version_at_least("", "0.1.0"));
@@ -130,6 +133,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "unknown version")]
     fn a_gate_on_an_unpublished_version_is_a_programming_error() {
-        version_at_least(VERSION, "1.3.0");
+        version_at_least(VERSION, "1.4.0");
     }
 }

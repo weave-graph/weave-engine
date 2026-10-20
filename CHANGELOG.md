@@ -6,6 +6,50 @@ defined in [docs/ROADMAP.md](docs/ROADMAP.md). The supported profile is in
 
 ## Unreleased
 
+### B5 part 1: optional review in the engine (contract 1.3.0, store 33)
+
+Part of [#12](https://github.com/weave-graph/weave-engine/issues/12)
+([guide](docs/REVIEW.md), [1.3 note](docs/contract/v1.3/README.md)).
+
+| Identifier | Version |
+|---|---|
+| Protocol (`Program.version`), `weave-contract` crate | **1.3.0** (additive minor) |
+| Store schema (`STORAGE_VERSION`) | **33** (five new review tables; store-32 binaries refuse it) |
+| Science API, Python client | 0.1.0, now emitting and accepting contract 1.3.0 |
+
+- Per-graph review modes in registry stores: `direct` (default) or
+  `reviewed` with users or groups as reviewers and a threshold
+  (`Engine::review_policy`, `Engine::set_review_policy`). A reviewed graph
+  refuses every direct write (`E_REVIEW_REQUIRED`).
+- Proposals (`Engine::propose_review`, `amend_review`, `withdraw_review`),
+  validated as the proposer's write and kept outside every graph; votes bound
+  to the exact version digest (`Engine::vote_review`, `E_REVIEW_CHANGED`);
+  the threshold of eligible reviewers publishes a proposal as its proposer in
+  one savepoint, or fails with `E_REVIEW_STALE`.
+- Policy changes of a reviewed graph are proposals decided by the policy they
+  replace.
+- `FactProvenance.review` (1.3.0 results): the proposal, decision, approving
+  reviewers and times of a fact published through review.
+- `Engine::review_proposal`, `Engine::list_review_proposals` and
+  `weave-engine review`: a proposal is visible to its proposer side and to
+  eligible reviewers within its read scope only.
+- New codes `E_REVIEW_REQUIRED`, `E_REVIEW_NOT_REQUIRED`, `E_REVIEW_CHANGED`,
+  `E_REVIEW_STALE`, `E_REVIEW_DECIDED`, `E_REVIEW_POLICY` and `E_REVIEW`.
+- The noninterference harness's registry worlds include a reviewed graph,
+  with pending, rejected and withdrawn proposals of public facts as hidden
+  input.
+
+**Vendor update for weave-language (contract 1.3.0).** Copy these files of
+`crates/weave-contract/` and update `vendor/manifest.json`:
+
+- changed: `Cargo.toml`, `src/lib.rs`, `src/provenance.rs`,
+  `src/versions.rs`, `tests/core_v1_fixtures.rs`,
+  `fixtures/core-v1/manifest.json`,
+  `fixtures/core-v1/negative/unknown-version.json`;
+- added: `fixtures/core-v1/positive/fact-provenance-review.json`,
+  `fixtures/core-v1/negative/fact-provenance-self-review.json`,
+  `fixtures/core-v1/negative/claimed-provenance-forged-review.json`.
+
 ### B2 part 3: persisted results and release policies (B2 complete)
 
 Closes [#5](https://github.com/weave-graph/weave-engine/issues/5)

@@ -388,6 +388,31 @@ pub(crate) fn validate_claims(data: &GraphData) -> Result<()> {
     Ok(())
 }
 
+/// The records a fact's visibility depends on besides its own clause: an
+/// edge's endpoints, an assertion's edge, an attachment's host and an
+/// embedding's subject (B5 review scope).
+fn visibility_dependencies(fact: &Fact) -> Vec<Key> {
+    let node = |id: &str| (store::Namespace::Node, id.to_string());
+    let record = |id: &str| (store::Namespace::Record, id.to_string());
+    match fact {
+        Fact::Edge(e) => vec![node(&e.from), node(&e.to)],
+        Fact::StructuralEdge(e) => vec![node(&e.from), node(&e.to)],
+        Fact::Assertion(a) => vec![record(&a.edge_id)],
+        Fact::Attachment(a) => match &a.host {
+            MetadataHost::Node { id } => vec![node(id)],
+            MetadataHost::Edge { id } | MetadataHost::Assertion { id } => vec![record(id)],
+            MetadataHost::Entity { .. } | MetadataHost::Graph => vec![],
+        },
+        Fact::Embedding(e) => match &e.subject {
+            EmbeddingSubject::Node { node_id } => vec![node(node_id)],
+            EmbeddingSubject::Edge { edge_id } => vec![record(edge_id)],
+            EmbeddingSubject::Assertion { assertion_id } => vec![record(assertion_id)],
+            EmbeddingSubject::Entity { .. } => vec![],
+        },
+        Fact::Node(_) | Fact::EmbeddingSpace(_) => vec![],
+    }
+}
+
 fn conflict(message: &str) -> Error {
     err("E_CONFLICT", message)
 }
@@ -940,6 +965,123 @@ impl Engine {
             host,
             WriteRules { propagation: false },
         )
+    }
+
+    /// The write of a proposal to a reviewed graph (B5), as its proposer:
+    /// the `write` command's checks and rules for the current version, with
+    /// write authority taken from the registry alone, because the review
+    /// mode refuses every direct write. Used to validate a proposal (in a
+    /// savepoint the caller rolls back) and to publish an accepted one.
+    pub(crate) fn write_proposed(
+        &self,
+        graph: &str,
+        branch: &str,
+        changes: &[FactChange],
+        proposer: &HostContext,
+    ) -> Result<(String, Option<String>)> {
+        identity_acceptance::require_external_graph(graph)?;
+        if graph.starts_with("weave:") {
+            return Err(err(
+                "E_RESERVED_NAMESPACE",
+                "fact writes to engine-reserved weave: graphs are rejected",
+            ));
+        }
+        if !self.branch_write_authority(proposer, graph, branch)? {
+            return Err(err(
+                "E_FORBIDDEN",
+                "host has not granted graph write authority",
+            ));
+        }
+        self.validate_reader_groups(
+            changes.iter().flat_map(|change| match change {
+                FactChange::Assert { fact } | FactChange::Correct { fact, .. } => {
+                    fact_reader_groups(fact)
+                }
+                FactChange::Retract { .. } => &[],
+            }),
+            proposer,
+        )?;
+        self.append_facts_with(
+            graph,
+            branch,
+            &None,
+            changes,
+            proposer,
+            WriteRules { propagation: true },
+        )
+    }
+
+    /// The reader clauses a proposal's records have (B5): each written
+    /// fact's own clause, the live version a correction or retraction
+    /// replaces, and every live record the written facts depend on for their
+    /// visibility (endpoints, hosts, subjects). A reviewer sees the proposal
+    /// only if it satisfies all of them. Public clauses are omitted.
+    pub(crate) fn proposal_scope(
+        &self,
+        graph: &str,
+        branch: &str,
+        changes: &[FactChange],
+    ) -> Result<Vec<(Vec<String>, Vec<String>)>> {
+        let parent = match self.head(graph, branch)? {
+            None => Parent::Empty,
+            Some(revision) if is_fact_revision(&revision) => Parent::Fact { revision },
+            Some(revision) => Parent::Snapshot {
+                data: Box::new(
+                    self.load(graph, &revision)?
+                        .ok_or_else(|| err("E_UNAVAILABLE", "graph unavailable"))?,
+                ),
+                revision,
+            },
+        };
+        let written: BTreeMap<Key, &Fact> = changes
+            .iter()
+            .filter_map(|change| match change {
+                FactChange::Assert { fact } | FactChange::Correct { fact, .. } => {
+                    Some((key(fact), fact))
+                }
+                FactChange::Retract { .. } => None,
+            })
+            .collect();
+        let mut clauses = BTreeSet::new();
+        let mut add = |fact: &Fact| {
+            let (readers, groups) = clause(fact);
+            if !(readers.is_empty() && groups.is_empty()) {
+                clauses.insert((readers.to_vec(), groups.to_vec()));
+            }
+        };
+        let mut queue: Vec<Key> = Vec::new();
+        for change in changes {
+            match change {
+                FactChange::Assert { fact } => {
+                    add(fact);
+                    queue.extend(visibility_dependencies(fact));
+                }
+                FactChange::Correct { fact, .. } => {
+                    add(fact);
+                    queue.extend(visibility_dependencies(fact));
+                    queue.push(key(fact));
+                }
+                FactChange::Retract { target, .. } => {
+                    queue.push((namespace(target.kind), target.id.clone()));
+                }
+            }
+        }
+        let mut seen = BTreeSet::new();
+        while let Some(k) = queue.pop() {
+            if !seen.insert(k.clone()) || seen.len() > 4 * MAX_WRITE_CHANGES {
+                continue;
+            }
+            // A record the proposal writes counts with its proposed clause,
+            // and the live version it replaces with its own.
+            if let Some(fact) = written.get(&k) {
+                queue.extend(visibility_dependencies(fact));
+            }
+            if let Some(seen) = self.parent_get(&parent, &k)? {
+                add(&seen.fact);
+                queue.extend(visibility_dependencies(&seen.fact));
+            }
+        }
+        Ok(clauses.into_iter().collect())
     }
 
     /// Whether a writer may compare a change with a live version (ADR-0008
@@ -2109,6 +2251,7 @@ impl Engine {
                     );
                     provenance.on_behalf_of =
                         decode_delegation(stored.recording.on_behalf_of.as_deref())?;
+                    provenance.review = self.review_provenance(&stored.recording.revision)?;
                     Ok(provenance)
                 })
                 .transpose();

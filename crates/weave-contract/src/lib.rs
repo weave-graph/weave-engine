@@ -34,7 +34,7 @@ pub use versions::{
 /// with the additive 1.1.0 identity fields of B1 (ADR-0007) and the 1.2.0
 /// write-time propagation rules of B2 (ADR-0008).
 /// Older versions are listed, oldest last, in [`versions::SUPPORTED_VERSIONS`].
-pub const VERSION: &str = "1.2.0";
+pub const VERSION: &str = "1.3.0";
 pub mod accepted_history;
 pub use accepted_history::{
     AcceptedSelection, AcceptedViewHistoryCut, AcceptedViewHistoryRange, AcceptedViewHistoryResult,

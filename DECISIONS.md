@@ -2287,3 +2287,154 @@ audience, not records, so that hook would be a second declassification path
 with no threshold. It is removed: a write that is broader than its declared
 inputs always fails, and a wider audience only ever learns what a policy
 releases.
+
+### 2026-10-20 — #12 B5 — Delivery in two parts; protocol 1.3.0 and store 33
+
+Part 1 is the engine: review modes, proposals, votes, policy transitions,
+review provenance, the trusted engine API and a `weave-engine review`
+command. Part 2 is the agent and reviewer surface on `weave-service` and
+MCP, after B4 part 3, and closes #12. Part 1 touches neither service crate.
+The only wire change is `FactProvenance.review`, an optional engine-recorded
+field, so the contract is the additive minor 1.3.0 and the language vendors
+once. The store moves to 33 because review state needs tables, and because a
+store-32 binary would ignore review policies and let writers publish
+directly to a reviewed graph. The Python client and `check_science.py` move
+to 1.3.0, as they did for 1.1.0 and 1.2.0; the change is one constant per
+file, which B4 part 3 will need to rebase over.
+
+### 2026-10-20 — #12 B5 — Governance is reused by its rules, not its tables
+
+The accepted-view governance binds approvals to public ed25519 member keys,
+publishes whole pinned snapshots into decision graphs, and writes those
+graphs through `writable_graphs` self-grants, which registry stores refuse
+(B1). None of that fits fact proposals from registry principals. B5 keeps
+its rules and replaces its authority: approvals bind an immutable digest of
+the exact proposal version, a threshold counts distinct members, a policy
+replacement is approved by its predecessor's quorum and never by itself,
+the decision compares an expected policy revision, and vote, decision and
+published revision commit in one savepoint. Members become registry users
+and groups resolved per request, collectors become graph write authority,
+and policy readers become graph Read plus record readers. Reviewer
+identities are authenticated by the host (B3 tokens and OIDC), as every
+other request is, so votes carry no signature. Signed governance views keep
+working unchanged in local stores.
+
+### 2026-10-20 — #12 B5 — Review state lives in its own append-only tables
+
+Proposals, versions, votes, decisions and policies are rows in five
+`review_*` tables, not facts in a graph. A graph would make proposals
+reachable by graph reads (change sets of a reserved graph, references),
+which is exactly what must never happen, and every read path would need a
+rule for them. Separate tables keep pending and rejected proposals out of
+every graph read by construction. Triggers refuse UPDATE and DELETE, so
+rejected and withdrawn proposals stay in history. A decision row links an
+accepted proposal to the fact revision it published; the provenance read
+path looks the revision up there, so the fact store and its backend trait
+are unchanged.
+
+### 2026-10-20 — #12 B5 — Registry authority only; a reviewed graph grants no direct write
+
+Review needs the registry (`E_REGISTRY_DISABLED` otherwise): reviewers,
+proposers and their eligibility are registry principals, and a local store's
+trusted host has the signed governance views. `writable_graphs` is never
+consulted. In a registry store `graph_writable` is false on a reviewed
+graph, so every peripheral writer (adapters, compiled handlers, capsule
+receipt and acceptance, integration, retention, checkpoints) loses its
+authority there, and `require_branch_write` answers `E_REVIEW_REQUIRED` to
+a principal that holds graph write authority. Proposing checks that
+authority directly (`branch_write_authority`), and acceptance checks it
+again for the proposer, so an agent narrowed or a user revoked before the
+decision cannot publish through a reviewer.
+
+### 2026-10-20 — #12 B5 — Who reviews
+
+A policy names users or groups; an eligible reviewer is an active user in
+it, with Read on the graph. Agents never review, and naming one fails with
+`E_REVIEW_POLICY`: the point of review is that a person accepts agent
+output, and Administer-like authority is not delegable either. The
+proposer's own vote never counts (four eyes), but an agent's owner may
+review the agent's proposals, which is the main use. Group membership is the
+registry's: group and tenant administrators decide who reviews, which is
+declared rather than prevented, because a group is how a team manages
+reviewers and how a policy of departed individual reviewers stays
+changeable.
+
+### 2026-10-20 — #12 B5 — Votes bind a version under a policy revision
+
+A vote names the digest of the current version; any other digest fails with
+`E_REVIEW_CHANGED`. The proposer may amend a pending proposal, which adds a
+version with a new digest (at most 64), so "an approval of a changed
+proposal" is concrete: approvals of version 1 never count for version 2.
+Votes also record the policy revision, and only votes under the current one
+count, as governance approvals bind their policy. The quorum is counted when
+the last approval arrives, from voters who are still eligible and within
+scope then, so a reviewer who lost Read or left the group no longer counts.
+One rejection decides a proposal: publishing needs M approvals, refusing
+needs one reviewer.
+
+### 2026-10-20 — #12 B5 — A reviewer's read scope is the proposal's record clauses
+
+A reviewer must be able to read what it approves. When a version is
+submitted, the engine stores the reader clauses of every record it writes,
+of the live versions it corrects or retracts, and of the records those
+facts' visibility depends on (endpoints, hosts, subjects). A reviewer sees
+the proposal only if its identity satisfies all of them under current
+membership; otherwise the proposal is exactly a missing one, in `show`,
+`list` (including `after` cursors) and `vote`. The clauses are stored, not
+recomputed from the head, so a proposal's visibility does not change when
+the graph moves on, and a retracted target's restriction is not forgotten.
+The proposer and principals in an agent proposer's ownership chain see their
+proposals whatever the clauses (the owner already reads its agents'
+records), and graph Administer holders see policy proposals.
+
+### 2026-10-20 — #12 B5 — Acceptance writes as the proposer, at decision time
+
+An accepted proposal is written through the fact write path as its
+proposer, with the current protocol's write rules, so `writer` and
+`on_behalf_of` are the proposer's and the review adds `review`. Its
+recorded time is the decision time: a proposed fact did not exist in the
+graph before, and `as_of` and change sets must say so. A proposal is
+validated by the same write at submission (in a rolled-back savepoint), so
+the proposer gets its normal write errors. At acceptance a failure is one
+uniform `E_REVIEW_STALE`, because the cause can be a record the reviewer
+cannot read; the whole vote is rolled back, so a stale proposal stays
+pending and the reviewer may reject it. A proposal that changes nothing
+fails at submission with `E_FACT_WRITE`.
+
+### 2026-10-20 — #12 B5 — Policy transitions
+
+On a direct graph, an Administer holder changes the mode at once: becoming
+stricter needs no one's consent. On a reviewed graph every change, including
+a return to direct and any change of reviewers or threshold, is a policy
+proposal decided by the current reviewers, never the proposer. It records
+the revision it replaces; a competing change that lands first makes it
+stale. There is no administrator override, as governance has no bootstrap
+override after a decision. Pending fact proposals of a graph that returns to
+direct can only be withdrawn.
+
+### 2026-10-20 — #12 B5 — Engine-minted proposal IDs and per-proposer bounds
+
+Proposal and decision IDs are `proposal:` or `decision:` and 128 random
+bits from SQLite, as governance decision IDs are, so a client cannot probe
+for hidden proposals by ID and proposal identities never collide across
+stores. Listing order is a per-store sequence, so hidden proposals between
+visible ones change no visible order. The pending bound is per proposer per
+graph (1,000), not per graph, so a proposer's limit never depends on
+proposals it cannot see. Listings scan at most 100,000 proposals and charge
+the read budget, which counts hidden proposals; that is the declared budget
+channel.
+
+### 2026-10-20 — #12 B5 — The harness covers review as hidden input
+
+B5 adds no `GraphExpression` kind, so the coverage test is unchanged; the
+new read paths are review provenance in every result and the review API.
+The registry worlds now make `g` reviewed: both stores publish one accepted
+proposal (with review provenance in every operator's output, its IDs
+normalized as labels), and the store with hidden input adds a hidden
+accepted proposal and pending, rejected and withdrawn proposals of *public*
+facts, a pending correction and a pending retraction. Every operator must
+still give the readers under test identical outcomes, and
+`pending_proposals_would_change_reader_outputs_once_accepted` shows that
+accepting the pending one changes `query`, `changes`, `nearest` and
+`expand` for them, so the property is not vacuous. The review API has its
+own paired test, `hidden_proposals_never_change_a_reviewers_outcomes`.

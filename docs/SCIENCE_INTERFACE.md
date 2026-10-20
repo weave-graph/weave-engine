@@ -226,7 +226,7 @@ Successful envelope:
 {
   "ok": true,
   "science_version": "0.1.0",
-  "contract_version": "1.2.0",
+  "contract_version": "1.3.0",
   "result": {
     "results": [{
       "kind": "committed",
@@ -248,7 +248,7 @@ Failure envelope, with nonzero CLI exit status:
 {
   "ok": false,
   "science_version": "0.1.0",
-  "contract_version": "1.2.0",
+  "contract_version": "1.3.0",
   "error": {"code": "E_SCIENCE_READ_ONLY", "message": "analysis programs must contain only read operations"}
 }
 ```

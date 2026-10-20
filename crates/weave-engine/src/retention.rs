@@ -76,6 +76,12 @@ const KNOWN_TABLES: &[&str] = &[
     "retention_stateful_adapters",
     "retention_tombstones",
     "retention_view_epochs",
+    // B5 review records: their revision references anchor published revisions.
+    "review_decisions",
+    "review_policies",
+    "review_proposals",
+    "review_versions",
+    "review_votes",
     "revision_integrity",
     "revisions",
     "schema_registry",

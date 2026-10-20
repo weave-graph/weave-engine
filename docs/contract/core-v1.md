@@ -319,6 +319,24 @@ protocol 0.22.0.
   writer acted for no one, and results of programs older than 1.1.0 never
   carry it. Fixture: `positive/fact-provenance-on-behalf-of.json`.
 
+- **`provenance.review`.** From 1.3.0 (B5,
+  [REVIEW.md](../REVIEW.md)), `FactProvenance` also has `review` for a fact
+  that a reviewed graph published through an accepted proposal:
+  `ReviewProvenance { proposal_id, decision_id, reviewers, proposed_at_ms,
+  decided_at_ms }`. `writer` and `on_behalf_of` stay the proposer's;
+  `reviewers` are the 1 to 32 approving reviewers of the quorum, sorted and
+  distinct, never the writer; `decided_at_ms` equals the fact's
+  `recorded_at_ms`, because a proposed fact is recorded only when it is
+  accepted, and `proposed_at_ms` is not later than it. Violations fail with
+  `E_PROVENANCE`. The field is engine-recorded, outside content and never part
+  of a revision ID, so `ClaimedProvenance` rejects it with
+  `E_UNKNOWN_FIELD`. It is omitted for facts written directly, and results of
+  programs older than 1.3.0 never carry it. Reviewer identities are disclosed
+  to the fact's readers, like the writer. Fixtures:
+  `positive/fact-provenance-review.json`,
+  `negative/fact-provenance-self-review.json`,
+  `negative/claimed-provenance-forged-review.json`.
+
 ## 7. Embeddings
 
 Defined by [ADR-0006](../architecture/ADR-0006-embedding-facts-and-spaces.md)
@@ -883,7 +901,8 @@ Positive: `positive/identity-graph-nodes-edges.json`,
 `positive/nearest-result-envelope.json`,
 `positive/reader-groups-omitted-when-empty.json`,
 `positive/fact-provenance-on-behalf-of.json`,
-`positive/readers-widened-explicitly.json`.
+`positive/readers-widened-explicitly.json`,
+`positive/fact-provenance-review.json`.
 
 Negative: `negative/unknown-version.json`, `negative/missing-version.json`,
 `negative/unknown-version-checked-first.json`,
@@ -909,7 +928,9 @@ Negative: `negative/unknown-version.json`, `negative/missing-version.json`,
 `negative/embedding-space-encoder-version.json`,
 `negative/legacy-version-feature-gate.json`,
 `negative/empty-valid-interval.json`,
-`negative/stale-expected-head.json`.
+`negative/stale-expected-head.json`,
+`negative/fact-provenance-self-review.json`,
+`negative/claimed-provenance-forged-review.json`.
 
 ### 13.4 Vendoring into weave-language
 

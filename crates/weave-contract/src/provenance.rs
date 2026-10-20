@@ -85,6 +85,50 @@ pub struct ClaimedProvenance {
 /// `weave-policy` capability chains (ADR-0007 section 3).
 pub const MAX_DELEGATION_CHAIN: usize = 8;
 
+/// Most reviewers named in one [`ReviewProvenance`], matching the bound on a
+/// review policy's threshold.
+pub const MAX_REVIEWERS: usize = 32;
+
+/// How a fact reached a reviewed graph (1.3.0, B5): the proposal it was
+/// written in, the decision that published it and the reviewers whose
+/// approvals made up the quorum. Engine-recorded and outside fact content,
+/// like `writer`, which stays the proposer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewProvenance {
+    /// The proposal the fact was written in.
+    pub proposal_id: String,
+    /// The decision that accepted the proposal.
+    pub decision_id: String,
+    /// The reviewers whose approvals of the accepted version formed the
+    /// quorum, sorted. Never the proposer.
+    pub reviewers: Vec<String>,
+    /// Engine-recorded time at which the proposal was first submitted.
+    pub proposed_at_ms: i64,
+    /// Engine-recorded time of the decision. It equals the fact's
+    /// `recorded_at_ms`: a proposed fact is recorded only when accepted.
+    pub decided_at_ms: i64,
+}
+
+impl ReviewProvenance {
+    pub fn validate(&self) -> Result<(), ContractError> {
+        if !label(&self.proposal_id)
+            || !label(&self.decision_id)
+            || self.reviewers.is_empty()
+            || self.reviewers.len() > MAX_REVIEWERS
+            || !self.reviewers.iter().all(|r| label(r))
+            || self.reviewers.windows(2).any(|w| w[0] >= w[1])
+            || self.proposed_at_ms < 0
+            || self.decided_at_ms < self.proposed_at_ms
+        {
+            return Err(invalid(
+                "review provenance needs bounded identifiers, 1 to 32 sorted distinct reviewers and ordered times",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Provenance of one stored fact as returned by the engine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -103,6 +147,10 @@ pub struct FactProvenance {
     pub method: Method,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<EvidenceRef>,
+    /// The review that published the fact (1.3.0, B5), for a fact written
+    /// through an accepted proposal. Omitted for facts written directly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<ReviewProvenance>,
 }
 
 /// Identity of one stored fact, used to key provenance in results.
@@ -219,6 +267,16 @@ impl FactProvenance {
                 "on_behalf_of holds at most 8 bounded principal identifiers",
             ));
         }
+        if let Some(review) = &self.review {
+            review.validate()?;
+            if review.decided_at_ms != self.recorded_at_ms
+                || review.reviewers.contains(&self.writer)
+            {
+                return Err(invalid(
+                    "a reviewed fact is recorded at its decision and never reviewed by its writer",
+                ));
+            }
+        }
         validate_claim(&self.source, &self.method, &self.evidence)
     }
     /// Combine an engine-recorded writer and time with a client claim.
@@ -236,6 +294,7 @@ impl FactProvenance {
             source: claim.source,
             method: claim.method,
             evidence: claim.evidence,
+            review: None,
         }
     }
 }

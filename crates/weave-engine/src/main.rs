@@ -2,13 +2,14 @@ use std::{collections::HashSet, env, fs, io::Read, process};
 use weave_engine::{Engine, HostContext};
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
-    let usage = "usage: weave-engine run --db PATH --actor PRINCIPAL [--write GRAPH] PLAN.json\n       weave-engine registry enable --db PATH --actor PRINCIPAL\n       weave-engine registry apply --db PATH --actor PRINCIPAL CHANGES.json\n       weave-engine graphs --db PATH --actor PRINCIPAL";
+    let usage = "usage: weave-engine run --db PATH --actor PRINCIPAL [--write GRAPH] PLAN.json\n       weave-engine registry enable --db PATH --actor PRINCIPAL\n       weave-engine registry apply --db PATH --actor PRINCIPAL CHANGES.json\n       weave-engine graphs --db PATH --actor PRINCIPAL\n       weave-engine review --db PATH --actor PRINCIPAL REQUEST.json";
     let (command, first) = match (
         args.first().map(String::as_str),
         args.get(1).map(String::as_str),
     ) {
         (Some("run"), _) => ("run", 1),
         (Some("graphs"), _) => ("graphs", 1),
+        (Some("review"), _) => ("review", 1),
         (Some("registry"), Some("enable")) => ("enable", 2),
         (Some("registry"), Some("apply")) => ("apply", 2),
         _ => return Err(usage.into()),
@@ -83,6 +84,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .apply_registry(&changes, &host)
                 .map(|r| serde_json::json!({"revision": r})),
         );
+    }
+    if command == "review" {
+        let request: weave_engine::ReviewRequest = serde_json::from_slice(&bytes)?;
+        let engine = Engine::open(&engine_path)?;
+        return report(engine.review_request(&request, &host));
     }
     // Stable core-v1 decode codes (E_VERSION, E_UNKNOWN_FIELD, ...) reach the caller.
     let plan = match weave_contract::decode_program(&bytes) {

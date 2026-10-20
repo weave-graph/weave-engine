@@ -57,7 +57,7 @@ pub use recorded_actors::{
 };
 pub use recorded_history::{RecordedHistoryRange, RecordedQueryResult};
 pub use weave_contract::{ObservationKind, RecordedCut, RecordedObservation, RecordedSelection};
-pub const STORAGE_VERSION: i64 = 32;
+pub const STORAGE_VERSION: i64 = 33;
 mod retention;
 pub use retention::{RecordedAvailability, RetentionPlan, RetentionPolicy, RetentionReceipt};
 mod adapter_lifecycle;
@@ -119,9 +119,15 @@ pub use facts::FactReconciliation;
 mod metadata;
 mod registry;
 mod release;
+mod review;
 pub use release::{
     PersistRequest, PersistedValue, ReleaseAudience, ReleaseAuditEntry, ReleaseKind,
     ReleaseOutcome, ReleasePolicy, ReleaseSource, MAX_PERSISTED_RECORDS, RELEASE_GRAPH,
+};
+pub use review::{
+    ReviewContent, ReviewDecision, ReviewMode, ReviewPolicy, ReviewPolicyChange, ReviewProposal,
+    ReviewProposalFilter, ReviewProposalReceipt, ReviewRequest, ReviewStatus, ReviewVerdict,
+    ReviewVote, MAX_PROPOSAL_CHANGES, MAX_REVIEW_LIST,
 };
 mod snapshot;
 mod traversal;
@@ -314,6 +320,7 @@ impl Engine {
         engine.initialize_governance_delivery()?;
         engine.initialize_governance_graphs()?;
         engine.initialize_governed_effects()?;
+        engine.initialize_review()?;
         engine.initialize_recorded_history(version)?;
         engine.initialize_retention(version)?;
         engine.initialize_adapter_lifecycle(version)?;
@@ -799,6 +806,12 @@ impl Engine {
                     if !weave_contract::version_at_least(&program.version, "1.1.0") {
                         for entry in &mut result.fact_provenance {
                             entry.provenance.on_behalf_of.clear();
+                        }
+                    }
+                    // `review` is a 1.3.0 result field (B5).
+                    if !weave_contract::version_at_least(&program.version, "1.3.0") {
+                        for entry in &mut result.fact_provenance {
+                            entry.provenance.review = None;
                         }
                     }
                     merge_sources(&mut result.source_revisions, &program.source_revisions)?;
