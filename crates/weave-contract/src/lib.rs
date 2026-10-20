@@ -26,7 +26,7 @@ pub mod wire;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 pub use wire::{decode, decode_program, is_supported_version, ContractError, SUPPORTED_VERSIONS};
-pub const VERSION: &str = "0.23.0";
+pub const VERSION: &str = "0.24.0";
 pub mod accepted_history;
 pub use accepted_history::{
     AcceptedSelection, AcceptedViewHistoryCut, AcceptedViewHistoryRange, AcceptedViewHistoryResult,
@@ -209,6 +209,12 @@ pub struct GraphData {
     pub nodes: Vec<Node>,
     #[serde(default)]
     pub edges: Vec<Edge>,
+    /// Embedding space descriptors (0.24, ADR-0006). Omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub embedding_spaces: Vec<embedding::EmbeddingSpace>,
+    /// Embedding facts (0.24, ADR-0006). Omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub embeddings: Vec<embedding::EmbeddingFact>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -304,6 +310,10 @@ pub struct CounterpartSelection {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphExpression {
+    /// Exact k-nearest neighbors in one embedding space (0.24, A4).
+    Nearest(embedding::NearestPlan),
+    /// Candidate similarity relations between embeddings (0.24, A4).
+    SimilarCandidates(embedding::CandidatesPlan),
     /// k-hop expansion from seed nodes (0.23, A3).
     Expand(traversal::ExpandPlan),
     /// Facts changed between two states of a branch (0.23, A3).
@@ -478,6 +488,15 @@ pub struct QueryResult {
     /// The change set of a `changes` expression (0.23, A3).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub changes: Option<traversal::ChangeSet>,
+    /// The ranked hits of a `nearest` expression, in rank order (0.24, A4).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub neighbors: Vec<embedding::Neighbor>,
+    /// The candidate relations of a `similar_candidates` expression (0.24, A4).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidates: Vec<embedding::CandidateRelation>,
+    /// How a ranking was computed; set by `nearest` and `similar_candidates` (0.24).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exactness: Option<embedding::Exactness>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ResolvedGraph {

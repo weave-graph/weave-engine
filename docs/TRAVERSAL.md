@@ -36,7 +36,8 @@ science JSON forms are in [SCIENCE_INTERFACE.md](SCIENCE_INTERFACE.md#traversal-
 | `graph_id`, `branch_id` | The branch to read (`branch_id` defaults to `main`) |
 | `revision` | An exact revision. Absent means the branch head, or `as_of` |
 | `as_of` | Read the branch as known at this recorded time (Unix ms). Not with `revision` |
-| `seeds` | 1 to 1,000 node IDs to start from |
+| `seeds` | 1 to 1,000 node IDs to start from (together with `seeds_from`) |
+| `seeds_from` | 0.24: an expression whose nodes, by origin in this graph, are also seeds; for example the hits of a [`nearest`](EMBEDDINGS.md#composition) ranking. A partial value makes the result partial |
 | `hops` | 1 to 16 |
 | `direction` | `out` (edges from a node, the default), `in` or `both` |
 | `predicates` | Edge predicates to follow; empty follows all |

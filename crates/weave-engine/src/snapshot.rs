@@ -46,6 +46,7 @@ impl Engine {
                 return Err(err("E_BATCH", "batch graph IDs must be valid and unique"));
             }
             validate_graph(&commit.data)?;
+            reject_snapshot_embeddings(&commit.data)?;
             if let Some(schema) = &commit.data.schema {
                 let key = (schema.id.clone(), schema.revision.clone());
                 if schemas.get(&key).is_some_and(|prior| prior != schema) {

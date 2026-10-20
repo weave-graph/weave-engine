@@ -65,8 +65,8 @@ def main():
         def actor(mode,id='restored',version=1,code=0,**fields):
             request={'id':id,'version':version,'clock':int(time.time()*1000),**fields};request_file.write_bytes(encode(request))
             return execute([str(a.actor.resolve()),str(db),mode,str(request_file)],request,'native-'+mode,code)
-        capabilities=ccall({'kind':'capabilities'});assert capabilities['store_marker']==30 and len(capabilities['operations'])==31
-        after=snapshot(db);assert after['marker']==30 and set(after['tables'])==set(before['tables'])|{'event_causation','dispatch_causal_policies','dispatch_circuits','fact_lines','fact_revisions','fact_log','fact_index','fact_checkpoints'}
+        capabilities=ccall({'kind':'capabilities'});assert capabilities['store_marker']==31 and len(capabilities['operations'])==31
+        after=snapshot(db);assert after['marker']==31 and set(after['tables'])==set(before['tables'])|{'event_causation','dispatch_causal_policies','dispatch_circuits','fact_lines','fact_revisions','fact_log','fact_index','fact_checkpoints'}
         assert {n:after['tables'][n]for n in before['tables']}==before['tables']
         state=ccall({'kind':'actor_state','adapter':'restored'})
         assert ccall({'kind':'actor_state','adapter':'restored'},principal='foreign',ok=False)['code']=='E_HOST_AUTH'

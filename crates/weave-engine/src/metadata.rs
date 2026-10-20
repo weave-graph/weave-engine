@@ -648,6 +648,9 @@ mod selector_tests {
         QueryResult {
             fact_provenance: Vec::new(),
             changes: None,
+            neighbors: Vec::new(),
+            candidates: Vec::new(),
+            exactness: None,
             recorded_observations: vec![],
             accepted_observations: vec![],
             version: VERSION.into(),

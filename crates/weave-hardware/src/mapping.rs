@@ -272,6 +272,8 @@ fn rank(fact: &Fact) -> u8 {
         Fact::Edge(_) | Fact::StructuralEdge(_) => 1,
         Fact::Assertion(_) => 2,
         Fact::Attachment(_) => 3,
+        Fact::EmbeddingSpace(_) => 4,
+        Fact::Embedding(_) => 5,
     }
 }
 

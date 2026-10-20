@@ -402,7 +402,7 @@ requires a persistent database path and rejects `:memory:`.
 
 `NativeError` preserves `.code`, `.message` and `.envelope`; use the code rather
 than parsing error text. `ProtocolError` rejects malformed/unsupported responses.
-The client supports science 0.1.0 and contract 0.23.0 explicitly. `ValueError` covers
+The client supports science 0.1.0 and contract 0.24.0 explicitly. `ValueError` covers
 invalid helper inputs and unavailable replay selections; `FileNotFoundError`
 identifies a missing native executable.
 

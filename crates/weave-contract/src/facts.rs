@@ -4,8 +4,14 @@
 //! graph branch in one atomic revision. Its revision ID is content-derived
 //! from the graph, branch, parent and the effective operations; the writer
 //! and recorded time are engine-recorded (ADR-0005) and never accepted here.
+//!
+//! From 0.24.0 (A4) a write also carries embedding spaces and embedding facts
+//! (ADR-0006). A space is immutable: it is asserted once and never corrected
+//! or retracted.
+use crate::embedding::{EmbeddingFact, EmbeddingSpace};
 use crate::{Assertion, Edge, MetadataAttachment, Node, StructuralEdge};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 
 /// Most changes one `write` command may carry.
 pub const MAX_WRITE_CHANGES: usize = 100_000;
@@ -19,6 +25,10 @@ pub enum Fact {
     StructuralEdge(StructuralEdge),
     Assertion(Assertion),
     Attachment(MetadataAttachment),
+    /// An embedding space descriptor (0.24, ADR-0006). Immutable once written.
+    EmbeddingSpace(EmbeddingSpace),
+    /// An embedding fact (0.24, ADR-0006).
+    Embedding(EmbeddingFact),
 }
 
 /// The kind of a fact record.
@@ -30,6 +40,8 @@ pub enum FactKind {
     StructuralEdge,
     Assertion,
     Attachment,
+    EmbeddingSpace,
+    Embedding,
 }
 
 impl Fact {
@@ -40,8 +52,12 @@ impl Fact {
             Fact::StructuralEdge(_) => FactKind::StructuralEdge,
             Fact::Assertion(_) => FactKind::Assertion,
             Fact::Attachment(_) => FactKind::Attachment,
+            Fact::EmbeddingSpace(_) => FactKind::EmbeddingSpace,
+            Fact::Embedding(_) => FactKind::Embedding,
         }
     }
+    /// The record's `id` field. For an embedding space this is the space ID
+    /// alone; its fact key is [`Fact::key_id`].
     pub fn id(&self) -> &str {
         match self {
             Fact::Node(n) => &n.id,
@@ -49,6 +65,16 @@ impl Fact {
             Fact::StructuralEdge(e) => &e.id,
             Fact::Assertion(a) => &a.id,
             Fact::Attachment(a) => &a.id,
+            Fact::EmbeddingSpace(s) => &s.id,
+            Fact::Embedding(e) => &e.id,
+        }
+    }
+    /// The ID that names this fact in `write` targets and change sets: the
+    /// record's `id`, or `id@revision` for an embedding space.
+    pub fn key_id(&self) -> Cow<'_, str> {
+        match self {
+            Fact::EmbeddingSpace(s) => Cow::Owned(s.reference().key()),
+            other => Cow::Borrowed(other.id()),
         }
     }
 }

@@ -6,6 +6,7 @@ use crate::fact_store::{
     FactVersion, IndexKeys, NewRevision, Recording, ValidTime,
 };
 use std::collections::{BTreeSet, HashMap};
+use weave_contract::embedding::{EmbeddingSpace, EmbeddingSubject};
 use weave_contract::facts::MAX_WRITE_CHANGES;
 use weave_contract::provenance::{
     ClaimedProvenance, EvidenceRef, FactProvenance, FactRef, Method, ProvenanceEntry,
@@ -27,6 +28,8 @@ pub(crate) fn store_kind(kind: FactKind) -> store::FactKind {
         FactKind::StructuralEdge => store::FactKind::StructuralEdge,
         FactKind::Assertion => store::FactKind::Assertion,
         FactKind::Attachment => store::FactKind::Attachment,
+        FactKind::EmbeddingSpace => store::FactKind::EmbeddingSpace,
+        FactKind::Embedding => store::FactKind::Embedding,
     }
 }
 pub(crate) fn contract_kind(kind: store::FactKind) -> FactKind {
@@ -36,6 +39,8 @@ pub(crate) fn contract_kind(kind: store::FactKind) -> FactKind {
         store::FactKind::StructuralEdge => FactKind::StructuralEdge,
         store::FactKind::Assertion => FactKind::Assertion,
         store::FactKind::Attachment => FactKind::Attachment,
+        store::FactKind::EmbeddingSpace => FactKind::EmbeddingSpace,
+        store::FactKind::Embedding => FactKind::Embedding,
     }
 }
 pub(crate) fn namespace(kind: FactKind) -> store::Namespace {
@@ -43,7 +48,7 @@ pub(crate) fn namespace(kind: FactKind) -> store::Namespace {
 }
 pub(crate) type Key = (store::Namespace, String);
 pub(crate) fn key(fact: &Fact) -> Key {
-    (namespace(fact.kind()), fact.id().to_string())
+    (namespace(fact.kind()), fact.key_id().into_owned())
 }
 
 fn valid(interval: &Interval) -> Option<ValidTime> {
@@ -74,6 +79,8 @@ fn is_carrier(fact: &Fact) -> bool {
                 || !a.derived_from.is_empty()
                 || !a.derived_nodes.is_empty()
         }
+        // Embedding gates restrict only the embedding itself.
+        Fact::EmbeddingSpace(_) | Fact::Embedding(_) => false,
     }
 }
 
@@ -119,13 +126,28 @@ fn anchor_keys(fact: &Fact) -> IndexKeys {
                 ..IndexKeys::default()
             }
         }
+        Fact::EmbeddingSpace(_) => IndexKeys::default(),
+        // Embeddings are selected by space (`predicate`) and subject.
+        Fact::Embedding(e) => {
+            let (entity, subject) = match &e.subject {
+                EmbeddingSubject::Entity { entity_id } => (Some(entity_id.clone()), None),
+                other => (None, Some(other.id().to_string())),
+            };
+            IndexKeys {
+                entity,
+                subject,
+                predicate: Some(e.space.key()),
+                valid: valid(&e.valid_time),
+                ..IndexKeys::default()
+            }
+        }
     }
 }
 
 pub(crate) fn version(fact: &Fact) -> Result<FactVersion> {
     Ok(FactVersion {
         kind: store_kind(fact.kind()),
-        id: fact.id().to_string(),
+        id: fact.key_id().into_owned(),
         body: serde_json::to_string(fact)?,
         keys: index_keys(fact),
     })
@@ -134,7 +156,7 @@ pub(crate) fn version(fact: &Fact) -> Result<FactVersion> {
 pub(crate) fn parse(version: &FactVersion) -> Result<Fact> {
     let fact: Fact = serde_json::from_str(&version.body)
         .map_err(|_| err("E_INTEGRITY", "stored fact is malformed"))?;
-    if fact.kind() != contract_kind(version.kind) || fact.id() != version.id {
+    if fact.kind() != contract_kind(version.kind) || fact.key_id() != version.id {
         return Err(err("E_INTEGRITY", "stored fact does not match its key"));
     }
     Ok(fact)
@@ -148,6 +170,8 @@ pub(crate) fn header_of(data: &GraphData) -> GraphData {
         structural_edges: vec![],
         assertions: vec![],
         attachments: vec![],
+        embedding_spaces: vec![],
+        embeddings: vec![],
         ..data.clone()
     }
 }
@@ -166,6 +190,13 @@ pub(crate) fn facts_of(data: &GraphData) -> Vec<Fact> {
         )
         .chain(data.assertions.iter().cloned().map(Fact::Assertion))
         .chain(data.attachments.iter().cloned().map(Fact::Attachment))
+        .chain(
+            data.embedding_spaces
+                .iter()
+                .cloned()
+                .map(Fact::EmbeddingSpace),
+        )
+        .chain(data.embeddings.iter().cloned().map(Fact::Embedding))
         .collect()
 }
 
@@ -176,6 +207,8 @@ pub(crate) fn push(data: &mut GraphData, fact: Fact) {
         Fact::StructuralEdge(e) => data.structural_edges.push(e),
         Fact::Assertion(a) => data.assertions.push(a),
         Fact::Attachment(a) => data.attachments.push(a),
+        Fact::EmbeddingSpace(s) => data.embedding_spaces.push(s),
+        Fact::Embedding(e) => data.embeddings.push(e),
     }
 }
 
@@ -202,6 +235,40 @@ pub(crate) fn requires_v022(data: &GraphData) -> bool {
         || data.attachments.iter().any(|a| a.provenance.is_some())
 }
 
+/// True when a graph value uses a 0.24 field (embedding spaces or embeddings).
+pub(crate) fn requires_v024(data: &GraphData) -> bool {
+    !data.embedding_spaces.is_empty() || !data.embeddings.is_empty()
+}
+
+/// True when a claim cites an embedding as evidence (0.24).
+pub(crate) fn cites_embedding(claim: &Option<ClaimedProvenance>) -> bool {
+    claim.as_ref().is_some_and(|c| {
+        c.evidence
+            .iter()
+            .any(|e| matches!(e, EvidenceRef::Embedding { .. }))
+    })
+}
+
+/// True when any record of a graph value cites an embedding as evidence (0.24).
+pub(crate) fn data_cites_embedding(data: &GraphData) -> bool {
+    facts_of(data)
+        .iter()
+        .any(|fact| cites_embedding(&claim_field(fact)))
+}
+
+/// The inline claim of a record, if it has one.
+pub(crate) fn claim_field(fact: &Fact) -> Option<ClaimedProvenance> {
+    match fact {
+        Fact::Node(n) => n.provenance.clone(),
+        Fact::Edge(e) => e.provenance.clone(),
+        Fact::StructuralEdge(e) => e.provenance.clone(),
+        Fact::Assertion(a) => a.provenance.clone(),
+        Fact::Attachment(a) => a.provenance.clone(),
+        Fact::EmbeddingSpace(_) => None,
+        Fact::Embedding(e) => e.provenance.clone(),
+    }
+}
+
 /// The claim recorded for a record: its inline `provenance`, else its legacy
 /// claimed source label with method `unspecified` (ADR-0005 migration rule).
 fn claim_of(fact: &Fact) -> Option<ClaimedProvenance> {
@@ -211,6 +278,8 @@ fn claim_of(fact: &Fact) -> Option<ClaimedProvenance> {
         Fact::StructuralEdge(e) => (&e.provenance, None),
         Fact::Assertion(a) => (&a.provenance, Some(a.source.clone())),
         Fact::Attachment(a) => (&a.provenance, None),
+        Fact::EmbeddingSpace(_) => return None,
+        Fact::Embedding(e) => (&e.provenance, None),
     };
     claim.clone().or_else(|| {
         legacy.map(|source| ClaimedProvenance {
@@ -237,6 +306,8 @@ pub(crate) fn validate_claims(data: &GraphData) -> Result<()> {
             Fact::StructuralEdge(e) => (&e.provenance, None),
             Fact::Assertion(a) => (&a.provenance, Some(&a.source)),
             Fact::Attachment(a) => (&a.provenance, None),
+            Fact::EmbeddingSpace(_) => continue,
+            Fact::Embedding(e) => (&e.provenance, None),
         };
         if let Some(claim) = claim {
             claim.validate().map_err(|e| err(&e.code, &e.message))?;
@@ -269,6 +340,9 @@ fn same_identity(old: &Fact, new: &Fact) -> bool {
         }
         (Fact::Assertion(a), Fact::Assertion(b)) => a.edge_id == b.edge_id,
         (Fact::Attachment(a), Fact::Attachment(b)) => a.host == b.host && a.key == b.key,
+        // A space is immutable: only the identical descriptor has its identity.
+        (Fact::EmbeddingSpace(a), Fact::EmbeddingSpace(b)) => a == b,
+        (Fact::Embedding(a), Fact::Embedding(b)) => a.space == b.space && a.subject == b.subject,
         _ => false,
     }
 }
@@ -284,6 +358,15 @@ fn depends_on(dependent: &Fact, target: &Fact) -> bool {
             (MetadataHost::Edge { id }, Fact::Edge(e)) => id == &e.id,
             (MetadataHost::Edge { id }, Fact::StructuralEdge(e)) => id == &e.id,
             (MetadataHost::Assertion { id }, Fact::Assertion(a)) => id == &a.id,
+            _ => false,
+        },
+        (Fact::Embedding(e), target) => match (&e.subject, target) {
+            (EmbeddingSubject::Node { node_id }, Fact::Node(n)) => node_id == &n.id,
+            (EmbeddingSubject::Edge { edge_id }, Fact::Edge(t)) => edge_id == &t.id,
+            (EmbeddingSubject::Edge { edge_id }, Fact::StructuralEdge(t)) => edge_id == &t.id,
+            (EmbeddingSubject::Assertion { assertion_id }, Fact::Assertion(a)) => {
+                assertion_id == &a.id
+            }
             _ => false,
         },
         _ => false,
@@ -510,7 +593,7 @@ impl Engine {
             Parent::Empty => Ok(None),
             Parent::Snapshot { data, .. } => Ok(facts_of(data)
                 .into_iter()
-                .find(|f| namespace(f.kind()) == key.0 && f.id() == key.1)
+                .find(|f| namespace(f.kind()) == key.0 && f.key_id() == key.1)
                 .map(|fact| Seen {
                     fact,
                     recorded_in: None,
@@ -715,6 +798,9 @@ impl Engine {
                     }
                 }
                 FactChange::Retract { expected, .. } => {
+                    if kind == FactKind::EmbeddingSpace {
+                        return Err(conflict("embedding spaces are immutable"));
+                    }
                     self.check_expectation(graph, &k, &live, expected)?;
                     if live.is_none() {
                         return Err(conflict("retracted fact is not live"));
@@ -773,11 +859,13 @@ impl Engine {
                         .filter(|f| matches!(f, Fact::Node(n) if n.entity_id == entity && !live_before.get(&key(f)).is_some_and(|l| l.is_some())))
                         .count();
                 if others == 0 {
-                    filters.push(FactFilter {
-                        kind: Some(store::FactKind::Attachment),
-                        entity: Some(entity),
-                        ..FactFilter::default()
-                    });
+                    for kind in [store::FactKind::Attachment, store::FactKind::Embedding] {
+                        filters.push(FactFilter {
+                            kind: Some(kind),
+                            entity: Some(entity.clone()),
+                            ..FactFilter::default()
+                        });
+                    }
                 }
             }
             for filter in &filters {
@@ -788,11 +876,21 @@ impl Engine {
                 if &ck == k {
                     continue;
                 }
-                let entity_host = matches!(
-                    (&candidate, target),
-                    (Fact::Attachment(a), Fact::Node(n))
-                        if a.host == MetadataHost::Entity { id: n.entity_id.clone() }
-                );
+                let entity_host = match (&candidate, target) {
+                    (Fact::Attachment(a), Fact::Node(n)) => {
+                        a.host
+                            == MetadataHost::Entity {
+                                id: n.entity_id.clone(),
+                            }
+                    }
+                    (Fact::Embedding(e), Fact::Node(n)) => {
+                        e.subject
+                            == EmbeddingSubject::Entity {
+                                entity_id: n.entity_id.clone(),
+                            }
+                    }
+                    _ => false,
+                };
                 if let Some(after) = post(&ck)? {
                     if entity_host || depends_on(&after, target) {
                         return Err(err(
@@ -846,6 +944,37 @@ impl Engine {
                     }
                     MetadataHost::Graph => {}
                 },
+                Fact::EmbeddingSpace(_) => {}
+                Fact::Embedding(e) => {
+                    needed.push((store::Namespace::Space, e.space.key()));
+                    match &e.subject {
+                        EmbeddingSubject::Node { node_id } => needed.push(node_key(node_id)),
+                        EmbeddingSubject::Edge { edge_id } => needed.push(record_key(edge_id)),
+                        EmbeddingSubject::Assertion { assertion_id } => {
+                            needed.push(record_key(assertion_id))
+                        }
+                        EmbeddingSubject::Entity { entity_id } => {
+                            needed.extend(
+                                ops.values()
+                                    .flatten()
+                                    .filter(
+                                        |f| matches!(f, Fact::Node(n) if &n.entity_id == entity_id),
+                                    )
+                                    .map(key),
+                            );
+                            for node in self.parent_select(
+                                &parent,
+                                &FactFilter {
+                                    kind: Some(store::FactKind::Node),
+                                    entity: Some(entity_id.clone()),
+                                    ..FactFilter::default()
+                                },
+                            )? {
+                                needed.push(key(&node));
+                            }
+                        }
+                    }
+                }
             }
             include(fact.clone(), &mut neighborhood);
             let mut queue = needed;
@@ -863,6 +992,7 @@ impl Engine {
             }
         }
         validate_graph(&neighborhood)?;
+        validate_embeddings(&neighborhood)?;
         self.validate_structures(graph, &neighborhood)?;
         // Canonical operations and the content-derived revision ID (ADR-0004 section 3).
         let retracted_kind = |k: &Key| -> Result<FactKind> {
@@ -1021,7 +1151,7 @@ impl Engine {
         let mut seen: BTreeSet<Key> = BTreeSet::new();
         let mut changes = Vec::new();
         for fact in facts {
-            if !valid_id(fact.id()) {
+            if !valid_id(&fact.key_id()) {
                 return Err(err("E_ID", "fact identifiers require 1 to 512 bytes"));
             }
             let k = key(fact);
@@ -1149,10 +1279,15 @@ impl Engine {
         }
         let mut data: GraphData = serde_json::from_str(&store.header(revision)?)
             .map_err(|_| err("E_INTEGRITY", "stored line header is malformed"))?;
+        // Ordinary reads never materialize embeddings or spaces (ADR-0006):
+        // only `nearest`, `similar_candidates` and `changes` read them.
         let facts = store
             .select(
                 revision,
-                &FactFilter::default(),
+                &FactFilter {
+                    graph_only: true,
+                    ..FactFilter::default()
+                },
                 self.materialization_limit(),
             )
             .map_err(|e| match e.code.as_str() {
@@ -1340,9 +1475,35 @@ impl Engine {
                     }
                     MetadataHost::Graph => {}
                 },
+                Fact::EmbeddingSpace(_) => {}
+                // An embedding is visible only with its subject.
+                Fact::Embedding(e) => match &e.subject {
+                    EmbeddingSubject::Node { node_id } => {
+                        needed.extend(get(store::Namespace::Node, node_id)?)
+                    }
+                    EmbeddingSubject::Edge { edge_id } => {
+                        needed.extend(get(store::Namespace::Record, edge_id)?)
+                    }
+                    EmbeddingSubject::Assertion { assertion_id } => {
+                        needed.extend(get(store::Namespace::Record, assertion_id)?)
+                    }
+                    EmbeddingSubject::Entity { entity_id } => {
+                        needed.extend(store.select(
+                            &FactFilter {
+                                kind: Some(store::FactKind::Node),
+                                entity: Some(entity_id.clone()),
+                                ..FactFilter::default()
+                            },
+                            limit,
+                        )?);
+                    }
+                },
             }
             if hosted
-                && !matches!(fact, Fact::Attachment(_))
+                && !matches!(
+                    fact,
+                    Fact::Attachment(_) | Fact::EmbeddingSpace(_) | Fact::Embedding(_)
+                )
                 && hosted_done.insert(fact.id().to_string())
             {
                 needed.extend(store.select(
@@ -1442,7 +1603,15 @@ impl Engine {
                 revision,
                 (store::Namespace::Record, assertion_id.clone()),
             ),
-            FactRef::Embedding { .. } => return Ok(None),
+            FactRef::Embedding {
+                graph_id,
+                revision,
+                embedding_id,
+            } => (
+                graph_id,
+                revision,
+                (store::Namespace::Record, embedding_id.clone()),
+            ),
         };
         if is_fact_revision(revision) {
             let store = self.fact_store();
@@ -1478,7 +1647,7 @@ impl Engine {
         };
         let Some(fact) = facts_of(data)
             .into_iter()
-            .find(|f| namespace(f.kind()) == k.0 && f.id() == k.1)
+            .find(|f| namespace(f.kind()) == k.0 && f.key_id() == k.1)
         else {
             return Ok(None);
         };
@@ -1529,7 +1698,37 @@ impl Engine {
                 host,
             ),
             EvidenceRef::Artifact { .. } => Ok(true),
+            EvidenceRef::Embedding {
+                graph_id,
+                revision,
+                embedding_id,
+            } => self.embedding_ref_visible(graph_id, revision, embedding_id, host),
         }
+    }
+
+    /// True when an embedding fact at an exact revision is visible to the host.
+    pub(crate) fn embedding_ref_visible(
+        &self,
+        graph: &str,
+        revision: &str,
+        id: &str,
+        host: &HostContext,
+    ) -> Result<bool> {
+        if !valid_id(graph) || !valid_id(revision) || !valid_id(id) {
+            return Ok(false);
+        }
+        if !is_fact_revision(revision)
+            || !self.protected_reference_allowed(graph, revision, host)?
+        {
+            return Ok(false);
+        }
+        let Some(data) =
+            self.load_reference_subset(graph, revision, store::Namespace::Record, id)?
+        else {
+            return Ok(false);
+        };
+        let (data, _) = self.authorized(data, host)?;
+        Ok(data.embeddings.iter().any(|e| e.id == id))
     }
 
     /// Fill `fact_provenance` for every stored source fact a result cites
@@ -1560,6 +1759,34 @@ impl Engine {
                 assertion_id: origin.assertion_id.clone(),
             });
         }
+        // Embeddings in the value (`nearest` hits) and candidate origins.
+        let revision_of = |graph: &str| -> Option<String> {
+            result
+                .input_snapshots
+                .iter()
+                .find(|r| r.graph_id == graph)
+                .map(|r| r.revision.clone())
+        };
+        if !result.graph.embeddings.is_empty() {
+            let graph_id = result
+                .snapshots
+                .keys()
+                .next()
+                .cloned()
+                .ok_or_else(|| err("E_INTEGRITY", "embedding value without an input"))?;
+            let revision = revision_of(&graph_id)
+                .ok_or_else(|| err("E_INTEGRITY", "embedding value without an input"))?;
+            for embedding in &result.graph.embeddings {
+                references.insert(FactRef::Embedding {
+                    graph_id: graph_id.clone(),
+                    revision: revision.clone(),
+                    embedding_id: embedding.id.clone(),
+                });
+            }
+        }
+        for candidate in &result.candidates {
+            references.extend(candidate.origins.iter().cloned());
+        }
         if let Some(changes) = &result.changes {
             for entry in &changes.entries {
                 for (fact, revision) in [
@@ -1569,6 +1796,10 @@ impl Engine {
                     let (Some(fact), Some(revision)) = (fact, revision) else {
                         continue;
                     };
+                    // Spaces are descriptors without claimed provenance.
+                    if matches!(fact, Fact::EmbeddingSpace(_)) {
+                        continue;
+                    }
                     let graph_id = result
                         .input_snapshots
                         .iter()
@@ -1581,6 +1812,12 @@ impl Engine {
                             revision: revision.clone(),
                             node_id: n.id.clone(),
                         },
+                        Fact::Embedding(e) => FactRef::Embedding {
+                            graph_id,
+                            revision: revision.clone(),
+                            embedding_id: e.id.clone(),
+                        },
+
                         other => FactRef::Assertion {
                             graph_id,
                             revision: revision.clone(),
@@ -1660,4 +1897,75 @@ pub(crate) fn retain_valid_nodes(graph: &mut GraphData, t: i64) -> HashSet<Strin
         .filter(|n| n.valid_time.is_some())
         .map(|n| n.id.clone())
         .collect()
+}
+
+/// Validate the embedding spaces and embeddings of a write's neighborhood
+/// (ADR-0006): every space is a bounded descriptor, and every embedding
+/// matches its space exactly and names a live subject of the right kind.
+pub(crate) fn validate_embeddings(data: &GraphData) -> Result<()> {
+    let contract = |e: weave_contract::ContractError| err(&e.code, &e.message);
+    let mut spaces: HashMap<String, &EmbeddingSpace> = HashMap::new();
+    for space in &data.embedding_spaces {
+        space.validate().map_err(contract)?;
+        spaces.insert(space.reference().key(), space);
+    }
+    let nodes: HashSet<&str> = data.nodes.iter().map(|n| n.id.as_str()).collect();
+    let entities: HashSet<&str> = data.nodes.iter().map(|n| n.entity_id.as_str()).collect();
+    let edges: HashSet<&str> = data
+        .edges
+        .iter()
+        .map(|e| e.id.as_str())
+        .chain(data.structural_edges.iter().map(|e| e.id.as_str()))
+        .collect();
+    let assertions: HashSet<&str> = data.assertions.iter().map(|a| a.id.as_str()).collect();
+    for embedding in &data.embeddings {
+        let space = spaces.get(&embedding.space.key()).ok_or_else(|| {
+            err(
+                "E_SPACE",
+                "an embedding names a space that is not declared in the graph",
+            )
+        })?;
+        embedding.validate(space).map_err(contract)?;
+        let gates = embedding
+            .derived_from
+            .len()
+            .saturating_add(embedding.derived_nodes.len())
+            .saturating_add(embedding.derived_snapshots.len());
+        if gates > 1000 {
+            return Err(err("E_BUDGET", "an embedding carries at most 1000 gates"));
+        }
+        let bounded =
+            embedding.derived_from.iter().all(|r| {
+                valid_id(&r.graph_id) && valid_id(&r.revision) && valid_id(&r.assertion_id)
+            }) && embedding
+                .derived_nodes
+                .iter()
+                .all(|r| valid_id(&r.graph_id) && valid_id(&r.revision) && valid_id(&r.node_id))
+                && embedding
+                    .derived_snapshots
+                    .iter()
+                    .all(|r| valid_id(&r.graph_id) && valid_id(&r.revision))
+                && embedding.readers.iter().all(|r| valid_id(r));
+        if !bounded {
+            return Err(err(
+                "E_REFERENCE",
+                "embedding readers and gates need bounded identifiers",
+            ));
+        }
+        let present = match &embedding.subject {
+            EmbeddingSubject::Node { node_id } => nodes.contains(node_id.as_str()),
+            EmbeddingSubject::Entity { entity_id } => entities.contains(entity_id.as_str()),
+            EmbeddingSubject::Edge { edge_id } => edges.contains(edge_id.as_str()),
+            EmbeddingSubject::Assertion { assertion_id } => {
+                assertions.contains(assertion_id.as_str())
+            }
+        };
+        if !present {
+            return Err(err(
+                "E_ENDPOINT",
+                "an embedding subject must be a live record of its kind",
+            ));
+        }
+    }
+    Ok(())
 }

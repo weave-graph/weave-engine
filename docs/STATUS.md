@@ -13,8 +13,8 @@ white-paper requirements remain tracked separately in the
 | Science API and CLI | `weave-science` 0.1.0; native Rust and one-request JSON process |
 | Python client | `weave_science` 0.1.0; Python 3.10+, no mandatory runtime dependencies |
 | MCP preview | `weave-mcp` 0.1.0; read-only local stdio MCP server, part 1 of A7 ([guide](MCP_PREVIEW.md)) |
-| Engine contract | 0.23.0; existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), and k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
-| Native storage | Store 30; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)) |
+| Engine contract | 0.24.0; existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)), and embedding facts with exact `nearest` and `similar_candidates` ([0.24](contract/v0.24/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
+| Native storage | Store 31; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)), which also holds embedding spaces and embeddings |
 | Platforms | Linux, macOS and Windows in the native CI profile |
 
 Experiments support durable import and correction with optimistic concurrency,
@@ -31,7 +31,7 @@ every contract feature 0.1–0.21 as core v1, extension or deferred. It also set
 the compatibility policy (semantic versioning, additive rules, the relationship
 between store and contract versions, deprecation and reserved names).
 
-- **Golden fixtures.** 34 golden fixtures in
+- **Golden fixtures.** 54 golden fixtures in
   `crates/weave-contract/fixtures/core-v1/` are pinned by a SHA-256 manifest.
   The contract harness checks decoding and canonical re-encoding. The engine
   harness checks execution outcomes. Both fail on drift.
@@ -41,10 +41,9 @@ between store and contract versions, deprecation and reserved names).
   `weave-engine run` CLI reports these codes and now rejects duplicate JSON
   keys; it previously reported `E_INPUT` for every decode failure. Plans over
   16 MiB still report `E_INPUT`, and the science envelope keeps `E_INPUT`.
-- **Not yet active.** Embedding facts and spaces
+- **Embeddings.** Embedding facts and spaces
   ([ADR-0006](architecture/ADR-0006-embedding-facts-and-spaces.md)) are
-  accepted. Their records exist in `weave-contract`, but no program carries
-  them. Their wire fields are reserved until A4.
+  active from protocol 0.24.0 (see [embeddings](#embeddings-and-hybrid-retrieval-a4)).
 
 ## Fact-level writes (A2)
 
@@ -130,7 +129,8 @@ The `weave-hardware` crate and CLI provide the
 Rows missing from an export are not retracted. `recorded_query` requires a
 reader who can see the whole revision (ADR-0002); restricted readers use the
 A3 `as_of` expression, which reads the visible subset as known at a time. Series overlap is filtered after an indexed
-read, not indexed itself. Embeddings for maintenance notes are A4.
+read, not indexed itself. The importer writes no embeddings; the caller
+embeds notes as embedding facts (see `tests/fleet_hybrid.rs`).
 ## Traversal, time travel and change sets (A3)
 
 Protocol 0.23.0 adds three graph expressions
@@ -220,6 +220,60 @@ and the unrestricted reader.
 time, no cancellation, stdio only. Exit questions 3 and 4 through the preview
 wait for `hybrid_search` (A4).
 
+## Embeddings and hybrid retrieval (A4)
+
+Protocol 0.24.0 and store 31 activate the embedding records of
+[ADR-0006](architecture/ADR-0006-embedding-facts-and-spaces.md)
+([guide](EMBEDDINGS.md), [0.24](contract/v0.24/README.md)):
+
+- **Embedding facts.** Spaces (encoder, encoder version, preprocessing,
+  dimensions, metric) and vectors (binary32) are facts of the fact log,
+  written incrementally with `write` with readers, conservative gates, valid
+  time and claimed provenance (normally `method: model`). Spaces are
+  immutable; comparisons across spaces fail with `E_SPACE` even at equal
+  dimension. Ordinary reads never return embeddings.
+- **`nearest`.** Exact k-nearest-neighbor ranking over one space at a pinned,
+  `as_of` or head revision, with `valid_at` and an optional candidate set
+  from any graph expression. Selection and authorization come before ranking;
+  ties break by subject and embedding ID. The result carries ranked
+  `neighbors`, the hit subjects with their attachments, `exactness: exact`
+  and `fact_provenance`.
+- **Composition.** Graph to vector: `nearest` restricted to an `expand`
+  neighborhood. Vector to graph: `expand` seeded from `nearest` hits
+  (`seeds_from`).
+- **Candidate relations.** `similar_candidates` proposes `weave:similar_to`
+  relations between visible embeddings, optionally only those absent from the
+  graph, with score, valid time and both embedding origins. They are result
+  values, never written and never traversed.
+- **Compatibility.** The untyped science `vector` property keeps its
+  binary64 semantics. `Engine::vector_property_changes` plans an explicit,
+  idempotent conversion into a declared space (`method: import`).
+- **Migration.** Store 30 upgrades to 31 by moving the marker; no row is
+  rewritten and store-30 binaries refuse store 31.
+
+Evidence: `tests/embeddings.rs` compares `nearest` with an exhaustive oracle
+on 24 random stores with exact duplicates, positive multiples (cosine ties)
+and one-ulp neighbors (5,184 rankings, over 13,000 adjacent ties), checks valid
+and recorded time, space mismatches on each descriptor field, both
+compositions against a BFS oracle, candidate provenance, and paired stores
+whose hidden embeddings (duplicates of visible vectors, closer vectors,
+vectors on hidden subjects, a hidden edge) change no output, error or tie.
+`tests/fleet_hybrid.rs` answers Phase A exit questions 3 and 4 on the
+generated fleet (in CI at 5,000 units) against an independent oracle, with
+restricted units hidden from the analyst.
+
+**Limits.**
+- Ranking is exhaustive; approximate indexes are C5. The 128 MiB read budget
+  counts the stored embeddings a ranking reads (hidden ones too), so a
+  whole-space ranking reaches roughly 7,000 vectors of 1,536 dimensions;
+  candidate sets and smaller spaces rank more.
+- Upsert of 100,000 vectors of 1,536 dimensions is not yet measured, and
+  the Python helpers and tutorial for hybrid retrieval are not yet written
+  (next A4 part). Python reaches the operators through `execute` programs.
+- Candidate relations are never persisted by the engine; persisting one is
+  an explicit write of an ordinary edge citing the embeddings as evidence.
+- Views and handler recipes reject `nearest` and `similar_candidates`.
+
 ## Verified evidence
 
 The implementation at `3bbd9d87f708c7aa3d5a2fb2afccb01be0789340` was merged at
@@ -273,9 +327,12 @@ addresses:
 - **Queries (Phase A).** Addressed by A3: k-hop `expand`, indexed `as_of`
   selection and `changes` change sets with a pull feed (see
   [traversal](#traversal-time-travel-and-change-sets-a3)).
-- **Embeddings (Phase A).** Science kNN uses an untyped `vector` node property
-  without time awareness and is not part of the plan algebra. Typed embedding
-  spaces support only pairwise distance.
+- **Embeddings (Phase A).** Addressed by A4 in part: temporal, permissioned
+  embedding facts in typed spaces, an exact `nearest` operator in the plan
+  algebra and candidate relations (see
+  [embeddings](#embeddings-and-hybrid-retrieval-a4)). The 1,536-dimension
+  upsert measurement and the Python tutorial remain.
+
 - **Sharing (Phase B).** There is no server, no authentication on the main API,
   no groups or agent identities, and leakage protection is enforced at read time
   only.

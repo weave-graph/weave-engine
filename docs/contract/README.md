@@ -1,6 +1,6 @@
 # Engine contract reference
 
-The current science client emits **contract 0.23.0** Programs. The canonical
+The current science client emits **contract 0.24.0** Programs. The canonical
 serializable schema is [`weave-contract`](../../crates/weave-contract/src/lib.rs)
 and its modules. Native requests and Python expressions use these types; unknown
 or incompatible input fails at the runtime boundary.
@@ -41,6 +41,7 @@ request envelope is separate: see [SCIENCE_INTERFACE.md](../SCIENCE_INTERFACE.md
 | [0.21](v0.21/README.md) | Accepted history and history ranges |
 | [0.22](v0.22/README.md) | Fact writes, node valid time and per-fact provenance |
 | [0.23](v0.23/README.md) | Traversal (`expand`), as-of selection and change sets (`changes`) |
+| [0.24](v0.24/README.md) | Embedding facts and spaces, exact `nearest`, `similar_candidates` and `seeds_from` |
 
 Each version states its finite support and remaining work. Contract version,
 store schema version, capsule format and host request version identify different

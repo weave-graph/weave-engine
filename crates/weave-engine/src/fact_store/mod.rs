@@ -29,8 +29,10 @@ pub const MAX_KEY_BYTES: usize = 512;
 pub enum Namespace {
     /// Node manifestation IDs.
     Node,
-    /// Edges, structural edges, assertions and attachments (and, from A4, embeddings).
+    /// Edges, structural edges, assertions, attachments and embeddings.
     Record,
+    /// Embedding spaces, keyed `id@revision` (store 31).
+    Space,
 }
 
 /// Kind of a stored fact. The declaration order is the materialization order.
@@ -41,19 +43,26 @@ pub enum FactKind {
     StructuralEdge,
     Assertion,
     Attachment,
+    /// An embedding space descriptor (store 31).
+    EmbeddingSpace,
+    /// An embedding fact (store 31).
+    Embedding,
 }
 
 impl FactKind {
-    pub const ALL: [FactKind; 5] = [
+    pub const ALL: [FactKind; 7] = [
         FactKind::Node,
         FactKind::Edge,
         FactKind::StructuralEdge,
         FactKind::Assertion,
         FactKind::Attachment,
+        FactKind::EmbeddingSpace,
+        FactKind::Embedding,
     ];
     pub fn namespace(self) -> Namespace {
         match self {
             FactKind::Node => Namespace::Node,
+            FactKind::EmbeddingSpace => Namespace::Space,
             _ => Namespace::Record,
         }
     }
@@ -64,10 +73,17 @@ impl FactKind {
             FactKind::StructuralEdge => "structural_edge",
             FactKind::Assertion => "assertion",
             FactKind::Attachment => "attachment",
+            FactKind::EmbeddingSpace => "embedding_space",
+            FactKind::Embedding => "embedding",
         }
     }
     pub fn parse(value: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.as_str() == value)
+    }
+    /// True for the kinds an ordinary graph read materializes: every kind
+    /// except embedding spaces and embeddings.
+    pub fn is_graph(self) -> bool {
+        !matches!(self, FactKind::EmbeddingSpace | FactKind::Embedding)
     }
 }
 
@@ -76,12 +92,14 @@ impl Namespace {
         match self {
             Namespace::Node => "node",
             Namespace::Record => "record",
+            Namespace::Space => "space",
         }
     }
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "node" => Some(Namespace::Node),
             "record" => Some(Namespace::Record),
+            "space" => Some(Namespace::Space),
             _ => None,
         }
     }
@@ -234,6 +252,8 @@ pub struct FactFilter {
     pub carrier: bool,
     /// Only facts with neither a subject nor an entity key (graph-hosted attachments).
     pub unanchored: bool,
+    /// Only graph facts: no embedding spaces and no embeddings (store 31).
+    pub graph_only: bool,
 }
 
 impl FactFilter {
@@ -254,6 +274,7 @@ impl FactFilter {
                 .is_none_or(|t| keys.valid.is_none_or(|v| v.contains(t)))
             && (!self.carrier || keys.carrier)
             && (!self.unanchored || (keys.subject.is_none() && keys.entity.is_none()))
+            && (!self.graph_only || fact.version.kind.is_graph())
             && self.recorded.is_none_or(|(start, end)| {
                 fact.recording.recorded_at_ms >= start && fact.recording.recorded_at_ms < end
             })

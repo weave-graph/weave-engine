@@ -1,0 +1,53 @@
+{
+  "concepts": [
+    "embedding.fact",
+    "fact.write"
+  ],
+  "engine": {
+    "error": "E_EMBEDDING",
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ]
+  },
+  "expect": {
+    "accept": true
+  },
+  "fixture": "embedding-snapshot-commit",
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "data": {
+          "edges": [],
+          "embedding_spaces": [
+            {
+              "dimensions": 3,
+              "encoder": "text-embedding-3-small",
+              "encoder_version": "2024-01-25",
+              "id": "notes",
+              "metric": "cosine_distance",
+              "preprocessing": "weave-chunk/512-tokens/v1",
+              "revision": "1"
+            }
+          ],
+          "nodes": [
+            {
+              "entity_id": "A",
+              "id": "a",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          ]
+        },
+        "expected_head": null,
+        "graph_id": "g",
+        "op": "commit"
+      }
+    ],
+    "version": "0.24.0"
+  },
+  "type": "program"
+}

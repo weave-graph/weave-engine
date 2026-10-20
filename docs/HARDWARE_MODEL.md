@@ -106,8 +106,10 @@ are open (`end` absent) are still true.
 
 A note's ID is `note:<host node ID>` (for example `note:maint:WO-000123`).
 That stable ID and its text are the hook for A4 embeddings
-([#13](https://github.com/weave-graph/weave-engine/issues/13)). This model
-writes no embedding facts.
+([#13](https://github.com/weave-graph/weave-engine/issues/13)). The importer
+writes no embedding facts: the caller embeds the notes and writes them as
+[embedding facts](EMBEDDINGS.md) on the maintenance or incident node, as
+`tests/fleet_hybrid.rs` does.
 
 ### Enforcement
 
@@ -335,8 +337,20 @@ took about 10 s, the identical re-import (zero facts) about 4.6 s, and the
 1,000 updates about 2.3 s in total. This is a description of one run, not a
 capacity promise.
 
-Questions 3 and 4 need A4 (embeddings and candidate relations), and the
-A3 operators (`expand`, `changes`) will answer question 2 in one plan.
+Questions 3 and 4 are answered by `tests/fleet_hybrid.rs` (A4) on the same
+generated fleet. A deterministic test embedder (signed feature hashing of
+words into 64 dimensions; no network and no model) embeds every maintenance
+note and incident description into the `hw-notes` space and a profile of
+every unit (model, firmware, notes, incident titles) into `hw-units`,
+written as embedding facts with the rows' readers and `method: model`
+provenance. Question 3 is one `nearest` plan whose candidates are the
+`expand` 2-hop neighborhood of the affected unit, valid at the incident
+time; question 4 is one `similar_candidates` plan with `exclude_linked`.
+Both are compared with an independent oracle for `fleet-admin` and
+`fleet-analyst`, return the note text and the embeddings' provenance, keep
+restricted units from the analyst, and are reproduced after reopening the
+store. CI runs it with 150 units in the main suite and at 5,000 units in the
+`hardware-fleet-5k` job.
 
 ## Example
 

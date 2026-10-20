@@ -4,6 +4,11 @@
 white papers' physical/vector geometry requirements, not the complete identity,
 clustering, learned mapping, spatial indexing or adapter service.
 
+The geometry extension is frozen. Embedding retrieval uses the embedding
+facts and spaces of [ADR-0006](architecture/ADR-0006-embedding-facts-and-spaces.md)
+instead ([EMBEDDINGS.md](EMBEDDINGS.md)); a geometry `Embedding` descriptor has
+no encoder version and is not comparable with an embedding space.
+
 The host must obtain every sample, descriptor and transform from authorized pinned
 graph evidence and supply its effective restrictions. These functions do not
 authenticate a principal string, attest a caller-supplied source revision, install

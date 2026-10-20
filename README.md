@@ -29,15 +29,16 @@ migration checks, and CI on Linux, macOS and Windows. It is **pre-release**.
 
 | Works today | Not yet (roadmap phase) |
 |---|---|
-| Immutable, durable graph revisions in SQLite with incremental fact-level writes; valid-time and recorded-time ("as known at") selection | Time-aware embeddings layer linked to graph queries (A4) |
+| Immutable, durable graph revisions in SQLite with incremental fact-level writes; valid-time and recorded-time ("as known at") selection | Python helpers and tutorial for hybrid retrieval (A4, next part) |
 | k-hop traversal (`expand`), as-of reads and "what changed" change sets with a pull feed (`changes`) | Multi-user server, authentication, groups, agent interface (Phase B) |
 | Per-record read permissions, re-checked through derived results | High-volume telemetry ingestion, approximate vector index (Phase C) |
 | Joins, rules, metadata graphs, per-fact provenance and explanations | |
+| Embeddings as temporal, permissioned facts in typed spaces; exact `nearest` composed with traversal; similarity candidate relations with provenance ([guide](docs/EMBEDDINGS.md)) | |
 | Exact vector neighbors and graph analytics (PageRank, components, paths) from Python, JSON or Rust | |
 | A read-only local MCP preview for agents (`weave-mcp`: query, expand, as-of, what changed, explain) as a fixed reader ([guide](docs/MCP_PREVIEW.md)) | Hybrid search through the preview (A4, A7) |
 
 The supported profile is described in [docs/STATUS.md](docs/STATUS.md): science
-**0.1.0**, contract **0.23.0**, store **30**. It runs locally. There is no
+**0.1.0**, contract **0.24.0**, store **31**. It runs locally. There is no
 server, and the CLI trusts its caller (see [SECURITY.md](SECURITY.md)).
 
 ## Run your first experiment

@@ -84,7 +84,7 @@ fn snapshot(path: &std::path::Path) -> (i64, Vec<String>, Vec<(String, String)>)
 
 #[test]
 fn populated_store_29_upgrades_without_rewriting_revisions() {
-    assert_eq!(STORAGE_VERSION, 30);
+    assert_eq!(STORAGE_VERSION, 31);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("store.db");
     let mut e = Engine::open(&path).unwrap();
@@ -96,7 +96,7 @@ fn populated_store_29_upgrades_without_rewriting_revisions() {
     assert_eq!((marker, tables.len()), (29, 0));
     let mut e = Engine::open(&path).unwrap();
     let (marker, tables, after_rows) = snapshot(&path);
-    assert_eq!(marker, 30);
+    assert_eq!(marker, STORAGE_VERSION);
     let mut expected: Vec<String> = FACT_TABLES.iter().map(|t| t.to_string()).collect();
     expected.sort();
     assert_eq!(tables, expected);
@@ -133,7 +133,7 @@ fn interrupted_upgrade_leaves_store_29_untouched() {
     assert!(crashed.is_err());
     assert_eq!(snapshot(&path), old, "nothing of the upgrade is visible");
     let mut e = Engine::open(&path).unwrap();
-    assert_eq!(snapshot(&path).0, 30);
+    assert_eq!(snapshot(&path).0, STORAGE_VERSION);
     assert_eq!(pinned(&mut e, &revisions), before);
 }
 

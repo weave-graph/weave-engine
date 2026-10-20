@@ -1,0 +1,63 @@
+{
+  "concepts": [
+    "query.nearest"
+  ],
+  "engine": {
+    "error": "E_NEAREST",
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ]
+  },
+  "expect": {
+    "accept": true
+  },
+  "fixture": "nearest-zero-k",
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "dimensions": 3,
+              "encoder": "text-embedding-3-small",
+              "encoder_version": "2024-01-25",
+              "id": "notes",
+              "kind": "embedding_space",
+              "metric": "cosine_distance",
+              "preprocessing": "weave-chunk/512-tokens/v1",
+              "revision": "1"
+            }
+          }
+        ],
+        "graph_id": "g",
+        "op": "write"
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "graph_id": "g",
+          "k": 0,
+          "kind": "nearest",
+          "query": {
+            "kind": "vector",
+            "vector": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          },
+          "space": {
+            "id": "notes",
+            "revision": "1"
+          }
+        }
+      }
+    ],
+    "version": "0.24.0"
+  },
+  "type": "program"
+}

@@ -14,7 +14,7 @@ from weave_science.results import canonical_json
 
 
 def envelope(result=None, **fields):
-    return {"ok": True, "science_version": "0.1.0", "contract_version": "0.23.0",
+    return {"ok": True, "science_version": "0.1.0", "contract_version": "0.24.0",
             "result": result or {}, **fields}
 
 
@@ -91,7 +91,7 @@ class ClientTests(unittest.TestCase):
 
     def test_invalid_and_future_protocols_fail_explicitly(self):
         for response in ([], {"ok": True}, envelope(science_version="1.0.0"),
-                         envelope(contract_version="1.0.0"), envelope(contract_version="0.24.0")):
+                         envelope(contract_version="1.0.0"), envelope(contract_version="0.25.0")):
             with self.subTest(response=response), self.respond(response):
                 with self.assertRaises(ProtocolError):
                     self.engine.capabilities()
@@ -235,7 +235,7 @@ class DataAndArtifactTests(unittest.TestCase):
 
     def test_artifact_exact_pins_versions_and_tamper_detection(self):
         context = {"actor": "researcher", "binary_sha256": "b" * 64,
-                   "science_version": "0.1.0", "contract_version": "0.23.0",
+                   "science_version": "0.1.0", "contract_version": "0.24.0",
                    "request": {"operation": "execute", "program": program(query("g"))}}
         result = QueryResult(native_result(), context=context)
         with tempfile.TemporaryDirectory() as directory:
@@ -255,14 +255,14 @@ class DataAndArtifactTests(unittest.TestCase):
     def test_mutating_program_is_never_replayed_from_artifact(self):
         source = {"version": "0.21.0", "commands": [{"op": "commit", "graph_id": "g"}]}
         result = QueryResult(native_result(), context={"actor": "researcher", "science_version": "0.1.0",
-            "contract_version": "0.23.0", "request": {"operation": "execute", "program": source}})
+            "contract_version": "0.24.0", "request": {"operation": "execute", "program": source}})
         with tempfile.TemporaryDirectory() as directory:
             saved = result.save_experiment(Path(directory) / "record.json")
             self.assertIsNone(saved.record["replay_request"])
             self.assertIn("read-only", saved.record["replay_unavailable"])
 
     def test_rehashed_external_artifact_cannot_run_mutating_replay(self):
-        context = {"actor": "researcher", "science_version": "0.1.0", "contract_version": "0.23.0",
+        context = {"actor": "researcher", "science_version": "0.1.0", "contract_version": "0.24.0",
                    "request": {"operation": "execute", "program": program(query("g"))}}
         artifact = Experiment.create(native_result(), context, label=None, parameters=None)
         for malicious in ({"operation": "import", "graph_id": "new"},
