@@ -272,8 +272,18 @@ server-sent events:
 ## Errors
 
 Tool failures are `isError` results with `error: {code, message}`. Engine
-and service codes pass through (`E_UNAVAILABLE`, `E_FORBIDDEN`,
-`E_CONFLICT`, `E_BUDGET`, `E_SPACE`, ...). The interface adds:
+and service codes pass through unchanged (`E_UNAVAILABLE`, `E_FORBIDDEN`,
+`E_CONFLICT`, `E_BUDGET`, `E_SPACE`, `E_QUOTA`, ...).
+
+Every tool runs a program of the current contract version (1.2.0 or
+later), so the write-time rules of [contract 1.2](contract/v1.2/README.md)
+apply to agents: an `assert_fact` whose visibility is broader than
+restricted evidence it cites fails `E_DERIVED_READERS`, and a fact the
+caller cannot read is unavailable exactly like a missing one (the uniform
+`E_CONFLICT` "fact ID is not available"). There is no correction tool, so
+no tool ever sets `widen_readers`; `E_READERS_WIDENED` arises only from
+corrections sent through `POST /v1/execute`. See the 1.2 note's "Error
+codes for clients" table. The interface adds:
 
 | Code | Meaning |
 |---|---|

@@ -2335,3 +2335,14 @@ boundary; sliding windows or token buckets were not worth the state. Usage
 is not persisted, so a restart starts fresh windows; that bounds a
 credential's rate, not a tenant's long-term volume, and is documented. Over
 the limit the service answers `E_QUOTA` with `429` and `Retry-After`.
+
+### 2026-10-20 — #40 B4 — Agent tools run contract 1.2.0 programs
+B2 part 2 activates the ADR-0008 write-time rules for programs of protocol
+1.2.0 and later. The agent tools build their programs with
+`weave_contract::VERSION`, which is now 1.2.0, so agents get those rules
+with no opt-out: agents are exactly the writers they guard against. An
+`assert_fact` whose visibility is broader than restricted evidence it cites
+fails `E_DERIVED_READERS`, and the engine's codes pass through unchanged
+(`tests/agent_mcp.rs`). The tools issue no corrections, so they never set
+`widen_readers`; a correction tool, if one is added, would copy the stored
+readers and set `widen_readers` only on an explicit argument.

@@ -591,3 +591,66 @@ async fn the_transport_is_authenticated_streamable_http_without_sessions() {
     assert!(mine.contains(&("mcp.invalid".into(), "error".into())));
     assert!(mine.contains(&("mcp.unknown_tool".into(), "error".into())));
 }
+
+/// B2 part 2 (contract 1.2.0) applies to agents: the tools emit 1.2.0
+/// programs, so a fact broader than the restricted evidence it cites fails
+/// `E_DERIVED_READERS`, and the engine's write codes reach the agent
+/// unchanged.
+#[tokio::test]
+async fn agent_writes_follow_the_write_time_rules_of_contract_1_2() {
+    let h = Harness::new();
+    let t = teams(&h).await;
+    let asserted = ok(&h, &t.x, "assert_fact", finding()).await;
+    let node = minted(&asserted, 0);
+    let revision = asserted["revision"].as_str().unwrap().to_string();
+    let citing = |visibility: Value| {
+        json!({"graph_id": GRAPH,
+            "provenance": {"method": {"kind": "model", "model": MODEL, "version": "2026-10"},
+                "evidence": [{"kind": "node", "graph_id": GRAPH, "revision": revision,
+                    "node_id": node}]},
+            "visibility": visibility,
+            "facts": [{"kind": "node", "space_id": "summary",
+                "properties": {"text": "Unit 7 had a bearing replaced"}}]})
+    };
+    // Publishing a summary of team A's finding to everyone is refused.
+    assert_eq!(
+        fails(&h, &t.y, "assert_fact", citing(json!({"public": true}))).await,
+        "E_DERIVED_READERS"
+    );
+    // Within team A it is fine.
+    ok(
+        &h,
+        &t.y,
+        "assert_fact",
+        citing(json!({"reader_groups": ["team-a"]})),
+    )
+    .await;
+    // Retracting a fact the caller cannot read is the uniform
+    // unavailable-fact error, as for one that does not exist.
+    let hidden = call(
+        &h,
+        &t.z,
+        "retract_fact",
+        json!({"graph_id": GRAPH, "facts": [{"kind": "node", "id": node}]}),
+    )
+    .await;
+    let missing = call(
+        &h,
+        &t.z,
+        "retract_fact",
+        json!({"graph_id": GRAPH, "facts": [{"kind": "node", "id": "r-none"}]}),
+    )
+    .await;
+    let error = |reply: &Reply| reply.json["result"]["structuredContent"]["error"].clone();
+    assert_eq!(
+        error(&hidden).to_string().replace(&node, "<id>"),
+        error(&missing).to_string().replace("r-none", "<id>")
+    );
+    // Every tool program is a 1.2.0 program.
+    let program = weave_mcp::agent::plan_retract(
+        json!({"graph_id": GRAPH, "facts": [{"kind": "node", "id": "n"}]}),
+    )
+    .unwrap()
+    .program();
+    assert!(weave_contract::version_at_least(&program.version, "1.2.0"));
+}
