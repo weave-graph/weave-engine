@@ -8,6 +8,9 @@ on:
       - 'crates/weave-host/**'
       - 'crates/weave-native/**'
       - 'scripts/root_*.py'
+      - 'scripts/**'
+      - 'Cargo.lock'
+      - '.github/workflows/integration.yml'
   pull_request:
     paths:
       - 'crates/weave-contract/**'
@@ -15,6 +18,9 @@ on:
       - 'crates/weave-host/**'
       - 'crates/weave-native/**'
       - 'scripts/root_*.py'
+      - 'scripts/**'
+      - 'Cargo.lock'
+      - '.github/workflows/integration.yml'
   workflow_dispatch:
 concurrency:
   group: integration-${{ github.event.pull_request.number || github.ref }}

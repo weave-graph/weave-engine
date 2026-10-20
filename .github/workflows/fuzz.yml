@@ -2,9 +2,9 @@ name: Fuzz smoke
 on:
   push:
     branches: [main]
-    paths: ['fuzz/**', 'crates/weave-contract/**', 'crates/weave-policy/**', 'crates/weave-engine/**']
+    paths: ['fuzz/**', 'crates/weave-contract/**', 'crates/weave-policy/**', 'crates/weave-engine/**', 'Cargo.lock', '.github/workflows/fuzz.yml']
   pull_request:
-    paths: ['fuzz/**', 'crates/weave-contract/**', 'crates/weave-policy/**', 'crates/weave-engine/**']
+    paths: ['fuzz/**', 'crates/weave-contract/**', 'crates/weave-policy/**', 'crates/weave-engine/**', 'Cargo.lock', '.github/workflows/fuzz.yml']
   workflow_dispatch:
 concurrency:
   group: fuzz-${{ github.event.pull_request.number || github.ref }}
