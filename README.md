@@ -29,7 +29,7 @@ migration checks, and CI on Linux, macOS and Windows. It is **pre-release**.
 
 | Works today | Not yet (roadmap phase) |
 |---|---|
-| Immutable, durable graph revisions in SQLite with incremental fact-level writes; valid-time and recorded-time ("as known at") selection | Python helpers and tutorial for hybrid retrieval (A4, next part) |
+| Immutable, durable graph revisions in SQLite with incremental fact-level writes; valid-time and recorded-time ("as known at") selection | |
 | k-hop traversal (`expand`), as-of reads and "what changed" change sets with a pull feed (`changes`) | Multi-user server, authentication, groups, agent interface (Phase B) |
 | Per-record read permissions, re-checked through derived results | High-volume telemetry ingestion, approximate vector index (Phase C) |
 | Joins, rules, metadata graphs, per-fact provenance and explanations | |

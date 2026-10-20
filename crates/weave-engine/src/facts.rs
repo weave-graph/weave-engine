@@ -411,6 +411,13 @@ pub(crate) trait FactSource {
     fn get(&self, namespace: store::Namespace, id: &str) -> Result<Option<store::StoredFact>>;
     /// Every live fact matching `filter`, in `(kind, id)` order; `E_BUDGET` beyond `limit`.
     fn select(&self, filter: &FactFilter, limit: usize) -> Result<Vec<store::StoredFact>>;
+    /// Visit every live fact matching `filter`, in no particular order,
+    /// without materializing them.
+    fn scan(
+        &self,
+        filter: &FactFilter,
+        visit: &mut dyn FnMut(store::StoredFact) -> Result<()>,
+    ) -> Result<()>;
     /// True when bodies read here are not yet charged to the read budget
     /// (a snapshot payload was charged once, when it was loaded).
     fn charged(&self) -> bool;
@@ -441,6 +448,13 @@ impl FactSource for LineSource<'_> {
     }
     fn select(&self, filter: &FactFilter, limit: usize) -> Result<Vec<store::StoredFact>> {
         self.store.select(&self.revision, filter, limit)
+    }
+    fn scan(
+        &self,
+        filter: &FactFilter,
+        visit: &mut dyn FnMut(store::StoredFact) -> Result<()>,
+    ) -> Result<()> {
+        self.store.scan(&self.revision, filter, visit)
     }
     fn charged(&self) -> bool {
         true
@@ -546,6 +560,16 @@ impl FactSource for SnapshotSource {
         }
         store::order(&mut facts);
         Ok(facts)
+    }
+    fn scan(
+        &self,
+        filter: &FactFilter,
+        visit: &mut dyn FnMut(store::StoredFact) -> Result<()>,
+    ) -> Result<()> {
+        for fact in self.select(filter, usize::MAX - 1)? {
+            visit(fact)?;
+        }
+        Ok(())
     }
     fn charged(&self) -> bool {
         false
@@ -1431,6 +1455,19 @@ impl Engine {
         seeds: Vec<store::StoredFact>,
         hosted: bool,
     ) -> Result<GraphData> {
+        self.closure_charging(store, seeds, hosted, true)
+    }
+
+    /// [`Self::closure_in`]; with `charge_embeddings` false, embedding bodies
+    /// are not charged to the read budget because the caller charged them to
+    /// its own scan budget (`nearest`).
+    pub(crate) fn closure_charging(
+        &self,
+        store: &dyn FactSource,
+        seeds: Vec<store::StoredFact>,
+        hosted: bool,
+        charge_embeddings: bool,
+    ) -> Result<GraphData> {
         let limit = self.materialization_limit();
         let mut facts: BTreeMap<(store::FactKind, String), Fact> = BTreeMap::new();
         let mut queue: Vec<store::StoredFact> = seeds;
@@ -1440,10 +1477,13 @@ impl Engine {
             if facts.contains_key(&slot) {
                 continue;
             }
-            if store.charged() {
+            if store.charged()
+                && (charge_embeddings || stored.version.kind != store::FactKind::Embedding)
+            {
                 self.read_budget.charge(stored.version.body.len())?;
             }
             let fact = parse(&stored.version)?;
+
             let get = |namespace, id: &str| store.get(namespace, id);
             let mut needed = Vec::new();
             match &fact {

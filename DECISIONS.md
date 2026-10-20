@@ -1119,3 +1119,38 @@ and the line stays writable), readability after success, and determinism
 across two stores. The MCP target writes the seeded store to a temporary
 file, because the server owns its session. A second engine on that file
 checks that no message changes the store.
+
+### 2026-10-20 — #13 A4 — Exact `nearest` streams under its own scan budget
+
+The 128 MiB read budget capped one whole-space ranking at roughly 7,000
+vectors of 1,536 dimensions, too low for hybrid RAG and for the issue's
+100k × 1,536 target. `nearest` now streams the selected embeddings through
+`FactBackend::scan` (a new trait method: the SQLite backend iterates rows,
+the reference backend materializes), authorizes them in chunks of 256 with
+their subjects through the one authorization path, and keeps only the best
+`k`, so memory is O(k) plus one chunk. Embedding bodies it streams are not
+charged to the read budget; instead every stored embedding it reads counts
+its dimensions against `MAX_SCAN_COMPONENTS` = 2^28 components (about
+174,000 vectors of 1,536 dimensions, `E_BUDGET` beyond), a contract constant
+so clients can see the ceiling. Subject records and gates are still charged
+to the read budget. The scan budget counts hidden embeddings too, the same
+documented exception as the read budget; nothing else about hidden vectors
+reaches the output, because each chunk is authorized before ranking and the
+merged top-k uses the same total order, which a chunk boundary cannot change
+(`streaming_nearest_spans_chunks_and_ignores_hidden_vectors` checks it across
+chunk boundaries with hidden duplicates of every visible vector). The
+measured whole-space top-10 at 100k × 1,536 is about 7 s on one host, mostly
+JSON decoding of stored vectors; a binary vector encoding or an index is a
+C4/C5 decision, not this epic's. `similar_candidates` keeps the read budget:
+pairwise ranking needs every target in memory anyway.
+
+### 2026-10-20 — #13 A4 — Python helpers name the typed operator `nearest_embeddings`
+
+`Engine.nearest` already means the science analysis over the untyped
+`vector` property, and changing it would reinterpret existing notebooks. The
+typed, in-plan operator is `Engine.nearest_embeddings` (builder
+`nearest_embeddings`), next to `similar_candidates`, `embedding_space`,
+`embedding`, `asserts` and `expand(seeds_from=...)`. Exact replay pins the
+revision of embedding rankings and of their nested inputs. The tutorial is a
+runnable example with a toy hashing encoder standing in for the caller's
+model, run by the native Python tests.

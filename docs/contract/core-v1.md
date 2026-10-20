@@ -423,7 +423,11 @@ fact (ADR-0001, ADR-0004), so a hidden write gives a new revision ID.
   that the reader may see with their subject are ranked, so hidden
   embeddings never change the rank, score or count of visible ones. The
   order is ascending score, then subject (kind, then ID), then embedding ID.
-  `k` is 1 to 1,000 (`E_NEAREST` for 0, `E_BUDGET` above). The value holds
+  `k` is 1 to 1,000 (`E_NEAREST` for 0, `E_BUDGET` above). The ranking
+  streams through the selected embeddings with O(k) memory and counts them
+  against its own scan budget, `MAX_SCAN_COMPONENTS` (2^28 vector components,
+  about 174,000 vectors of 1,536 dimensions; `E_BUDGET` beyond), instead of
+  the read budget. The value holds
   the hits' subject nodes with their attachments and origins, the hit
   embeddings and their space, `QueryResult.neighbors` (`Neighbor { rank,
   embedding_id, subject, score }` in rank order) and `exactness: exact`. A
@@ -836,8 +840,10 @@ To vendor them (LA0, weave-language#1):
 - Decoding is structural only. Version feature gates, identifier bounds and
   authorization are checked at execution by the engine.
 - `nearest` and `similar_candidates` are exhaustive (`exactness: exact`).
-  The read budget counts the stored embeddings they read, including hidden
-  ones, as every read does, so a whole-space ranking is bounded by it.
+  The scan budget of `nearest` and the read budget of `similar_candidates`
+  count the stored embeddings they read, including hidden ones, as every
+  read does.
+
 
 - Error messages are diagnostic text. They are not stable and not part of the
   contract.

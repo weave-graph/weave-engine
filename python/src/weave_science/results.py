@@ -97,10 +97,14 @@ def _pin_program(source: Mapping[str, Any], result: Mapping[str, Any]) -> dict[s
                 value.clear()
                 value.update({"kind": "query", "query": plan})
                 return
-            if value.get("kind") == "expand":
+            if value.get("kind") in {"expand", "nearest", "similar_candidates"}:
                 value.pop("as_of", None)
                 pin_query(value)
+                for key in ("seeds_from", "candidates", "sources", "targets"):
+                    if key in value:
+                        visit(value[key])
                 return
+
             if value.get("kind") == "changes":
                 change_set = result.get("changes") or {}
                 for end, key in (("from", "from_revision"), ("to", "to_revision")):
@@ -175,6 +179,26 @@ class QueryResult:
     def changes(self) -> list[dict[str, Any]]:
         """Entries of a change set (``changes`` expressions): change, kind, id, before, after."""
         return deepcopy((self.raw.get("changes") or {}).get("entries", []))
+
+    @property
+    def neighbors(self) -> list[dict[str, Any]]:
+        """Ranked hits of ``nearest_embeddings``: rank, embedding_id, subject, score (a distance)."""
+        return deepcopy(self.raw.get("neighbors", []))
+
+    @property
+    def candidates(self) -> list[dict[str, Any]]:
+        """Candidate relations of ``similar_candidates``, with score, valid time and origins."""
+        return deepcopy(self.raw.get("candidates", []))
+
+    @property
+    def exactness(self) -> str | None:
+        """``exact`` for embedding rankings (``approximate`` is reserved)."""
+        return self.raw.get("exactness")
+
+    @property
+    def embeddings(self) -> list[dict[str, Any]]:
+        """The hit embedding facts of ``nearest_embeddings``."""
+        return deepcopy(self.graph.get("embeddings", []))
 
     @property
     def cursor(self) -> str | None:

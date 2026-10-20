@@ -270,6 +270,22 @@ field (`from_revision`, `to_revision`, `entries`); pass `to_revision` as
 `expand` or `as_of` result like any graph value and rejects a change set with
 `E_SCIENCE_RESULT`.
 
+The A4 operators travel the same way in 0.24.0 Programs
+([guide](EMBEDDINGS.md)): write `embedding_space` and `embedding` facts with
+an `import` request's `changes`, then evaluate `nearest` or
+`similar_candidates`:
+
+```json
+{"operation":"execute","program":{"version":"0.24.0","commands":[
+  {"op":"evaluate","value":{"kind":"nearest","graph_id":"fleet",
+    "space":{"id":"notes","revision":"1"},"query":{"kind":"vector","vector":[0.1,0.2,0.3]},
+    "k":10,"candidates":{"kind":"expand","graph_id":"fleet","seeds":["unit-1"],"hops":2,"direction":"both"}}}]}}
+```
+
+The result carries `neighbors`, `exactness` and the hit embeddings; a
+`similar_candidates` result carries `candidates`. `capabilities` lists both
+under `query_operators`.
+
 ## Algorithms
 
 Topology algorithms accept optional `valid_at`, absent/null by default. They use

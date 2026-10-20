@@ -27,6 +27,7 @@ use weave_contract::embedding::{
     CandidateRelation, CandidatesPlan, EmbeddingFact, EmbeddingMetric, EmbeddingSpace,
     EmbeddingSubject, Exactness, NearestPlan, NearestQuery, Neighbor, SpaceRef,
     CANDIDATE_PREDICATE, E_NEAREST, E_SPACE, MAX_CANDIDATE_LIMIT, MAX_COMPARISONS, MAX_K,
+    MAX_SCAN_COMPONENTS,
 };
 use weave_contract::provenance::FactRef;
 
@@ -139,6 +140,76 @@ impl Subjects {
     }
 }
 
+/// Embeddings authorized together by a streaming ranking.
+const SCAN_CHUNK: usize = 256;
+
+/// A streaming exact top-k over stored embeddings (`nearest`).
+///
+/// Every offered embedding counts its dimensions against
+/// [`MAX_SCAN_COMPONENTS`] before it is read further, whether or not the
+/// reader can see it, like the read budget. Chunks are authorized with their
+/// subjects through the one authorization path; only visible, selected
+/// embeddings are ranked, and only the best `k` are kept.
+struct Ranking<'a> {
+    engine: &'a Engine,
+    source: &'a dyn FactSource,
+    host: &'a HostContext,
+    subjects: Option<&'a Subjects>,
+    excluded: Option<&'a EmbeddingSubject>,
+    metric: EmbeddingMetric,
+    query: &'a [f32],
+    k: usize,
+    dimensions: u64,
+    scanned: u64,
+    max_components: u64,
+    chunk: Vec<StoredFact>,
+    best: Vec<EmbeddingFact>,
+    denied: bool,
+}
+
+impl Ranking<'_> {
+    fn offer(&mut self, stored: StoredFact) -> Result<()> {
+        self.scanned = self.scanned.saturating_add(self.dimensions);
+        if self.scanned > self.max_components {
+            return Err(err(
+                "E_BUDGET",
+                "nearest scans at most 268435456 vector components",
+            ));
+        }
+        self.chunk.push(stored);
+        if self.chunk.len() == SCAN_CHUNK {
+            self.flush()?;
+        }
+        Ok(())
+    }
+    fn flush(&mut self) -> Result<()> {
+        if self.chunk.is_empty() {
+            return Ok(());
+        }
+        let stored = std::mem::take(&mut self.chunk);
+        let (visible, denied) =
+            self.engine
+                .authorize_embeddings_charging(self.source, stored, self.host, false)?;
+        self.denied |= denied;
+        let mut pool: Vec<EmbeddingFact> = std::mem::take(&mut self.best);
+        pool.extend(
+            visible
+                .into_values()
+                .filter(|e| self.subjects.is_none_or(|s| s.admits(&e.subject)))
+                .filter(|e| self.excluded != Some(&e.subject)),
+        );
+        let refs: Vec<&EmbeddingFact> = pool.iter().collect();
+        let keep: Vec<usize> = ExactScan
+            .rank(self.metric, self.query, &refs, self.k)
+            .into_iter()
+            .map(|r| r.index)
+            .collect();
+        let mut slots: Vec<Option<EmbeddingFact>> = pool.into_iter().map(Some).collect();
+        self.best = keep.into_iter().filter_map(|i| slots[i].take()).collect();
+        Ok(())
+    }
+}
+
 fn contract(e: weave_contract::ContractError) -> Error {
     err(&e.code, &e.message)
 }
@@ -245,10 +316,22 @@ impl Engine {
         stored: Vec<StoredFact>,
         host: &HostContext,
     ) -> Result<(BTreeMap<String, EmbeddingFact>, bool)> {
+        self.authorize_embeddings_charging(source, stored, host, true)
+    }
+
+    /// [`Self::authorize_embeddings`]; with `charge` false the embedding
+    /// bodies are not charged to the read budget (the scan budget counts them).
+    fn authorize_embeddings_charging(
+        &self,
+        source: &dyn FactSource,
+        stored: Vec<StoredFact>,
+        host: &HostContext,
+        charge: bool,
+    ) -> Result<(BTreeMap<String, EmbeddingFact>, bool)> {
         if stored.is_empty() {
             return Ok((BTreeMap::new(), false));
         }
-        let closure = self.closure_in(source, stored, false)?;
+        let closure = self.closure_charging(source, stored, false, charge)?;
         let attributed = self.authorize_attributed(closure, host)?;
         let denied = attributed.header_incomplete
             || attributed
@@ -404,18 +487,56 @@ impl Engine {
         let subjects = candidate_value
             .as_ref()
             .map(|v| Subjects::of(v, &plan.graph_id));
-        let stored = if subjects.as_ref().is_some_and(|s| s.len() == 0) {
-            Vec::new()
-        } else {
-            self.select_embeddings(source, &plan.space, plan.valid_at, subjects.as_ref())?
+        // Stream the selection in chunks: authorize each chunk, then keep
+        // only the best k. Memory is O(k + chunk), whatever the space size.
+        let mut ranking = Ranking {
+            engine: self,
+            source,
+            host,
+            subjects: subjects.as_ref(),
+            excluded: excluded.as_ref(),
+            metric: space.metric,
+            query: &query,
+            k: plan.k as usize,
+            dimensions: u64::from(space.dimensions),
+            scanned: 0,
+            max_components: MAX_SCAN_COMPONENTS,
+            chunk: Vec::new(),
+            best: Vec::new(),
+            denied: false,
         };
-        let (visible, denied) = self.authorize_embeddings(source, stored, host)?;
-        incomplete |= denied;
-        let selected: Vec<&EmbeddingFact> = visible
-            .values()
-            .filter(|e| subjects.as_ref().is_none_or(|s| s.admits(&e.subject)))
-            .filter(|e| excluded.as_ref() != Some(&e.subject))
-            .collect();
+        let filter = |subject: Option<&String>, entity: Option<&String>| FactFilter {
+            kind: Some(store::FactKind::Embedding),
+            predicate: Some(plan.space.key()),
+            subject: subject.cloned(),
+            entity: entity.cloned(),
+            valid_at: plan.valid_at,
+            ..FactFilter::default()
+        };
+        match subjects.as_ref() {
+            None => source.scan(&filter(None, None), &mut |stored| ranking.offer(stored))?,
+            Some(subjects) => {
+                let limit = self.materialization_limit();
+                let mut seen: HashSet<String> = HashSet::new();
+                for (subject, entity) in subjects
+                    .nodes
+                    .iter()
+                    .chain(&subjects.records)
+                    .map(|id| (Some(id), None))
+                    .chain(subjects.entities.iter().map(|e| (None, Some(e))))
+                {
+                    for stored in source.select(&filter(subject, entity), limit)? {
+                        if seen.insert(stored.version.id.clone()) {
+                            ranking.offer(stored)?;
+                        }
+                    }
+                }
+            }
+        }
+        ranking.flush()?;
+        incomplete |= ranking.denied;
+        let best = std::mem::take(&mut ranking.best);
+        let selected: Vec<&EmbeddingFact> = best.iter().collect();
         let search = ExactScan;
         let ranked = search.rank(space.metric, &query, &selected, plan.k as usize);
         let hits: Vec<&EmbeddingFact> = ranked.iter().map(|r| selected[r.index]).collect();
@@ -896,5 +1017,59 @@ impl Engine {
             converted,
             rounded,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::facts::SnapshotSource;
+
+    #[test]
+    fn the_scan_budget_fails_with_e_budget_before_reading_further() {
+        let engine = Engine::memory().unwrap();
+        let source = SnapshotSource::new(&GraphData::default(), "sha256:r").unwrap();
+        let host = HostContext::new("alice", Vec::<String>::new());
+        let mut ranking = Ranking {
+            engine: &engine,
+            source: &source,
+            host: &host,
+            subjects: None,
+            excluded: None,
+            metric: EmbeddingMetric::Euclidean,
+            query: &[0.0; 4],
+            k: 1,
+            dimensions: 4,
+            scanned: 0,
+            max_components: 8,
+            chunk: Vec::new(),
+            best: Vec::new(),
+            denied: false,
+        };
+        let stored = || StoredFact {
+            position: 0,
+            version: store::FactVersion {
+                kind: store::FactKind::Embedding,
+                id: "e".into(),
+                body: "{}".into(),
+                keys: store::IndexKeys::default(),
+            },
+            recording: store::Recording {
+                writer: "w".into(),
+                on_behalf_of: None,
+                recorded_at_ms: 0,
+                revision: "sha256:r".into(),
+            },
+        };
+        ranking.offer(stored()).unwrap();
+        ranking.offer(stored()).unwrap();
+        assert_eq!(ranking.offer(stored()).unwrap_err().code, "E_BUDGET");
+        assert_eq!(
+            ranking.chunk.len(),
+            2,
+            "the over-budget embedding is never read"
+        );
+        assert_eq!(MAX_SCAN_COMPONENTS, 268_435_456);
+        const { assert!(100_000 * 1_536 < MAX_SCAN_COMPONENTS) };
     }
 }

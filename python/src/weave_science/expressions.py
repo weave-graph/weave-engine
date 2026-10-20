@@ -1,5 +1,6 @@
 """Builders for the existing engine contract, without a second evaluator."""
 
+import math
 from copy import deepcopy
 from typing import Any, Iterable, Mapping
 
@@ -68,10 +69,11 @@ def as_of(graph_id: str, recorded_at_ms: int, **selection: Any) -> dict[str, Any
             "unix_millis": recorded_at_ms}
 
 
-def expand(graph_id: str, seeds: Iterable[str], *, hops: int, direction: str = "out",
+def expand(graph_id: str, seeds: Iterable[str] = (), *, hops: int, direction: str = "out",
            predicates: Iterable[str] = (), valid_at: int | None = None,
            revision: str | None = None, as_of: int | None = None,
-           branch_id: str = "main", limit: int = 10_000) -> dict[str, Any]:
+           branch_id: str = "main", limit: int = 10_000,
+           seeds_from: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """The exact k-hop neighborhood of the visible seed nodes.
 
     Every node within ``hops`` hops along visible edges whose predicate is in
@@ -79,10 +81,12 @@ def expand(graph_id: str, seeds: Iterable[str], *, hops: int, direction: str = "
     plus every such edge that leaves a node fewer than ``hops`` hops away.
     ``direction`` is ``out``, ``in`` or ``both``. Read a pinned ``revision``,
     the branch ``as_of`` a recorded time, or the head. More than ``limit``
-    nodes plus edges fails with E_BUDGET; nothing is truncated.
+    nodes plus edges fails with E_BUDGET; nothing is truncated. ``seeds_from``
+    (contract 0.24) adds the nodes of another graph expression as seeds, for
+    example the hits of ``nearest_embeddings``.
     """
     seeds = list(seeds)
-    if not seeds or not all(isinstance(seed, str) and seed for seed in seeds):
+    if (not seeds and seeds_from is None) or not all(isinstance(seed, str) and seed for seed in seeds):
         raise ValueError("expand needs at least one seed node ID")
     if isinstance(hops, bool) or not isinstance(hops, int) or not 1 <= hops <= 16:
         raise ValueError("hops must be an integer from 1 to 16")
@@ -98,6 +102,8 @@ def expand(graph_id: str, seeds: Iterable[str], *, hops: int, direction: str = "
     for key, value in (("valid_at", valid_at), ("revision", revision), ("as_of", as_of)):
         if value is not None:
             plan[key] = value
+    if seeds_from is not None:
+        plan["seeds_from"] = deepcopy(dict(seeds_from))
     return plan
 
 
@@ -172,3 +178,92 @@ def window(value: Mapping[str, Any], start: int, end: int | None) -> dict[str, A
 
 def explain(value: Mapping[str, Any]) -> dict[str, Any]:
     return {"kind": "explain", "input": deepcopy(dict(value))}
+
+
+def _space(space: Any) -> dict[str, str]:
+    if isinstance(space, Mapping):
+        identifier, revision = space.get("id"), space.get("revision")
+    elif isinstance(space, (tuple, list)) and len(space) == 2:
+        identifier, revision = space
+    else:
+        raise ValueError("space must be (id, revision) or {'id': ..., 'revision': ...}")
+    if not isinstance(identifier, str) or not identifier or not isinstance(revision, str) or not revision:
+        raise ValueError("space needs a nonempty id and revision")
+    return {"id": identifier, "revision": revision}
+
+
+def _selection(plan: dict[str, Any], revision: str | None, as_of: int | None,
+               valid_at: int | None) -> None:
+    if revision is not None and as_of is not None:
+        raise ValueError("choose revision or as_of")
+    if as_of is not None:
+        _time(as_of, "as_of")
+    for key, value in (("revision", revision), ("as_of", as_of), ("valid_at", valid_at)):
+        if value is not None:
+            plan[key] = value
+
+
+def nearest_embeddings(graph_id: str, space: Any, *, vector: Iterable[float] | None = None,
+                       embedding_id: str | None = None, k: int = 10,
+                       valid_at: int | None = None, candidates: Mapping[str, Any] | None = None,
+                       revision: str | None = None, as_of: int | None = None,
+                       branch_id: str = "main") -> dict[str, Any]:
+    """Exact k nearest embedding facts of one space (contract 0.24 ``nearest``).
+
+    The query is a caller-supplied ``vector`` in the space, or the visible
+    embedding fact ``embedding_id`` (its own subject is excluded). Only
+    embeddings valid at ``valid_at`` and, with ``candidates``, whose subject
+    is a record of that graph expression (for example an ``expand``) are
+    ranked, after the engine authorizes them: hidden vectors never change a
+    visible rank or score. ``k`` is 1 to 1,000.
+    """
+    if (vector is None) == (embedding_id is None):
+        raise ValueError("give exactly one of vector or embedding_id")
+    if isinstance(k, bool) or not isinstance(k, int) or not 1 <= k <= 1000:
+        raise ValueError("k must be an integer from 1 to 1000")
+    if vector is not None:
+        values = list(vector)
+        if not values or any(isinstance(v, bool) or not isinstance(v, (int, float))
+                             or not math.isfinite(v) for v in values):
+            raise ValueError("vector must contain finite numeric components")
+        query_value: dict[str, Any] = {"kind": "vector", "vector": values}
+    else:
+        query_value = {"kind": "embedding", "embedding_id": embedding_id}
+    plan: dict[str, Any] = {"kind": "nearest", "graph_id": graph_id, "branch_id": branch_id,
+                            "space": _space(space), "query": query_value, "k": k}
+    _selection(plan, revision, as_of, valid_at)
+    if candidates is not None:
+        plan["candidates"] = deepcopy(dict(candidates))
+    return plan
+
+
+def similar_candidates(graph_id: str, space: Any, *, k: int = 1, max_score: float | None = None,
+                       valid_at: int | None = None, sources: Mapping[str, Any] | None = None,
+                       targets: Mapping[str, Any] | None = None, exclude_linked: bool = False,
+                       limit: int = 1000, revision: str | None = None, as_of: int | None = None,
+                       branch_id: str = "main") -> dict[str, Any]:
+    """Candidate ``weave:similar_to`` relations between visible embeddings.
+
+    For every source embedding (all, or the subjects of ``sources``), its
+    ``k`` nearest targets of another subject at most ``max_score`` apart.
+    ``exclude_linked`` keeps only pairs not already joined by a visible edge.
+    Candidates are result values with provenance; they are never written.
+    """
+    if isinstance(k, bool) or not isinstance(k, int) or not 1 <= k <= 1000:
+        raise ValueError("k must be an integer from 1 to 1000")
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100_000:
+        raise ValueError("limit must be an integer from 1 to 100000")
+    plan: dict[str, Any] = {"kind": "similar_candidates", "graph_id": graph_id,
+                            "branch_id": branch_id, "space": _space(space), "k": k, "limit": limit}
+    if max_score is not None:
+        if isinstance(max_score, bool) or not isinstance(max_score, (int, float)) \
+                or not math.isfinite(max_score) or max_score < 0:
+            raise ValueError("max_score must be a finite nonnegative distance")
+        plan["max_score"] = max_score
+    if exclude_linked:
+        plan["exclude_linked"] = True
+    for key, value in (("sources", sources), ("targets", targets)):
+        if value is not None:
+            plan[key] = deepcopy(dict(value))
+    _selection(plan, revision, as_of, valid_at)
+    return plan

@@ -1,0 +1,60 @@
+{
+  "profile": "weave-embedding-benchmark/1",
+  "date": "2026-10-20",
+  "command": "cargo run --release --locked -p weave-engine --example embedding_benchmark -- 100000 1536 1000",
+  "host": "AMD Ryzen 9 7950X (16 cores), Linux, on-disk WAL SQLite store, optimized build, one process",
+  "store": 31,
+  "batch": 1000,
+  "batch_write_ms_first": {
+    "max": 402.612645,
+    "median": 329.619636,
+    "min": 318.32019299999996,
+    "p95": 402.612645,
+    "samples": 5
+  },
+  "batch_write_ms_last": {
+    "max": 334.44881399999997,
+    "median": 330.72573700000004,
+    "min": 325.139699,
+    "p95": 334.44881399999997,
+    "samples": 5
+  },
+  "benchmark": "embedding-upsert-and-exact-nearest",
+  "dimensions": 1536,
+  "exact_top10_valid_at": {
+    "latency_ms": {
+      "max": 3623.728557,
+      "median": 3622.322959,
+      "min": 3608.085311,
+      "p95": 3623.728557,
+      "samples": 5
+    },
+    "neighbors": 10
+  },
+  "exact_top10_whole_space": {
+    "latency_ms": {
+      "max": 7099.0306820000005,
+      "median": 7092.279473,
+      "min": 7082.669347999999,
+      "p95": 7099.0306820000005,
+      "samples": 5
+    },
+    "neighbors": 10
+  },
+  "load_seconds": 34.707247241,
+  "metric": "cosine_distance",
+  "peak_rss_kib_after_rankings": 264900,
+  "peak_rss_kib_before_rankings": 264900,
+  "protocol": "0.24.0",
+  "single_embedding_upsert_ms_at_full_size": {
+    "max": 1.971894,
+    "median": 1.1914600000000002,
+    "min": 1.1348040000000001,
+    "p95": 1.971894,
+    "samples": 5
+  },
+  "store_bytes": 2134859320,
+  "vectors": 100005,
+  "visible_to_reader": "90% (every tenth embedding restricted)",
+  "notes": "Times in milliseconds. 100 writes of 1,000 nodes plus 1,000 embeddings each, then 5 single-embedding writes on the full store. Each ranking is one exact top-10 nearest over the whole cosine space by a reader who sees 90% of it (restricted embeddings are scanned and authorized, never ranked); valid_at selects about half the space through the index. Peak RSS is the process high-water mark, set during loading; the rankings did not raise it. One run on one host, not a capacity promise."
+}

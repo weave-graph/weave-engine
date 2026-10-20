@@ -164,7 +164,52 @@ class DataAndArtifactTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 bad()
 
+    def test_embedding_builders_validate_before_execution(self):
+        from weave_science import (asserts, embedding, embedding_space, expand,
+                                   nearest_embeddings, similar_candidates)
+        space = embedding_space("notes", revision="1", encoder="e", encoder_version="v",
+                                preprocessing="p", dimensions=2)
+        fact = embedding("v1", space, "a", [0.5, 0.25], valid_from=10, readers=["bob"])
+        self.assertEqual(fact["subject"], {"kind": "node", "node_id": "a"})
+        self.assertEqual(fact["provenance"]["method"], {"kind": "model", "model": "e", "version": "v"})
+        self.assertEqual(asserts([fact])[0]["change"], "assert")
+        plan = nearest_embeddings("g", ("notes", "1"), vector=[1, 0], k=3, valid_at=5,
+                                  candidates=expand("g", ["a"], hops=2))
+        self.assertEqual(plan["query"], {"kind": "vector", "vector": [1, 0]})
+        self.assertEqual(plan["candidates"]["kind"], "expand")
+        self.assertEqual(nearest_embeddings("g", {"id": "notes", "revision": "1"}, embedding_id="v1")["query"],
+                         {"kind": "embedding", "embedding_id": "v1"})
+        self.assertEqual(expand("g", hops=1, seeds_from=plan)["seeds_from"]["kind"], "nearest")
+        self.assertEqual(similar_candidates("g", ("notes", "1"), exclude_linked=True, max_score=0.5)["exclude_linked"], True)
+        for bad in (lambda: nearest_embeddings("g", ("notes", "1")),
+                    lambda: nearest_embeddings("g", ("notes", "1"), vector=[1], embedding_id="v"),
+                    lambda: nearest_embeddings("g", ("notes", "1"), vector=[float("nan")]),
+                    lambda: nearest_embeddings("g", ("notes", "1"), vector=[1], k=0),
+                    lambda: nearest_embeddings("g", "notes", vector=[1]),
+                    lambda: nearest_embeddings("g", ("notes", "1"), vector=[1], revision="r", as_of=1),
+                    lambda: similar_candidates("g", ("notes", "1"), max_score=-1),
+                    lambda: similar_candidates("g", ("notes", "1"), limit=0),
+                    lambda: embedding("v", space, "a", [1.0]),
+                    lambda: embedding_space("s", revision="1@2", encoder="e", encoder_version="v",
+                                            preprocessing="p", dimensions=2),
+                    lambda: expand("g", hops=1)):
+            with self.assertRaises(ValueError):
+                bad()
+
+    def test_embedding_rankings_pin_their_revision_for_replay(self):
+        from weave_science import expand, nearest_embeddings
+        plan = expand("g", hops=1, seeds_from=nearest_embeddings(
+            "g", ("notes", "1"), vector=[1.0], as_of=3, candidates=query("g")))
+        result = {"snapshots": {"g": "r1"}, "input_snapshots": [{"graph_id": "g", "revision": "r1"}]}
+        from weave_science.results import _pin_program
+        pinned = _pin_program(program(plan), result)["commands"][0]["value"]
+        self.assertEqual(pinned["revision"], "r1")
+        self.assertEqual(pinned["seeds_from"]["revision"], "r1")
+        self.assertNotIn("as_of", pinned["seeds_from"])
+        self.assertEqual(pinned["seeds_from"]["candidates"]["query"]["revision"], "r1")
+
     def test_helpers_do_not_mutate_caller_rows(self):
+
         properties = {"label": "sample", "nested": [1, 2]}
         record = node("m1", entity_id="e", properties=properties, vector=[1, 2])
         snapshot = graph_data([record], [edge("a", "m1", "m1", valid_from=-5, valid_to=9)])

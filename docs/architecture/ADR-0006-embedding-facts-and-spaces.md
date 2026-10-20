@@ -116,6 +116,11 @@ These choices refine the decision without changing it
 - **Ranking boundary.** Ranking runs behind one internal trait over the
   already-authorized selection; the exact scan is the only implementation.
   C5's approximate index plugs in there and falls back to the exact scan.
+- **Streaming exact scan.** `nearest` streams the selected embeddings from
+  the fact index in chunks, authorizes each chunk and keeps the best `k`
+  (O(k) memory). Its vectors count against a dedicated scan budget of 2^28
+  components (`MAX_SCAN_COMPONENTS`) instead of the 128 MiB read budget, so
+  100,000 vectors of 1,536 dimensions rank exactly.
 - **Candidates.** `similar_candidates` reports each pair once, lower subject
   first; its ID is derived from the graph, the space and both embedding IDs,
   so it is stable across revisions. Persisting one is an ordinary edge with
