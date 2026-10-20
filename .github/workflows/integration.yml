@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: weave-graph/weave-language
-          ref: 1e169b6a37f7c974bc70b1af5e369a84dee881a7
+          ref: dc9ff9dba3124b4d20e61477f6b27015c3cd29d3
           path: weave-language
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify actual compiler and persistent runtime
@@ -117,7 +117,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: weave-graph/weave-language
-          ref: 1e169b6a37f7c974bc70b1af5e369a84dee881a7
+          ref: dc9ff9dba3124b4d20e61477f6b27015c3cd29d3
           path: weave-language
       - uses: dtolnay/rust-toolchain@stable
       - name: Build actual compiler SDK and native embedding library
