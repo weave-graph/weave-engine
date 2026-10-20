@@ -8,6 +8,10 @@ The goals are in [VISION.md](../VISION.md). The evidence behind the decisions is
 in the [17 October audit](AUDIT_2026-10-17.md). The proposed GitHub issue changes
 and full issue texts are in [ROADMAP_PROPOSAL.md](ROADMAP_PROPOSAL.md).
 
+> **Paused on 2026-10-21.** Phase A is released as v1.0.0, and B1–B3 are done.
+> B4, B5 and B6 are in progress or not started. The exact state, open blockers
+> and resume steps are in [RESUME.md](RESUME.md).
+
 ## Why reorganize
 
 The existing epics E01–E15 and L0–L7 follow the original white papers, which
