@@ -24,7 +24,7 @@ language `main` is `76d4661`.
 
 | Work | Branch | PR | Head | State |
 |---|---|---|---|---|
-| B4 part 3: sandboxed `compile` MCP tool and Python `AgentClient` | `b4-part3-sdk-compile` | #79 | `5ecec27` | `compiler-runtime` red. Still pins weave-language `73def87`; must move to `76d4661`, which has the minted-ID fix |
+| B4 part 3: sandboxed `compile` MCP tool and Python `AgentClient` | `b4-part3-sdk-compile` | #79 (draft) | `5ecec27` | `compiler-runtime` red. Still pins weave-language `73def87`; must move to `76d4661`, which has the minted-ID fix |
 | B5 part 1: engine review modes, proposals and votes on registry authority, `FactProvenance.review` (contract **1.3.0**, store **33**) | `b5-review-part1` | #78 (draft) | `fee1f51` | Conflicts with `main`. 18 compatibility migration jobs fail, cause not yet diagnosed |
 
 Neither PR contains `Closes #12` or `Closes #41`. #79 references #40, which is
@@ -59,6 +59,7 @@ already closed (see below).
 
 1. Reopen #40, as in blocker 1.
 2. **B4 part 3 (#79):**
+   - mark #79 ready for review;
    - set both weave-language refs in `integration.yml` to
      `76d4661fc5cfbc3f740a169bb29f2c1be284e17f`;
    - get CI green;
