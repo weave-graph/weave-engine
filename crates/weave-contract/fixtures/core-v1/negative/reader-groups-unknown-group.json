@@ -1,0 +1,49 @@
+{
+  "fixture": "reader-groups-unknown-group",
+  "concepts": [
+    "fact.reader_groups",
+    "fact.readers",
+    "fact.write",
+    "compat.versions"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "version": "1.1.0",
+    "commands": [
+      {
+        "op": "write",
+        "graph_id": "g",
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "node",
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s",
+              "properties": {},
+              "metadata": [],
+              "readers": [
+                "alice"
+              ],
+              "reader_groups": [
+                "team"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "error": "E_UNAVAILABLE"
+  }
+}

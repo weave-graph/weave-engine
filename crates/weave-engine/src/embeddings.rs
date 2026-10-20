@@ -466,6 +466,7 @@ impl Engine {
         if plan.k == 0 {
             return Err(err(E_NEAREST, "nearest needs k of at least 1"));
         }
+        self.require_graph_snapshot(host, &plan.graph_id)?;
         if plan.k > MAX_K {
             return Err(err("E_BUDGET", "nearest returns at most 1000 neighbors"));
         }
@@ -641,6 +642,7 @@ impl Engine {
         {
             return Err(err("E_ID", "identifiers require 1 to 512 UTF-8 bytes"));
         }
+        self.require_graph_snapshot(host, &plan.graph_id)?;
         if plan.k == 0 || plan.limit == 0 {
             return Err(err(
                 E_NEAREST,
@@ -939,12 +941,7 @@ impl Engine {
         importer_version: &str,
         host: &HostContext,
     ) -> Result<VectorImport> {
-        if !host.writable_graphs.contains(graph) {
-            return Err(err(
-                "E_FORBIDDEN",
-                "host has not granted graph write authority",
-            ));
-        }
+        self.require_branch_write(host, graph, branch)?;
         if !valid_id(property) || !valid_id(importer) || !valid_id(importer_version) {
             return Err(err("E_ID", "identifiers require 1 to 512 UTF-8 bytes"));
         }
@@ -1032,6 +1029,7 @@ impl Engine {
                 vector,
                 valid_time: valid_time.clone(),
                 readers: node.readers.clone(),
+                reader_groups: node.reader_groups.clone(),
                 derived_from: vec![],
                 derived_nodes: vec![],
                 derived_snapshots: vec![],

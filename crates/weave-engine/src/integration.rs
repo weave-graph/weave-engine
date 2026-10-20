@@ -109,7 +109,7 @@ impl Engine {
                 )?;
                 identity_acceptance::require_external_graph(&record.graph_id)?;
                 identity_acceptance::require_external_schema(&record.data)?;
-                if !host.writable_graphs.contains(&record.graph_id) {
+                if !self.graph_writable(host, &record.graph_id, None)? {
                     return Err(err(
                         "E_FORBIDDEN",
                         "host must authorize every imported graph",

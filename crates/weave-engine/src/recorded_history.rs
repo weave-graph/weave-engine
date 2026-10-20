@@ -74,6 +74,7 @@ impl Engine {
         if query.revision.is_some() {
             return Err(err("E_HISTORY_RANGE", "unpinned history query required"));
         }
+        self.require_graph(host, &query.graph_id, crate::registry::Permission::Read)?;
         weave_contract::accepted_history::validate_range(interval, limit)
             .map_err(|d| err(&d.code, &d.message))?;
         let range = self.recorded_range_for(
@@ -484,6 +485,7 @@ CREATE INDEX IF NOT EXISTS head_observations_order ON head_observations(graph_id
         }
         let _transaction = self.optional_read_transaction()?;
         let _clock = self.operation_scope()?;
+        self.require_graph(host, &query.graph_id, crate::registry::Permission::Read)?;
         let observation = self.select_observation(&query.graph_id, &query.branch_id, cut, host)?;
         let mut pinned = query.clone();
         pinned.revision = Some(observation.graph.revision.clone());

@@ -84,7 +84,7 @@ fn snapshot(path: &std::path::Path) -> (i64, Vec<String>, Vec<(String, String)>)
 
 #[test]
 fn populated_store_29_upgrades_without_rewriting_revisions() {
-    assert_eq!(STORAGE_VERSION, 31);
+    assert_eq!(STORAGE_VERSION, 32);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("store.db");
     let mut e = Engine::open(&path).unwrap();

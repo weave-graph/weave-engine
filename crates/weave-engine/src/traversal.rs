@@ -160,7 +160,7 @@ impl Engine {
         data: GraphData,
         host: &HostContext,
     ) -> Result<Attributed> {
-        let readable = visible(data.clone(), &host.principal);
+        let readable = visible(data.clone(), &*self.access(host)?);
         let (graph, _) = self.authorized(data, host)?;
         let kept: HashMap<Slot, usize> = facts::facts_of(&graph)
             .iter()
@@ -280,6 +280,7 @@ impl Engine {
             None
         };
         let _clock_scope = self.operation_scope()?;
+        self.require_graph(host, &query.graph_id, crate::registry::Permission::Read)?;
         let revision = self
             .revision_as_of(&query.graph_id, &query.branch_id, unix_millis, host)?
             .ok_or_else(|| err("E_UNAVAILABLE", "graph unavailable"))?;
@@ -308,6 +309,9 @@ impl Engine {
             || plan.revision.as_ref().is_some_and(|r| !valid_id(r))
         {
             return Err(err("E_ID", "identifiers require 1 to 512 UTF-8 bytes"));
+        }
+        if !plan.graph_id.is_empty() {
+            self.require_graph_snapshot(host, &plan.graph_id)?;
         }
         if plan.seeds.is_empty() && plan.seeds_from.is_none() {
             return Err(err("E_EXPAND", "expand needs at least one seed"));
@@ -702,6 +706,7 @@ impl Engine {
         if !valid_id(&plan.graph_id) || !valid_id(&plan.branch_id) || !valid_id(&host.principal) {
             return Err(err("E_ID", "identifiers require 1 to 512 UTF-8 bytes"));
         }
+        self.require_graph_snapshot(host, &plan.graph_id)?;
         bounded_ids(&plan.entities, MAX_SCOPE)?;
         bounded_ids(&plan.predicates, MAX_SCOPE)?;
         let limit = limit(plan.limit)?;

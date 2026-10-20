@@ -34,6 +34,11 @@ pub struct StructuralEdge {
     pub metadata: Vec<GraphRef>,
     #[serde(default)]
     pub readers: Vec<String>,
+    /// Group references (1.1.0, ADR-0007 section 2): a disjunction alongside
+    /// `readers`, resolved against current group membership when a request
+    /// runs. Omitted when empty, so records without groups keep their bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reader_groups: Vec<String>,
     /// Claimed provenance (0.22, ADR-0005). Part of the record's content.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provenance: Option<provenance::ClaimedProvenance>,
@@ -68,6 +73,11 @@ pub struct Assertion {
     pub metadata: Vec<GraphRef>,
     #[serde(default)]
     pub readers: Vec<String>,
+    /// Group references (1.1.0, ADR-0007 section 2): a disjunction alongside
+    /// `readers`, resolved against current group membership when a request
+    /// runs. Omitted when empty, so records without groups keep their bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reader_groups: Vec<String>,
     #[serde(default)]
     pub derived_from: Vec<AssertionRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

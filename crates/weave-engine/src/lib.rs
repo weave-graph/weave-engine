@@ -57,7 +57,7 @@ pub use recorded_actors::{
 };
 pub use recorded_history::{RecordedHistoryRange, RecordedQueryResult};
 pub use weave_contract::{ObservationKind, RecordedCut, RecordedObservation, RecordedSelection};
-pub const STORAGE_VERSION: i64 = 31;
+pub const STORAGE_VERSION: i64 = 32;
 mod retention;
 pub use retention::{RecordedAvailability, RetentionPlan, RetentionPolicy, RetentionReceipt};
 mod adapter_lifecycle;
@@ -117,12 +117,18 @@ pub use embeddings::VectorImport;
 pub use facts::FactReconciliation;
 
 mod metadata;
+mod registry;
 mod snapshot;
 mod traversal;
 mod typed;
 mod typed_context;
 mod visibility;
 pub use capsule::{Capsule, CapsuleRevision};
+pub use registry::{
+    GraphAcl, GraphGrant, GraphListing, Permission, Principal, PrincipalKind, PrincipalStatus,
+    RegistryChange, ADMINISTRATORS, MAX_GROUP_CLOSURE, MAX_GROUP_DEPTH, REGISTRY_BRANCH,
+    REGISTRY_GRAPH,
+};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Error {
@@ -172,6 +178,7 @@ pub struct Engine {
     authorization: authorization::Authorization,
     operation_clock: operation_clock::OperationClock,
     protected_reads: governance_graph::ProtectedReads,
+    registry_cache: registry::Cache,
 }
 impl Engine {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -248,6 +255,7 @@ impl Engine {
             authorization: authorization::Authorization::default(),
             operation_clock: operation_clock::OperationClock::new(clock),
             protected_reads: governance_graph::ProtectedReads::default(),
+            registry_cache: registry::Cache::default(),
         };
         let initialization = rusqlite::Transaction::new_unchecked(
             &engine.conn,
@@ -518,6 +526,23 @@ impl Engine {
                 "embedding spaces, embeddings and embedding evidence require contract 0.24.0",
             ));
         }
+        if !weave_contract::version_at_least(&program.version, "1.1.0")
+            && program.commands.iter().any(|command| match command {
+                Command::Write { changes, .. } => changes.iter().any(|change| match change {
+                    FactChange::Assert { fact } | FactChange::Correct { fact, .. } => {
+                        !facts::fact_reader_groups(fact).is_empty()
+                    }
+                    FactChange::Retract { .. } => false,
+                }),
+                Command::Commit { data, .. } => facts::data_reader_groups(data).next().is_some(),
+                Command::CommitBatch { commits, .. } => commits
+                    .iter()
+                    .any(|c| facts::data_reader_groups(&c.data).next().is_some()),
+                _ => false,
+            })
+        {
+            return Err(err("E_VERSION", "reader_groups require contract 1.1.0"));
+        }
         if !weave_contract::version_at_least(program.version.as_str(), "0.22.0")
             && program.commands.iter().any(|command| match command {
                 Command::Write { .. } => true,
@@ -743,6 +768,12 @@ impl Engine {
                     if weave_contract::version_at_least(program.version.as_str(), "0.22.0") {
                         self.attach_fact_provenance(result, host)?;
                     }
+                    // `on_behalf_of` is a 1.1.0 result field.
+                    if !weave_contract::version_at_least(&program.version, "1.1.0") {
+                        for entry in &mut result.fact_provenance {
+                            entry.provenance.on_behalf_of.clear();
+                        }
+                    }
                     merge_sources(&mut result.source_revisions, &program.source_revisions)?;
                     if let Command::Bind { name, .. } = command {
                         if let Some(bound) = values.get_mut(name) {
@@ -797,16 +828,12 @@ impl Engine {
         data: &GraphData,
         host: &HostContext,
     ) -> Result<(String, Option<String>)> {
-        if !host.writable_graphs.contains(graph) {
-            return Err(err(
-                "E_FORBIDDEN",
-                "host has not granted graph write authority",
-            ));
-        }
+        self.require_branch_write(host, graph, branch)?;
         if !valid_id(graph) || !valid_id(branch) || !valid_id(&host.principal) {
             return Err(err("E_ID", "identifiers must not be empty"));
         }
         validate_graph(data)?;
+        self.validate_reader_groups(facts::data_reader_groups(data), host)?;
         reject_snapshot_embeddings(data)?;
         self.validate_structures(graph, data)?;
         let head = self.head(graph, branch)?;
@@ -1009,6 +1036,7 @@ impl Engine {
             None
         };
         let _clock_scope = self.operation_scope()?;
+        self.require_graph(host, &query.graph_id, registry::Permission::Read)?;
         let revision = match &query.revision {
             Some(rev) => rev.clone(),
             None => self
@@ -1533,7 +1561,9 @@ impl Engine {
                 }
                 // Results are scoped to the evaluating principal until a release policy exists.
                 source.readers = vec![host.principal.clone()];
+                source.reader_groups.clear();
                 target.readers = vec![host.principal.clone()];
+                target.reader_groups.clear();
                 let type_id = if let Some(output) = &mut schema {
                     typed::type_join_node(
                         &mut source,
@@ -1587,6 +1617,7 @@ impl Engine {
                     properties: BTreeMap::new(),
                     metadata: vec![],
                     readers: vec![host.principal.clone()],
+                    reader_groups: Vec::new(),
                     derived_from: premises.clone(),
                     derivations,
                 };
@@ -1978,7 +2009,7 @@ impl Engine {
     }
     fn authorized_nodes(&self, data: GraphData, host: &HostContext) -> Result<(GraphData, bool)> {
         let _authorization = self.authorization.enter();
-        let mut data = visible(data, &host.principal);
+        let mut data = visible(data, &*self.access(host)?);
         let mut visiting = HashSet::new();
         let mut budget = 1000;
         if !self.context_typing_visible(&data, host, &mut visiting, &mut budget, 0)?
@@ -2023,7 +2054,7 @@ impl Engine {
             }
         }
         data.nodes = nodes;
-        Ok((visible(data, &host.principal), incomplete))
+        Ok((visible(data, &*self.access(host)?), incomplete))
     }
     fn authorized(&self, data: GraphData, host: &HostContext) -> Result<(GraphData, bool)> {
         let _authorization = self.authorization.enter();
@@ -2205,7 +2236,7 @@ impl Engine {
             else {
                 return Ok(false);
             };
-            let source = visible(source, &host.principal);
+            let source = visible(source, &*self.access(host)?);
             if !self.context_typing_visible(&source, host, visiting, budget, depth + 1)?
                 || !self.graph_influence_visible(&source, host, visiting, budget, depth + 1)?
             {
@@ -2278,7 +2309,7 @@ impl Engine {
             else {
                 return Ok(false);
             };
-            let source = visible(source, &host.principal);
+            let source = visible(source, &*self.access(host)?);
             if !self.context_typing_visible(&source, host, visiting, budget, depth + 1)?
                 || !self.graph_influence_visible(&source, host, visiting, budget, depth + 1)?
             {
@@ -2581,16 +2612,20 @@ impl Engine {
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 }
-fn visible(mut data: GraphData, principal: &str) -> GraphData {
-    data.nodes.retain(|n| allowed(&n.readers, principal));
+/// The records of `data` visible under `access`, with dangling edges,
+/// assertions, attachments and embeddings removed.
+fn visible(mut data: GraphData, access: &visibility::Access) -> GraphData {
+    let principal = access;
+    data.nodes
+        .retain(|n| allowed(&n.readers, &n.reader_groups, principal));
     let nodes: HashSet<_> = data.nodes.iter().map(|n| n.id.as_str()).collect();
     data.edges.retain(|e| {
-        allowed(&e.readers, principal)
+        allowed(&e.readers, &e.reader_groups, principal)
             && nodes.contains(e.from.as_str())
             && nodes.contains(e.to.as_str())
     });
     data.structural_edges.retain(|e| {
-        allowed(&e.readers, principal)
+        allowed(&e.readers, &e.reader_groups, principal)
             && nodes.contains(e.from.as_str())
             && nodes.contains(e.to.as_str())
     });
@@ -2599,11 +2634,14 @@ fn visible(mut data: GraphData, principal: &str) -> GraphData {
         .iter()
         .map(|e| e.id.as_str())
         .collect();
-    data.assertions
-        .retain(|a| allowed(&a.readers, principal) && structures.contains(a.edge_id.as_str()));
-    data.attachments.retain(|a| allowed(&a.readers, principal));
+    data.assertions.retain(|a| {
+        allowed(&a.readers, &a.reader_groups, principal) && structures.contains(a.edge_id.as_str())
+    });
+    data.attachments
+        .retain(|a| allowed(&a.readers, &a.reader_groups, principal));
     prune_attachments(&mut data);
-    data.embeddings.retain(|e| allowed(&e.readers, principal));
+    data.embeddings
+        .retain(|e| allowed(&e.readers, &e.reader_groups, principal));
     prune_embeddings(&mut data);
     data
 }
@@ -2630,8 +2668,8 @@ fn prune_embeddings(data: &mut GraphData) {
         }
     });
 }
-fn allowed(readers: &[String], principal: &str) -> bool {
-    visibility::readers_admit(readers, principal)
+fn allowed(readers: &[String], reader_groups: &[String], access: &visibility::Access) -> bool {
+    visibility::record_admits(readers, reader_groups, access)
 }
 fn refs(data: &GraphData) -> Vec<GraphRef> {
     data.context_typing

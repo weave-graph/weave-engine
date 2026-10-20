@@ -7,7 +7,7 @@ or drive experiments with JSON; use the [Python client](PYTHON_SCIENCE.md) for
 notebooks, table helpers and experiment records.
 
 The science interface version is **0.1.0** and the engine contract version is
-**1.0.0**. These are separate versions. The Rust
+**1.1.0**. These are separate versions. The Rust
 [request types](../crates/weave-science/src/lib.rs) define the science schema;
 the [engine contract index](contract/README.md) explains base and extension
 semantics. Canonical [contract types](../crates/weave-contract/src/lib.rs) define
@@ -82,7 +82,7 @@ def call(request, *, write=False):
     if completed.returncode or not response["ok"]:
         raise RuntimeError(response.get("error", completed.stderr))
     assert response["science_version"] == "0.1.0"
-    assert response["contract_version"] == "1.0.0"
+    assert response["contract_version"] == "1.1.0"
     return response["result"]
 
 graph = {
@@ -214,7 +214,7 @@ Successful envelope:
 {
   "ok": true,
   "science_version": "0.1.0",
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "result": {
     "results": [{
       "kind": "committed",
@@ -236,7 +236,7 @@ Failure envelope, with nonzero CLI exit status:
 {
   "ok": false,
   "science_version": "0.1.0",
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "error": {"code": "E_SCIENCE_READ_ONLY", "message": "analysis programs must contain only read operations"}
 }
 ```
@@ -270,13 +270,13 @@ field (`from_revision`, `to_revision`, `entries`); pass `to_revision` as
 `expand` or `as_of` result like any graph value and rejects a change set with
 `E_SCIENCE_RESULT`.
 
-The A4 operators travel the same way in 0.24.0 and 1.0.0 Programs
+The A4 operators travel the same way in 0.24.0, 1.0.0 and 1.1.0 Programs
 ([guide](EMBEDDINGS.md)): write `embedding_space` and `embedding` facts with
 an `import` request's `changes`, then evaluate `nearest` or
 `similar_candidates`:
 
 ```json
-{"operation":"execute","program":{"version":"1.0.0","commands":[
+{"operation":"execute","program":{"version":"1.1.0","commands":[
   {"op":"evaluate","value":{"kind":"nearest","graph_id":"fleet",
     "space":{"id":"notes","revision":"1"},"query":{"kind":"vector","vector":[0.1,0.2,0.3]},
     "k":10,"candidates":{"kind":"expand","graph_id":"fleet","seeds":["unit-1"],"hops":2,"direction":"both"}}}]}}

@@ -167,6 +167,11 @@ pub struct EmbeddingFact {
     /// Empty means public. Nonempty is a disjunction of principal IDs.
     #[serde(default)]
     pub readers: Vec<String>,
+    /// Group references (1.1.0, ADR-0007 section 2): a disjunction alongside
+    /// `readers`, resolved against current group membership when a request
+    /// runs. Omitted when empty, so records without groups keep their bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reader_groups: Vec<String>,
     /// Conservative AND gates: an embedding computed from restricted text is
     /// restricted to readers of that text.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

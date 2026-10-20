@@ -406,7 +406,7 @@ CREATE TABLE IF NOT EXISTS retention_retired_branches(graph_id TEXT NOT NULL,bra
         if ![graph, branch, expected, &host.principal]
             .iter()
             .all(|s| valid_id(s))
-            || !host.writable_graphs.contains(graph)
+            || !self.graph_writable(host, graph, Some(branch))?
         {
             return Err(err("E_FORBIDDEN", "branch retirement unavailable"));
         }

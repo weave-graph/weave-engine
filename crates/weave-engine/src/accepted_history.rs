@@ -118,7 +118,7 @@ impl Engine {
         let policy = self
             .gov_policy(view, &head.policy)
             .map_err(|_| unavailable())?;
-        if !crate::visibility::readers_admit(&policy.readers, &host.principal)
+        if !crate::visibility::readers_admit(&policy.readers, &*self.access(host)?)
             && !policy.proposers.contains(&host.principal)
         {
             return Err(unavailable());

@@ -117,7 +117,7 @@ def main():
         r = subprocess.run([str(a.storage.resolve()), str(db), "after_commit", "20"], capture_output=True, timeout=60)
         assert r.returncode == 83, r
         upgraded, new_tables = rows()
-        assert upgraded == store_marker() == 31, upgraded
+        assert upgraded == store_marker(), upgraded
         assert new_tables == tables
 
         # The store-30 binary refuses the upgraded store.
@@ -162,8 +162,8 @@ def main():
                   "new_marker": store_marker(), "pinned_revisions": len(pins), "pinned_queries": compared,
                   "process_deaths": 2,
                   "checks": ["kill before schema commit leaves store 30 readable by the old binary",
-                             "kill after schema commit leaves store 31 with every row unchanged",
-                             "old binary refuses store 31 with E_STORAGE_VERSION",
+                             "kill after schema commit leaves the current store with every row unchanged",
+                             "old binary refuses the current store with E_STORAGE_VERSION",
                              "pinned query results byte-identical except result.version",
                              "embedding facts written and ranked on the migrated fact line, hidden vector excluded"]}
         print(json.dumps(report))

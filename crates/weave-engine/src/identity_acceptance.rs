@@ -47,6 +47,12 @@ pub(crate) fn reserved(graph: &str) -> bool {
 }
 pub(crate) fn require_external_graph(graph: &str) -> Result<()> {
     governance_graph::require_external_graph(graph)?;
+    if crate::registry::reserved(graph) {
+        return Err(err(
+            "E_RESERVED_NAMESPACE",
+            "the principal registry is written only through the registry API",
+        ));
+    }
     if reserved(graph) {
         Err(err(
             "E_RESERVED_NAMESPACE",
@@ -699,7 +705,9 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
                     ))?
                 );
                 from.readers = vec![host.principal.clone()];
+                from.reader_groups.clear();
                 to.readers = from.readers.clone();
+                to.reader_groups.clear();
                 for node in [&mut from, &mut to] {
                     for reference in &references {
                         if !node.derived_from.contains(reference) {
@@ -800,7 +808,10 @@ CREATE TABLE IF NOT EXISTS identity_receipts(actor TEXT NOT NULL,nonce TEXT NOT 
             return Ok(false);
         };
         match self.identity_policy(&reference) {
-            Ok(policy) => Ok(allowed(&policy.readers, &host.principal)),
+            Ok(policy) => Ok(crate::visibility::readers_admit(
+                &policy.readers,
+                &*self.access(host)?,
+            )),
             Err(error) if error.code == "E_IDENTITY_UNAVAILABLE" => Ok(false),
             Err(error) => Err(error),
         }
@@ -816,8 +827,8 @@ fn membership_graph(
     let mut edges = Vec::new();
     for (_, reference, source) in sources {
         let id = format!("member:{}", key(reference)?);
-        nodes.push(json!({"id":id,"entity_id":source.entity_id,"space_id":source.space_id,"type_id":"Member","context_scope":candidate.context.as_ref().map(|reference|ContextSelection::Pinned{reference:reference.clone()}).unwrap_or_default(),"properties":{"source_graph":reference.graph_id,"source_revision":reference.revision,"source_node":reference.node_id},"derived_nodes":[reference],"derived_from":candidate.evidence,"readers":source.readers}));
-        edges.push(json!({"id":format!("membership:{}",key(reference)?),"type_id":"Membership","predicate":"weave:identity-member","from":id,"to":id,"valid_time":candidate.valid_time,"assertion_context":candidate.context,"assertion_source":actor,"assertion_properties":{"candidate":candidate.id,"policy":candidate.policy},"derived_from":candidate.evidence,"readers":source.readers}));
+        nodes.push(json!({"id":id,"entity_id":source.entity_id,"space_id":source.space_id,"type_id":"Member","context_scope":candidate.context.as_ref().map(|reference|ContextSelection::Pinned{reference:reference.clone()}).unwrap_or_default(),"properties":{"source_graph":reference.graph_id,"source_revision":reference.revision,"source_node":reference.node_id},"derived_nodes":[reference],"derived_from":candidate.evidence,"readers":source.readers,"reader_groups":source.reader_groups}));
+        edges.push(json!({"id":format!("membership:{}",key(reference)?),"type_id":"Membership","predicate":"weave:identity-member","from":id,"to":id,"valid_time":candidate.valid_time,"assertion_context":candidate.context,"assertion_source":actor,"assertion_properties":{"candidate":candidate.id,"policy":candidate.policy},"derived_from":candidate.evidence,"readers":source.readers,"reader_groups":source.reader_groups}));
     }
     Ok(serde_json::from_value(
         json!({"schema":membership_schema(),"nodes":nodes,"edges":edges}),

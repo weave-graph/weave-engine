@@ -4,6 +4,49 @@ Release notes for tagged releases of weave-engine. Phases and epics are
 defined in [docs/ROADMAP.md](docs/ROADMAP.md). The supported profile is in
 [docs/STATUS.md](docs/STATUS.md).
 
+## Unreleased
+
+### B1 part 1: principal registry, group readers, graph ACLs and Discover
+
+Part of [#38](https://github.com/weave-graph/weave-engine/issues/38)
+([ADR-0007](docs/architecture/ADR-0007-identity-groups-and-tenancy.md),
+accepted with amendments; [guide](docs/REGISTRY.md)).
+
+| Identifier | Version |
+|---|---|
+| Protocol (`Program.version`), `weave-contract` crate | **1.1.0** (additive minor, [note](docs/contract/v1.1/README.md)) |
+| Store schema (`STORAGE_VERSION`) | **32** (marker-only upgrade from 31; store-31 binaries refuse it) |
+| Science API, Python client | 0.1.0, now emitting and accepting contract 1.1.0 |
+
+- An opt-in, one-way principal registry per store (`Engine::enable_registry`,
+  `Engine::apply_registry`, `weave-engine registry`), stored as facts in
+  `weave:registry`: users, groups, bounded nested membership, statuses,
+  group administrators and tenant administrators.
+- `reader_groups` on fact records, resolved against current membership on
+  every request; revocation is effective on the next request and rewrites
+  nothing. History is read under current membership.
+- Graph ACLs ordered Discover ≤ Read ≤ Write ≤ Administer, protected
+  branches, and `Engine::list_graphs`. A graph without Discover is
+  indistinguishable from a nonexistent graph.
+- Authority-reducing registry changes advance the signed-admission policy
+  epoch.
+- Stores without a registry are unchanged.
+
+**Vendor update for weave-language (contract 1.1.0).** Copy these files of
+`crates/weave-contract/` and update `vendor/manifest.json`:
+
+- changed: `Cargo.toml`, `src/algebra.rs`, `src/assertions.rs`,
+  `src/counterpart.rs`, `src/embedding.rs`, `src/identity.rs`, `src/lib.rs`,
+  `src/provenance.rs`, `src/rules.rs`, `src/schema.rs`, `src/temporal.rs`,
+  `src/versions.rs`, `tests/core_v1_fixtures.rs`,
+  `fixtures/core-v1/manifest.json`,
+  `fixtures/core-v1/negative/unknown-version.json`;
+- added: `fixtures/core-v1/negative/reader-groups-unknown-group.json`,
+  `fixtures/core-v1/negative/reader-groups-version-gated.json`,
+  `fixtures/core-v1/positive/fact-provenance-on-behalf-of.json`,
+  `fixtures/core-v1/positive/reader-groups-omitted-when-empty.json`;
+- removed: `fixtures/core-v1/negative/reserved-node-reader-groups.json`.
+
 ## 1.0.0: Phase A, the shared core (2026-10-20)
 
 Phase A delivers a local, embeddable temporal graph database with per-fact

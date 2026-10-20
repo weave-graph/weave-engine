@@ -3,7 +3,9 @@
 **Phase A is complete** (20 October 2026). The shared core is released as
 protocol **1.0.0**, which freezes [core contract v1](contract/core-v1.md)
 with the 0.24.0 feature set ([release notes](../CHANGELOG.md),
-[1.0 note](contract/v1.0/README.md)). The language reached Phase A parity in
+[1.0 note](contract/v1.0/README.md)). **Phase B has started:** B1 part 1
+adds the principal registry, group readers, graph ACLs and Discover as
+protocol **1.1.0** and store 32 ([below](#principals-groups-and-graph-acls-b1)). The language reached Phase A parity in
 LA1 (weave-language#3): each of the five exit questions fits in at most 15
 lines of `.weave`, and engine CI runs all five through `check_phase_a.py`.
 Source writes cannot set `readers` until LB1. A source `correct` of a
@@ -23,8 +25,8 @@ white-paper requirements remain tracked separately in the
 | Science API and CLI | `weave-science` 0.1.0; native Rust and one-request JSON process |
 | Python client | `weave_science` 0.1.0; Python 3.10+, no mandatory runtime dependencies |
 | MCP preview | `weave-mcp` 0.1.0; read-only local stdio MCP server (A7, [guide](MCP_PREVIEW.md)) |
-| Engine contract | 1.0.0, which freezes core v1 with the 0.24.0 feature set ([1.0](contract/v1.0/README.md)); 0.1.0–0.24.0 programs stay accepted with their published semantics. Existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)), and embedding facts with exact `nearest` and `similar_candidates` ([0.24](contract/v0.24/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
-| Native storage | Store 31; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)), which also holds embedding spaces and embeddings |
+| Engine contract | 1.1.0: core v1 as frozen in 1.0.0 with the 0.24.0 feature set ([1.0](contract/v1.0/README.md)), plus `reader_groups` and `FactProvenance.on_behalf_of` ([1.1](contract/v1.1/README.md)); 0.1.0–0.24.0 and 1.0.0 programs stay accepted with their published semantics. Existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)), and embedding facts with exact `nearest` and `similar_candidates` ([0.24](contract/v0.24/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
+| Native storage | Store 32; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)), which also holds embedding spaces and embeddings |
 | Platforms | Linux, macOS and Windows in the native CI profile |
 
 Experiments support durable import and correction with optimistic concurrency,
@@ -347,6 +349,40 @@ A6 is complete ([#16](https://github.com/weave-graph/weave-engine/issues/16)):
 - **Release.** The [CHANGELOG](../CHANGELOG.md) has the 1.0.0 release notes,
   covering limits and deferred scope.
 
+## Principals, groups and graph ACLs (B1)
+
+B1 ([#38](https://github.com/weave-graph/weave-engine/issues/38),
+[ADR-0007](architecture/ADR-0007-identity-groups-and-tenancy.md), accepted)
+is in progress. Part 1 is implemented ([guide](REGISTRY.md)):
+
+- **Registry.** An opt-in, one-way principal registry per store, stored as
+  facts in the reserved graph `weave:registry`, with users, groups (a team
+  is a group), nested membership (acyclic, at most 4 deep, at most 1,024
+  groups per principal, enforced at write time with `E_BUDGET`), statuses,
+  group administrators and the built-in `weave:administrators` group. IDs
+  are never reused. Registry history and "who was in G at T" are ordinary
+  `as_of` queries of the registry graph.
+- **Group readers.** `reader_groups` (protocol 1.1.0) on every fact record,
+  resolved against current membership when each request runs. Removing a
+  member hides group facts on the next request, including pinned and as-of
+  history, with no stored revision rewritten. Writes may name only groups
+  the writer can discover; anything else fails with one `E_UNAVAILABLE`.
+- **Graph ACLs and Discover.** Discover ≤ Read ≤ Write ≤ Administer per
+  graph, for users and groups, plus protected branches with branch write
+  ACLs. Graphs are closed by default. A graph without Discover gives exactly
+  the nonexistent-graph error for every operation and is absent from
+  `Engine::list_graphs`; Discover without the needed permission gives
+  `E_FORBIDDEN`.
+- **Local stores** without a registry behave exactly as before; the existing
+  authorization and influence suites pass unchanged.
+- **Store 32.** Store 31 upgrades by moving the marker; no row is rewritten
+  and store-31 binaries refuse store 32 (`check_registry_store_migration.py`
+  in the compatibility workflow, against the v1.0.0 binary).
+
+Remaining for B1: agents owned by a principal with a narrowed delegated
+scope, `on_behalf_of` on their writes, the escalation tests and the full
+permission matrix.
+
 ## Verified evidence
 
 The implementation at `3bbd9d87f708c7aa3d5a2fb2afccb01be0789340` was merged at
@@ -407,9 +443,9 @@ addresses:
   remain for C5.
 
 
-- **Sharing (Phase B).** There is no server, no authentication on the main API,
-  no groups or agent identities, and leakage protection is enforced at read time
-  only.
+- **Sharing (Phase B).** There is no server and no authentication on the main
+  API. Users, groups and graph ACLs exist (B1 part 1); agent identities do not
+  yet, and leakage protection is enforced at read time only.
 - **Scale (Phase C).** There is no telemetry ingestion and no approximate vector
   index. Measured workloads are 10k–100k objects.
 

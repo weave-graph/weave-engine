@@ -126,6 +126,7 @@ mod tests {
                 .cloned()
                 .map(|mut e| {
                     e.readers = vec!["reader".into()];
+                    e.reader_groups.clear();
                     e
                 })
                 .collect::<Vec<_>>()

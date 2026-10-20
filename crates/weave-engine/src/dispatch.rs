@@ -95,10 +95,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
                 .subscriptions
                 .iter()
                 .any(|s| !valid_id(&s.graph_id) || !valid_id(&s.branch_id))
-            || manifest
-                .output_graphs
-                .iter()
-                .any(|g| !authority.writable_graphs.contains(g))
+            || !self.all_writable(authority, &manifest.output_graphs)?
             || manifest.effect_destinations.iter().any(|d| !valid_id(d))
         {
             return Err(err(
@@ -171,10 +168,7 @@ INSERT OR IGNORE INTO engine_identity VALUES (1,'urn:weave:replica:' || lower(he
         })?;
         if manifest.id != id
             || manifest.principal != host.principal
-            || manifest
-                .output_graphs
-                .iter()
-                .any(|g| !host.writable_graphs.contains(g))
+            || !self.all_writable(host, &manifest.output_graphs)?
         {
             return Err(unavailable());
         }

@@ -55,18 +55,23 @@ fn selection(program: &Program) -> Result<&ClusterRequest> {
 fn restrict(graph: &mut GraphData, principal: &str) {
     for n in &mut graph.nodes {
         n.readers = vec![principal.into()];
+        n.reader_groups.clear();
     }
     for e in &mut graph.edges {
         e.readers = vec![principal.into()];
+        e.reader_groups.clear();
     }
     for e in &mut graph.structural_edges {
         e.readers = vec![principal.into()];
+        e.reader_groups.clear();
     }
     for a in &mut graph.assertions {
         a.readers = vec![principal.into()];
+        a.reader_groups.clear();
     }
     for a in &mut graph.attachments {
         a.readers = vec![principal.into()];
+        a.reader_groups.clear();
     }
 }
 impl Engine {

@@ -390,7 +390,7 @@ impl Engine {
         }
         let mut included = HashSet::new();
         for record in &capsule.revisions {
-            if !host.writable_graphs.contains(&record.graph_id) {
+            if !self.graph_writable(host, &record.graph_id, None)? {
                 return Err(err(
                     "E_FORBIDDEN",
                     "host has not granted capsule storage authority",
@@ -606,7 +606,7 @@ impl Engine {
         if !valid_id(branch) || !valid_id(&host.principal) {
             return Err(err("E_ID", "branch and principal required"));
         }
-        if !host.writable_graphs.contains(&reference.graph_id) {
+        if !self.graph_writable(host, &reference.graph_id, Some(branch))? {
             return Err(err(
                 "E_FORBIDDEN",
                 "host has not granted acceptance authority",

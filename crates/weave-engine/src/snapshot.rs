@@ -33,12 +33,7 @@ impl Engine {
         for commit in commits {
             identity_acceptance::require_external_graph(&commit.graph_id)?;
             identity_acceptance::require_external_schema(&commit.data)?;
-            if !host.writable_graphs.contains(&commit.graph_id) {
-                return Err(err(
-                    "E_FORBIDDEN",
-                    "host has not granted graph write authority",
-                ));
-            }
+            self.require_branch_write(host, &commit.graph_id, &commit.branch_id)?;
             if !valid_id(&commit.graph_id)
                 || !valid_id(&commit.branch_id)
                 || !graphs.insert(&commit.graph_id)
@@ -46,6 +41,7 @@ impl Engine {
                 return Err(err("E_BATCH", "batch graph IDs must be valid and unique"));
             }
             validate_graph(&commit.data)?;
+            self.validate_reader_groups(facts::data_reader_groups(&commit.data), host)?;
             reject_snapshot_embeddings(&commit.data)?;
             if let Some(schema) = &commit.data.schema {
                 let key = (schema.id.clone(), schema.revision.clone());

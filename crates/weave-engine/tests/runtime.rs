@@ -22,6 +22,7 @@ fn node(id: &str, entity: &str, space: &str) -> Node {
         properties: BTreeMap::new(),
         metadata: vec![],
         readers: vec![],
+        reader_groups: Vec::new(),
     }
 }
 fn data() -> GraphData {
@@ -60,6 +61,7 @@ fn data() -> GraphData {
             properties: BTreeMap::new(),
             metadata: vec![],
             readers: vec![],
+            reader_groups: Vec::new(),
             derived_from: vec![],
             derivations: vec![],
         }],

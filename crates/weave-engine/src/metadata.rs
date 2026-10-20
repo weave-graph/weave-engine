@@ -200,18 +200,18 @@ impl Engine {
         prune_attachments(&mut graph);
 
         // This access path has its own visibility; it does not relabel the stored target graph.
-        graph
-            .nodes
-            .iter_mut()
-            .for_each(|n| n.readers = vec![principal.principal.clone()]);
-        graph
-            .edges
-            .iter_mut()
-            .for_each(|e| e.readers = vec![principal.principal.clone()]);
-        graph
-            .attachments
-            .iter_mut()
-            .for_each(|a| a.readers = vec![principal.principal.clone()]);
+        graph.nodes.iter_mut().for_each(|n| {
+            n.readers = vec![principal.principal.clone()];
+            n.reader_groups.clear();
+        });
+        graph.edges.iter_mut().for_each(|e| {
+            e.readers = vec![principal.principal.clone()];
+            e.reader_groups.clear();
+        });
+        graph.attachments.iter_mut().for_each(|a| {
+            a.readers = vec![principal.principal.clone()];
+            a.reader_groups.clear();
+        });
         input.snapshots =
             BTreeMap::from([(reference.graph_id.clone(), reference.revision.clone())]);
         input.graph = graph;
@@ -601,6 +601,7 @@ pub(crate) fn carry_node_attachments(
             };
         }
         copy.readers = vec![principal.principal.clone()];
+        copy.reader_groups.clear();
         let source = input
             .attachment_origins
             .get(&attachment.id)

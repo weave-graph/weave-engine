@@ -3,7 +3,8 @@
 //! list each gate had before, copied from the 0.24.0 source (where `VERSION`
 //! was 0.24.0), and the test requires that every gate accepts exactly the same
 //! versions as before, for every version in `SUPPORTED_VERSIONS`, with 1.0.0
-//! accepted wherever the current version was. A future version bump touches
+//! and every later version accepted wherever the current version was. A
+//! future version bump touches
 //! the version table, not this list.
 //!
 //! The behavioral test below runs one program per gated feature under every
@@ -450,10 +451,13 @@ const GATES: &[Gate] = &[
 
 #[test]
 fn every_gate_accepts_exactly_the_versions_it_accepted_before() {
-    assert_eq!(VERSION, "1.0.0");
+    // `old_current` gates accepted the current version at the 1.0.0 cut, so
+    // they accept 1.0.0 and every later version (1.1.0, B1).
+    assert!(version_at_least(VERSION, "1.0.0"));
     for gate in GATES {
         for version in SUPPORTED_VERSIONS {
-            let before = gate.old.contains(version) || (gate.old_current && *version == VERSION);
+            let before = gate.old.contains(version)
+                || (gate.old_current && version_at_least(version, "1.0.0"));
             assert_eq!(
                 version_at_least(version, gate.introduced),
                 before,

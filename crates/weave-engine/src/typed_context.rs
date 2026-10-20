@@ -82,7 +82,7 @@ impl Engine {
         let Some(data) = self.load(&reference.graph_id, &reference.revision)? else {
             return Ok(None);
         };
-        let data = visible(data, &host.principal);
+        let data = visible(data, &*self.access(host)?);
         if data.profile != GraphProfile::Explicit
             || !self.context_typing_visible(&data, host, visiting, budget, depth + 1)?
             || !self.graph_influence_visible(&data, host, visiting, budget, depth + 1)?

@@ -1,4 +1,5 @@
-//! Store 30 → 31 (A4, ADR-0006): embedding spaces and embeddings become
+//! Store 30 → 31 (A4, ADR-0006), now reaching the current store: embedding
+//! spaces and embeddings become
 //! fact kinds of the existing fact log. No table changes and no row is
 //! rewritten; the marker moves so that a store-30 binary refuses a store
 //! that may hold kinds it cannot read. Genuine old binaries and real process
@@ -84,7 +85,7 @@ fn downgrade_to_30(path: &std::path::Path) {
 
 #[test]
 fn populated_store_30_upgrades_without_rewriting_facts() {
-    assert_eq!(STORAGE_VERSION, 31);
+    assert_eq!(STORAGE_VERSION, 32);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("store.db");
     let clock = Arc::new(ManualClock::new(10));
@@ -97,7 +98,7 @@ fn populated_store_30_upgrades_without_rewriting_facts() {
     assert_eq!(old.0, 30);
     let mut e = Engine::open_with_clock(&path, clock.clone()).unwrap();
     let new = rows(&path);
-    assert_eq!(new.0, 31);
+    assert_eq!(new.0, STORAGE_VERSION);
     assert_eq!(
         (&new.1, &new.2, &new.3),
         (&old.1, &old.2, &old.3),
@@ -121,7 +122,7 @@ fn populated_store_30_upgrades_without_rewriting_facts() {
     drop(e);
     // A store-30 binary refuses the store from here on (it refuses any marker
     // above 30 the same way, see `fact_store_migration.rs`).
-    assert_eq!(rows(&path).0, 31);
+    assert_eq!(rows(&path).0, STORAGE_VERSION);
 }
 
 #[cfg(feature = "recovery-testing")]
@@ -141,7 +142,7 @@ fn interrupted_upgrade_leaves_store_30_untouched() {
     assert!(crashed.is_err());
     assert_eq!(rows(&path), old, "nothing of the upgrade is visible");
     let mut e = Engine::open_with_clock(&path, Arc::new(ManualClock::new(10))).unwrap();
-    assert_eq!(rows(&path).0, 31);
+    assert_eq!(rows(&path).0, STORAGE_VERSION);
     assert_eq!(pinned(&mut e, &revisions), before);
 }
 
