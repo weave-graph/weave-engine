@@ -7,7 +7,9 @@ with the 0.24.0 feature set ([release notes](../CHANGELOG.md),
 the principal registry with users, groups and agents, group readers, graph
 ACLs and Discover, as protocol **1.1.0** and store 32
 ([below](#principals-groups-agents-and-graph-acls-b1)),
-and B3 part 1 adds the authenticated multi-tenant `weave-service` ([below](#authenticated-service-b3)). The language reached Phase A parity in
+B3 part 1 adds the authenticated multi-tenant `weave-service` ([below](#authenticated-service-b3)),
+and B2 part 1 adds a generated noninterference harness over every operator
+([below](#derived-fact-leakage-protection-b2)). The language reached Phase A parity in
 LA1 (weave-language#3): each of the five exit questions fits in at most 15
 lines of `.weave`, and engine CI runs all five through `check_phase_a.py`.
 Source writes cannot set `readers` until LB1. A source `correct` of a
@@ -463,6 +465,44 @@ binary ([guide](SERVICE.md)):
 
 B3 is complete.
 
+## Derived-fact leakage protection (B2)
+
+B2 ([#5](https://github.com/weave-graph/weave-engine/issues/5),
+[ADR-0008](architecture/ADR-0008-write-time-propagation-and-release-policies.md),
+accepted) is in progress. Part 1 is implemented:
+
+- **Noninterference harness.** Generated pairs of stores that differ only in
+  facts the readers under test cannot see, in local and registry stores
+  (literal readers, `reader_groups`, nested groups, hidden registry state and
+  an undiscoverable graph). Every `GraphExpression` operator (28 kinds) and
+  every science analysis (5) is checked: values, counts, ranks,
+  explanations, coverage, diagnostics, `fact_provenance` and errors must be
+  identical for each reader under test, after revision identity is
+  normalized (ADR-0008 section 7). Each operator must also be reached by the
+  hidden facts. Cases per operator: 40 in the debug suite, 500 in the PR CI
+  job and 10,000 in the scheduled full-count job
+  ([measured counts](measurements/2026-10-20-noninterference.json)).
+- **Declared channels.** `recorded_query`, `accepted_graph` and
+  `accepted_history` answer one bit about hidden records in the revision
+  they select; revision identity, work budgets, timing and size, write-path
+  ID occupancy and disclosed writer identities are listed in
+  [SECURITY.md](../SECURITY.md).
+- **Fixes.** `reason` explanations no longer choose among equivalent
+  witnesses in an order that follows revision IDs, and proof conjunctions
+  are flat and canonically ordered, so hidden records no longer change a
+  visible witness or push a result over the carrier depth budget.
+- **Writes.** Generated writes in registry stores (corrections and
+  retractions of visible, hidden and missing records, and new records) give
+  identical outcomes with and without hidden facts. The one exception is
+  declared: a retraction that a hidden record depends on fails with the same
+  `E_DEPENDENT_FACT` as for a visible dependent, and changes nothing.
+
+Not yet enforced: write-time propagation (a declared derivation with
+broader readers than its inputs is still accepted, and the write path still
+compares changes with live versions the writer cannot read; ADR-0008
+sections 2 to 4, part 2); persisted analytics, rankings and embeddings with
+their inputs' restrictions, and release policies (sections 5 and 6, part 3).
+
 ## Verified evidence
 
 The implementation at `3bbd9d87f708c7aa3d5a2fb2afccb01be0789340` was merged at
@@ -528,7 +568,8 @@ addresses:
   authenticated users and agents of isolated tenants with API tokens and an
   audit log. Users, groups, agents and graph ACLs exist (B1); OIDC and signed
   agent capabilities do not yet, and leakage protection is enforced at read
-  time only (write-time propagation is B2).
+  time only (B2 part 1 adds a generated noninterference check of every
+  operator; write-time propagation is part 2).
 - **Scale (Phase C).** There is no telemetry ingestion and no approximate vector
   index. Measured workloads are 10k–100k objects.
 

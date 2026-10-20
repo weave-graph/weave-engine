@@ -298,6 +298,53 @@ fn make_group(
         snapshot_premises: gates.snapshots,
     })
 }
+const AND: &str = "weave:influence:and/v1";
+
+/// The explanation inputs of the conjunction of two alternatives. Nested
+/// conjunctions are flattened into one duplicate-free list, ordered by the
+/// inputs with their revision IDs blanked first. Operators fold conjunctions
+/// in record order, and record order follows generated IDs, which follow
+/// revision IDs; a nested pair encoding therefore made an alternative's shape
+/// and depth (and so the depth budget) depend on facts a reader cannot see
+/// (B2, #5). The gates are unchanged: they are the union of both sides.
+fn conjuncts(x: &Alternative, y: &Alternative) -> Vec<serde_json::Value> {
+    fn blank(value: &serde_json::Value) -> serde_json::Value {
+        match value {
+            serde_json::Value::Array(items) => {
+                serde_json::Value::Array(items.iter().map(blank).collect())
+            }
+            serde_json::Value::Object(map) => serde_json::Value::Object(
+                map.iter()
+                    .map(|(k, v)| {
+                        if k == "revision" {
+                            (k.clone(), serde_json::Value::Null)
+                        } else {
+                            (k.clone(), blank(v))
+                        }
+                    })
+                    .collect(),
+            ),
+            other => other.clone(),
+        }
+    }
+    let mut inputs = Vec::new();
+    for group in [x, y] {
+        match group.parameters.get("inputs") {
+            Some(serde_json::Value::Array(nested)) if group.operator == AND => {
+                inputs.extend(nested.iter().cloned())
+            }
+            _ => inputs.push(serde_json::to_value(group).expect("carrier serialization")),
+        }
+    }
+    let mut keyed: Vec<(String, String, serde_json::Value)> = inputs
+        .into_iter()
+        .map(|v| (blank(&v).to_string(), v.to_string(), v))
+        .collect();
+    keyed.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
+    keyed.dedup_by(|a, b| a.1 == b.1);
+    keyed.into_iter().map(|(_, _, v)| v).collect()
+}
+
 /// Whole graph Union uses this conjunction, never proof disjunction.
 pub fn conjunction(a: &Carrier, b: &Carrier, budget: &mut Budget) -> Result<Carrier> {
     let a = canonicalize(a, budget)?;
@@ -349,12 +396,7 @@ pub fn conjunction(a: &Carrier, b: &Carrier, budget: &mut Budget) -> Result<Carr
                 let xr = group_refs(x, budget)?;
                 let yr = group_refs(y, budget)?;
                 let gates = combine_refs(&xr, &yr, budget)?;
-                groups.push(make_group(
-                    "weave:influence:and/v1",
-                    gates,
-                    &(x, y),
-                    budget,
-                )?);
+                groups.push(make_group(AND, gates, &conjuncts(x, y), budget)?);
             }
         }
         groups
@@ -715,7 +757,12 @@ mod tests {
             "E_INFLUENCE_BUDGET"
         );
         let a = groups(8);
-        let b = groups(16);
+        // Distinct right-hand groups: a conjunction is a set of conjuncts, so
+        // `and(x, y)` and `and(y, x)` are one alternative (B2).
+        let mut b = groups(16);
+        for g in &mut b.alternatives {
+            g.operator = format!("right-{}", g.operator);
+        }
         assert_eq!(
             conjunction(&a, &b, &mut budget())
                 .unwrap()

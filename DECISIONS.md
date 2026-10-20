@@ -1791,3 +1791,233 @@ the engine, against 0.45 ms after any later small write. The harness seeds
 each graph and then makes one small write, so it measures steady state.
 This is an engine (A2 fact store) observation, reported rather than changed
 here.
+
+### 2026-10-20 — #5 B2 — Delivery in three parts; ADR-0008 accepted with part 1
+
+Part 1 is ADR-0008, the noninterference harness over every operator and
+science analysis, its CI tiers, and the fixes the harness finds. Part 2 is
+write-time propagation: the exact conjunction carrier, declared derivations
+that may not widen their inputs, corrections that may not silently widen,
+and a write path that never reveals hidden records. It is the contract change
+(protocol 1.2.0). Part 3 is persisted analytics and rankings with their
+inputs' restrictions, and release policies, and closes #5. The harness lands
+first because it mostly adds tests and then guards the two later parts. The
+ADR is written as accepted, like ADR-0007, because part 1 already implements
+its section 7 and parts 2 and 3 need it merged.
+
+### 2026-10-20 — #5 B2 — A seeded generator, not a property-testing crate
+
+The harness draws each store pair from one seed with SplitMix64, as the A5
+generator does, and a failing case is replayed with `WEAVE_NI_SEED`. A crate
+such as proptest would add a dependency to the workspace lockfile and give
+shrinking, but the inputs are whole stores plus plans with engine-specific
+shapes, and every case found so far was diagnosed from its seed and a dump of
+both outputs (`WEAVE_NI_DUMP`). One shared module
+(`crates/weave-engine/tests/support/noninterference.rs`) builds the pairs for
+both the engine and the science harness, through `#[path]`.
+
+### 2026-10-20 — #5 B2 — What the harness compares, and what it normalizes
+
+Each case compares a reader's whole outcome from the two stores: the result
+JSON (values, counts, ranks, explanations, coverage, diagnostics,
+`fact_provenance`) or the error code and message. Only revision identity is
+normalized, because ADR-0001 makes revision IDs content-derived over every
+fact. Revisions become labels for the visible state they stand for; the
+store's random replica ID and head-observation IDs are blanked; generated IDs
+that digest a value (and so its revision IDs) are compared up to a consistent
+renaming, found by colour refinement with individualization; arrays are
+compared as multisets, pins of one visible state as a set, and nested proof
+conjunctions as one set. Rank orders (`neighbors`, `candidates`, change
+entries) are compared exactly. Anything else that differs fails the case.
+
+Hidden facts are written as their own revisions after each visible step, at
+the same recorded time. A hidden write at a later time would make an `as_of`
+read and a head read of one visible state name two revisions in that store
+only, and operators that combine them then keep both copies (for example
+`union`). That is the declared revision-identity channel, not a leak of
+content, and writing at the same time keeps every label and time on one
+revision so the harness can require equality everywhere else.
+
+### 2026-10-20 — #5 B2 — Case counts and CI tiers
+
+A case is one generated store pair and one generated plan, checked for both
+readers under test and for sensitivity. `WEAVE_NI_CASES` sets the cases per
+operator. The debug workspace suite runs 40, which takes about 15 s. A new
+`noninterference` job in `ci.yml` runs 500 per operator and per science
+analysis on every PR, optimized, in about 30 s on an 8-thread host. The
+scheduled `noninterference-full.yml` runs 10,000 nightly, on demand and when
+the harness changes, and uploads the counts. Each world serves 10 plans per
+operator; the governance and identity operators, which run only in local
+stores, get 20 in each local world, so every operator reaches its count.
+
+### 2026-10-20 — #5 B2 — Sensitivity is part of the property
+
+A harness whose hidden facts never reach an operator would pass vacuously.
+`mallory` can read every record of both stores, and each operator must give
+`mallory` different outcomes from the two stores on some cases. Visible
+restricted records therefore list `mallory` too, and in registry stores
+`mallory` is in every group; this changes nothing for the readers under test.
+
+### 2026-10-20 — #5 B2 — Whole-revision operators are declared, not failed
+
+`recorded_query`, `accepted_graph` and `accepted_history` serve a revision
+only to a reader who can see all of it, by ADR-0002 and by the accepted-view
+design. A hidden record in the selected revision turns a result into their
+single "unavailable" error. That is one bit, it is documented, and changing
+it would change what those operators mean. The harness allows exactly that
+error in the store with hidden facts, counts those outcomes as `declared`,
+and still requires equality otherwise. SECURITY.md lists the channel.
+
+### 2026-10-20 — #5 B2 — Governance and identity operators run in local stores only
+
+`accepted_graph`, `accepted_history` and `resolve_identity` need governance
+roots, signed approvals and identity policies, which are peripheral
+subsystems that registry stores do not extend (B1). They are generated in the
+local-profile half of the worlds, with twice the plans. Every other operator
+runs in both profiles. The agent ceiling and revocation obligations of
+ADR-0007 section 10 (items 5 and 6) join the harness in B2 part 2: B1 part 2
+(agents, #69) merged while part 1 was being finished. Items 1 to 3 (group
+readers, hidden registry state, Discover) are
+covered now.
+
+### 2026-10-20 — #5 B2 — Finding: rule explanations followed revision IDs
+
+The harness found that `reason` could show a different witness for the same
+conclusion when a hidden record was in the revision. Saturation keeps the
+first proof it finds for a conclusion and leaf set, and it visited a fact's
+proofs in the order of a digest that covers revision IDs. Saturation now
+visits proofs in the order of their records without revision IDs, then by
+the digest. No hidden content was exposed, but the visible explanation
+changed. `rule_witnesses_do_not_depend_on_hidden_records` fails without the
+fix. Results of the same plan on unchanged data can show another of the
+equivalent witnesses than before; nothing stored is reinterpreted.
+
+### 2026-10-20 — #5 B2 — Finding: proof conjunctions nested in record order
+
+The 10,000-case run found a `support` over a `window` that succeeded in one
+store and failed with `E_INFLUENCE_BUDGET` in the other. Proof conjunctions
+were encoded as nested pairs, folded in record order, which follows generated
+IDs and so revision IDs. The nesting depth, and with it the carrier depth
+budget of 32, depended on hidden records. A conjunction of two alternatives
+now lists its conjuncts flat, without duplicates, ordered by the conjuncts
+with revision IDs blanked; the operator label and the gates are unchanged,
+and a stored nested pair is read as the same conjunction. Twelve conjuncts
+used to exceed the depth budget and are now well inside it.
+`proof_conjunctions_do_not_depend_on_hidden_records` covers both.
+
+### 2026-10-20 — #5 B2 — Finding: the write path compares with hidden versions (fixed in part 2)
+
+Reviewing the write path for risk 1 showed that it reveals more than ID
+occupancy: an identical `assert` of a hidden fact is a no-op, `correct` and
+`retract` act on hidden facts, references to hidden records validate, and
+`reconcile_facts` plans by comparing with them (ADR-0008 section 4). The fix
+treats an unreadable live version as absent except for occupancy, with an
+exception for the principal that recorded that version so A5 importers keep
+working. It changes write semantics for every writer, so it ships with the
+rest of write-time propagation in part 2, and SECURITY.md states the gap
+until then.
+
+### 2026-10-20 — #5 B2 — Risk 1: record-ID occupancy stays a declared channel
+
+An `assert` of an ID that a hidden live record holds must fail, because IDs
+are unique per graph. After part 2 it fails with one `E_CONFLICT` whatever
+the hidden record's kind or content, so the channel is one bit per guessed
+ID, for principals with Write on the graph. Per-writer ID namespaces would
+close it but change every fact identity, including the A5 row keys that make
+imports idempotent. B4 tools generate record IDs on the server, so agents
+never choose them. Retraction dependents and structural-identity reuse are
+the same class and are declared with it.
+
+### 2026-10-20 — #5 B2 — Risk 2: a correction may not silently widen readers
+
+A `correct` whose clause is broader than the clause it replaces will fail
+with `E_READERS_WIDENED` unless the change sets `widen_readers: true`
+(protocol 1.2.0, part 2). Rejecting instead of requiring nothing is the safe
+default for the case that motivated it: an omitted `readers` on a
+correction is how the weave-language#19 risk publishes a restricted fact.
+"Broader" is syntactic (public where the old one was not, or a principal or
+group the old one lacks), so it never depends on membership the writer
+cannot see. The check is gated on 1.2.0, because core v1 section 11.4 keeps
+the meaning of saved programs: a 1.1.0 correction still replaces its
+readers. The compiler emits the version it vendors, so source corrections
+are protected from the 1.2.0 vendor update on.
+
+### 2026-10-20 — #5 B2 — Which fixes follow the version policy
+
+Core v1 section 11.4 says rejecting input a published version accepted
+needs a new version. B2 follows it for input rules that guard against a
+writer's mistakes (declared derivations, widening corrections): a writer who
+can read the inputs could copy them anyway, so a version gate loses nothing.
+The write-path rule of ADR-0008 section 4 is authorization against writers
+who may not read a record; a version gate would let any of them bypass it by
+declaring 1.1.0, so it applies to every version, like the earlier
+cached-receipt fix. The two part-1 fixes change only the canonical order and
+shape of explanations, not their meaning, and apply to every version
+without a protocol bump. Their contract files (`src/rules.rs`,
+`src/carrier_algebra.rs`) still change for the language vendor.
+
+### 2026-10-20 — #5 B2 — Risk 3: budgets that count hidden records stay declared
+
+The read budget, the `nearest` scan budget and the proof-traversal budget
+count every record an operation reads. Counting only visible records would
+leave the work on hidden records unbounded, which is what the budgets exist
+to prevent. They are listed in SECURITY.md with timing and size. The harness
+keeps its stores far below every budget, so a budget error it sees is a
+finding, as the conjunction-depth case was.
+
+### 2026-10-20 — #5 B2 — A hidden dependent refuses a retraction, uniformly
+
+Retracting a fact that a live fact the writer cannot read depends on fails
+with `E_DEPENDENT_FACT` (B3 logged this risk for B2). There were three
+options:
+
+- **Cascade** under the dependent's restriction. The writer would delete
+  records it cannot see or name, which ADR-0004's "no cascading retraction"
+  decision rejected for visible records, and the owner of the hidden record
+  loses data silently.
+- **Orphan**, leaving the hidden dependent live with a dangling reference.
+  Reads would drop it like any record whose endpoint is gone, but it would
+  break the invariant that every live record's references are live, which
+  validation, change sets and integrity checks rely on. It would also
+  reappear if the referenced ID were asserted again.
+- **Refuse uniformly.** This keeps every record intact and costs one bit:
+  "something depends on this record." Only a principal with Write on the
+  graph learns it, and only about a record it can read.
+
+B2 refuses. The error is the same code and message for a hidden and for a
+visible dependent, names neither, and changes nothing. That is the case in
+local and registry stores. `a_hidden_dependent_refuses_a_retraction_like_a_visible_one`
+checks both kinds of store, and the write-outcome harness allows exactly
+this error and nothing else. The bit is declared with ID occupancy in
+ADR-0008 section 4 and SECURITY.md.
+
+### 2026-10-20 — #5 B2 — Writes are in the harness, starting with registry stores
+
+`hidden_facts_never_change_a_writers_outcome_in_registry_stores` runs
+generated writes by a principal with Write on the graph: assertions of new
+records, corrections and retractions of visible, hidden and missing records.
+It covers the B3 rule (#70) that correcting or retracting a fact the writer
+cannot read fails exactly as for a missing one. A case whose outcomes differ
+must be the uniform dependent refusal, which ends that world, because the two
+stores' visible states then differ. Assertions of hidden IDs, references to
+hidden records and local stores are left out for now. They still compare with
+hidden versions, which ADR-0008 section 4 fixes in part 2, and part 2 adds
+them to the generator.
+
+The registry worlds' trusted writer (`admin`) is now a reader of every
+restricted record, through `readers` and group membership. Otherwise #70
+would forbid it to correct them during setup. This changes nothing for the
+readers under test.
+
+### 2026-10-20 — #5 B2 — Risk 1 in the engine for local and embedded use
+
+B3 closed ID occupancy for service clients: a non-administrator may assert
+only IDs minted for it by `POST /v1/ids`. The engine adds no minting of its
+own. In the local and embedded profile the host is trusted (SECURITY.md), it
+chooses IDs, and with no registry there is no Read boundary between writers.
+In a registry store embedded without the service, the host is in the same
+position as the service and can mint IDs the same way. What the engine owes
+every profile is ADR-0008 section 4 (part 2): an `assert` of an ID that a
+hidden record holds fails with one `E_CONFLICT`, whatever the hidden record's
+kind or content, so a writer who chooses IDs learns occupancy and nothing
+else. That remaining bit is declared.

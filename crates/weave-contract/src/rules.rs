@@ -107,6 +107,44 @@ fn proof_key(proof: &Proof) -> String {
         ))
     }
 }
+/// The order in which saturation visits a fact's proofs. The first proof
+/// found for a conclusion and leaf set is its kept witness, so this order
+/// decides which trace an explanation shows. It compares the proofs' records
+/// without their revision IDs first: revision IDs are content-derived over
+/// every fact of a graph, so ordering by `proof_key` alone let facts a reader
+/// cannot see choose the witness that reader is shown (B2, #5).
+fn visit_order(proofs: &BTreeMap<String, Proof>) -> Vec<&Proof> {
+    let mut ordered: Vec<(String, &String, &Proof)> = proofs
+        .iter()
+        .map(|(key, proof)| {
+            let records = (
+                proof
+                    .leaves
+                    .iter()
+                    .map(|l| (&l.graph_id, &l.assertion_id))
+                    .collect::<Vec<_>>(),
+                proof
+                    .nodes
+                    .iter()
+                    .map(|n| (&n.graph_id, &n.node_id))
+                    .collect::<Vec<_>>(),
+                proof
+                    .snapshots
+                    .iter()
+                    .map(|s| &s.graph_id)
+                    .collect::<Vec<_>>(),
+                proof.contextual,
+            );
+            (
+                serde_json::to_string(&records).expect("rule records serialize"),
+                key,
+                proof,
+            )
+        })
+        .collect();
+    ordered.sort_by(|a, b| (&a.0, a.1).cmp(&(&b.0, b.1)));
+    ordered.into_iter().map(|(_, _, proof)| proof).collect()
+}
 fn insert(
     facts: &mut Facts,
     fact: FactKey,
@@ -493,7 +531,7 @@ pub fn reason(
                         if end.is_some_and(|end| start >= end) {
                             continue;
                         }
-                        for proof in proofs.values() {
+                        for proof in visit_order(proofs) {
                             tick(&mut steps, limits.max_steps)?;
                             if proof.contextual {
                                 return Err(error(

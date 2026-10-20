@@ -12,6 +12,9 @@ Protocol [0.15](contract/v0.15/README.md) separates graph membership from the de
 | Relationship membership | join endpoint wrappers | `tests/identity_acceptance.rs`: endpoint-only persistence, then current relationship policy revocation |
 | Empty metadata | selected attachment path carried before target lookup | `tests/influence_composition.rs`: unavailable private path through unknown Support, persisted without carrier/readers |
 | Cached current authority | common stored-result revalidation | `tests/identity_acceptance.rs`: empty influenced cached view/changes invalidated without head movement |
+| Generated noninterference (B2) | every `GraphExpression` kind and science analysis over generated store pairs ([ADR-0008](architecture/ADR-0008-write-time-propagation-and-release-policies.md) section 7) | `tests/noninterference.rs`, `weave-science/tests/noninterference.rs`: identical outcomes for readers who cannot see the hidden facts; rule witnesses and proof conjunctions independent of revision IDs |
+
+A conjunction of two proof alternatives (`weave:influence:and/v1`) lists its conjuncts flat, without duplicates, ordered by the conjuncts with their revision IDs blanked (B2). Earlier results nested pairs in record order, so their depth followed revision IDs. A stored nested pair still reads as the same conjunction.
 
 Conservative AND gates can deny a complete summary when one supporting alternative becomes unavailable. This is intentional until a release policy and more precise value-level alternatives are defined. The model does not prevent a trusted author from manually reauthoring facts; it protects engine-generated proof-carrying values and rejects serialized attempts to mint authority. Whole JSON storage also exposes the already documented physical cost of reading private content, without a timing/RSS noninterference claim.
 

@@ -1,0 +1,408 @@
+{
+ "command": "WEAVE_NI_CASES=10000 cargo test --release --locked -p weave-engine --test noninterference -- --nocapture; same for -p weave-science",
+ "date": "2026-10-20",
+ "engine": {
+  "cases_per_operator_target": 10000,
+  "operators": {
+   "accepted_graph": {
+    "cases": 10000,
+    "declared": 592,
+    "error_codes": {
+     "E_GOV_UNAVAILABLE": 12806
+    },
+    "errors": 12806,
+    "ok": 7194,
+    "sensitive": 3358
+   },
+   "accepted_history": {
+    "cases": 10000,
+    "declared": 503,
+    "error_codes": {
+     "E_GOV_HISTORY_UNAVAILABLE": 10579
+    },
+    "errors": 10579,
+    "ok": 9421,
+    "sensitive": 2716
+   },
+   "as_of": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_UNAVAILABLE": 4040
+    },
+    "errors": 4040,
+    "ok": 15960,
+    "sensitive": 5175
+   },
+   "changes": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 1108,
+     "E_UNAVAILABLE": 800
+    },
+    "errors": 1908,
+    "ok": 18092,
+    "sensitive": 4827
+   },
+   "cluster": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {},
+    "errors": 0,
+    "ok": 20000,
+    "sensitive": 6746
+   },
+   "context": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 160,
+     "E_SPACE": 92,
+     "E_UNAVAILABLE": 1983
+    },
+    "errors": 2235,
+    "ok": 17765,
+    "sensitive": 5636
+   },
+   "counterparts": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 137,
+     "E_IDENTITY": 15,
+     "E_SPACE": 77,
+     "E_UNAVAILABLE": 2089
+    },
+    "errors": 2318,
+    "ok": 17682,
+    "sensitive": 4920
+   },
+   "current_view": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_UNAVAILABLE": 16588
+    },
+    "errors": 16588,
+    "ok": 3412,
+    "sensitive": 1170
+   },
+   "diff": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 168,
+     "E_SPACE": 112,
+     "E_UNAVAILABLE": 1993
+    },
+    "errors": 2273,
+    "ok": 17727,
+    "sensitive": 8577
+   },
+   "expand": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 808,
+     "E_SPACE": 114,
+     "E_UNAVAILABLE": 2533
+    },
+    "errors": 3455,
+    "ok": 16545,
+    "sensitive": 7251
+   },
+   "explain": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 181,
+     "E_SPACE": 104,
+     "E_UNAVAILABLE": 2193
+    },
+    "errors": 2478,
+    "ok": 17522,
+    "sensitive": 4899
+   },
+   "filter": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 161,
+     "E_SPACE": 96,
+     "E_UNAVAILABLE": 1998
+    },
+    "errors": 2255,
+    "ok": 17745,
+    "sensitive": 3707
+   },
+   "geometry": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_GEOMETRY_UNAVAILABLE": 15888
+    },
+    "errors": 15888,
+    "ok": 4112,
+    "sensitive": 4669
+   },
+   "join": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 212,
+     "E_SPACE": 124,
+     "E_UNAVAILABLE": 3193
+    },
+    "errors": 3529,
+    "ok": 16471,
+    "sensitive": 2517
+   },
+   "metadata": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_UNAVAILABLE": 708
+    },
+    "errors": 708,
+    "ok": 19292,
+    "sensitive": 735
+   },
+   "nearest": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 106,
+     "E_SPACE": 871,
+     "E_UNAVAILABLE": 7497
+    },
+    "errors": 8474,
+    "ok": 11526,
+    "sensitive": 6724
+   },
+   "project": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 82,
+     "E_PROJECT_MEMBER": 15329,
+     "E_SPACE": 45,
+     "E_UNAVAILABLE": 987
+    },
+    "errors": 16443,
+    "ok": 3557,
+    "sensitive": 5214
+   },
+   "query": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_UNAVAILABLE": 648
+    },
+    "errors": 648,
+    "ok": 19352,
+    "sensitive": 6911
+   },
+   "reason": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 170,
+     "E_SPACE": 104,
+     "E_UNAVAILABLE": 2035
+    },
+    "errors": 2309,
+    "ok": 17691,
+    "sensitive": 6424
+   },
+   "recorded_query": {
+    "cases": 10000,
+    "declared": 960,
+    "error_codes": {
+     "E_HISTORY_UNAVAILABLE": 15270,
+     "E_UNAVAILABLE": 698
+    },
+    "errors": 15968,
+    "ok": 4032,
+    "sensitive": 5467
+   },
+   "reference": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 247,
+     "E_SPACE": 146,
+     "E_UNAVAILABLE": 3012
+    },
+    "errors": 3405,
+    "ok": 16595,
+    "sensitive": 6784
+   },
+   "resolve_identity": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {},
+    "errors": 0,
+    "ok": 20000,
+    "sensitive": 3430
+   },
+   "sequence": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 302,
+     "E_INFLUENCE_BUDGET": 3,
+     "E_SPACE": 193,
+     "E_UNAVAILABLE": 3821
+    },
+    "errors": 4319,
+    "ok": 15681,
+    "sensitive": 6595
+   },
+   "similar_candidates": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 430,
+     "E_SPACE": 33,
+     "E_UNAVAILABLE": 1577
+    },
+    "errors": 2040,
+    "ok": 17960,
+    "sensitive": 6132
+   },
+   "support": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 174,
+     "E_SPACE": 99,
+     "E_UNAVAILABLE": 2115
+    },
+    "errors": 2388,
+    "ok": 17612,
+    "sensitive": 6486
+   },
+   "typed_context": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 134,
+     "E_CONTEXT_UNAVAILABLE": 8280,
+     "E_SPACE": 95,
+     "E_UNAVAILABLE": 2029
+    },
+    "errors": 10538,
+    "ok": 9462,
+    "sensitive": 5070
+   },
+   "union": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 326,
+     "E_SPACE": 194,
+     "E_UNAVAILABLE": 3731
+    },
+    "errors": 4251,
+    "ok": 15749,
+    "sensitive": 7270
+   },
+   "window": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 155,
+     "E_INFLUENCE_BUDGET": 3,
+     "E_SPACE": 123,
+     "E_UNAVAILABLE": 2057
+    },
+    "errors": 2338,
+    "ok": 17662,
+    "sensitive": 6394
+   }
+  },
+  "seconds": 682.230818792,
+  "worlds": 1000
+ },
+ "host": {
+  "machine": "x86_64",
+  "os": "Linux",
+  "threads_used": 8
+ },
+ "notes": "writes: declared counts the uniform E_DEPENDENT_FACT refusals (a world stops after one); sensitivity does not apply to writes.",
+ "result": "pass: every operator and analysis reached 10,000 cases, with no interference and nonzero sensitivity",
+ "science": {
+  "analyses": {
+   "components": {
+    "cases": 10000,
+    "error_codes": {
+     "E_SCIENCE_PARTIAL": 993,
+     "E_UNAVAILABLE": 196
+    },
+    "errors": 1189,
+    "ok": 18811,
+    "sensitive": 9490
+   },
+   "degree": {
+    "cases": 10000,
+    "error_codes": {
+     "E_SCIENCE_PARTIAL": 907,
+     "E_UNAVAILABLE": 192
+    },
+    "errors": 1099,
+    "ok": 18901,
+    "sensitive": 9520
+   },
+   "nearest_vectors": {
+    "cases": 10000,
+    "error_codes": {
+     "E_SCIENCE_PARTIAL": 944,
+     "E_UNAVAILABLE": 184
+    },
+    "errors": 1128,
+    "ok": 18872,
+    "sensitive": 9497
+   },
+   "pagerank": {
+    "cases": 10000,
+    "error_codes": {
+     "E_SCIENCE_PARTIAL": 1047,
+     "E_UNAVAILABLE": 152
+    },
+    "errors": 1199,
+    "ok": 18801,
+    "sensitive": 9509
+   },
+   "shortest_paths": {
+    "cases": 10000,
+    "error_codes": {
+     "E_SCIENCE_PARTIAL": 938,
+     "E_SCIENCE_SOURCE": 14786,
+     "E_SCIENCE_TARGET": 1137,
+     "E_UNAVAILABLE": 202
+    },
+    "errors": 17063,
+    "ok": 2937,
+    "sensitive": 4995
+   }
+  },
+  "cases_per_analysis_target": 10000,
+  "seconds": 229.201906761,
+  "worlds": 1000
+ },
+ "source_commit": "origin/main 4440843 + B2 part 1",
+ "what": "B2 noninterference harness, full-count tier (ADR-0008 section 7)",
+ "writes_registry_stores": {
+  "cases": 10146,
+  "declared": 27,
+  "error_codes": {
+   "E_CONFLICT": 6613,
+   "E_DEPENDENT_FACT": 496,
+   "E_SCHEMA_ENDPOINT": 9
+  },
+  "errors": 7118,
+  "ok": 3001,
+  "sensitive": 0
+ }
+}
