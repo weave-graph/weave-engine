@@ -489,7 +489,8 @@ async fn the_transport_is_authenticated_streamable_http_without_sessions() {
             "what_changed",
             "hybrid_search",
             "explain",
-            "describe_schema"
+            "describe_schema",
+            "compile"
         ]
     );
     // A notification is accepted with no body.

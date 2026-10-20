@@ -2346,3 +2346,71 @@ fails `E_DERIVED_READERS`, and the engine's codes pass through unchanged
 (`tests/agent_mcp.rs`). The tools issue no corrections, so they never set
 `widen_readers`; a correction tool, if one is added, would copy the stored
 readers and set `widen_readers` only on an explicit argument.
+
+### 2026-10-21 — #40 B4 — The `compile` tool runs `weave sdk` as a sandboxed child
+The coordinator's specification, now that weave-language#23 ships a stdin
+mode. The engine still does not link the language: the operator names the
+binary (`serve --compiler`), and each call runs `weave sdk --untrusted`
+(plus `--read-only` when the caller holds Write on no graph) with one
+`weave-compiler-request/1` on stdin. The command-line flags are a floor the
+request cannot lower, and the tool's arguments have no policy field. The
+child gets an empty environment, a fresh empty working directory that is
+removed afterwards, no stderr, a 10 s wall-clock limit enforced on its whole
+process group (a grandchild holding stdout open cannot stall the service),
+at most 16 MiB of output, and on Unix CPU-time, no-file-write and no-core
+limits set before `exec`, with a 2 GiB address-space cap on Linux; Windows
+gets the time and output limits only. Exit 0 and 1 return the compiler's
+response as the result (a diagnostic is an answer, not a tool failure, so an
+agent can repair from it); anything else, and a response whose `ok` does
+not match the exit code, is `E_COMPILER`. Without a compiler the tool is
+still listed and answers `E_UNSUPPORTED`, so the tool surface does not
+depend on configuration. `weave-service` gains `libc` on Unix for the
+`setpgid`/`setrlimit` calls in `pre_exec`, the only `unsafe` in the crate.
+
+### 2026-10-21 — #40 B4 — The compile manifest is `/v1/manifest` plus embedding spaces
+The service builds the manifest itself, so an agent cannot hand the
+compiler a wider one: exactly what `GET /v1/manifest` serves, with the
+embedding space descriptors of up to 8 readable graphs merged in (the
+language asks hosts to do this merge). `graphs` picks which; by default the
+first readable ones. Spaces are read with the same change set as
+`describe_schema`, run as the caller; space descriptors have no fact
+provenance, so the compile request audits the graphs it listed and no
+facts. A graph whose spaces cannot be read is left without
+`embedding_spaces`, which the format reads as unknown rather than none.
+
+### 2026-10-21 — #40 B4 — Compiling never executes, and the plan runs through `/v1/execute`
+`compile` returns the compiler response and stops. There is no MCP tool
+that runs an arbitrary program: a compiled plan runs only when the caller
+sends `artifacts.program` to `POST /v1/execute`, where `run_program`
+admits it (minted IDs, supported commands), counts it against quotas, runs
+it as the caller under contract 1.2.0 rules and audits it. The compiler is
+advisory, as LB1 states; the engine decides.
+
+### 2026-10-21 — #40 B4 — A compilation holds the tenant queue
+A tool call runs inside the tenant's one-request-at-a-time section, and the
+compile tool is no exception, so one compilation can hold a tenant for up
+to its 10 s limit. Moving it outside would split one MCP message into two
+audited sections around an unlocked subprocess. Real compilations of agent
+source take milliseconds; the time limit and the per-agent request rate
+bound the worst case, and the limit is documented. Revisit if B6
+measurements show compile load.
+
+### 2026-10-21 — #40 B4 — The Python SDK speaks MCP, not a parallel API
+`weave_science.AgentClient` posts JSON-RPC `tools/call` to `/v1/mcp` with
+the agent's token, so its operations are the MCP tools by construction:
+same arguments, same results, same audit, quotas and boundary, and new
+tools (B5 review tools) are reachable through `call` before a convenience
+method exists. It uses only `urllib`, like the rest of the package; `ssl`
+contexts are passed through for private CAs. Errors raise `AgentError` with
+the stable code and HTTP status. `execute`, `mint_ids`, `quota` and
+`whoami` cover the service routes an agent needs around the tools. A Rust
+SDK was not added: Rust callers have the same HTTP contract, and the tool
+layer itself is the `weave-mcp` library.
+
+### 2026-10-21 — #40 B4 — Integration pins weave-language `73def87`
+Both weave-language checkouts in `integration.yml` move to `73def87`
+(contract 1.2.0 vendored, `weave sdk`, `check_agent_service.py`). The
+`compiler-runtime` job builds `weave-service` and runs the language's
+`check_agent_service.py` and the engine's `check_agent_compile.py` against
+the real compiler. The workflow now also triggers on `weave-mcp` and
+`weave-service` changes, since it tests them.

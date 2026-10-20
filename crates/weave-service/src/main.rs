@@ -20,7 +20,7 @@ const USAGE: &str = "usage:
   weave-service quota set    --data DIR --tenant ID (--principal ID | --agents) --requests-per-minute N|unlimited --writes-per-hour N|unlimited
   weave-service quota remove --data DIR --tenant ID (--principal ID | --agents)
   weave-service quota list   --data DIR --tenant ID
-  weave-service serve --data DIR --listen ADDR (--tls-cert PEM --tls-key PEM | --plaintext-loopback)";
+  weave-service serve --data DIR --listen ADDR (--tls-cert PEM --tls-key PEM | --plaintext-loopback) [--compiler WEAVE_BINARY]";
 
 fn flags(args: &[String]) -> Result<HashMap<String, String>, String> {
     let mut out = HashMap::new();
@@ -61,7 +61,15 @@ fn quota_subject(flags: &HashMap<String, String>) -> Result<&str, String> {
 
 fn open(flags: &HashMap<String, String>, log: Logger) -> Result<Service, String> {
     let data = PathBuf::from(required(flags, "data")?);
-    Service::open(&data, Arc::new(SystemClock), Limits::default(), log)
+    let mut limits = Limits::default();
+    if let Some(binary) = flags.get("compiler") {
+        let binary = PathBuf::from(binary);
+        if !binary.is_file() {
+            return Err("--compiler must name the weave-language `weave` binary".into());
+        }
+        limits.compiler = Some(weave_service::compile::Compiler::new(binary));
+    }
+    Service::open(&data, Arc::new(SystemClock), limits, log)
         .map_err(|e| format!("{}: {}", e.code, e.message))
 }
 

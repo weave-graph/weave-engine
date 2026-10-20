@@ -36,6 +36,11 @@ target/release/weave-service serve --data /srv/weave --listen 0.0.0.0:8443 \
 target/release/weave-service serve --data /srv/weave --listen 127.0.0.1:8080 --plaintext-loopback
 ```
 
+`--compiler /path/to/weave` names the weave-language binary the MCP
+`compile` tool runs as a sandboxed child
+([AGENT_INTERFACE.md](AGENT_INTERFACE.md#compile)); without it the tool
+answers `E_UNSUPPORTED`.
+
 `tenant create` creates the tenant's store, enables its registry with
 `--admin` as the first tenant administrator, and prints a bootstrap token for
 that administrator. The token is printed once and is never stored in clear.
@@ -353,6 +358,7 @@ Engine codes (`E_UNAVAILABLE`, `E_FORBIDDEN`, `E_BUDGET`, `E_CONFLICT`,
 | `E_BODY_LIMIT` | 413 | the request body exceeds 16 MiB |
 | `E_UNSUPPORTED` | 400 | a program command the service does not run |
 | `E_ID_NOT_MINTED` | 400 | a principal asserted a record ID not minted for it |
+| `E_COMPILER` | 400 | the configured compiler failed, timed out or answered out of bounds (MCP `compile` only) |
 | `E_QUOTA` | 429 | the principal's request rate or fact-write quota is used up; `Retry-After` gives the seconds until its window resets ([quotas](#quotas-and-rate-limits)) |
 | `E_BACKPRESSURE` | 503 | the tenant's queue is full; retry later (`Retry-After: 1`) |
 | `E_AUDIT` | 503 | the audit entry could not be written; the response is withheld |

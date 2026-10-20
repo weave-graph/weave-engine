@@ -612,26 +612,37 @@ async fn manifest(
         "manifest",
         true,
         Box::new(|state, ctx| {
-            let graphs = state.engine.list_graphs(&ctx.host)?;
-            let groups = state.engine.registry_nameable_groups(&ctx.host)?;
-            let listed: Vec<Value> = graphs
-                .iter()
-                .map(|g| {
-                    json!({"graph_id": g.graph_id, "permission": g.permission,
-                        "branches": g.branches})
-                })
-                .collect();
-            let mut done = Done::json(json!({
-                "format": "weave-visible/1",
-                "principal": ctx.principal,
-                "graphs": listed,
-                "reader_groups": groups,
-            }));
-            done.graphs = graphs.iter().map(|g| g.graph_id.clone()).collect();
+            let mut done = Done::default();
+            done.body = visible_manifest(state, ctx, &mut done)?;
             Ok(done)
         }),
     )
     .await
+}
+
+/// The caller's `weave-visible/1` manifest: the graphs it can discover,
+/// with permission and branches, and the groups it may name. Records the
+/// listed graphs in `done` for the audit log.
+pub(crate) fn visible_manifest(
+    state: &mut TenantState,
+    ctx: &Ctx,
+    done: &mut Done,
+) -> Result<Value, ApiError> {
+    let graphs = state.engine.list_graphs(&ctx.host)?;
+    let groups = state.engine.registry_nameable_groups(&ctx.host)?;
+    let listed: Vec<Value> = graphs
+        .iter()
+        .map(
+            |g| json!({"graph_id": g.graph_id, "permission": g.permission, "branches": g.branches}),
+        )
+        .collect();
+    done.graphs = graphs.iter().map(|g| g.graph_id.clone()).collect();
+    Ok(json!({
+        "format": "weave-visible/1",
+        "principal": ctx.principal,
+        "graphs": listed,
+        "reader_groups": groups,
+    }))
 }
 
 /// Graph IDs a request names anywhere in its JSON: client input, recorded

@@ -10,8 +10,8 @@ ACLs and Discover, as protocol 1.1.0 and store 32
 B3 is complete with the authenticated multi-tenant `weave-service` ([below](#authenticated-service-b3)),
 B2 is complete with a generated noninterference harness over every operator,
 write-time propagation as protocol **1.2.0**, and audited release policies
-([below](#derived-fact-leakage-protection-b2)), and B4 part 1 serves the
-agent interface over MCP ([below](#agent-interface-b4)). The language reached Phase A parity in
+([below](#derived-fact-leakage-protection-b2)), and B4 is complete with
+the agent interface over MCP and a Python agent SDK ([below](#agent-interface-b4)). The language reached Phase A parity in
 LA1 (weave-language#3): each of the five exit questions fits in at most 15
 lines of `.weave`, and engine CI runs all five through `check_phase_a.py`.
 Source writes cannot set `readers` until LB1. A source `correct` of a
@@ -32,7 +32,7 @@ white-paper requirements remain tracked separately in the
 | Python client | `weave_science` 0.1.0; Python 3.10+, no mandatory runtime dependencies |
 | MCP preview | `weave-mcp` 0.1.0; read-only local stdio MCP server (A7, [guide](MCP_PREVIEW.md)) |
 | Service | `weave-service` 0.1.0; authenticated multi-tenant HTTP/JSON server over TLS, one store per tenant, API tokens and a read/write audit log (B3, [guide](SERVICE.md)) |
-| Agent interface | MCP at `weave-service` `POST /v1/mcp`, agent tools 1.0.0: assert, retract, query, expand, as-of, what changed, hybrid search, explain, describe schema (B4 part 1, [guide](AGENT_INTERFACE.md)) |
+| Agent interface | MCP at `weave-service` `POST /v1/mcp`, agent tools 1.0.0: assert, retract, query, expand, as-of, what changed, hybrid search, explain, describe schema, compile; Python `AgentClient` (B4, [guide](AGENT_INTERFACE.md)) |
 | Engine contract | 1.1.0: core v1 as frozen in 1.0.0 with the 0.24.0 feature set ([1.0](contract/v1.0/README.md)), plus `reader_groups` and `FactProvenance.on_behalf_of` ([1.1](contract/v1.1/README.md)); 0.1.0–0.24.0 and 1.0.0 programs stay accepted with their published semantics. Existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)), and embedding facts with exact `nearest` and `similar_candidates` ([0.24](contract/v0.24/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
 | Native storage | Store 32; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)), which also holds embedding spaces and embeddings |
 | Platforms | Linux, macOS and Windows in the native CI profile |
@@ -539,9 +539,9 @@ accepted) is complete:
 
 ## Agent interface (B4)
 
-B4 ([#40](https://github.com/weave-graph/weave-engine/issues/40)) is in
-progress. Part 1 serves the agent interface as MCP over the authenticated
-service ([guide](AGENT_INTERFACE.md)):
+B4 ([#40](https://github.com/weave-graph/weave-engine/issues/40)) is
+complete. The agent interface is MCP over the authenticated service
+([guide](AGENT_INTERFACE.md)):
 
 - **Endpoint.** `POST /v1/mcp`, MCP Streamable HTTP without sessions or
   event streams: one JSON-RPC message per request, authenticated and audited
@@ -577,7 +577,16 @@ team and one without access) and `agent_injection.rs`.
   writes at the boundary commit exactly the permitted number
   (`tests/quota.rs`).
 
-**Not yet:** the Python SDK and a compile tool. Derived-fact restriction follows the engine's current propagation
+- **Compile (part 3).** The `compile` tool runs the operator-configured
+  weave-language compiler (`serve --compiler`) as a sandboxed child under
+  the untrusted policy, read-only for callers that can write no graph,
+  against the caller's manifest with embedding spaces; it runs nothing, and
+  `E_UNSUPPORTED` without a compiler (`tests/agent_compile.rs`,
+  `scripts/check_agent_compile.py` in the language integration workflow).
+- **Python SDK (part 3).** `weave_science.AgentClient` calls the same tools
+  over MCP, with stable `AgentError` codes (`python/tests/test_agent.py`).
+
+B4 is complete. Agent writes follow the contract 1.2.0 write-time rules
 (B2).
 
 ## Verified evidence

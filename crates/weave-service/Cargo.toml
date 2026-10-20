@@ -24,6 +24,9 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 rustls-pki-types = { version = "1", features = ["std"] }
 ring = "0.17"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 weave-policy = { path = "../weave-policy", version = "0.1.0" }
 rsa = { version = "0.9", features = ["sha2", "getrandom"] }

@@ -6,12 +6,13 @@ Agents write and query shared Weave knowledge through a standard
 `weave-service` serves it at `POST /v1/mcp`, behind the same
 authentication, tenancy and audit as the rest of its API
 ([SERVICE.md](SERVICE.md)). It extends the read-only local
-[preview](MCP_PREVIEW.md) (A7) with writes, identity and a schema tool.
+[preview](MCP_PREVIEW.md) (A7) with writes, identity, a schema tool and a
+sandboxed compiler for Weave language source.
 
-**Status.** B4 parts 1 and 2: the MCP endpoint with all nine tools, agent
-identity and provenance on every write, the data/code boundary, revocation
-on the next call, audit, and per-agent quotas and rate limits. The Python
-SDK follows in part 3 of #40.
+**Status.** B4 is complete: the MCP endpoint with ten tools, agent identity
+and provenance on every write, the data/code boundary, revocation on the
+next call, audit, per-agent quotas and rate limits, the `compile` tool and
+the [Python SDK](#python-sdk), which calls the same tools.
 
 ## Quickstart: connect an MCP client
 
@@ -119,6 +120,7 @@ one-command program, as the same principal.
 | `explain` | A derivation graph with the source facts and their provenance | read-only |
 | `assert_fact` | Record new facts, with service-minted IDs (below) | write |
 | `retract_fact` | End live facts; history keeps them | write, destructive |
+| `compile` | Compile Weave language source under the untrusted policy, without running it (below) | read-only |
 
 ### `assert_fact`
 
@@ -206,6 +208,78 @@ Every example is a complete, valid call for that tool. The description is
 computed from one A3 change set from the empty state to the head, read as
 the caller, so it contains only what the caller can see; hidden facts never
 change an entry or a count.
+
+### `compile`
+
+`{"source", "modules"?, "entry_id"?, "graphs"?}` compiles
+[Weave language](https://github.com/weave-graph/weave-language) source into
+a contract program, so an agent can write plans in source and repair them
+from diagnostics. The operator configures the compiler binary
+(`weave-service serve --compiler /path/to/weave`); without one the tool
+fails `E_UNSUPPORTED`.
+
+- **The policy is the service's.** The tool runs `weave sdk --untrusted`,
+  plus `--read-only` when the caller can write no graph; the flags are a
+  floor the request cannot lower, and the arguments have no policy field.
+  Under `untrusted` every written record must state its readers
+  (`E_VISIBILITY_REQUIRED` at the record) and host templates are refused;
+  under `read_only` any write is `E_EFFECT_DENIED`.
+- **Checked against what the caller sees.** The request carries the
+  caller's visible manifest, exactly `GET /v1/manifest`, with the embedding
+  space descriptors of up to 8 readable graphs added (`graphs` chooses
+  which; by default the first readable ones). Graphs, groups and spaces the
+  caller cannot see fail at compile time with the engine's codes
+  (`E_UNAVAILABLE`, `E_FORBIDDEN`, `E_SPACE_MISMATCH`, `E_UNKNOWN_SPACE`) at
+  the exact source span.
+- **The result** is `{"policy": {"untrusted", "read_only"}, "response"}`,
+  where `response` is the compiler's `weave-compiler-response/1`: `ok: true`
+  with `artifacts` (`artifacts.program` is the plan), or `ok: false` with
+  the diagnostic (`code`, `message`, `start`, `end`). A diagnostic is a
+  result, not a tool error.
+- **Compiling grants nothing.** The tool runs no program and touches no
+  graph. To run a plan, send `artifacts.program` to `POST /v1/execute` (or
+  `AgentClient.execute`), where it is admitted, authorized, counted against
+  quotas and audited like any other program.
+- **Sandbox.** The compiler is a child process with an empty environment, a
+  fresh empty working directory removed afterwards, no stderr, a 10 s
+  wall-clock limit (the whole process group is killed), and at most 16 MiB
+  of output; on Unix also a CPU-time limit and no file writes, and on Linux
+  a 2 GiB address-space limit. A compiler that fails, times out or answers
+  out of bounds is `E_COMPILER`.
+
+## Python SDK
+
+`weave_science.AgentClient` (the [Python client](../python/README.md),
+standard library only) speaks MCP to `POST /v1/mcp` with an agent's token,
+so each method is exactly one tool call with the same identity, quotas,
+audit and boundary:
+
+```python
+from weave_science import AgentClient, AgentError
+
+client = AgentClient("https://weave.example.com:8443", token)
+graphs = client.describe_schema()
+graph = graphs["graphs"][0]["graph_id"]
+written = client.assert_fact(graph, [
+        {"kind": "node", "ref": "finding", "space_id": "finding",
+         "properties": {"text": "Bearing replaced on unit 7"}}],
+    method={"kind": "model", "model": "my-extractor", "version": "1"},
+    evidence=[{"kind": "artifact", "uri": "doc://log-42", "digest": "sha256:..."}],
+    visibility={"reader_groups": graphs["reader_groups"][:1]})
+compiled = client.compile('use G graph "maintenance"; lens L from G { }')
+if compiled["response"]["ok"]:
+    client.execute(compiled["response"]["artifacts"]["program"])
+```
+
+Methods: `describe_schema`, `query`, `expand`, `as_of`, `what_changed`
+(`from_=` for the `from` bound), `hybrid_search`, `explain`, `assert_fact`,
+`retract_fact`, `compile`, and `call(tool, arguments)` for any tool; plus
+`execute`, `mint_ids`, `quota` and `whoami` for the service routes. Results
+are each tool's `result`, untrusted data. Failures raise `AgentError` with
+the stable `code` (`E_QUOTA`, `E_UNAUTHENTICATED`, `E_MCP_INPUT`,
+`E_DERIVED_READERS`, ...), the HTTP `status` and `retry_after`.
+`python/tests/test_agent.py` runs the issue's scenario against a real
+service when `WEAVE_SERVICE_BINARY` is set (CI sets it).
 
 ## Results are data, not instructions
 
@@ -317,7 +391,10 @@ codes for clients" table. The interface adds:
   (an embedding is restricted by its own readers). Write-time propagation
   and release policies are B2
   ([#5](https://github.com/weave-graph/weave-engine/issues/5)).
-- Not yet: the Python SDK and a compile tool.
+- `compile` runs inside the request, so a compilation holds its tenant's
+  one-at-a-time queue for up to its 10 s limit; the request rate bounds how
+  often an agent can do that. On Windows only the time and output limits
+  apply to the compiler process.
 
 Evidence: `crates/weave-service/tests/agent_mcp.rs` (agent X asserts from a
 document, agent Y finds it with `hybrid_search` and `explain` shows X;
@@ -327,4 +404,8 @@ transport), `tests/agent_hidden.rs` (paired worlds that differ only in
 team A's facts give agent Z of team B and agent W without access identical
 responses from every tool, writes included) and `tests/agent_injection.rs`
 (injected text changes no permission, triggers no write and never leaves
-`result`; arguments cannot name a writer, grant or authority).
+`result`; arguments cannot name a writer, grant or authority),
+`tests/quota.rs`, `tests/agent_compile.rs` (the policy floor, the manifest
+with spaces, an empty environment and directory, time and output limits,
+nothing executed) and `scripts/check_agent_compile.py` (the real compiler,
+in the language integration workflow).

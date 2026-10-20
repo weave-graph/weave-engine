@@ -37,6 +37,8 @@ pub mod codes {
     pub const MCP_PROTOCOL: &str = "E_MCP_PROTOCOL_VERSION";
     /// The principal's request rate or fact-write quota is used up (B4).
     pub const QUOTA: &str = "E_QUOTA";
+    /// The configured compiler failed, timed out or answered out of bounds.
+    pub const COMPILER: &str = "E_COMPILER";
 }
 
 /// The exact message of every authentication failure.

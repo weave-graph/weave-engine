@@ -885,3 +885,120 @@ pub fn describe_schema() -> Value {
         "additionalProperties": false,
     })
 }
+
+// ----------------------------------------------------------------- compile
+
+/// Longest source text (and module source) `compile` accepts, in bytes.
+pub const MAX_SOURCE_BYTES: usize = 512 * 1024;
+/// Most modules one `compile` call supplies.
+pub const MAX_MODULES: usize = 64;
+/// Most graphs whose embedding spaces one `compile` call's manifest lists.
+pub const MAX_SPACE_GRAPHS: usize = 8;
+
+/// A module the source imports, pinned by content as the compiler requires.
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Module {
+    pub id: String,
+    pub revision: String,
+    pub source: String,
+}
+
+/// `compile` arguments. There is no policy field: the host sets the policy.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompileArguments {
+    pub source: String,
+    #[serde(default)]
+    pub modules: Vec<Module>,
+    #[serde(default)]
+    pub entry_id: Option<String>,
+    /// Graphs whose embedding spaces the manifest lists; `None` is the
+    /// host's default.
+    #[serde(default)]
+    pub graphs: Option<Vec<String>>,
+}
+
+pub fn parse_compile(arguments: Value) -> Result<CompileArguments, Error> {
+    crate::check_arguments_within(&arguments, MAX_SOURCE_BYTES)?;
+    let arguments: CompileArguments = serde_json::from_value(arguments)
+        .map_err(|error| failure(codes::INPUT, format!("invalid compile arguments: {error}")))?;
+    if arguments.modules.len() > MAX_MODULES {
+        return Err(failure(
+            "E_BUDGET",
+            format!("at most {MAX_MODULES} modules"),
+        ));
+    }
+    if arguments
+        .graphs
+        .as_ref()
+        .is_some_and(|g| g.len() > MAX_SPACE_GRAPHS)
+    {
+        return Err(failure(
+            "E_BUDGET",
+            format!("graphs names at most {MAX_SPACE_GRAPHS} graphs"),
+        ));
+    }
+    if arguments
+        .entry_id
+        .as_ref()
+        .is_some_and(|id| id.is_empty() || id.len() > MAX_REF_BYTES * 4)
+    {
+        return Err(failure(codes::INPUT, "entry_id requires 1 to 256 bytes"));
+    }
+    Ok(arguments)
+}
+
+/// The `weave-compiler-request/1` a `compile` call sends: the caller's
+/// source with the host's policy (always `untrusted`, `read_only` as the
+/// host decides) and the caller's visible manifest.
+pub fn compile_request(arguments: &CompileArguments, read_only: bool, manifest: Value) -> Value {
+    json!({
+        "format": "weave-compiler-request/1",
+        "entry_id": arguments.entry_id.as_deref().unwrap_or("agent"),
+        "source": arguments.source,
+        "modules": arguments.modules,
+        "policy": {"untrusted": true, "read_only": read_only, "visible": manifest},
+    })
+}
+
+/// The embedding space descriptors in a [`describe_program`] result, as a
+/// `weave-visible/1` manifest lists them.
+pub fn visible_spaces(result: &Value) -> Vec<Value> {
+    result["changes"]["entries"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter(|entry| entry["after"]["kind"] == "embedding_space")
+        .map(|entry| {
+            let mut space = entry["after"].clone();
+            if let Some(object) = space.as_object_mut() {
+                object.remove("kind");
+            }
+            space
+        })
+        .collect()
+}
+
+/// `compile` arguments schema.
+pub fn compile_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "source": {"type": "string", "maxLength": MAX_SOURCE_BYTES,
+                "description": "Weave language source"},
+            "modules": {"type": "array", "maxItems": MAX_MODULES, "items": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "revision": {"type": "string"},
+                    "source": {"type": "string"}},
+                "required": ["id", "revision", "source"], "additionalProperties": false},
+                "description": "Modules the source imports, pinned by content"},
+            "entry_id": {"type": "string", "description": "A label for diagnostics (default agent)"},
+            "graphs": {"type": "array", "items": {"type": "string"}, "maxItems": MAX_SPACE_GRAPHS,
+                "description": "Graphs whose embedding spaces to check; default: your first readable graphs"},
+        },
+        "required": ["source"],
+        "additionalProperties": false,
+    })
+}
