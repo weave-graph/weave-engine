@@ -683,8 +683,22 @@ impl SqliteFactStore<'_> {
     /// The SQL and bound values that select the live versions matching `filter`.
     fn filter_sql(&self, revision: &str, filter: &FactFilter) -> Result<(String, Vec<Value>)> {
         let info = self.info(revision)?;
+        // A subject or entity key anchors the selection to one record's
+        // facts. Without statistics, a filter that also names a predicate
+        // ties between two two-column indexes and SQLite takes
+        // `fact_index_predicate`, walking every fact of that predicate (for
+        // a scoped `nearest`, every embedding of the space per candidate).
+        // The hint changes the plan only: the rows, and so every result and
+        // E_BUDGET, are those of the same WHERE clause.
+        let index = if filter.subject.is_some() {
+            " INDEXED BY fact_index_subject"
+        } else if filter.entity.is_some() {
+            " INDEXED BY fact_index_entity"
+        } else {
+            ""
+        };
         let mut sql = format!(
-            "SELECT {FACT_COLUMNS} FROM fact_index i JOIN fact_log l ON l.position=i.position WHERE {LIVE}"
+            "SELECT {FACT_COLUMNS} FROM fact_index i{index} JOIN fact_log l ON l.position=i.position WHERE {LIVE}"
         );
         let mut values: Vec<Value> = vec![info.line.into(), info.seq.into()];
         // Each `?` in a clause refers to the one value bound with it.

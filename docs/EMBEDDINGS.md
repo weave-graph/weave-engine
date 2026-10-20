@@ -205,6 +205,13 @@ conversion plans nothing.
   store; an exact top-10 over the whole space takes about 7.1 s (3.6 s when
   `valid_at` selects half), with peak memory unchanged by the ranking. The
   store is about 2.1 GB, because vectors are stored as JSON.
+- A `nearest` with `candidates` reads only the embeddings of the visible
+  candidates' subjects, through the fact index. Its cost therefore follows
+  the candidate set, not the space. Measured
+  ([report](benchmarks/scoped-nearest-2026-10-20.json)): a top-10 within a
+  2-hop `expand` of about five nodes takes 2.7 ms with 20,000 or with
+  200,000 vectors of 32 dimensions, against 0.54 s and 5.6 s for the whole
+  space. Without `candidates`, the ranking scans the whole space.
 - The scan budget of `nearest` counts every stored embedding it streams,
   including ones the reader cannot see, as the read budget counts every read
   record; `similar_candidates` keeps its vectors in memory and is bounded by

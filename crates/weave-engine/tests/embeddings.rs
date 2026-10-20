@@ -1559,3 +1559,122 @@ fn streaming_nearest_spans_chunks_and_ignores_hidden_vectors() {
         }
     }
 }
+
+/// Scoped `nearest` (A6). Two on-disk stores differ only in facts the reader
+/// cannot see:
+///
+/// * 300 hidden nodes, linked from the candidate seeds by hidden edges;
+/// * hidden embeddings that duplicate visible ones on candidate subjects;
+/// * embeddings on hidden nodes;
+/// * a hidden entity embedding.
+///
+/// A restricted `nearest` looks up only the visible candidates' embeddings,
+/// and the plan alone chooses that lookup. So results, ranks, ties, coverage
+/// and errors are identical after normalizing revision IDs.
+#[test]
+fn hidden_candidates_never_change_a_scoped_nearest() {
+    let build = |dir: &std::path::Path, hidden: bool| {
+        let mut e =
+            Engine::open_with_clock(dir.join("s.db"), Arc::new(ManualClock::new(5))).unwrap();
+        let mut changes = vec![assert(space("sp", 3, "cosine_distance"))];
+        for i in 0..20 {
+            changes.push(assert(node(&format!("n{i}"), json!([]))));
+            changes.push(assert(json!({"kind": "edge", "id": format!("e{i}"), "predicate": "p",
+                "from": format!("n{i}"), "to": format!("n{}", (i * 3 + 1) % 20), "valid_time": {"start": 0}})));
+            let v = [1.0 + (i % 3) as f32, 2.0, 1.0 + (i % 2) as f32];
+            changes.push(assert(embedding(
+                &format!("v{i}"),
+                "sp",
+                on_node(&format!("n{i}")),
+                &v,
+                always(),
+                json!([]),
+            )));
+        }
+        if hidden {
+            let mallory = json!(["mallory"]);
+            for j in 0..300 {
+                changes.push(assert(node(&format!("h{j}"), mallory.clone())));
+                changes.push(assert(json!({"kind": "edge", "id": format!("he{j}"), "predicate": "p",
+                    "from": format!("n{}", j % 20), "to": format!("h{j}"), "valid_time": {"start": 0},
+                    "readers": mallory})));
+                changes.push(assert(embedding(
+                    &format!("hv{j}"),
+                    "sp",
+                    on_node(&format!("h{j}")),
+                    &[1.0, 2.0, 1.0],
+                    always(),
+                    json!([]),
+                )));
+            }
+            for i in 0..20 {
+                let v = [1.0 + (i % 3) as f32, 2.0, 1.0 + (i % 2) as f32];
+                changes.push(assert(embedding(
+                    &format!("dup{i}"),
+                    "sp",
+                    on_node(&format!("n{i}")),
+                    &v,
+                    always(),
+                    mallory.clone(),
+                )));
+            }
+            changes.push(assert(embedding(
+                "hent",
+                "sp",
+                json!({"kind": "entity", "entity_id": "N3"}),
+                &[1.0, 2.0, 1.0],
+                always(),
+                mallory.clone(),
+            )));
+        }
+        write(&mut e, changes).unwrap();
+        e
+    };
+    let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (mut a, mut b) = (build(da.path(), false), build(db.path(), true));
+    let mut plans = vec![];
+    for seeds in [
+        json!(["n0"]),
+        json!(["n3", "n7"]),
+        json!(["h1", "n2"]),
+        json!(["h5"]),
+    ] {
+        for hops in [0, 1, 2] {
+            for k in [1u32, 3, 25] {
+                let mut plan = nearest("sp", &[1.0, 2.0, 1.0], k);
+                plan["candidates"] = json!({"kind": "expand", "graph_id": "g", "seeds": seeds, "hops": hops, "direction": "both"});
+                plans.push(plan.clone());
+                plan["query"] = json!({"kind": "embedding", "embedding_id": "v3"});
+                plans.push(plan);
+            }
+        }
+    }
+    for from in ["n4", "h4"] {
+        let mut plan = nearest("sp", &[2.0, 2.0, 1.0], 5);
+        plan["candidates"] = json!({"kind": "query", "query": {"graph_id": "g", "from": from}});
+        plans.push(plan);
+    }
+    let mut hits = 0;
+    for plan in &plans {
+        for principal in ["alice", "carol"] {
+            let x = normal(&evaluate(&mut a, principal, plan.clone()));
+            let y = normal(&evaluate(&mut b, principal, plan.clone()));
+            assert_eq!(x, y, "{principal} {plan}");
+            hits += usize::from(x.contains("\"neighbors\""));
+        }
+    }
+    assert!(hits > plans.len() / 3, "many plans rank something: {hits}");
+    // Mallory's view differs: the hidden candidates are hers.
+    let mut plan = nearest("sp", &[1.0, 2.0, 1.0], 25);
+    plan["candidates"] =
+        json!({"kind": "expand", "graph_id": "g", "seeds": ["n0"], "hops": 1, "direction": "both"});
+    let hers = evaluate(&mut b, "mallory", plan).unwrap();
+    assert!(hers
+        .neighbors
+        .iter()
+        .any(|n| n.embedding_id.starts_with("hv")));
+    assert!(hers
+        .neighbors
+        .iter()
+        .any(|n| n.embedding_id.starts_with("dup")));
+}

@@ -1,0 +1,174 @@
+{
+  "profile": "weave-scoped-nearest-benchmark/1",
+  "date": "2026-10-20",
+  "source_base": "5e2a1d9bbf715e7d7d1d636595ab4c7e9e28406c",
+  "before": "main at the base commit plus examples/scoped_nearest_benchmark.rs",
+  "after": "the same plus the subject/entity index hint in fact_store/sqlite.rs (this PR)",
+  "build": "cargo run --release --locked -p weave-engine --example scoped_nearest_benchmark",
+  "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "host": {
+    "os": "linux",
+    "kernel": "7.2.6",
+    "arch": "x86_64",
+    "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+    "logical_cpus": 32,
+    "memory": "131533336 kB"
+  },
+  "protocol": "0.24.0",
+  "store": 31,
+  "workload": "VECTORS nodes with one located_at edge each (i to 7i+1 mod n) and one 32-dimensional embedding each, on an on-disk WAL store; nearest k=10 over the whole space, within a 2-hop expand of a random node, and within a query of the edges from a random node; each sample one Engine::execute",
+  "results": {
+    "before": [
+      {
+        "dimensions": 32,
+        "expand_candidate_nodes_mean": 5.0,
+        "load_seconds": 6.646635954,
+        "nearest_in_2_hop_expand_ms": {
+          "max": 25.865612,
+          "median": 23.924135,
+          "p95": 24.249,
+          "samples": 200
+        },
+        "nearest_in_query_candidates_ms": {
+          "max": 9.389474,
+          "median": 8.657911,
+          "p95": 8.824340999999999,
+          "samples": 200
+        },
+        "nearest_whole_space_ms": {
+          "max": 546.191952,
+          "median": 542.7986089999999,
+          "p95": 546.191952,
+          "samples": 10
+        },
+        "query_at_batch_head_ms": {
+          "max": 209.18392599999999,
+          "median": 206.336711,
+          "p95": 209.18392599999999,
+          "samples": 10
+        },
+        "query_at_single_fact_head_ms": {
+          "max": 0.9223089999999999,
+          "median": 0.442625,
+          "p95": 0.9223089999999999,
+          "samples": 10
+        },
+        "vectors": 20000
+      },
+      {
+        "dimensions": 32,
+        "expand_candidate_nodes_mean": 5.0,
+        "load_seconds": 49.826145159,
+        "nearest_in_2_hop_expand_ms": {
+          "max": 277.809688,
+          "median": 251.20000999999996,
+          "p95": 257.60864,
+          "samples": 200
+        },
+        "nearest_in_query_candidates_ms": {
+          "max": 100.489519,
+          "median": 89.274604,
+          "p95": 92.431326,
+          "samples": 200
+        },
+        "nearest_whole_space_ms": {
+          "max": 5558.199877,
+          "median": 5520.814811,
+          "p95": 5558.199877,
+          "samples": 10
+        },
+        "query_at_batch_head_ms": {
+          "max": 525.9543960000001,
+          "median": 521.764068,
+          "p95": 525.9543960000001,
+          "samples": 10
+        },
+        "query_at_single_fact_head_ms": {
+          "max": 0.5670970000000001,
+          "median": 0.437345,
+          "p95": 0.5670970000000001,
+          "samples": 10
+        },
+        "vectors": 200000
+      }
+    ],
+    "after": [
+      {
+        "dimensions": 32,
+        "expand_candidate_nodes_mean": 5.0,
+        "load_seconds": 6.608607521,
+        "nearest_in_2_hop_expand_ms": {
+          "max": 3.0034660000000004,
+          "median": 2.650369,
+          "p95": 2.6856240000000002,
+          "samples": 200
+        },
+        "nearest_in_query_candidates_ms": {
+          "max": 1.0687909999999998,
+          "median": 0.9564320000000001,
+          "p95": 0.969596,
+          "samples": 200
+        },
+        "nearest_whole_space_ms": {
+          "max": 545.655643,
+          "median": 543.857662,
+          "p95": 545.655643,
+          "samples": 10
+        },
+        "query_at_batch_head_ms": {
+          "max": 209.197121,
+          "median": 207.38986400000002,
+          "p95": 209.197121,
+          "samples": 10
+        },
+        "query_at_single_fact_head_ms": {
+          "max": 0.52589,
+          "median": 0.421125,
+          "p95": 0.52589,
+          "samples": 10
+        },
+        "vectors": 20000
+      },
+      {
+        "dimensions": 32,
+        "expand_candidate_nodes_mean": 5.0,
+        "load_seconds": 49.734444816,
+        "nearest_in_2_hop_expand_ms": {
+          "max": 2.836114,
+          "median": 2.7385729999999997,
+          "p95": 2.759361,
+          "samples": 200
+        },
+        "nearest_in_query_candidates_ms": {
+          "max": 1.056799,
+          "median": 0.98233,
+          "p95": 0.9931810000000001,
+          "samples": 200
+        },
+        "nearest_whole_space_ms": {
+          "max": 5641.516079,
+          "median": 5609.4578679999995,
+          "p95": 5641.516079,
+          "samples": 10
+        },
+        "query_at_batch_head_ms": {
+          "max": 523.657767,
+          "median": 508.41136,
+          "p95": 523.657767,
+          "samples": 10
+        },
+        "query_at_single_fact_head_ms": {
+          "max": 0.476468,
+          "median": 0.43375800000000003,
+          "p95": 0.476468,
+          "samples": 10
+        },
+        "vectors": 200000
+      }
+    ]
+  },
+  "notes": [
+    "query_at_batch_head_ms vs query_at_single_fact_head_ms: every read verifies its fact revision's ID from that revision's own operations, so a read at a head written as one 50k-change batch costs 0.2-0.5 s; the benchmark ends its load with a single-fact write so that cost stays out of the nearest samples (documented in EMBEDDINGS.md limits)",
+    "one host, one run, warm caches; descriptions of what was measured, not capacity or latency promises"
+  ]
+}
