@@ -1,0 +1,234 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 43.85s
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.02s
+     Running `fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans -artifact_prefix=<checkout>/fuzz/artifacts/vector_plans/ -max_total_time=60 -timeout=5 -rss_limit_mb=1536 -max_len=131072 -seed=201020 fuzz/corpus/vector_plans fuzz/seeds/vector_plans`
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 201020
+INFO: Loaded 1 modules   (780064 inline 8-bit counters): 780064 [0x61afd2e3f620, 0x61afd2efdd40), 
+INFO: Loaded 1 PC tables (780064 PCs): 780064 [0x61afd2efdd40,0x61afd3ae4f40), 
+INFO:        0 files found in fuzz/corpus/vector_plans
+INFO:        3 files found in fuzz/seeds/vector_plans
+INFO: seed corpus: files: 3 min: 654b max: 809b total: 2170b rss: 66Mb
+#6	INITED cov: 10640 ft: 15183 corp: 3/2170b exec/s: 0 rss: 180Mb
+	NEW_FUNC[1/21]: 0x61afcff768d0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x13ff8d0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/21]: 0x61afd1bd3360  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x305c360) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/7]: 0x61afcff78bb0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x1401bb0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/7]: 0x61afcfff2b80  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x147bb80) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afd1b281c0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x2fb11c0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afcfff82f0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x14812f0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/8]: 0x61afd1bd6450  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x305f450) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/8]: 0x61afd1be6c20  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x306fc20) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/3]: 0x61afcfff7420  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x1480420) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/3]: 0x61afd25dc820  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x3a65820) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/3]: 0x61afd1c37470  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x30c0470) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/3]: 0x61afd1c37e10  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x30c0e10) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afd25dc910  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x3a65910) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/7]: 0x61afd04c3c00  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x194cc00) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/7]: 0x61afd06a70b0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x1b300b0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/2]: 0x61afd25825a0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x3a0b5a0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/2]: 0x61afcfff8a10  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x1481a10) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afd237dcd0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x3806cd0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afd2576e60  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x39ffe60) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/2]: 0x61afd1780a60  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x2c09a60) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/2]: 0x61afd24e6ba0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x396fba0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afcfff8b40  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x1481b40) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afcfff15c0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x147a5c0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/2]: 0x61afd1bd70a0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x30600a0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/2]: 0x61afd1c3acb0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x30c3cb0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/10]: 0x61afcfff1320  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x147a320) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/10]: 0x61afcfff5910  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x147e910) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/2]: 0x61afd1bd3100  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x305c100) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/2]: 0x61afd1c3c280  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x30c5280) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/3]: 0x61afcfff7920  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x1480920) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/3]: 0x61afcfff8830  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x1481830) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afcfff1ed0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x147aed0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/3]: 0x61afd25543f0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x39dd3f0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/3]: 0x61afd25dbee0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x3a64ee0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afcfff26e0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x147b6e0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afcfff8650  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x1481650) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/3]: 0x61afd06be1b0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x1b471b0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/3]: 0x61afd133f2a0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x27c82a0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afd0bcf250  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x2058250) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/1]: 0x61afd1c3a7c0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x30c37c0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/3]: 0x61afd25542e0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x39dd2e0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/3]: 0x61afd259fba0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x3a28ba0) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[1/4]: 0x61afd0bcd020  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x2056020) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+	NEW_FUNC[2/4]: 0x61afd0bcde90  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/vector_plans+0x2056e90) (BuildId: ab15c7e2286770ed38c90af5cb2db216dcf7825d)
+#488606	DONE   cov: 12229 ft: 26345 corp: 1111/299Kb lim: 989 exec/s: 8009 rss: 540Mb
+###### Recommended dictionary. ######
+"candi" # Uses: 319
+"\001\000\000\000\000\000\003)" # Uses: 314
+"query" # Uses: 343
+"\000\000\000\000\000\000\000\000" # Uses: 320
+"\005\000" # Uses: 330
+"\003\000\000\000\000\000\000\000" # Uses: 313
+"space" # Uses: 325
+"\377\377\377\377\377\377\377\001" # Uses: 317
+" a" # Uses: 356
+"assertion" # Uses: 306
+"seeds" # Uses: 265
+"\001\000\000\000\000\000\000\013" # Uses: 309
+"\377\377\377c" # Uses: 332
+"\020\000" # Uses: 352
+"\000\000\000\000" # Uses: 354
+"\021\000\000\000" # Uses: 301
+"\001\011" # Uses: 346
+"similar_candidAtes" # Uses: 330
+"\002\000\000\000\000\000\000\000" # Uses: 333
+"spaceh_i" # Uses: 332
+"\000\000\000\004" # Uses: 316
+"\014\000\000\000\000\000\000\000" # Uses: 342
+"graph_id" # Uses: 311
+"\001\000\000\000\000\000\000\000" # Uses: 306
+"unknown varia" # Uses: 315
+"\376\377\377\377" # Uses: 332
+"\000\000\000\000\000\000\000\001" # Uses: 347
+"%\002\000\000\000\000\000\000" # Uses: 332
+"?\000\0019" # Uses: 358
+"\366\002\000\000\000\000\000\000" # Uses: 336
+"re" # Uses: 308
+"\377\377\377\377\377\377\377\377" # Uses: 327
+"\377\377\013\037DF\035k" # Uses: 340
+"directio" # Uses: 324
+"limit" # Uses: 319
+"valid_at" # Uses: 316
+"bran" # Uses: 364
+"kind" # Uses: 339
+"\000\000\000\000\000\000\002\306" # Uses: 279
+"hops" # Uses: 337
+"\011\000\000\000\000\000\000\000" # Uses: 309
+"branc" # Uses: 307
+"\001\000\000\000\000\000\0002" # Uses: 309
+"neArest" # Uses: 300
+"\377\377" # Uses: 290
+"\377\377\377\377" # Uses: 308
+"Vect" # Uses: 318
+"candidates" # Uses: 309
+"exclude_l" # Uses: 317
+"\000\000\013\357D5\014\234" # Uses: 310
+"\377\021" # Uses: 325
+"\004\010\010\002" # Uses: 324
+"\000\000\000\000\000\000\0000" # Uses: 283
+"\377\377lo\025\244]\000" # Uses: 313
+"encoder" # Uses: 295
+"grap" # Uses: 336
+"\000\000\000\000\000\000\000," # Uses: 303
+"\377\377\377\377\377\377\377\031" # Uses: 283
+"\001\000\000\017" # Uses: 297
+"spac" # Uses: 309
+"\025\000\000\000\000\000\000\000" # Uses: 273
+"\000\016" # Uses: 322
+"va" # Uses: 330
+"\004\000\000\000\000\000\000\000" # Uses: 297
+"id" # Uses: 294
+"\000\000\022M\376h\370\212" # Uses: 292
+"valid" # Uses: 301
+"f\000\000\000" # Uses: 284
+"\030\000\000\000\000\000\000\000" # Uses: 302
+"\377\377\377\377\377\377\377\036" # Uses: 282
+"en" # Uses: 305
+"\376\377\377\377\377\377\377\377" # Uses: 301
+"\377\377\377\005" # Uses: 252
+"se" # Uses: 276
+"type_id" # Uses: 267
+"vali" # Uses: 305
+"\377\011" # Uses: 271
+"\001\000\000\000" # Uses: 276
+"branch_i" # Uses: 268
+"\000\000\000\000\000\000\000*" # Uses: 269
+"\377\005" # Uses: 287
+"e-" # Uses: 250
+"embe" # Uses: 289
+"\377\377\377\377\377\377\377V" # Uses: 266
+"\000\004" # Uses: 261
+" \000\000\000\000\000\000\000" # Uses: 261
+"\001\000" # Uses: 274
+"grapi" # Uses: 234
+"\014\000\000\000" # Uses: 258
+"\376\377\377\370" # Uses: 255
+"\024\000\000\000\000\000\000\000" # Uses: 230
+"!\000\000\000\000\000\000\000" # Uses: 268
+"m\000" # Uses: 254
+"\377\377\377\020" # Uses: 247
+"candidate" # Uses: 256
+"/\031HD\337\013\000\000" # Uses: 264
+"candid!te" # Uses: 234
+"\001\000\000\000\000\000\000\020" # Uses: 220
+"\377\377\377\377\377\377\377\010" # Uses: 222
+"\000\000" # Uses: 229
+"direction" # Uses: 249
+"graph_ig" # Uses: 232
+"\005\000\000\000\000\000\000\000" # Uses: 249
+"structural_edge" # Uses: 237
+"&\000\000\000\000\000\000\000" # Uses: 230
+"\000\000\000\000\000\000\000 " # Uses: 246
+"\376\377\377\313" # Uses: 234
+"\007\000\000\000\000\000\000\000" # Uses: 214
+"\001\000\000\200" # Uses: 233
+"\001\006" # Uses: 236
+"\001\000\000u" # Uses: 233
+"\001\000\000\000\000\000\000&" # Uses: 190
+"gra`" # Uses: 222
+"gra`h_id" # Uses: 227
+"\377\377\377\017" # Uses: 210
+"\004\000" # Uses: 237
+"version" # Uses: 222
+"as_of" # Uses: 222
+"\001\000\000\000\000\000\000\012" # Uses: 227
+"\000\000\000\000\000\000\000\010" # Uses: 238
+"vector" # Uses: 214
+"fuzz" # Uses: 216
+"\001\000\000\000\000\000\000\001" # Uses: 221
+"\002\000\000\000" # Uses: 211
+"\006\000\000\000\000\000\000\000" # Uses: 220
+"\010\000\000\000\000\000\000\000" # Uses: 219
+"*\002\000\000" # Uses: 198
+"\000\006" # Uses: 225
+"graph" # Uses: 205
+"\001\000\000\000\000\000\000\250" # Uses: 180
+"\003\000" # Uses: 199
+"@\020\000\000" # Uses: 179
+"cand" # Uses: 200
+"\001\000mo\025\255{\200" # Uses: 187
+"ki" # Uses: 186
+"\016\000\000\000\000\000\000\000" # Uses: 174
+"-\000\000\000\000\000\000\000" # Uses: 173
+"\013\000\000\000" # Uses: 177
+"\001\000\0015" # Uses: 173
+"quer" # Uses: 141
+"embedding_space" # Uses: 159
+"vaild_at" # Uses: 159
+"direc" # Uses: 172
+"limi" # Uses: 168
+"i\000\000\000" # Uses: 141
+"\024\001\000\000\000\000\000\000" # Uses: 153
+"\001\000\000\011" # Uses: 169
+"\377w" # Uses: 142
+"\000\000\000\000\000\000\000\016" # Uses: 144
+"op" # Uses: 117
+"bra;" # Uses: 118
+"branch" # Uses: 143
+"\000\000\000?\377j\236\224" # Uses: 117
+"brre" # Uses: 118
+"\376\377\377\365" # Uses: 138
+"branAch_" # Uses: 115
+"\377\377\012\337D\237\2250" # Uses: 84
+"\365\377\377\377" # Uses: 101
+"exclu" # Uses: 119
+"branch_id" # Uses: 94
+"\001\000\000\000\000\000\000|" # Uses: 82
+"\377\013" # Uses: 85
+"a\000\000\000" # Uses: 77
+"\360\343\232D\337\013\000\000" # Uses: 54
+"dimensi" # Uses: 61
+"\000\000\000\000\000\000\002&" # Uses: 67
+"\036\001\000\000\000\000\000\000" # Uses: 53
+"\000\000\000\000\000\000\000\014" # Uses: 47
+"\371\377\377\377" # Uses: 54
+"human" # Uses: 41
+"\000\000\000\246" # Uses: 41
+"me" # Uses: 24
+"\015\000\000\000\000\000\000\000" # Uses: 27
+"\001\001" # Uses: 20
+"\002\000" # Uses: 1
+###### End of recommended dictionary. ######
+Done 488606 runs in 61 second(s)

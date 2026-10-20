@@ -1,0 +1,38 @@
+{
+  "commands": [
+    {
+      "op": "evaluate",
+      "value": {
+        "branch_id": "main",
+        "candidates": {
+          "branch_id": "main",
+          "direction": "both",
+          "graph_id": "fuzz",
+          "hops": 2,
+          "kind": "expand",
+          "limit": 10000,
+          "seeds": [
+            "a"
+          ]
+        },
+        "graph_id": "fuzz",
+        "k": 10,
+        "kind": "nearest",
+        "query": {
+          "kind": "vector",
+          "vector": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        "space": {
+          "id": "notes",
+          "revision": "1"
+        },
+        "valid_at": 150
+      }
+    }
+  ],
+  "version": "0.24.0"
+}

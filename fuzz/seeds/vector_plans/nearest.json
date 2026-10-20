@@ -1,0 +1,45 @@
+{
+  "commands": [
+    {
+      "op": "evaluate",
+      "value": {
+        "branch_id": "main",
+        "graph_id": "fuzz",
+        "k": 3,
+        "kind": "nearest",
+        "query": {
+          "kind": "vector",
+          "vector": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        "space": {
+          "id": "notes",
+          "revision": "1"
+        },
+        "valid_at": 50
+      }
+    },
+    {
+      "op": "evaluate",
+      "value": {
+        "as_of": 15,
+        "branch_id": "main",
+        "graph_id": "fuzz",
+        "k": 2,
+        "kind": "nearest",
+        "query": {
+          "embedding_id": "vc",
+          "kind": "embedding"
+        },
+        "space": {
+          "id": "notes",
+          "revision": "1"
+        }
+      }
+    }
+  ],
+  "version": "0.24.0"
+}

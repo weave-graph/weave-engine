@@ -329,7 +329,8 @@ an independent oracle computed from the rows. It also checks that every
 answer cites the provenance of its facts, that restricted units never reach
 the analyst, and that answers are identical after reopening the store. CI
 runs it with 150 units in the main suite and with 5,000 units and 1,000
-updates in the `hardware-fleet-5k` job.
+updates in the `phase-a-exit` job on Linux, macOS and Windows, as part of
+the [Phase A exit scenario check](PHASE_A_EXIT.md).
 
 Measured on one Linux host (AMD Ryzen 9 7950X, optimized build, on-disk
 store), 5,000 units: the base import (151,622 facts, two fact revisions)
@@ -350,7 +351,7 @@ Both are compared with an independent oracle for `fleet-admin` and
 `fleet-analyst`, return the note text and the embeddings' provenance, keep
 restricted units from the analyst, and are reproduced after reopening the
 store. CI runs it with 150 units in the main suite and at 5,000 units in the
-`hardware-fleet-5k` job.
+`phase-a-exit` job.
 
 ## Example
 

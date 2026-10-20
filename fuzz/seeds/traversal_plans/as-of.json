@@ -1,0 +1,29 @@
+{
+  "commands": [
+    {
+      "op": "evaluate",
+      "value": {
+        "kind": "as_of",
+        "query": {
+          "branch_id": "main",
+          "graph_id": "fuzz",
+          "predicate": "feeds"
+        },
+        "unix_millis": 15
+      }
+    },
+    {
+      "op": "evaluate",
+      "value": {
+        "kind": "as_of",
+        "query": {
+          "branch_id": "main",
+          "from": "a",
+          "graph_id": "fuzz"
+        },
+        "unix_millis": 25
+      }
+    }
+  ],
+  "version": "0.24.0"
+}

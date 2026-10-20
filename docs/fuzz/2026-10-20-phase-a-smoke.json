@@ -1,0 +1,82 @@
+{
+  "date": "2026-10-20",
+  "engine_base": "f97c93d",
+  "host": "x86_64-unknown-linux-gnu (AMD Ryzen 9 7950X, 32 threads, 125 GiB)",
+  "compiler": "rustc 1.100.0-nightly (420ed2a0c 2026-09-18)",
+  "cargo_fuzz": "0.13.2",
+  "sanitizer": "address (cargo-fuzz default)",
+  "limits": {
+    "max_total_time_seconds": 60,
+    "per_input_timeout_seconds": 5,
+    "rss_limit_mb": 1536,
+    "max_input_bytes": 131072,
+    "seed": 201020
+  },
+  "command": "cargo +nightly-2026-09-19 fuzz run <target> fuzz/corpus/<target> fuzz/seeds/<target> -- -max_total_time=60 -timeout=5 -rss_limit_mb=1536 -max_len=131072 -seed=201020",
+  "corpus": "fresh: each run started from an empty fuzz/corpus/<target> plus the committed seeds",
+  "runs": [
+    {
+      "target": "fact_write",
+      "run": "fact_write",
+      "inputs": 575281,
+      "seconds": 61,
+      "libfuzzer_cov": 10098,
+      "libfuzzer_features": 17226,
+      "corpus_entries": 1086,
+      "corpus_size": "392Kb",
+      "reported_rss_mib": 527,
+      "exit_code": 0
+    },
+    {
+      "target": "traversal_plans",
+      "run": "traversal_plans",
+      "inputs": 429784,
+      "seconds": 61,
+      "libfuzzer_cov": 12377,
+      "libfuzzer_features": 30109,
+      "corpus_entries": 1081,
+      "corpus_size": "231Kb",
+      "reported_rss_mib": 539,
+      "exit_code": 0
+    },
+    {
+      "target": "vector_plans",
+      "run": "vector_plans",
+      "inputs": 488606,
+      "seconds": 61,
+      "libfuzzer_cov": 12229,
+      "libfuzzer_features": 26345,
+      "corpus_entries": 1111,
+      "corpus_size": "299Kb",
+      "reported_rss_mib": 540,
+      "exit_code": 0
+    },
+    {
+      "target": "mcp_jsonrpc",
+      "run": "mcp_jsonrpc",
+      "inputs": 7275,
+      "seconds": 61,
+      "libfuzzer_cov": 11173,
+      "libfuzzer_features": 40858,
+      "corpus_entries": 641,
+      "corpus_size": "752Kb",
+      "reported_rss_mib": 585,
+      "exit_code": 0
+    }
+  ],
+  "seed_sha256": {
+    "fuzz/seeds/fact_write/assert-correct-retract.json": "8729d897be12bef5cca2c8c38d75f9fde2d8cb51bccab7c8f47f9df460ccbc0b",
+    "fuzz/seeds/fact_write/assert-then-correct.json": "ed799cde9c74a0f5c77bb7127381ddd2854d91f4ddc493e492ce5882ea7d6ef4",
+    "fuzz/seeds/fact_write/dimension-mismatch-rollback.json": "133c093e189c2e9dac3799fefe2632361b7cb7562d9b48b2b9cfc27528e503ec",
+    "fuzz/seeds/fact_write/embedding-and-provenance.json": "e6b6759a2dc89ebfaa2f25a5c157f77c88712574b52ba8953244fb04b79aa15b",
+    "fuzz/seeds/fact_write/stale-expected-head.json": "b68848d9edd835c30d419989a8c2cdf49ab0153b53550e4c9e3c1249fd25ed69",
+    "fuzz/seeds/traversal_plans/as-of.json": "125c953e36ca049dd50bdb27f89444e5d7dc5439f93c57046ebf7da40a0b24c6",
+    "fuzz/seeds/traversal_plans/changes.json": "adba631a883ea05c59498915d04c85f326b8080f12bde7b46a4257120bb2372a",
+    "fuzz/seeds/traversal_plans/expand.json": "8b6fff51f757cd95e8683f3f5560cb6bb11e71c00b2d640aa58599e08fe91eed",
+    "fuzz/seeds/vector_plans/nearest-in-neighborhood.json": "ffd209b867d29593fb4d4712f8409dabe6bd6b8a1d1479da5eada6d60682cc6d",
+    "fuzz/seeds/vector_plans/nearest.json": "3033ba5b8dfc053a072769eb34095b3a4f5bba72c425ff682c93c6f5efcf52ea",
+    "fuzz/seeds/vector_plans/similar-candidates.json": "d4d26c2c7c9764f6d1214ceb9f28262e836dbb171e1694a813150ca2fba62b02",
+    "fuzz/seeds/mcp_jsonrpc/errors.jsonl": "3539b05bbfd929d75876ce520a1ed93e32dee53536abea996ce083bad6c8d0cd",
+    "fuzz/seeds/mcp_jsonrpc/session.jsonl": "91109e304b253f34b6d8b9d4f332a128f5d56e6c0d4451e999a7905ca65cfb35"
+  }
+}

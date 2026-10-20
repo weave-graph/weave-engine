@@ -149,7 +149,7 @@ fn phase_a_hybrid_retrieval_questions_3_and_4() {
     let importer = HostContext::new(IMPORTER, [GRAPH.to_string()]);
     let target = Target::new(GRAPH);
     import_batch(&mut engine, &importer, &target, &dataset.base).unwrap();
-    apply_updates(&mut engine, &importer, &target, &dataset.updates, |u| {
+    let applied = apply_updates(&mut engine, &importer, &target, &dataset.updates, |u| {
         clock.set(parse_time(&u.reported_at).unwrap())
     })
     .unwrap();
@@ -510,4 +510,20 @@ fn phase_a_hybrid_retrieval_questions_3_and_4() {
         };
         assert_eq!(again, ids);
     }
+
+    // One machine-readable line for `scripts/check_phase_a_exit.py`, printed
+    // only after every assertion above passed.
+    println!(
+        "PHASE_A_EXIT {}",
+        json!({
+            "test": "fleet_hybrid",
+            "units": config.units,
+            "updates": config.updates,
+            "dataset": dataset.digest(),
+            "head_after_updates": applied.revisions.last(),
+            "embeddings": notes.len() + units.len(),
+            "checks": ["embeddings", "q3", "q4", "q5", "explain", "reopen"],
+            "counts": {"q3_answers": checked, "restricted_units": restricted.len()},
+        })
+    );
 }

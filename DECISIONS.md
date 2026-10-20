@@ -1064,3 +1064,58 @@ without `float_roundtrip` can parse a printed `f64` one unit in the last place
 off, as the first run showed (`1.1102230246251563e-16` against
 `…565e-16`). IDs and their order are compared exactly. In-process tests keep
 comparing scores exactly.
+
+### 2026-10-20 — #16 A6 — The exit scenario is one script over the three existing scenario tests
+
+`fleet_scenario.rs`, `fleet_hybrid.rs` and `fleet_exit_questions.rs` already
+hold independent oracles for every exit question. A new single test would
+have copied those oracles, or moved them into a shared support crate that
+the A4 part 2 work is also editing. Instead, `scripts/check_phase_a_exit.py`
+runs the three tests optimized at the exit size, and each test prints one
+`PHASE_A_EXIT {json}` line only after all of its assertions have passed. The
+script fails unless every scenario clause is reported by the tests listed for
+it, and unless the three tests report the same dataset digest and the same
+content-derived head revision after the 1,000 updates. The second condition
+shows that they answered over one fleet state, not three similar ones. The
+result is one pass or fail with a JSON report, and no oracle exists twice.
+The MCP test was fixed at 60 units; it now takes `WEAVE_FLEET_UNITS` and
+`WEAVE_FLEET_UPDATES` like the other two and still defaults to 60.
+
+### 2026-10-20 — #16 A6 — `phase-a-exit` replaces `hardware-fleet-5k` and runs on three OSes
+
+Issue #16 asks for the scenario to pass in CI on Linux, macOS and Windows.
+The new `phase-a-exit` job runs the script on all three, with a 90-minute
+timeout. It stays a separate job so that a slow runner cannot hide failures
+in the main matrix. It already runs the two tests that `hardware-fleet-5k`
+ran, at the same size, so that job was removed rather than running them
+twice on Linux.
+
+### 2026-10-20 — #16 A6 — Scenario gaps closed in the tests, not in the script
+
+A review of the three tests against the scenario text found three gaps. The
+MCP `what_changed` answers were not checked for source facts. Restricted
+units were not checked as hidden in MCP change sets. `fleet_scenario.rs` did
+not reproduce "what changed for U" after reopening the store. All three are
+now assertions in the tests. None needed an engine change: every check passed
+on first run at 5,000 units.
+
+### 2026-10-20 — #16 A6 — Fuzz targets share a seeded graph with a hidden-word leak oracle
+
+The four new targets (`fact_write`, `traversal_plans`, `vector_plans`,
+`mcp_jsonrpc`) run over one small seeded fact graph with three writes at
+recorded times 10, 20 and 30. Every fact readable only by `admin` contains
+the word `secret` in its ID or content. For the analyst, no output, result or
+error may contain that word unless the fuzz input contains it. This is a
+cheap noninterference check that covers error messages too. `check_seeds`
+proves the check is not vacuous: the admin does see `secret` through the
+seeds of each read target. The read targets also require evaluation to be
+deterministic and to leave the head and event count unchanged. The plan
+targets decode whole programs with `decode_program`, so version-first
+decoding is fuzzed too, and they keep only programs whose top-level commands
+are the target's operators. Nested expressions are left free, so
+compositions like `nearest` over `expand` are reached. The write target uses
+a fresh store per input and checks atomicity (a failed write changes nothing
+and the line stays writable), readability after success, and determinism
+across two stores. The MCP target writes the seeded store to a temporary
+file, because the server owns its session. A second engine on that file
+checks that no message changes the store.

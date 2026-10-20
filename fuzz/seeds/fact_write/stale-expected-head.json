@@ -1,0 +1,25 @@
+{
+  "commands": [
+    {
+      "branch_id": "main",
+      "changes": [
+        {
+          "change": "assert",
+          "fact": {
+            "entity_id": "G",
+            "id": "g",
+            "kind": "node",
+            "metadata": [],
+            "properties": {},
+            "readers": [],
+            "space_id": "s"
+          }
+        }
+      ],
+      "expected_head": "fact:sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "graph_id": "fuzz",
+      "op": "write"
+    }
+  ],
+  "version": "0.24.0"
+}
