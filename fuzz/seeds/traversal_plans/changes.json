@@ -1,0 +1,41 @@
+{
+  "commands": [
+    {
+      "op": "evaluate",
+      "value": {
+        "branch_id": "main",
+        "from": {
+          "kind": "as_of",
+          "unix_millis": 15
+        },
+        "graph_id": "fuzz",
+        "kind": "changes",
+        "limit": 10000,
+        "to": {
+          "kind": "head"
+        }
+      }
+    },
+    {
+      "op": "evaluate",
+      "value": {
+        "branch_id": "main",
+        "entities": [
+          "A"
+        ],
+        "from": {
+          "kind": "as_of",
+          "unix_millis": 0
+        },
+        "graph_id": "fuzz",
+        "kind": "changes",
+        "limit": 10000,
+        "to": {
+          "kind": "as_of",
+          "unix_millis": 25
+        }
+      }
+    }
+  ],
+  "version": "0.24.0"
+}

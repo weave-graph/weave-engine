@@ -120,10 +120,8 @@ The `weave-hardware` crate and CLI provide the
   units (about 151,600 facts, roughly a fifth customer-restricted) plus 1,000
   updates (rollouts, relocations, replacements, maintenance, incidents and
   corrections), byte-identical on every platform.
-- **Scenario.** The parts of the Phase A exit scenario that the current
-  operators reach run on it in CI at full size (`hardware-fleet-5k`): import,
-  zero-fact re-import, 1,000 single-update writes, question 2 in both forms
-  against an independent oracle, reader restrictions and reopening.
+- **Scenario.** The whole Phase A exit scenario runs on it in CI at full size
+  (see [Phase A acceptance](#phase-a-acceptance-a6)).
 
 **Limits.** Imports above 100,000 changes are written in several revisions.
 Rows missing from an export are not retracted. `recorded_query` requires a
@@ -277,6 +275,26 @@ restricted units hidden from the analyst.
 - Candidate relations are never persisted by the engine; persisting one is
   an explicit write of an ordinary edge citing the embeddings as evidence.
 - Views and handler recipes reject `nearest` and `similar_candidates`.
+
+## Phase A acceptance (A6)
+
+A6 is in progress ([#16](https://github.com/weave-graph/weave-engine/issues/16)).
+Delivered so far:
+
+- **Exit scenario.** `scripts/check_phase_a_exit.py` runs the whole
+  [exit scenario](ROADMAP.md#phase-a-rock-solid-shared-core) at 5,000 units
+  and 1,000 updates and gives one pass or fail: questions 1 to 5, source-fact
+  explanations, reproducibility after reopening, and questions 2 to 4 through
+  the MCP preview. It runs in the `phase-a-exit` CI job on Linux, macOS and
+  Windows ([how it works](PHASE_A_EXIT.md)).
+- **Fuzzing.** cargo-fuzz targets for fact `write` decode and apply
+  (`fact_write`), the A3 plans (`traversal_plans`), the A4 plans
+  (`vector_plans`) and MCP JSON-RPC input (`mcp_jsonrpc`) run as bounded
+  smoke runs in `fuzz.yml` ([fuzzing](FUZZING.md)).
+
+Still open: store migration evidence from store 29, baseline benchmarks for
+the Phase A paths, the protocol 1.0.0 cut, the README quickstart, and the
+tagged release.
 
 ## Verified evidence
 

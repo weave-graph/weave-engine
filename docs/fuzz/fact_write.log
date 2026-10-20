@@ -1,0 +1,258 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.02s
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.02s
+     Running `fuzz/target/x86_64-unknown-linux-gnu/release/fact_write -artifact_prefix=<checkout>/fuzz/artifacts/fact_write/ -max_total_time=60 -timeout=5 -rss_limit_mb=1536 -max_len=131072 -seed=201020 fuzz/corpus/fact_write fuzz/seeds/fact_write`
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 201020
+INFO: Loaded 1 modules   (780190 inline 8-bit counters): 780190 [0x5b240b335460, 0x5b240b3f3bfe), 
+INFO: Loaded 1 PC tables (780190 PCs): 780190 [0x5b240b3f3c00,0x5b240bfdb5e0), 
+INFO:        0 files found in fuzz/corpus/fact_write
+INFO:        5 files found in fuzz/seeds/fact_write
+INFO: seed corpus: files: 5 min: 539b max: 1480b total: 5317b rss: 65Mb
+#6	INITED cov: 8505 ft: 11915 corp: 5/5317b exec/s: 0 rss: 192Mb
+	NEW_FUNC[1/21]: 0x5b24085dacf0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x156ecf0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/21]: 0x5b2408474600  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x1408600) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b24084f6370  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x148a370) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/10]: 0x5b240a2ac880  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x3240880) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/10]: 0x5b240a2b2140  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x3246140) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b240ac4d290  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x3be1290) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b24084f6520  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x148a520) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b2408b7f540  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x1b13540) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/2]: 0x5b24084f08b0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x14848b0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/2]: 0x5b240ac8c540  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x3c20540) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b240a2bd050  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x3251050) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/3]: 0x5b24084768e0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x140a8e0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/3]: 0x5b240ab1d860  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x3ab1860) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/8]: 0x5b240a2aab70  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x323eb70) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/8]: 0x5b240a2ad4d0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x32414d0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/2]: 0x5b240a30e760  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x32a2760) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/2]: 0x5b240a310470  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x32a4470) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b24084f5150  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x1489150) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/3]: 0x5b240ac6abc0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x3bfebc0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/3]: 0x5b24084f6a90  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x148aa90) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b240acbfb40  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x3c53b40) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b240a2f3590  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x3287590) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b240a1fe5f0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x31925f0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/2]: 0x5b24090c6820  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x205a820) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/2]: 0x5b2409d04bf0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x2c98bf0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b24084ef2f0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x14832f0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b24084efc00  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x1483c00) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b240aa54100  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x39e8100) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b240a20f680  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x31a3680) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b24084f0410  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x1484410) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/10]: 0x5b24084ef050  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x1483050) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/10]: 0x5b24084f3640  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x1487640) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/3]: 0x5b24084f59a0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x14899a0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/3]: 0x5b24084f68b0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x148a8b0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/4]: 0x5b24090c45f0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x20585f0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/4]: 0x5b24090c5460  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x2059460) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/2]: 0x5b2409dc6fb0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x2d5afb0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/2]: 0x5b2409dcf8e0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x2d638e0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/2]: 0x5b240a614330  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x35a8330) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/2]: 0x5b240a6bd1f0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x36511f0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/1]: 0x5b24084f66d0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x148a6d0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[1/3]: 0x5b240ac2a820  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x3bbe820) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+	NEW_FUNC[2/3]: 0x5b240ac881c0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/fact_write+0x3c1c1c0) (BuildId: 0e1aee81d22cc3323dd0d5e4c966be2ae6518214)
+#575281	DONE   cov: 10098 ft: 17226 corp: 1086/392Kb lim: 1580 exec/s: 9430 rss: 527Mb
+###### Recommended dictionary. ######
+"\377\377\377\377\377\377\377\177" # Uses: 341
+"\005\000" # Uses: 359
+"\003\000\000\000\000\000\000\000" # Uses: 334
+"\025\000\000\000\000\000\000\000" # Uses: 381
+"\015\000" # Uses: 361
+"e-bc" # Uses: 343
+"kind" # Uses: 345
+"\000\000\000\000\000\000\000\000" # Uses: 360
+"\376\377\377\377" # Uses: 365
+"\377\377\377\377\377\377\377\377" # Uses: 315
+"retention_retired" # Uses: 342
+"3\000\000\000\000\000\000\000" # Uses: 335
+"\264\377\377\377" # Uses: 341
+"sp " # Uses: 348
+"\001\000\000\014" # Uses: 357
+"re" # Uses: 340
+"\377\377\377\377" # Uses: 320
+"en" # Uses: 334
+"\000\200@\000" # Uses: 371
+"\001\000\027\225z2\250\260" # Uses: 331
+"\377\377\377\003" # Uses: 345
+"\001\000\000\000" # Uses: 322
+"\377\377\011=" # Uses: 318
+"\377\377\377\377\377\377\377\031" # Uses: 327
+"\000\000\000\000" # Uses: 362
+"\001\000\000\000\000\000\000\000" # Uses: 355
+"\010\000\000\000" # Uses: 352
+"pro\177erti" # Uses: 335
+"\000\000\000\001" # Uses: 331
+"id" # Uses: 334
+"readers" # Uses: 354
+"fac" # Uses: 364
+"provenance" # Uses: 351
+"\377\377\377\377\377\377\000w" # Uses: 310
+"entity_" # Uses: 325
+"to" # Uses: 331
+"\014\000" # Uses: 302
+"\377\377\377\377\377\377\377\010" # Uses: 311
+"changes" # Uses: 336
+"provena" # Uses: 315
+"\377\377\377\002" # Uses: 309
+"\377\377\377\377\377\377\377\007" # Uses: 338
+"sta" # Uses: 330
+"su" # Uses: 350
+"command" # Uses: 328
+"query" # Uses: 323
+"\011\000\000\000\000\000\000\000" # Uses: 350
+"retention_retired_branches" # Uses: 319
+"importe" # Uses: 333
+"!\000\000\000\000\000\000\000" # Uses: 345
+"spac" # Uses: 362
+"\377\377\377\377\377\377\003\015" # Uses: 303
+"space_i" # Uses: 357
+"\012\000\000\000" # Uses: 283
+"\002\000\000\000" # Uses: 289
+"\001\000" # Uses: 331
+"\001\000\027\225z;\207p" # Uses: 323
+"\000\000\000\020" # Uses: 337
+"\030\000\000\000\000\000\000\000" # Uses: 281
+"\377\377" # Uses: 315
+"\376\377\377\377\377\377\377\377" # Uses: 333
+"\001\000\000\000\000\000\000\010" # Uses: 321
+"\001\000\000\000\000\000\000\002" # Uses: 307
+"valid_time" # Uses: 318
+"graph_id" # Uses: 321
+"space_" # Uses: 295
+"\000\000\000\000\000\000\000\024" # Uses: 306
+"\273\377\377\377" # Uses: 328
+"\377\377\377\245" # Uses: 318
+"chan" # Uses: 308
+"pr" # Uses: 295
+"\010\002\000\010" # Uses: 311
+"de" # Uses: 313
+"\013\000\000\000\000\000\000\000" # Uses: 299
+"\000\000\000\000\000\000\000P" # Uses: 316
+"valid_t" # Uses: 299
+"from" # Uses: 290
+"\000\000" # Uses: 317
+"retention_projection_recei" # Uses: 258
+"space_id" # Uses: 295
+"op" # Uses: 321
+"br" # Uses: 306
+"kindd" # Uses: 300
+"\377\377\377\377\377\377\377=" # Uses: 292
+"me  " # Uses: 294
+"\377\377\377\376" # Uses: 292
+"\001\000\000\000\000\000\003\024" # Uses: 272
+"\372\000\000\000\000\000\000\000" # Uses: 303
+"\377\377\377\377\377\377\377\001" # Uses: 306
+"entity_su" # Uses: 310
+"\000\015" # Uses: 258
+"\370\377\377\377" # Uses: 330
+"polarit" # Uses: 285
+"\377\377\377\377\377\377\377\000" # Uses: 284
+"v\212\351\377\337\000\000\000" # Uses: 248
+"\007\000" # Uses: 291
+"enti" # Uses: 279
+"\006\000\000\000" # Uses: 268
+"mode" # Uses: 272
+"version" # Uses: 273
+"/\000\000\000" # Uses: 252
+"\375\377\377\377" # Uses: 265
+"gr" # Uses: 266
+"propert" # Uses: 263
+"0.24.0" # Uses: 270
+"6\001" # Uses: 276
+"%\000\000\000\000\000\000\000" # Uses: 251
+"\000\000\000\000\000\000\000\001" # Uses: 287
+"kindty_" # Uses: 234
+"\020\000\000\000\000\000\000\000" # Uses: 280
+"\001\000\000\000\000\000\000\004" # Uses: 228
+"branch_" # Uses: 254
+"\000\000\000\036" # Uses: 260
+"\004\000\000\000\000\000\000\000" # Uses: 256
+"\027\000\000\000\000\000\000\000" # Uses: 265
+"\376\377\377\373" # Uses: 291
+"\377\377\377\377\377\377\000I" # Uses: 243
+"\000\000r\231\203\250\017\200" # Uses: 255
+"\000\011" # Uses: 257
+"rea" # Uses: 281
+"\001\000\014\343\241\245|\274" # Uses: 234
+"\001\000\000\000\000\000\001;" # Uses: 251
+"\241\002\000\000\000\000\000\000" # Uses: 248
+"ki" # Uses: 267
+"ch&anges" # Uses: 257
+"retention_adapter_states" # Uses: 211
+"\000\000\000\351" # Uses: 227
+"d\000" # Uses: 259
+"\000\000\000\007" # Uses: 227
+"\364\377\377\377" # Uses: 242
+"\001\021" # Uses: 246
+"v\000" # Uses: 258
+"\026\000\000\000\000\000\000\000" # Uses: 211
+"\377\377\377\370" # Uses: 242
+"\005\000\000\000" # Uses: 238
+"\243\003\000\000\000\000\000\000" # Uses: 219
+"va" # Uses: 214
+"\005\000\000\000\000\000\000\000" # Uses: 206
+"6\000\000\000" # Uses: 210
+"method" # Uses: 236
+"\021\000\000\000\000\000\000\000" # Uses: 203
+"valid_" # Uses: 184
+"metadata" # Uses: 222
+"versi" # Uses: 210
+"\377\377\377\372" # Uses: 221
+"\001\000\000g" # Uses: 179
+"\377\377q\231\203\250\264\200" # Uses: 205
+"unknown varia" # Uses: 179
+"prop" # Uses: 216
+"\377\377\377\377\377\377\377s" # Uses: 178
+"\001\015" # Uses: 228
+"cha" # Uses: 195
+"cct" # Uses: 174
+"\377\377\377\377\377\377\377\006" # Uses: 184
+"\377\377\377\371" # Uses: 213
+"me" # Uses: 182
+"\312\314\314\014" # Uses: 176
+"\261\252Cz\225\027\000\000" # Uses: 170
+"brd" # Uses: 173
+"expecte" # Uses: 180
+"\000\000\000\000\000\000\000 " # Uses: 157
+"\010\000\000\000\000\000\000\000" # Uses: 162
+"\001\000\000\000\000\000\000\024" # Uses: 180
+"\377\004" # Uses: 177
+"\373\377\377\377" # Uses: 124
+"\000\000\000\000\000\000\000\016" # Uses: 148
+"\000\000\000\000\000\000\000\010" # Uses: 132
+"\035\000\000\000" # Uses: 147
+"\377\377\377\377\377\377\3773" # Uses: 132
+"assertion" # Uses: 174
+"h_" # Uses: 157
+"\241\376\377\377" # Uses: 161
+"\001\000\000/" # Uses: 128
+"deri" # Uses: 108
+"\000\001" # Uses: 129
+"\272\377\377\377" # Uses: 128
+"metadat" # Uses: 109
+"\001\000\000\000\000\000\000 " # Uses: 101
+"mount_receipts" # Uses: 94
+"\377\000" # Uses: 105
+"subject" # Uses: 90
+"\001\000\000\000\000\000\000\032" # Uses: 83
+"\000\000\000\000\000\000\000\002" # Uses: 87
+"fact" # Uses: 84
+"\013\314\314\313" # Uses: 75
+"\001\000\000\004" # Uses: 60
+"\361\276Rz\225\027\000\000" # Uses: 87
+"changesap" # Uses: 60
+"\377\377\377\005" # Uses: 61
+"\377\377\377\177" # Uses: 83
+"pz" # Uses: 50
+"ch" # Uses: 37
+"derived_f" # Uses: 44
+"\377Q" # Uses: 64
+"reaners" # Uses: 39
+"6\001\000\000" # Uses: 28
+"properties" # Uses: 31
+"metabata" # Uses: 19
+"\000\002" # Uses: 15
+"\015\000\000\000\000\000\000\000" # Uses: 3
+###### End of recommended dictionary. ######
+Done 575281 runs in 61 second(s)

@@ -2,9 +2,9 @@ name: Fuzz smoke
 on:
   push:
     branches: [main]
-    paths: ['fuzz/**', 'crates/weave-contract/**', 'crates/weave-policy/**', 'crates/weave-engine/**', 'Cargo.lock', '.github/workflows/fuzz.yml']
+    paths: ['fuzz/**', 'crates/weave-contract/**', 'crates/weave-policy/**', 'crates/weave-engine/**', 'crates/weave-science/**', 'crates/weave-mcp/**', 'Cargo.lock', '.github/workflows/fuzz.yml']
   pull_request:
-    paths: ['fuzz/**', 'crates/weave-contract/**', 'crates/weave-policy/**', 'crates/weave-engine/**', 'Cargo.lock', '.github/workflows/fuzz.yml']
+    paths: ['fuzz/**', 'crates/weave-contract/**', 'crates/weave-policy/**', 'crates/weave-engine/**', 'crates/weave-science/**', 'crates/weave-mcp/**', 'Cargo.lock', '.github/workflows/fuzz.yml']
   workflow_dispatch:
 concurrency:
   group: fuzz-${{ github.event.pull_request.number || github.ref }}
@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [program_atomic, capsule_receive, policy_wire]
+        target: [program_atomic, capsule_receive, policy_wire, fact_write, traversal_plans, vector_plans, mcp_jsonrpc]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master

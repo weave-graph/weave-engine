@@ -1,0 +1,35 @@
+{
+  "commands": [
+    {
+      "op": "evaluate",
+      "value": {
+        "branch_id": "main",
+        "graph_id": "fuzz",
+        "k": 1,
+        "kind": "similar_candidates",
+        "limit": 1000,
+        "space": {
+          "id": "notes",
+          "revision": "1"
+        }
+      }
+    },
+    {
+      "op": "evaluate",
+      "value": {
+        "branch_id": "main",
+        "exclude_linked": true,
+        "graph_id": "fuzz",
+        "k": 2,
+        "kind": "similar_candidates",
+        "limit": 1000,
+        "space": {
+          "id": "notes",
+          "revision": "1"
+        },
+        "valid_at": 50
+      }
+    }
+  ],
+  "version": "0.24.0"
+}

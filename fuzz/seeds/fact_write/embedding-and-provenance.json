@@ -1,0 +1,67 @@
+{
+  "commands": [
+    {
+      "branch_id": "main",
+      "changes": [
+        {
+          "change": "assert",
+          "fact": {
+            "id": "vd",
+            "kind": "embedding",
+            "provenance": {
+              "method": {
+                "kind": "model",
+                "model": "fuzz-encoder",
+                "version": "1"
+              },
+              "source": "seed"
+            },
+            "readers": [],
+            "space": {
+              "id": "notes",
+              "revision": "1"
+            },
+            "subject": {
+              "kind": "node",
+              "node_id": "c"
+            },
+            "valid_time": {
+              "end": 50,
+              "start": 5
+            },
+            "vector": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "change": "assert",
+          "fact": {
+            "entity_id": "E",
+            "id": "e",
+            "kind": "node",
+            "metadata": [],
+            "properties": {
+              "note": "imported"
+            },
+            "provenance": {
+              "method": {
+                "importer": "seed-csv",
+                "kind": "import",
+                "version": "1"
+              },
+              "source": "seed.csv"
+            },
+            "readers": [],
+            "space_id": "s"
+          }
+        }
+      ],
+      "graph_id": "fuzz",
+      "op": "write"
+    }
+  ],
+  "version": "0.24.0"
+}

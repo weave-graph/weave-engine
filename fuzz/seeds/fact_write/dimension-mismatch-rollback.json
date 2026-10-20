@@ -1,0 +1,55 @@
+{
+  "commands": [
+    {
+      "branch_id": "main",
+      "changes": [
+        {
+          "change": "assert",
+          "fact": {
+            "entity_id": "H",
+            "id": "h",
+            "kind": "node",
+            "metadata": [],
+            "properties": {},
+            "readers": [],
+            "space_id": "s"
+          }
+        }
+      ],
+      "graph_id": "fuzz",
+      "op": "write"
+    },
+    {
+      "branch_id": "main",
+      "changes": [
+        {
+          "change": "assert",
+          "fact": {
+            "id": "vbad",
+            "kind": "embedding",
+            "readers": [],
+            "space": {
+              "id": "notes",
+              "revision": "1"
+            },
+            "subject": {
+              "kind": "node",
+              "node_id": "h"
+            },
+            "valid_time": {
+              "end": null,
+              "start": 0
+            },
+            "vector": [
+              1.0,
+              0.0
+            ]
+          }
+        }
+      ],
+      "graph_id": "fuzz",
+      "op": "write"
+    }
+  ],
+  "version": "0.24.0"
+}

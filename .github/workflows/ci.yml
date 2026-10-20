@@ -71,23 +71,31 @@ jobs:
         env:
           WEAVE_A3_FACTS: '100000'
         run: cargo test --release --locked -p weave-engine --test traversal_scale -- --nocapture
-  hardware-fleet-5k:
-    # The A5 fleet scenario at the Phase A exit size, in its own job.
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+  phase-a-exit:
+    # The whole Phase A exit scenario (docs/ROADMAP.md) at its exit size, 5,000
+    # units and 1,000 updates, on every supported OS, in its own job so a slow
+    # runner here cannot hide failures elsewhere. One script runs the three
+    # scenario tests optimized and gives one pass/fail with a JSON report.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: hardware-fleet
-      - name: 5,000-unit fleet with 1,000 incremental updates (release)
-        env:
-          WEAVE_FLEET_UNITS: '5000'
-          WEAVE_FLEET_UPDATES: '1000'
-        run: cargo test --release --locked -p weave-hardware --test fleet_scenario -- --nocapture
-      - name: Exit questions 3 and 4 (hybrid retrieval) on the 5,000-unit fleet (release)
-        env:
-          WEAVE_FLEET_UNITS: '5000'
-          WEAVE_FLEET_UPDATES: '1000'
-        run: cargo test --release --locked -p weave-hardware --test fleet_hybrid -- --nocapture
+          shared-key: phase-a-exit
+      - name: Phase A exit scenario, 5,000 units and 1,000 updates (release)
+        run: python scripts/check_phase_a_exit.py --units 5000 --updates 1000 --report phase-a-exit.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase-a-exit-${{ matrix.os }}
+          path: phase-a-exit.json
+          if-no-files-found: ignore

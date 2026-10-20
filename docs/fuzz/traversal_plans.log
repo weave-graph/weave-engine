@@ -1,0 +1,273 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 20.38s
+    Finished `release` profile [optimized + debuginfo] target(s) in 20.28s
+     Running `fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans -artifact_prefix=<checkout>/fuzz/artifacts/traversal_plans/ -max_total_time=60 -timeout=5 -rss_limit_mb=1536 -max_len=131072 -seed=201020 fuzz/corpus/traversal_plans fuzz/seeds/traversal_plans`
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 201020
+INFO: Loaded 1 modules   (780064 inline 8-bit counters): 780064 [0x647f7b84e620, 0x647f7b90cd40), 
+INFO: Loaded 1 PC tables (780064 PCs): 780064 [0x647f7b90cd40,0x647f7c4f3f40), 
+INFO:        0 files found in fuzz/corpus/traversal_plans
+INFO:        3 files found in fuzz/seeds/traversal_plans
+INFO: seed corpus: files: 3 min: 507b max: 732b total: 1925b rss: 65Mb
+#7	INITED cov: 10660 ft: 14389 corp: 3/1925b exec/s: 0 rss: 252Mb
+	NEW_FUNC[1/19]: 0x647f789858d0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x13ff8d0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/19]: 0x647f7a5e2d40  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x305cd40) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f78a072f0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x14812f0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f7a5e2370  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x305c370) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/7]: 0x647f78987bb0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1401bb0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/7]: 0x647f78a01b80  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x147bb80) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f7ad8cce0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x3806ce0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f78a074a0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x14814a0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/7]: 0x647f7a5e5460  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x305f460) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/7]: 0x647f78987910  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1401910) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/15]: 0x647f78ed2c10  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x194cc10) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/15]: 0x647f790b60c0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1b300c0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f7af85e70  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x39ffe70) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f7afeb920  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x3a65920) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/2]: 0x647f7a5f5c30  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x306fc30) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/2]: 0x647f78a06420  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1480420) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/4]: 0x647f7a5e60b0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x30600b0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/4]: 0x647f7a6278b0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x30a18b0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/3]: 0x647f7af915b0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x3a0b5b0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/3]: 0x647f78a07a10  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1481a10) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f78a005c0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x147a5c0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f7a64ab10  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x30c4b10) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/3]: 0x647f78a06920  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1480920) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/3]: 0x647f78a07830  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1481830) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f7a630320  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x30aa320) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f7a5371d0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x2fb11d0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f7ad8add0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x3804dd0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f78a00ed0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x147aed0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f78a016e0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x147b6e0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f78a07650  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1481650) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/3]: 0x647f790c6d50  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1b40d50) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/3]: 0x647f7917d870  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1bf7870) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/5]: 0x647f78d80030  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x17fa030) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/5]: 0x647f78d84000  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x17fe000) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/2]: 0x647f790cd1c0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1b471c0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/2]: 0x647f79d4e2b0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x27c82b0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/9]: 0x647f789859a0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x13ff9a0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/9]: 0x647f7af60aa0  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x39daaa0) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/5]: 0x647f78a00320  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x147a320) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/5]: 0x647f78a04910  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x147e910) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f7af60700  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x39da700) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/4]: 0x647f79f8fd80  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x2a09d80) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/4]: 0x647f79f92560  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x2a0c560) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/2]: 0x647f795de260  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x2058260) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[2/2]: 0x647f795ded50  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x2058d50) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+	NEW_FUNC[1/1]: 0x647f78a0dc10  (<checkout>/fuzz/target/x86_64-unknown-linux-gnu/release/traversal_plans+0x1487c10) (BuildId: 19134554b1a38619e8b555b3bef913f9d1a1765d)
+#429784	DONE   cov: 12377 ft: 30109 corp: 1081/231Kb lim: 804 exec/s: 7045 rss: 539Mb
+###### Recommended dictionary. ######
+"e-" # Uses: 303
+"\000\000\000\000\000\000\000\240" # Uses: 267
+"\005\000" # Uses: 279
+"\003\000\000\000\000\000\000\000" # Uses: 269
+"\000\000\000\000\000\000\000\000" # Uses: 292
+"e " # Uses: 234
+"seeds" # Uses: 267
+"\012\000" # Uses: 253
+"\027\000\000\000\000\000\000\000" # Uses: 255
+"op" # Uses: 278
+"unix" # Uses: 267
+"graph_id" # Uses: 248
+"\\\360k\343\230\013\000\000" # Uses: 263
+"limit" # Uses: 253
+"\377\377\377\377" # Uses: 259
+"\377\377\377\377\377\377\377\007" # Uses: 297
+"\000\000\000\000" # Uses: 265
+"!\201\001\000" # Uses: 281
+"7\000\000\000\000\000\000\000" # Uses: 242
+"\001\000\000\000\000\000\000\002" # Uses: 261
+"\000\000\000\000\000\000\000\177" # Uses: 252
+"from" # Uses: 253
+"\000\000\000\000\000\000\000\001" # Uses: 276
+"\377\377\003\020" # Uses: 262
+"\000\000" # Uses: 262
+"\011\000\000\000" # Uses: 275
+"\000\000\017\346)\340\226P" # Uses: 250
+"properties" # Uses: 269
+"\001\000\000\000\000\000\000\000" # Uses: 240
+"\377\000" # Uses: 262
+"\020\000\000\000\000\000\000\000" # Uses: 237
+"h\000\000\000" # Uses: 270
+"\011\000\000\000\000\000\000\000" # Uses: 238
+"predi" # Uses: 266
+"predicate" # Uses: 256
+"\002\000\000 " # Uses: 266
+"\001\000\000\000\000\000\000+" # Uses: 227
+"\002\000\000\000\000\000\000\000" # Uses: 233
+"va" # Uses: 260
+"\015\000\000\000" # Uses: 260
+"hops" # Uses: 250
+"\015\000\000\000\000\000\000\000" # Uses: 247
+"propertie" # Uses: 232
+"e-ab" # Uses: 226
+"\376\377\377\305" # Uses: 239
+"9\000\000\000\000\000\000\000" # Uses: 233
+"node" # Uses: 291
+"\030\000\000\000\000\000\000\000" # Uses: 236
+"bra`" # Uses: 252
+"\377\377\377\375" # Uses: 225
+"\021\004" # Uses: 226
+"\377\377\377\377\377\377\377\010" # Uses: 250
+"\001\022" # Uses: 243
+"L\000\000\000\000\000\000\000" # Uses: 227
+"\001\000" # Uses: 224
+"\001\000\000\007" # Uses: 222
+"\001\000\000\000\000\000\000\004" # Uses: 226
+"\004\000" # Uses: 239
+"\374\377\377\377" # Uses: 259
+"\377\377\377\377\377\377\377\377" # Uses: 251
+"chanesg" # Uses: 198
+"\377\377\377\377\377\377\377\001" # Uses: 209
+"kind" # Uses: 214
+"\000\000\000\375" # Uses: 231
+"\001\002" # Uses: 227
+"\022\000\000\000\000\000\000\000" # Uses: 221
+"bran" # Uses: 244
+"direction" # Uses: 237
+"predchane" # Uses: 200
+"\017\000\000\000\000\000\000\000" # Uses: 229
+"\001\000\000\000\000\000\002G" # Uses: 220
+"\000\010" # Uses: 261
+"\000\023" # Uses: 226
+"graph" # Uses: 211
+"\377\377" # Uses: 215
+"\377\023" # Uses: 225
+"unix_mill" # Uses: 223
+"branch_ad" # Uses: 195
+"%\000\000\000\000\000\000\000" # Uses: 244
+"fuuu" # Uses: 215
+"limi" # Uses: 240
+"kint" # Uses: 229
+"\363\377\377\377" # Uses: 218
+"\377\377\011\370\343\215Y\020" # Uses: 216
+"\000\000\013\010\343co|" # Uses: 230
+"as_of" # Uses: 212
+"metadata" # Uses: 232
+"nearest" # Uses: 227
+"\001\000\000\000" # Uses: 214
+"\376\377\377\377\377\377\377\377" # Uses: 218
+"valid_" # Uses: 209
+"unix_" # Uses: 215
+"changes" # Uses: 179
+"\035\264\331)\206\017\000\000" # Uses: 203
+"\317\266j\343\010\013\000\000" # Uses: 207
+"\371\377\377\377" # Uses: 220
+"br" # Uses: 227
+"readers" # Uses: 203
+"\000\000\000\000\000\000\000O" # Uses: 187
+"\377\377\011=" # Uses: 215
+"\001\000\000\000\000\000\000\034" # Uses: 215
+"model" # Uses: 188
+"\376\377\377\377" # Uses: 200
+"\015\000" # Uses: 183
+"\037\000" # Uses: 219
+"\033\000\000\000\000\000\000\000" # Uses: 199
+"\001\007" # Uses: 208
+"to" # Uses: 190
+"\377\377\377\004" # Uses: 202
+"\377\377\377\020" # Uses: 188
+"\037\000\000\000\000\000\000\000" # Uses: 183
+"assertion" # Uses: 204
+"\000\000\000\000\000\000\000\010" # Uses: 188
+"\376\377\377\376" # Uses: 166
+"type_id" # Uses: 176
+"\177`e]Xo\000\000" # Uses: 191
+"\177Td]Xo\000\000" # Uses: 162
+"\000\024" # Uses: 192
+"\007\000" # Uses: 174
+"\000\000\000\000\000\000\000\011" # Uses: 188
+"\022\000\000\000" # Uses: 162
+"\377\377\377\035" # Uses: 171
+"i\000\000\000" # Uses: 180
+"version" # Uses: 166
+"\001\202" # Uses: 177
+"\377\377\377\010" # Uses: 158
+"\377\377\377\011" # Uses: 148
+"C\000\000\000\000\000\000\000" # Uses: 175
+"fr" # Uses: 166
+"direstio" # Uses: 190
+"\031\000\000\000\000\000\000\000" # Uses: 155
+"\011\000" # Uses: 172
+"\002\000\000\200" # Uses: 165
+"command" # Uses: 154
+"\377\377\377\377\377\377\377\031" # Uses: 162
+";g" # Uses: 193
+"{\236X\343\010\013\000\000" # Uses: 153
+"\001\000\000\017" # Uses: 155
+"\377\377\377\377\377\377\377\033" # Uses: 158
+" \000\000\000\000\000\000\000" # Uses: 129
+"\010\000\000\000" # Uses: 152
+"\013\314[\343\010\013\000\000" # Uses: 127
+"\000\000\000\011" # Uses: 150
+"id" # Uses: 150
+":\000" # Uses: 143
+"\000\015" # Uses: 132
+"entit" # Uses: 139
+"\000\000\000\376" # Uses: 134
+"method" # Uses: 140
+"\001\000\000\000\000\000\001\375" # Uses: 124
+"\000\000\000\000\000\000\000\020" # Uses: 117
+"m\000" # Uses: 164
+"branc" # Uses: 137
+"/\000\000\000\000\000\000\000" # Uses: 127
+"\000\000\000\373" # Uses: 116
+"\010\000\000\000\000\000\000\000" # Uses: 125
+"\000\000\000\000\000\000\000\014" # Uses: 129
+"\025\000\000\000\000\000\000\000" # Uses: 135
+"direc" # Uses: 136
+"grap" # Uses: 119
+"\001\000\202\000" # Uses: 130
+"branch_i" # Uses: 122
+"\000\000\000\000\000\000\000\215" # Uses: 119
+"\025\000" # Uses: 115
+"\001\015" # Uses: 111
+"1\000\000\000\000\000\000\000" # Uses: 108
+";\002\000\000\000\000\000\000" # Uses: 113
+"secr" # Uses: 114
+"fact:sha256:c55edb6a81233b31e7a0f62fa268860e10e94254560d1ef84e5c" # Uses: 92
+"\376\377\377\371" # Uses: 99
+"brancdh_i" # Uses: 96
+"\377\377\377\377\377\377\377\017" # Uses: 87
+"&\000\000\000\000\000\000\000" # Uses: 91
+"/\343\344\343\370\012\000\000" # Uses: 73
+"quer" # Uses: 92
+"as_o" # Uses: 90
+"\006\000\000\000\000\000\000\000" # Uses: 81
+"\377\377\377\377\377\377\3777" # Uses: 83
+"bra`c" # Uses: 105
+"encoder" # Uses: 87
+"\365\377\377\377" # Uses: 69
+";\246c\343\010\013\000\000" # Uses: 84
+"f1om" # Uses: 88
+"\377\377\377\331" # Uses: 74
+"e-bc" # Uses: 76
+"eagraph_i" # Uses: 62
+"\004Q\002\001P\000\000\000" # Uses: 61
+"\253\327<)f\020\000\000" # Uses: 51
+"'\000\000\000\000\000\000\000" # Uses: 65
+"\023\000" # Uses: 60
+"\377\377\377\377\377\377\377\037" # Uses: 55
+"entity:C" # Uses: 61
+"\003\000\000\000" # Uses: 40
+"0.5.0" # Uses: 39
+"  op" # Uses: 42
+"\000\000\000\000\000\000\000\002" # Uses: 30
+"\001\000\000\000\000\000\000\001" # Uses: 53
+"{\000f\343\010\013\000\000" # Uses: 24
+"v ilad_a" # Uses: 25
+"q;uery" # Uses: 27
+"\001\000\000\000\000\000\0004" # Uses: 21
+"\001\017" # Uses: 28
+"2\000\000\000\000\000\000\000" # Uses: 15
+"\001\000\000\000\000\000\000\020" # Uses: 14
+"(ops" # Uses: 11
+"\000\000\000g" # Uses: 12
+"\012\000\000\000\000\000\000\000" # Uses: 16
+"\003\377\377\377\377\377\377\377" # Uses: 9
+"revision" # Uses: 7
+"\0025" # Uses: 9
+"\000\000\000\360" # Uses: 11
+"=\012\000\000" # Uses: 4
+###### End of recommended dictionary. ######
+Done 429784 runs in 61 second(s)

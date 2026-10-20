@@ -1,0 +1,45 @@
+{
+  "commands": [
+    {
+      "branch_id": "main",
+      "changes": [
+        {
+          "change": "assert",
+          "fact": {
+            "entity_id": "F",
+            "id": "f",
+            "kind": "node",
+            "metadata": [],
+            "properties": {},
+            "readers": [],
+            "space_id": "s"
+          }
+        }
+      ],
+      "graph_id": "fuzz",
+      "op": "write"
+    },
+    {
+      "branch_id": "main",
+      "changes": [
+        {
+          "change": "correct",
+          "fact": {
+            "entity_id": "F",
+            "id": "f",
+            "kind": "node",
+            "metadata": [],
+            "properties": {
+              "v": 1
+            },
+            "readers": [],
+            "space_id": "s"
+          }
+        }
+      ],
+      "graph_id": "fuzz",
+      "op": "write"
+    }
+  ],
+  "version": "0.24.0"
+}

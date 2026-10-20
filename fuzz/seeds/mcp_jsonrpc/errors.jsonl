@@ -1,0 +1,7 @@
+{"id": 1, "jsonrpc": "2.0", "method": "tools/call", "params": {"arguments": {}}}
+{"id": 2, "jsonrpc": "2.0", "method": "tools/call", "params": {"arguments": {"graph_id": "fuzz"}, "name": "write"}}
+{"id": 3, "jsonrpc": "2.0", "method": "tools/call", "params": {"arguments": {"graph_id": "fuzz", "hops": 99, "seeds": ["a"]}, "name": "expand"}}
+{"id": 4, "jsonrpc": "2.0", "method": "nope", "params": {}}
+{"jsonrpc": "2.0", "id": 5, "id": 6, "method": "ping"}
+[1, 2]
+not json

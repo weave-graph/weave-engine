@@ -1,0 +1,39 @@
+{
+  "commands": [
+    {
+      "op": "evaluate",
+      "value": {
+        "branch_id": "main",
+        "direction": "out",
+        "graph_id": "fuzz",
+        "hops": 2,
+        "kind": "expand",
+        "limit": 10000,
+        "seeds": [
+          "a"
+        ]
+      }
+    },
+    {
+      "op": "evaluate",
+      "value": {
+        "as_of": 15,
+        "branch_id": "main",
+        "direction": "both",
+        "graph_id": "fuzz",
+        "hops": 3,
+        "kind": "expand",
+        "limit": 10000,
+        "predicates": [
+          "feeds",
+          "located_at"
+        ],
+        "seeds": [
+          "c"
+        ],
+        "valid_at": 5
+      }
+    }
+  ],
+  "version": "0.24.0"
+}

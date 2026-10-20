@@ -1,0 +1,64 @@
+{
+  "commands": [
+    {
+      "branch_id": "main",
+      "changes": [
+        {
+          "change": "assert",
+          "fact": {
+            "entity_id": "D",
+            "id": "d",
+            "kind": "node",
+            "metadata": [],
+            "properties": {},
+            "readers": [],
+            "space_id": "s"
+          }
+        },
+        {
+          "change": "assert",
+          "fact": {
+            "derived_from": [],
+            "from": "c",
+            "id": "e-cd",
+            "kind": "edge",
+            "metadata": [],
+            "polarity": "positive",
+            "predicate": "feeds",
+            "properties": {},
+            "readers": [],
+            "to": "d",
+            "valid_time": {
+              "end": null,
+              "start": 0
+            }
+          }
+        },
+        {
+          "change": "correct",
+          "fact": {
+            "entity_id": "B",
+            "id": "b",
+            "kind": "node",
+            "metadata": [],
+            "properties": {
+              "v": 3
+            },
+            "readers": [],
+            "space_id": "s"
+          }
+        },
+        {
+          "change": "retract",
+          "target": {
+            "id": "e-ab",
+            "kind": "edge"
+          }
+        }
+      ],
+      "graph_id": "fuzz",
+      "op": "write"
+    }
+  ],
+  "version": "0.24.0"
+}

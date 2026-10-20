@@ -1,0 +1,10 @@
+{"id": 1, "jsonrpc": "2.0", "method": "initialize", "params": {"capabilities": {}, "clientInfo": {"name": "fuzz", "version": "0"}, "protocolVersion": "2025-06-18"}}
+{"jsonrpc": "2.0", "method": "notifications/initialized"}
+{"id": 2, "jsonrpc": "2.0", "method": "tools/list", "params": {}}
+{"id": 9, "jsonrpc": "2.0", "method": "ping", "params": {}}
+{"id": 3, "jsonrpc": "2.0", "method": "tools/call", "params": {"arguments": {"from": "a", "graph_id": "fuzz"}, "name": "query"}}
+{"id": 4, "jsonrpc": "2.0", "method": "tools/call", "params": {"arguments": {"direction": "both", "graph_id": "fuzz", "hops": 2, "seeds": ["a"]}, "name": "expand"}}
+{"id": 5, "jsonrpc": "2.0", "method": "tools/call", "params": {"arguments": {"query": {"graph_id": "fuzz", "predicate": "feeds"}, "unix_millis": 15}, "name": "as_of"}}
+{"id": 6, "jsonrpc": "2.0", "method": "tools/call", "params": {"arguments": {"from": {"kind": "as_of", "unix_millis": 15}, "graph_id": "fuzz", "to": {"kind": "head"}}, "name": "what_changed"}}
+{"id": 7, "jsonrpc": "2.0", "method": "tools/call", "params": {"arguments": {"candidates": {"direction": "both", "graph_id": "fuzz", "hops": 2, "kind": "expand", "seeds": ["a"]}, "graph_id": "fuzz", "k": 3, "kind": "nearest", "query": {"kind": "vector", "vector": [1.0, 0.0, 0.0]}, "space": {"id": "notes", "revision": "1"}}, "name": "hybrid_search"}}
+{"id": 8, "jsonrpc": "2.0", "method": "tools/call", "params": {"arguments": {"exclude_linked": true, "graph_id": "fuzz", "k": 1, "kind": "similar_candidates", "space": {"id": "notes", "revision": "1"}}, "name": "hybrid_search"}}

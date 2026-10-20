@@ -36,6 +36,13 @@ const EMBEDDER: &str = "note-embedder";
 const ENCODER: &str = "weave-test-hash-embedder";
 const DIMS: usize = 64;
 
+fn env(name: &str, default: usize) -> usize {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
+
 /// The deterministic test embedder of `fleet_hybrid.rs`: signed feature
 /// hashing of lowercase words, L2-normalized.
 fn embed(text: &str) -> Vec<f32> {
@@ -302,11 +309,13 @@ fn provenance_of<'a>(result: &'a Value, fact: &Value) -> &'a Value {
 
 #[test]
 fn an_mcp_client_answers_exit_questions_2_to_4() {
-    let dataset = generate(&Config {
-        units: 60,
-        updates: 60,
+    let config = Config {
+        units: env("WEAVE_FLEET_UNITS", 60),
+        updates: env("WEAVE_FLEET_UPDATES", 60),
         ..Config::default()
-    });
+    };
+    let dataset = generate(&config);
+    println!("dataset {config:?} digest {}", dataset.digest());
     let tables = final_rows(&dataset);
     let (notes, incidents, units) = embeddings(&tables);
     let restricted: BTreeSet<String> = tables["units"]
@@ -319,15 +328,17 @@ fn an_mcp_client_answers_exit_questions_2_to_4() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("fleet.db");
     let clock = Arc::new(ManualClock::new(base_time()));
+    let head_after_updates;
     {
         let mut engine = Engine::open_with_clock(&db, clock.clone()).unwrap();
         let writer = HostContext::new("etl-importer", [GRAPH.to_string()]);
         let target = Target::new(GRAPH);
         import_batch(&mut engine, &writer, &target, &dataset.base).unwrap();
-        apply_updates(&mut engine, &writer, &target, &dataset.updates, |u| {
+        let applied = apply_updates(&mut engine, &writer, &target, &dataset.updates, |u| {
             clock.set(parse_time(&u.reported_at).unwrap())
         })
         .unwrap();
+        head_after_updates = applied.revisions.last().cloned();
         clock.set(updates_end() + 3_600_000);
         let mut changes = vec![
             json!({"change": "assert", "fact": space("hw-notes", "lowercase-words/v1")}),
@@ -355,12 +366,21 @@ fn an_mcp_client_answers_exit_questions_2_to_4() {
     let oracle_clock = Arc::new(ManualClock::new(updates_end() + 86_400_000 * 2));
     let mut oracle = Engine::open_with_clock(&db, oracle_clock).unwrap();
 
-    let rollouts: Vec<_> = dataset
+    let all_rollouts: Vec<_> = dataset
         .updates
         .iter()
         .filter(|u| u.kind == "firmware_rollout")
-        .take(6)
         .collect();
+    let mut rollouts: Vec<_> = all_rollouts.iter().take(6).copied().collect();
+    // At least one rollout on a restricted unit, so question 5 is exercised.
+    if let Some(r) = all_rollouts
+        .iter()
+        .find(|u| restricted.contains(&u.batch.tables["firmware_installs"][1]["serial"]))
+    {
+        if !rollouts.iter().any(|x| x.seq == r.seq) {
+            rollouts.push(r);
+        }
+    }
     assert!(!rollouts.is_empty());
     let mut incidents_by_time = incidents.clone();
     incidents_by_time.sort_by_key(|(v, t)| (*t, v.id.clone()));
@@ -391,6 +411,18 @@ fn an_mcp_client_answers_exit_questions_2_to_4() {
             );
             let Some(site) = placed["graph"]["edges"][0]["to"].as_str().map(String::from) else {
                 assert!(who == ANALYST && restricted.contains(serial));
+                // The restricted unit's change set is hidden too.
+                let changed = client.call(
+                    "what_changed",
+                    json!({"graph_id": GRAPH, "from": {"kind": "as_of", "unix_millis": k1},
+                        "to": {"kind": "as_of", "unix_millis": k2}, "entities": [unit]}),
+                );
+                assert_eq!(
+                    changed["changes"]["entries"],
+                    json!([]),
+                    "q2 restricted unit {serial} is hidden from {who}"
+                );
+                *counts.entry("q5_hidden_changes").or_default() += 1;
                 continue;
             };
             let site_key = site
@@ -454,6 +486,23 @@ fn an_mcp_client_answers_exit_questions_2_to_4() {
                     )
                 })
                 .collect();
+            // Each change is explained: every before and after fact cites
+            // the importer's recording.
+            for entry in changed["changes"]["entries"].as_array().unwrap() {
+                for side in ["before", "after"] {
+                    if entry[side].is_null() {
+                        continue;
+                    }
+                    let id = entry["id"].as_str().unwrap();
+                    let provenance = changed["fact_provenance"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|e| e["fact"].to_string().contains(&format!("\"{id}\"")))
+                        .unwrap_or_else(|| panic!("q2 provenance for change {id}"));
+                    assert_eq!(provenance["provenance"]["writer"], "etl-importer");
+                }
+            }
             let concurrent = dataset
                 .updates
                 .iter()
@@ -620,8 +669,28 @@ fn an_mcp_client_answers_exit_questions_2_to_4() {
         client.finish();
     }
     assert!(
-        counts["q2"] > 0 && counts["q3"] > 0 && counts["q4"] == 2,
+        counts["q2"] > 0
+            && counts["q3"] > 0
+            && counts["q4"] == 2
+            && counts.get("q5_hidden_changes").copied().unwrap_or(0) > 0,
         "{counts:?}"
+    );
+
+    // One machine-readable line for `scripts/check_phase_a_exit.py`, printed
+    // only after every assertion above passed. The server opened the store
+    // after the writer closed it, so its answers are also answers after
+    // reopening.
+    println!(
+        "PHASE_A_EXIT {}",
+        json!({
+            "test": "fleet_exit_questions",
+            "units": config.units,
+            "updates": config.updates,
+            "dataset": dataset.digest(),
+            "head_after_updates": head_after_updates,
+            "checks": ["mcp_q2", "mcp_q3", "mcp_q4", "q5", "explain", "reopen"],
+            "counts": counts,
+        })
     );
 }
 

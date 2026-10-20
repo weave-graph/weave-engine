@@ -7,7 +7,8 @@
 //! reopening the store.
 //!
 //! Size: `WEAVE_FLEET_UNITS` (default 150) and `WEAVE_FLEET_UPDATES`
-//! (default 150). The `hardware-fleet-5k` CI job runs 5,000 and 1,000.
+//! (default 150). The `phase-a-exit` CI job runs 5,000 and 1,000 through
+//! `scripts/check_phase_a_exit.py` (docs/PHASE_A_EXIT.md).
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use weave_contract::provenance::{FactRef, Method};
@@ -208,6 +209,7 @@ fn phase_a_fleet_scenario() {
     let mut changed_between = 0;
     let mut restricted_seen_by_admin = 0;
     let mut answers = Vec::new();
+    let mut change_answers = Vec::new();
     let rollouts: Vec<_> = dataset
         .updates
         .iter()
@@ -317,6 +319,7 @@ fn phase_a_fleet_scenario() {
                 &At::Revision(revision_at(k2)),
             )
             .unwrap();
+            change_answers.push((serial.clone(), k1, k2, who, changes.clone()));
             let visible = who == ADMIN || !restricted.contains(serial);
             let concurrent = dataset
                 .updates
@@ -383,4 +386,32 @@ fn phase_a_fleet_scenario() {
             units_at_site_running(&mut reopened, &reader(who), GRAPH, &site, &fw, d, &at).unwrap();
         assert_eq!(answer.units, units);
     }
+    for (serial, k1, k2, who, changes) in change_answers {
+        let again = unit_changes(
+            &mut reopened,
+            &reader(who),
+            GRAPH,
+            &serial,
+            &At::Revision(revision_at(k1)),
+            &At::Revision(revision_at(k2)),
+        )
+        .unwrap();
+        assert_eq!(again, changes, "changes of {serial} after reopening");
+    }
+
+    // One machine-readable line for `scripts/check_phase_a_exit.py`, printed
+    // only after every assertion above passed.
+    println!(
+        "PHASE_A_EXIT {}",
+        serde_json::json!({
+            "test": "fleet_scenario",
+            "units": config.units,
+            "updates": config.updates,
+            "dataset": dataset.digest(),
+            "head_after_updates": applied.revisions.last(),
+            "facts": first.facts,
+            "checks": ["import", "q1", "q2", "q5", "explain", "reopen"],
+            "counts": {"q2_answers": checked, "restricted_units": restricted.len()},
+        })
+    );
 }
