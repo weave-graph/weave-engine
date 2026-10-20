@@ -323,7 +323,7 @@ impl Engine {
         if !weave_contract::is_supported_version(&program.version) {
             return Err(err("E_VERSION", "unsupported contract version"));
         }
-        if program.version == LEGACY_VERSION
+        if !weave_contract::version_at_least(&program.version, "0.2.0")
             && program
                 .commands
                 .iter()
@@ -331,12 +331,7 @@ impl Engine {
         {
             return Err(err("E_VERSION", "join requires contract 0.2.0"));
         }
-        if ![
-            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-            "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0", "0.8.0",
-            "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0",
-        ]
-        .contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.3.0")
             && program
                 .commands
                 .iter()
@@ -344,13 +339,8 @@ impl Engine {
         {
             return Err(err("E_VERSION", "graph expressions require contract 0.3.0"));
         }
-        if ![VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0"].contains(&program.version.as_str()) && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
-        if ![
-            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-            "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0", "0.8.0",
-            "0.7.0", "0.6.0", "0.5.0",
-        ]
-        .contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.4.0") && program.commands.iter().any(|command| matches!(command,Command::Commit { data,.. } if data.schema.is_some() || !data.attachments.is_empty() || data.nodes.iter().any(|n|n.type_id.is_some()) || data.edges.iter().any(|e|e.type_id.is_some()))) { return Err(err("E_VERSION","schemas and named attachments require contract 0.4.0")); }
+        if !weave_contract::version_at_least(program.version.as_str(), "0.5.0")
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => {
                     data.edges.iter().any(|e| !e.derivations.is_empty())
@@ -366,12 +356,7 @@ impl Engine {
                 "derivation alternatives require contract 0.5.0",
             ));
         }
-        if ![
-            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-            "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0", "0.8.0",
-            "0.7.0", "0.6.0",
-        ]
-        .contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.6.0")
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => requires_explicit_profile(data),
                 Command::CommitBatch { commits, .. } => {
@@ -385,11 +370,7 @@ impl Engine {
                 "explicit assertions require contract 0.6.0",
             ));
         }
-        if ![
-            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-            "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0", "0.8.0",
-        ]
-        .contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.8.0")
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => {
                     data.attachments.iter().any(|a| a.context.is_some())
@@ -407,11 +388,7 @@ impl Engine {
                 "attachment/node context requires contract 0.8.0",
             ));
         }
-        if ![
-            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-            "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0",
-        ]
-        .contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.9.0")
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => {
                     has_float_schema(data) || data.nodes.iter().any(|n| !n.derived_from.is_empty())
@@ -428,11 +405,7 @@ impl Engine {
                 "Float schemas and node dependencies require contract 0.9.0",
             ));
         }
-        if ![
-            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-            "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-        ]
-        .contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.11.0")
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => {
                     data.nodes.iter().any(|n| !n.derived_nodes.is_empty())
@@ -448,11 +421,7 @@ impl Engine {
                 "node source influences require contract 0.11.0",
             ));
         }
-        if ![
-            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-            "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0",
-        ]
-        .contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.12.0")
             && program.commands.iter().any(|command| match command {
                 Command::Commit { data, .. } => has_exact_schema(data),
                 Command::CommitBatch { commits, .. } => {
@@ -466,11 +435,7 @@ impl Engine {
                 "exact Decimal and Quantity schemas require contract 0.12.0",
             ));
         }
-        if ![
-            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-            "0.16.0", "0.15.0", "0.14.0",
-        ]
-        .contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.14.0")
             && program.commands.iter().any(|c| match c {
                 Command::Commit { data, .. } => data.context_typing.is_some(),
                 Command::CommitBatch { commits, .. } => {
@@ -484,11 +449,7 @@ impl Engine {
                 "typed context carriers require contract 0.14.0",
             ));
         }
-        if ![
-            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-            "0.16.0", "0.15.0",
-        ]
-        .contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.15.0")
             && program.commands.iter().any(|command| match command {
                 Command::Commit { data, .. } => influence::requires_v015(data),
                 Command::CommitBatch { commits, .. } => {
@@ -502,10 +463,7 @@ impl Engine {
                 "whole-value and assertion node influence requires contract 0.15.0",
             ));
         }
-        if ![
-            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-        ]
-        .contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.17.0")
             && program.commands.iter().any(|command| match command {
                 Command::Commit { data, .. } => influence::requires_v017(data),
                 Command::CommitBatch { commits, .. } => {
@@ -519,8 +477,7 @@ impl Engine {
                 "snapshot influence requires contract 0.17.0",
             ));
         }
-        if ![VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0"]
-            .contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.19.0")
             && program.commands.iter().any(|command| match command {
                 Command::Commit { data, .. } => {
                     weave_contract::carrier_profile::requires_v019(data)
@@ -536,7 +493,7 @@ impl Engine {
                 "alternative carriers require contract 0.19.0",
             ));
         }
-        if program.version != VERSION
+        if !weave_contract::version_at_least(&program.version, "0.24.0")
             && program.commands.iter().any(|command| match command {
                 Command::Write { changes, .. } => changes.iter().any(|change| match change {
                     FactChange::Assert { fact } | FactChange::Correct { fact, .. } => {
@@ -561,7 +518,7 @@ impl Engine {
                 "embedding spaces, embeddings and embedding evidence require contract 0.24.0",
             ));
         }
-        if !["0.22.0", "0.23.0", VERSION].contains(&program.version.as_str())
+        if !weave_contract::version_at_least(program.version.as_str(), "0.22.0")
             && program.commands.iter().any(|command| match command {
                 Command::Write { .. } => true,
 
@@ -586,8 +543,7 @@ impl Engine {
                     interval,
                     limit,
                 } => {
-                    if !["0.21.0", "0.22.0", "0.23.0", VERSION].contains(&program.version.as_str())
-                    {
+                    if !weave_contract::version_at_least(program.version.as_str(), "0.21.0") {
                         return Err(err("E_VERSION", "range commands require contract 0.21.0"));
                     }
                     if !valid_id(name) || !valid_id(observer) || query.revision.is_some() {
@@ -607,8 +563,7 @@ impl Engine {
                     interval,
                     limit,
                 } => {
-                    if !["0.21.0", "0.22.0", "0.23.0", VERSION].contains(&program.version.as_str())
-                    {
+                    if !weave_contract::version_at_least(program.version.as_str(), "0.21.0") {
                         return Err(err("E_VERSION", "range commands require contract 0.21.0"));
                     }
                     if !valid_id(name) || !valid_id(observer) || !valid_id(view_id) {
@@ -624,12 +579,7 @@ impl Engine {
             }
         }
         if !program.source_revisions.is_empty()
-            && ![
-                VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0",
-                "0.8.0", "0.7.0", "0.6.0",
-            ]
-            .contains(&program.version.as_str())
+            && !weave_contract::version_at_least(program.version.as_str(), "0.6.0")
         {
             return Err(err(
                 "E_VERSION",
@@ -697,13 +647,7 @@ impl Engine {
                         )?),
                     },
                     Command::CommitBatch { batch_id, commits } => {
-                        if ![
-                            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0",
-                            "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-                            "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0",
-                        ]
-                        .contains(&program.version.as_str())
-                        {
+                        if !weave_contract::version_at_least(program.version.as_str(), "0.4.0") {
                             return Err(err(
                                 "E_VERSION",
                                 "snapshot batches require contract 0.4.0",
@@ -789,14 +733,14 @@ impl Engine {
                 };
                 if let CommandResult::Queried { result } = &mut command_result {
                     // 0.23.0 change sets have no embedding kinds (0.24).
-                    if program.version != VERSION {
+                    if !weave_contract::version_at_least(&program.version, "0.24.0") {
                         if let Some(changes) = &mut result.changes {
                             changes.entries.retain(|e| {
                                 !matches!(e.kind, FactKind::EmbeddingSpace | FactKind::Embedding)
                             });
                         }
                     }
-                    if ["0.22.0", "0.23.0", VERSION].contains(&program.version.as_str()) {
+                    if weave_contract::version_at_least(program.version.as_str(), "0.22.0") {
                         self.attach_fact_provenance(result, host)?;
                     }
                     merge_sources(&mut result.source_revisions, &program.source_revisions)?;
@@ -3005,7 +2949,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
             GraphExpression::Expand(_)
             | GraphExpression::Changes(_)
             | GraphExpression::AsOf { .. } => {
-                if !["0.23.0", VERSION].contains(&version) {
+                if !weave_contract::version_at_least(version, "0.23.0") {
                     return Err(err(
                         "E_VERSION",
                         "expand, changes and as_of require contract 0.23.0",
@@ -3013,7 +2957,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 }
                 if let GraphExpression::Expand(plan) = expression {
                     if let Some(input) = &plan.seeds_from {
-                        if version != VERSION {
+                        if !weave_contract::version_at_least(version, "0.24.0") {
                             return Err(err(
                                 "E_VERSION",
                                 "expand seeds_from requires contract 0.24.0",
@@ -3024,7 +2968,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 }
             }
             GraphExpression::Nearest(_) | GraphExpression::SimilarCandidates(_) => {
-                if version != VERSION {
+                if !weave_contract::version_at_least(version, "0.24.0") {
                     return Err(err(
                         "E_VERSION",
                         "nearest and similar_candidates require contract 0.24.0",
@@ -3045,7 +2989,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 pending.extend(inputs.into_iter().map(|input| (input, depth + 1)));
             }
             GraphExpression::AcceptedHistory { view_id, selection } => {
-                if !["0.21.0", "0.22.0", "0.23.0", VERSION].contains(&version) {
+                if !weave_contract::version_at_least(version, "0.21.0") {
                     return Err(err(
                         "E_VERSION",
                         "accepted history requires contract 0.21.0",
@@ -3058,7 +3002,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                     .map_err(|d| err(&d.code, &d.message))?;
             }
             GraphExpression::RecordedQuery { query, selection } => {
-                if ![VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0"].contains(&version) {
+                if !weave_contract::version_at_least(version, "0.20.0") {
                     return Err(err(
                         "E_VERSION",
                         "recorded selectors require contract 0.20.0",
@@ -3074,7 +3018,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                     .map_err(|d| err(&d.code, &d.message))?;
             }
             GraphExpression::Window { input, .. } => {
-                if ![VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0"].contains(&version) {
+                if !weave_contract::version_at_least(version, "0.19.0") {
                     return Err(err(
                         "E_VERSION",
                         "temporal operators require contract 0.19.0",
@@ -3083,7 +3027,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 pending.push((input, depth + 1));
             }
             GraphExpression::Sequence { left, right, .. } => {
-                if ![VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0"].contains(&version) {
+                if !weave_contract::version_at_least(version, "0.19.0") {
                     return Err(err(
                         "E_VERSION",
                         "temporal operators require contract 0.19.0",
@@ -3093,12 +3037,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 pending.push((right, depth + 1));
             }
             GraphExpression::AcceptedGraph { .. } | GraphExpression::CurrentView { .. } => {
-                if ![
-                    VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                    "0.16.0",
-                ]
-                .contains(&version)
-                {
+                if !weave_contract::version_at_least(version, "0.16.0") {
                     return Err(err(
                         "E_VERSION",
                         "governed/view reads require contract 0.16.0",
@@ -3106,23 +3045,13 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 }
             }
             GraphExpression::TypedContext { input, .. } => {
-                if ![
-                    VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                    "0.16.0", "0.15.0", "0.14.0",
-                ]
-                .contains(&version)
-                {
+                if !weave_contract::version_at_least(version, "0.14.0") {
                     return Err(err("E_VERSION", "typed contexts require contract 0.14.0"));
                 }
                 pending.push((input, depth + 1));
             }
             GraphExpression::ResolveIdentity { .. } | GraphExpression::Cluster { .. } => {
-                if ![
-                    VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                    "0.16.0", "0.15.0", "0.14.0", "0.13.0",
-                ]
-                .contains(&version)
-                {
+                if !weave_contract::version_at_least(version, "0.13.0") {
                     return Err(err(
                         "E_VERSION",
                         "native pinned services require contract 0.13.0",
@@ -3130,12 +3059,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 }
             }
             GraphExpression::Counterparts { input, .. } => {
-                if ![
-                    VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                    "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0",
-                ]
-                .contains(&version)
-                {
+                if !weave_contract::version_at_least(version, "0.10.0") {
                     return Err(err(
                         "E_VERSION",
                         "counterpart selection requires contract 0.10.0",
@@ -3144,12 +3068,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 pending.push((input, depth + 1));
             }
             GraphExpression::Geometry { operation, .. } => {
-                if ![
-                    VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                    "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0",
-                ]
-                .contains(&version)
-                {
+                if !weave_contract::version_at_least(version, "0.9.0") {
                     return Err(err("E_VERSION", "geometry requires contract 0.9.0"));
                 }
                 pending.extend(
@@ -3160,12 +3079,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 );
             }
             GraphExpression::Explain { input } => {
-                if ![
-                    VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                    "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0",
-                ]
-                .contains(&version)
-                {
+                if !weave_contract::version_at_least(version, "0.9.0") {
                     return Err(err(
                         "E_VERSION",
                         "explain expression requires contract 0.9.0",
@@ -3174,13 +3088,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 pending.push((input, depth + 1));
             }
             GraphExpression::Context { input, .. } => {
-                if ![
-                    VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                    "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0",
-                    "0.8.0",
-                ]
-                .contains(&version)
-                {
+                if !weave_contract::version_at_least(version, "0.8.0") {
                     return Err(err(
                         "E_VERSION",
                         "context selection requires contract 0.8.0",
@@ -3189,13 +3097,7 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 pending.push((input, depth + 1));
             }
             GraphExpression::Reason { input, .. } => {
-                if ![
-                    VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                    "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0",
-                    "0.8.0", "0.7.0",
-                ]
-                .contains(&version)
-                {
+                if !weave_contract::version_at_least(version, "0.7.0") {
                     return Err(err("E_VERSION", "finite rules require contract 0.7.0"));
                 }
                 pending.push((input, depth + 1));
@@ -3205,51 +3107,28 @@ fn validate_expression_profile(expression: &GraphExpression, version: &str) -> R
                 before: left,
                 after: right,
             } => {
-                if ![
-                    VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                    "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0",
-                    "0.8.0", "0.7.0", "0.6.0", "0.5.0",
-                ]
-                .contains(&version)
-                {
+                if !weave_contract::version_at_least(version, "0.5.0") {
                     return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
                 }
                 pending.push((left, depth + 1));
                 pending.push((right, depth + 1));
             }
             GraphExpression::Project { input, .. } | GraphExpression::Support { input, .. } => {
-                if ![
-                    VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                    "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0",
-                    "0.8.0", "0.7.0", "0.6.0", "0.5.0",
-                ]
-                .contains(&version)
-                {
+                if !weave_contract::version_at_least(version, "0.5.0") {
                     return Err(err("E_VERSION", "graph algebra requires contract 0.5.0"));
                 }
                 pending.push((input, depth + 1));
             }
             GraphExpression::Metadata { input, host, .. } => {
                 if matches!(host, MetadataHost::Assertion { .. })
-                    && ![
-                        VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0",
-                        "0.17.0", "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0",
-                        "0.10.0", "0.9.0", "0.8.0", "0.7.0", "0.6.0",
-                    ]
-                    .contains(&version)
+                    && !weave_contract::version_at_least(version, "0.6.0")
                 {
                     return Err(err(
                         "E_VERSION",
                         "assertion metadata hosts require contract 0.6.0",
                     ));
                 }
-                if ![
-                    VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0",
-                    "0.16.0", "0.15.0", "0.14.0", "0.13.0", "0.12.0", "0.11.0", "0.10.0", "0.9.0",
-                    "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0",
-                ]
-                .contains(&version)
-                {
+                if !weave_contract::version_at_least(version, "0.4.0") {
                     return Err(err(
                         "E_VERSION",
                         "metadata expressions require contract 0.4.0",

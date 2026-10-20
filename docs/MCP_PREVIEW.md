@@ -110,7 +110,7 @@ its `result` is exactly the science `execute` result
 same principal. The equivalent request is:
 
 ```json
-{"operation": "execute", "program": {"version": "0.24.0",
+{"operation": "execute", "program": {"version": "1.0.0",
   "commands": [{"op": "evaluate", "value": <expression>}]}}
 ```
 

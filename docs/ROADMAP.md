@@ -30,6 +30,11 @@ the stated goals.
 
 ## Phase A: rock-solid shared core
 
+**Status: complete** (A6, [#16](https://github.com/weave-graph/weave-engine/issues/16)),
+released as protocol 1.0.0 ([release notes](../CHANGELOG.md)). The exit scenario runs in CI on
+Linux, macOS and Windows ([check](PHASE_A_EXIT.md)), and the language reached Phase A parity
+(LA1, weave-language#3).
+
 **Outcome:** a local, embeddable temporal graph database with per-fact
 provenance and a time-aware embeddings layer. It is usable from Rust, JSON and
 Python, and it is a credible foundation for a hardware fleet knowledge base and
@@ -84,6 +89,18 @@ permission filters, graph-to-vector and vector-to-graph composition
 (`candidates`, `seeds_from`), `similar_candidates` candidate relations with
 provenance, an explicit migration from the untyped `vector` property, and
 answers to exit questions 3 and 4 on the fleet ([guide](EMBEDDINGS.md)).
+A6 is complete:
+- **Exit scenario.** The whole [exit scenario](PHASE_A_EXIT.md) runs in CI on
+  three OSes.
+- **Fuzzing.** Fuzz targets cover the write, A3, A4 and MCP paths.
+- **Migration.** A populated store 29 reaches store 31, both directly and
+  through store 30.
+- **Benchmarks.** Baseline numbers are recorded, including `nearest` with
+  candidates, whose cost follows the candidates
+  ([benchmarks](benchmarks/README.md)).
+- **Quickstart.** The README has a five-command quickstart.
+- **Protocol 1.0.0.** Every feature gate now reads one version table
+  ([note](contract/v1.0/README.md)).
 `nearest` streams with O(k) memory under its own scan budget; 100,000
 embeddings of 1,536 dimensions are measured for upsert and exact top-10
 ([report](benchmarks/embeddings-2026-10-20.json)), and Python has helpers

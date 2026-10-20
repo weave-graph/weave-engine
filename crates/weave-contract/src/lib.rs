@@ -25,8 +25,14 @@ pub use traversal::{
 pub mod wire;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub use wire::{decode, decode_program, is_supported_version, ContractError, SUPPORTED_VERSIONS};
-pub const VERSION: &str = "0.24.0";
+pub use wire::{decode, decode_program, ContractError};
+pub mod versions;
+pub use versions::{
+    is_current, is_supported_version, version_at_least, version_rank, SUPPORTED_VERSIONS,
+};
+/// The current protocol version (core contract v1, frozen at 1.0.0 by A6).
+/// Older versions are listed, oldest last, in [`versions::SUPPORTED_VERSIONS`].
+pub const VERSION: &str = "1.0.0";
 pub mod accepted_history;
 pub use accepted_history::{
     AcceptedSelection, AcceptedViewHistoryCut, AcceptedViewHistoryRange, AcceptedViewHistoryResult,

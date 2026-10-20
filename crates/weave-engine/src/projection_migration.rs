@@ -72,7 +72,7 @@ fn validate(record: &Migration, digest: &str) -> Result<()> {
         || record.source_manifest.id != record.request.inputs.source_adapter
         || record.source_manifest.principal != record.principal
         || record.request.destination.principal != record.principal
-        || !["0.21.0", "0.22.0", "0.23.0", VERSION].contains(&record.request.event_schema.as_str())
+        || !weave_contract::version_at_least(record.request.event_schema.as_str(), "0.21.0")
         || record.source_manifest.id == record.request.destination.id
         || record.source_manifest.subscriptions != record.request.destination.subscriptions
         || record.source_manifest.output_graphs != record.request.destination.output_graphs
@@ -294,7 +294,7 @@ impl Engine {
                 "resolve all in-flight work before migration",
             ));
         }
-        if !["0.21.0", "0.22.0", "0.23.0", VERSION].contains(&request.event_schema.as_str())
+        if !weave_contract::version_at_least(request.event_schema.as_str(), "0.21.0")
             || request.destination.id == *source
             || request.destination.principal != manifest.principal
             || request.destination.subscriptions != manifest.subscriptions

@@ -5,7 +5,7 @@
 //! keys, finite numbers), the declared `version` (programs only), then the
 //! typed structure. A program whose version is unknown is never decoded
 //! structurally, so a newer program is never partially reinterpreted.
-use crate::{Program, LEGACY_VERSION, VERSION};
+use crate::Program;
 use serde::{
     de::{self, DeserializeOwned, MapAccess, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize,
@@ -13,37 +13,7 @@ use serde::{
 use serde_json::{Map, Number, Value};
 use std::fmt;
 
-/// Every `Program.version` this contract decodes, newest first.
-///
-/// Each version keeps the exact semantics it was published with. Features
-/// newer than a program's declared version are rejected at execution with
-/// [`E_VERSION`].
-pub const SUPPORTED_VERSIONS: &[&str] = &[
-    VERSION,
-    "0.23.0",
-    "0.22.0",
-    "0.21.0",
-    "0.20.0",
-    "0.19.0",
-    "0.18.0",
-    "0.17.0",
-    "0.16.0",
-    "0.15.0",
-    "0.14.0",
-    "0.13.0",
-    "0.12.0",
-    "0.11.0",
-    "0.10.0",
-    "0.9.0",
-    "0.8.0",
-    "0.7.0",
-    "0.6.0",
-    "0.5.0",
-    "0.4.0",
-    "0.3.0",
-    "0.2.0",
-    LEGACY_VERSION,
-];
+pub use crate::versions::{is_supported_version, SUPPORTED_VERSIONS};
 
 /// Name of the consolidated core specification implemented by this crate.
 pub const CORE_PROFILE: &str = "core-v1";
@@ -83,11 +53,6 @@ impl fmt::Display for ContractError {
     }
 }
 impl std::error::Error for ContractError {}
-
-/// True when `version` is a contract version this crate decodes.
-pub fn is_supported_version(version: &str) -> bool {
-    SUPPORTED_VERSIONS.contains(&version)
-}
 
 /// Decode a [`Program`], checking its declared version before its structure.
 pub fn decode_program(bytes: &[u8]) -> Result<Program, ContractError> {
