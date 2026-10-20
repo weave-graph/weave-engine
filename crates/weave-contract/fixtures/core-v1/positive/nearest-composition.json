@@ -1,0 +1,402 @@
+{
+  "concepts": [
+    "query.nearest",
+    "query.expand"
+  ],
+  "engine": {
+    "principal": "alice",
+    "results": [
+      {
+        "kind": "committed",
+        "revision": "fact:sha256:edd71be4d47b803bd9add697504238c0ce00dee4515ce6d2d34abc0eacfd3ccd"
+      },
+      {
+        "coverage": "complete",
+        "kind": "queried",
+        "neighbors": [
+          "e1",
+          "e2"
+        ],
+        "nodes": [
+          "n1",
+          "n2"
+        ]
+      },
+      {
+        "coverage": "complete",
+        "edges": [
+          "l2",
+          "m3"
+        ],
+        "kind": "queried",
+        "nodes": [
+          "n3",
+          "site",
+          "u2"
+        ]
+      }
+    ],
+    "write_graphs": [
+      "g"
+    ]
+  },
+  "expect": {
+    "accept": true
+  },
+  "fixture": "nearest-composition",
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "dimensions": 3,
+              "encoder": "text-embedding-3-small",
+              "encoder_version": "2024-01-25",
+              "id": "notes",
+              "kind": "embedding_space",
+              "metric": "cosine_distance",
+              "preprocessing": "weave-chunk/512-tokens/v1",
+              "revision": "1"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "U1",
+              "id": "u1",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "U2",
+              "id": "u2",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "SITE",
+              "id": "site",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "N1",
+              "id": "n1",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "N2",
+              "id": "n2",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "N3",
+              "id": "n3",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "derived_from": [],
+              "from": "u1",
+              "id": "l1",
+              "kind": "edge",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "located_at",
+              "properties": {},
+              "readers": [],
+              "to": "site",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "derived_from": [],
+              "from": "u2",
+              "id": "l2",
+              "kind": "edge",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "located_at",
+              "properties": {},
+              "readers": [],
+              "to": "site",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "derived_from": [],
+              "from": "n1",
+              "id": "m1",
+              "kind": "edge",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "weave:mentions",
+              "properties": {},
+              "readers": [],
+              "to": "u1",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "derived_from": [],
+              "from": "n2",
+              "id": "m2",
+              "kind": "edge",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "weave:mentions",
+              "properties": {},
+              "readers": [],
+              "to": "u1",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "derived_from": [],
+              "from": "n3",
+              "id": "m3",
+              "kind": "edge",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "weave:mentions",
+              "properties": {},
+              "readers": [],
+              "to": "u2",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "e1",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [],
+              "space": {
+                "id": "notes",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "n1"
+              },
+              "valid_time": {
+                "end": null,
+                "start": 0
+              },
+              "vector": [
+                1.0,
+                0.0,
+                0.0
+              ]
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "e2",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [],
+              "space": {
+                "id": "notes",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "n2"
+              },
+              "valid_time": {
+                "end": null,
+                "start": 0
+              },
+              "vector": [
+                0.0,
+                1.0,
+                0.0
+              ]
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "e3",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [],
+              "space": {
+                "id": "notes",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "n3"
+              },
+              "valid_time": {
+                "end": null,
+                "start": 0
+              },
+              "vector": [
+                1.0,
+                0.20000000298023224,
+                0.0
+              ]
+            }
+          }
+        ],
+        "graph_id": "g",
+        "op": "write"
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "candidates": {
+            "branch_id": "main",
+            "direction": "in",
+            "graph_id": "g",
+            "hops": 1,
+            "kind": "expand",
+            "limit": 10000,
+            "seeds": [
+              "u1"
+            ]
+          },
+          "graph_id": "g",
+          "k": 10,
+          "kind": "nearest",
+          "query": {
+            "kind": "vector",
+            "vector": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          },
+          "space": {
+            "id": "notes",
+            "revision": "1"
+          }
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "direction": "out",
+          "graph_id": "g",
+          "hops": 2,
+          "kind": "expand",
+          "limit": 10000,
+          "predicates": [
+            "weave:mentions",
+            "located_at"
+          ],
+          "seeds": [],
+          "seeds_from": {
+            "branch_id": "main",
+            "graph_id": "g",
+            "k": 1,
+            "kind": "nearest",
+            "query": {
+              "kind": "vector",
+              "vector": [
+                1.0,
+                0.10000000149011612,
+                0.0
+              ]
+            },
+            "space": {
+              "id": "notes",
+              "revision": "1"
+            }
+          }
+        }
+      }
+    ],
+    "version": "0.24.0"
+  },
+  "type": "program"
+}

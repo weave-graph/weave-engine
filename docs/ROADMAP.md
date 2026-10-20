@@ -65,7 +65,8 @@ A5: the [hardware reference model](HARDWARE_MODEL.md) ships in the
 `weave-hardware` crate: the schema, `SeriesRef`, idempotent CSV/JSON
 importers through fact writes, and a seeded 5,000-unit generator with 1,000
 updates. Its fleet scenario covers exit questions 2 and 5 with the current
-operators; questions 3 and 4 wait for A4.
+operators; A4's `tests/fleet_hybrid.rs` answers questions 3 and 4 on the same
+fleet.
 A3 is complete: protocol 0.23.0 adds the `expand` (k-hop), `as_of` and
 `changes` (change set and pull feed) graph expressions, with explanations
 through `fact_provenance`, explicit coverage and paired hidden-input tests
@@ -76,6 +77,14 @@ A7 part 1: the [read-only MCP preview](MCP_PREVIEW.md) (`weave-mcp`) serves
 `query`, `expand`, `as_of`, `what_changed` and `explain` over stdio as a fixed
 reader, and answers exit question 2 on the fleet. `hybrid_search` reports
 `E_UNSUPPORTED` until A4 lands; questions 3 and 4 through the preview follow it.
+A4 in progress: protocol 0.24.0 and store 31 activate embedding facts and
+spaces (ADR-0006) and add the exact `nearest` operator with time and
+permission filters, graph-to-vector and vector-to-graph composition
+(`candidates`, `seeds_from`), `similar_candidates` candidate relations with
+provenance, an explicit migration from the untyped `vector` property, and
+answers to exit questions 3 and 4 on the fleet ([guide](EMBEDDINGS.md)). The
+100k × 1,536-dimension upsert measurement and the Python tutorial follow in
+the next part.
 
 **Phase A exit scenario:** import a fleet of 5,000 units with parts, firmware,
 sites, owners, sensor series references and maintenance notes with embeddings.

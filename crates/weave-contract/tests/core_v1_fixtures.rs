@@ -38,6 +38,8 @@ const CONCEPTS: &[&str] = &[
     "query.expression",
     "query.expand",
     "query.changes",
+    "query.nearest",
+    "query.similar_candidates",
     "result.envelope",
     "error.version",
     "error.unknown_field",
@@ -226,7 +228,7 @@ fn negative_fixtures_fail_with_their_stable_code() {
 
 #[test]
 fn unknown_version_fails_with_e_version_before_structure() {
-    for version in ["0.24.0", "1.0.0", "0.21", "", "0.21.0-rc1"] {
+    for version in ["0.25.0", "1.0.0", "0.21", "", "0.21.0-rc1"] {
         let program = json!({"version": version, "commands": [], "unknown": true});
         let error = decode_program(&serde_json::to_vec(&program).unwrap()).unwrap_err();
         assert_eq!(error.code, wire::E_VERSION, "{version}");
@@ -242,7 +244,7 @@ fn unknown_version_fails_with_e_version_before_structure() {
         let program = json!({"version": version, "commands": []});
         decode_program(&serde_json::to_vec(&program).unwrap()).unwrap();
     }
-    assert_eq!(wire::SUPPORTED_VERSIONS.len(), 23);
+    assert_eq!(wire::SUPPORTED_VERSIONS.len(), 24);
     assert_eq!(wire::SUPPORTED_VERSIONS[0], VERSION);
 }
 
@@ -261,7 +263,15 @@ fn unknown_fields_fail_with_e_unknown_field_at_every_depth() {
             "graph_id": "g", "seeds": ["a"], "hops": 1, "depth": 2}}]}),
         json!({"version": VERSION, "commands": [{"op": "evaluate", "value": {"kind": "changes",
             "graph_id": "g", "from": {"kind": "cursor", "revision": "r", "at": 1}}}]}),
+        json!({"version": VERSION, "commands": [{"op": "evaluate", "value": {"kind": "nearest",
+            "graph_id": "g", "space": {"id": "s", "revision": "1"}, "k": 1,
+            "query": {"kind": "vector", "vector": [1.0]}, "mode": "approximate"}}]}),
+        json!({"version": VERSION, "commands": [{"op": "write", "graph_id": "g", "changes": [
+            {"change": "assert", "fact": {"kind": "embedding", "id": "v", "space": {"id": "s", "revision": "1"},
+                "subject": {"kind": "node", "node_id": "a"}, "vector": [1.0], "valid_time": {"start": 0},
+                "reader_groups": ["team"]}}]}]}),
     ];
+
     for program in programs {
         let error = decode_program(&serde_json::to_vec(&program).unwrap()).unwrap_err();
         assert_eq!(error.code, wire::E_UNKNOWN_FIELD, "{program}: {error}");

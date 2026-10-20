@@ -771,10 +771,14 @@ fn clock_expression(
                 "governed or cached view reads cannot be registered as view dependencies",
             ))
         }
-        GraphExpression::Expand(_) | GraphExpression::Changes(_) | GraphExpression::AsOf { .. } => {
+        GraphExpression::Expand(_)
+        | GraphExpression::Changes(_)
+        | GraphExpression::AsOf { .. }
+        | GraphExpression::Nearest(_)
+        | GraphExpression::SimilarCandidates(_) => {
             return Err(err(
                 "E_VIEW",
-                "expand and changes are not supported in views",
+                "expand, changes, nearest and similar_candidates are not supported in views",
             ))
         }
         GraphExpression::ResolveIdentity { selection } => {
@@ -901,6 +905,8 @@ fn collect_heads(expression: &GraphExpression, heads: &mut BTreeMap<(String, Str
         | GraphExpression::Expand(_)
         | GraphExpression::Changes(_)
         | GraphExpression::AsOf { .. }
+        | GraphExpression::Nearest(_)
+        | GraphExpression::SimilarCandidates(_)
         | GraphExpression::AcceptedGraph { .. }
         | GraphExpression::CurrentView { .. }
         | GraphExpression::Reference { .. }

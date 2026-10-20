@@ -1,0 +1,43 @@
+{
+  "concepts": [
+    "compat.versions",
+    "embedding.fact"
+  ],
+  "engine": {
+    "error": "E_VERSION",
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ]
+  },
+  "expect": {
+    "accept": true
+  },
+  "fixture": "embedding-write-version-gated",
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "dimensions": 3,
+              "encoder": "text-embedding-3-small",
+              "encoder_version": "2024-01-25",
+              "id": "notes",
+              "kind": "embedding_space",
+              "metric": "cosine_distance",
+              "preprocessing": "weave-chunk/512-tokens/v1",
+              "revision": "1"
+            }
+          }
+        ],
+        "graph_id": "g",
+        "op": "write"
+      }
+    ],
+    "version": "0.23.0"
+  },
+  "type": "program"
+}

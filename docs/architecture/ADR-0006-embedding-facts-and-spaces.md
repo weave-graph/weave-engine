@@ -2,9 +2,9 @@
 
 Status: **accepted** on 2026-10-19 (A1, [#2](https://github.com/weave-graph/weave-engine/issues/2)).
 The records are defined in [core contract v1](../contract/core-v1.md#7-embeddings)
-and in `crates/weave-contract/src/embedding.rs`. They are activated on the wire
-by the A4 protocol bump ([#13](https://github.com/weave-graph/weave-engine/issues/13)).
-Until then, no protocol 0.21.0 `Program` can carry them.
+and in `crates/weave-contract/src/embedding.rs`. Protocol 0.24.0 and store 31
+activate them on the wire (A4, [#13](https://github.com/weave-graph/weave-engine/issues/13));
+see "Implementation (A4)" below.
 
 ## Context
 
@@ -88,6 +88,41 @@ into a declared space. That conversion is a new write with method `import`,
 and the old property stays as it was. The `weave-spaces` geometry extension is
 frozen. Its `Embedding` geometry has no encoder version, so it is not
 comparable with an `EmbeddingSpace`.
+
+## Implementation (A4, protocol 0.24.0, store 31)
+
+These choices refine the decision without changing it
+([DECISIONS.md](../../DECISIONS.md), entries "#13 A4"):
+
+- **Spaces are facts of the graph.** A space is a fact of kind
+  `embedding_space` with key `id@revision`, so a space revision never
+  contains `@`. It is asserted once; a different descriptor under the same
+  key, a correction to one or a retraction fails with `E_CONFLICT`. There is
+  no cross-graph space registry: it would let a writer learn of a space in a
+  graph it cannot read. Comparing vectors from two graphs still requires
+  equal descriptors (`E_SPACE`).
+- **Embeddings are written with `write` only.** A snapshot commit that
+  carries spaces or embeddings fails with `E_EMBEDDING`. Ordinary reads never
+  materialize embeddings, so large vector sets cost graph reads nothing;
+  `nearest`, `similar_candidates` and `changes` read them through the fact
+  index (by space, subject and valid time).
+- **Valid time of the embedding, not of the subject.** `valid_at` selects on
+  the embedding's valid time; the subject must be visible but its node valid
+  time is not re-applied (an embedding of a note about past work stays valid
+  after the work). Candidate sets restrict subjects by time when needed.
+- **Normative distance.** Scores are binary64 sums in component order
+  (`EmbeddingMetric::distance`), so results and ties are reproducible
+  bit for bit. A cosine space rejects the zero vector.
+- **Ranking boundary.** Ranking runs behind one internal trait over the
+  already-authorized selection; the exact scan is the only implementation.
+  C5's approximate index plugs in there and falls back to the exact scan.
+- **Candidates.** `similar_candidates` reports each pair once, lower subject
+  first; its ID is derived from the graph, the space and both embedding IDs,
+  so it is stable across revisions. Persisting one is an ordinary edge with
+  `EvidenceRef::Embedding` evidence (0.24).
+- **Compatibility path.** `Engine::vector_property_changes` is the explicit
+  importer: binary64 to binary32 rounding is counted and reported, provenance
+  is `method: import` citing the node, and the property is unchanged.
 
 ## Consequences
 

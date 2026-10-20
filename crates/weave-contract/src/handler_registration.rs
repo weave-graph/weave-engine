@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 pub const HANDLER_TEMPLATE_FORMAT: &str = "weave-handler-registration/1";
-pub const HANDLER_TEMPLATE_PROTOCOL: &str = "0.23.0";
+pub const HANDLER_TEMPLATE_PROTOCOL: &str = "0.24.0";
 pub const HANDLER_EVENT_BINDING: &str = "$event";
 pub const MAX_HANDLER_BYTES: usize = 1024 * 1024;
 
@@ -182,6 +182,8 @@ fn recipe_sources(
                 | GraphExpression::Expand(_)
                 | GraphExpression::Changes(_)
                 | GraphExpression::AsOf { .. }
+                | GraphExpression::Nearest(_)
+                | GraphExpression::SimilarCandidates(_)
                 | GraphExpression::RecordedQuery { .. }
                 | GraphExpression::Query { .. }
                 | GraphExpression::TypedContext { .. }
@@ -211,6 +213,7 @@ fn fields(template: &CompiledHandlerTemplate) -> Result<(), Diagnostic> {
     if template.format != HANDLER_TEMPLATE_FORMAT
         || ![
             HANDLER_TEMPLATE_PROTOCOL,
+            "0.23.0",
             "0.22.0",
             "0.21.0",
             "0.20.0",
@@ -267,6 +270,7 @@ fn fields(template: &CompiledHandlerTemplate) -> Result<(), Diagnostic> {
         &template.recipe,
         [
             HANDLER_TEMPLATE_PROTOCOL,
+            "0.23.0",
             "0.22.0",
             "0.21.0",
             "0.20.0",
@@ -336,6 +340,7 @@ pub fn seal_handler_template(
         &template.recipe,
         [
             HANDLER_TEMPLATE_PROTOCOL,
+            "0.23.0",
             "0.22.0",
             "0.21.0",
             "0.20.0",

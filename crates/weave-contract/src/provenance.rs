@@ -60,6 +60,13 @@ pub enum EvidenceRef {
     Graph { graph_id: String, revision: String },
     /// An external artifact (document, log file, series export) by URI and digest.
     Artifact { uri: String, digest: String },
+    /// An embedding fact at an exact revision (0.24), for example an origin
+    /// of a persisted candidate relation.
+    Embedding {
+        graph_id: String,
+        revision: String,
+        embedding_id: String,
+    },
 }
 
 /// Provenance a client may claim when writing a fact.
@@ -154,6 +161,11 @@ impl EvidenceRef {
                 graph_id,
                 revision,
                 node_id: id,
+            }
+            | Self::Embedding {
+                graph_id,
+                revision,
+                embedding_id: id,
             } => label(graph_id) && label(revision) && label(id),
             Self::Graph { graph_id, revision } => label(graph_id) && label(revision),
             Self::Artifact { uri, digest } => label(uri) && label(digest),

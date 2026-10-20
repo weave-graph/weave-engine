@@ -1,0 +1,44 @@
+{
+  "concepts": [
+    "compat.versions",
+    "query.nearest"
+  ],
+  "engine": {
+    "error": "E_VERSION",
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ]
+  },
+  "expect": {
+    "accept": true
+  },
+  "fixture": "nearest-version-gated",
+  "input": {
+    "commands": [
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "graph_id": "g",
+          "k": 1,
+          "kind": "nearest",
+          "query": {
+            "kind": "vector",
+            "vector": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          },
+          "space": {
+            "id": "notes",
+            "revision": "1"
+          }
+        }
+      }
+    ],
+    "version": "0.23.0"
+  },
+  "type": "program"
+}

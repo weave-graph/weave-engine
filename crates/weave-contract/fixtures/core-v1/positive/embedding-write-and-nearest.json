@@ -1,0 +1,297 @@
+{
+  "concepts": [
+    "embedding.fact",
+    "query.nearest",
+    "fact.readers",
+    "time.valid"
+  ],
+  "engine": {
+    "clock_ms": 1757808000000,
+    "principal": "alice",
+    "results": [
+      {
+        "kind": "committed",
+        "revision": "fact:sha256:32d2d567504490b3b57d04960d0b6815f7034fb18b1090f1afd64e175d3fd02d"
+      },
+      {
+        "coverage": "complete",
+        "exactness": "exact",
+        "fact_provenance": {
+          "count": 4,
+          "methods": [
+            "model",
+            "unspecified"
+          ],
+          "writers": [
+            "alice"
+          ]
+        },
+        "kind": "queried",
+        "neighbors": [
+          "va",
+          "vb"
+        ],
+        "nodes": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "coverage": "complete",
+        "exactness": "exact",
+        "kind": "queried",
+        "neighbors": [
+          "va"
+        ],
+        "nodes": [
+          "a"
+        ]
+      }
+    ],
+    "write_graphs": [
+      "g"
+    ]
+  },
+  "expect": {
+    "accept": true
+  },
+  "fixture": "embedding-write-and-nearest",
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "dimensions": 3,
+              "encoder": "text-embedding-3-small",
+              "encoder_version": "2024-01-25",
+              "id": "notes",
+              "kind": "embedding_space",
+              "metric": "cosine_distance",
+              "preprocessing": "weave-chunk/512-tokens/v1",
+              "revision": "1"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "A",
+              "id": "a",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "B",
+              "id": "b",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "C",
+              "id": "c",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [
+                "bob"
+              ],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "va",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [],
+              "space": {
+                "id": "notes",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "a"
+              },
+              "valid_time": {
+                "end": null,
+                "start": 0
+              },
+              "vector": [
+                1.0,
+                0.0,
+                0.0
+              ]
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "vb",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [],
+              "space": {
+                "id": "notes",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "b"
+              },
+              "valid_time": {
+                "end": 100,
+                "start": 0
+              },
+              "vector": [
+                0.5,
+                0.5,
+                0.0
+              ]
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "vc",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [],
+              "space": {
+                "id": "notes",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "c"
+              },
+              "valid_time": {
+                "end": null,
+                "start": 0
+              },
+              "vector": [
+                1.0,
+                0.10000000149011612,
+                0.0
+              ]
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "vh",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [
+                "bob"
+              ],
+              "space": {
+                "id": "notes",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "a"
+              },
+              "valid_time": {
+                "end": null,
+                "start": 0
+              },
+              "vector": [
+                1.0,
+                0.009999999776482582,
+                0.0
+              ]
+            }
+          }
+        ],
+        "graph_id": "g",
+        "op": "write"
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "graph_id": "g",
+          "k": 3,
+          "kind": "nearest",
+          "query": {
+            "kind": "vector",
+            "vector": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          },
+          "space": {
+            "id": "notes",
+            "revision": "1"
+          },
+          "valid_at": 50
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "graph_id": "g",
+          "k": 3,
+          "kind": "nearest",
+          "query": {
+            "kind": "vector",
+            "vector": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          },
+          "space": {
+            "id": "notes",
+            "revision": "1"
+          },
+          "valid_at": 150
+        }
+      }
+    ],
+    "version": "0.24.0"
+  },
+  "type": "program"
+}

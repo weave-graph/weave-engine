@@ -86,3 +86,8 @@ jobs:
           WEAVE_FLEET_UNITS: '5000'
           WEAVE_FLEET_UPDATES: '1000'
         run: cargo test --release --locked -p weave-hardware --test fleet_scenario -- --nocapture
+      - name: Exit questions 3 and 4 (hybrid retrieval) on the 5,000-unit fleet (release)
+        env:
+          WEAVE_FLEET_UNITS: '5000'
+          WEAVE_FLEET_UPDATES: '1000'
+        run: cargo test --release --locked -p weave-hardware --test fleet_hybrid -- --nocapture

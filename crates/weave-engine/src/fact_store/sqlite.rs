@@ -547,6 +547,9 @@ impl FactBackend for SqliteFactStore<'_> {
         if filter.unanchored {
             sql.push_str(" AND i.subject IS NULL AND i.entity IS NULL");
         }
+        if filter.graph_only {
+            sql.push_str(" AND i.kind NOT IN ('embedding_space','embedding')");
+        }
         if let Some((start, end)) = filter.recorded {
             bind(&mut sql, " AND i.recorded_at_ms>=?", start.into());
             bind(&mut sql, " AND i.recorded_at_ms<?", end.into());

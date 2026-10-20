@@ -2,11 +2,13 @@
 
 Status: **accepted** on 2026-10-19 (A1,
 [#2](https://github.com/weave-graph/weave-engine/issues/2)). Baseline protocol:
-**0.21.0**. Current protocol: **0.23.0**. Protocol 0.22.0 activated per-fact
+**0.21.0**. Current protocol: **0.24.0**. Protocol 0.22.0 activated per-fact
 provenance, node valid time and fact-level writes (A2,
 [#3](https://github.com/weave-graph/weave-engine/issues/3)); 0.23.0 adds
 k-hop `expand`, `as_of` selection and `changes` change sets (A3,
-[#4](https://github.com/weave-graph/weave-engine/issues/4)). Profile name: `core-v1` (`weave_contract::wire::CORE_PROFILE`).
+[#4](https://github.com/weave-graph/weave-engine/issues/4)); 0.24.0 activates
+embedding spaces and facts and adds exact `nearest` and `similar_candidates`
+(A4, [#13](https://github.com/weave-graph/weave-engine/issues/13)). Profile name: `core-v1` (`weave_contract::wire::CORE_PROFILE`).
 
 This document is the consolidated, normative specification of the core of the
 Weave contract that Phases A–C build on. It replaces reading the 21 additive
@@ -40,11 +42,7 @@ An implementation conforms to core v1 when it:
   weave-engine runtime does; a compiler that only emits programs does not).
 
 Provenance ([section 6](#6-provenance)) is active on the wire from protocol
-0.22.0. Embeddings ([section 7](#7-embeddings), activated by A4) are **defined
-but not yet active on the wire**. Their records are normative and
-fixture-tested as standalone records. The fields that will carry them in
-programs are reserved ([section 11.6](#116-reserved-names)) and rejected with
-`E_UNKNOWN_FIELD`.
+0.22.0, and embeddings ([section 7](#7-embeddings)) from protocol 0.24.0.
 
 ## 2. Notation
 
@@ -110,7 +108,7 @@ convention, and two of them are never merged because of a similarity.
 ## 4. Facts
 
 A **fact** is a node, an edge, an explicit assertion, a metadata attachment or
-(from A4) an embedding.
+(from 0.24.0) an embedding space or an embedding.
 
 - **`fact.polarity`.** Every edge or assertion has `polarity`, either
   `positive` (the default) or `negative`. A negative claim is explicit evidence
@@ -138,18 +136,22 @@ A **fact** is a node, an edge, an explicit assertion, a metadata attachment or
   (replace the live version of the same kind and ID) or
   `{change: "retract", target: {kind, id}, expected?}`. `fact` is a record
   tagged by `kind`: `node`, `edge`, `structural_edge`, `assertion` or
-  `attachment`. A key occurs at most once per write. A correction cannot
+  `attachment`, and from 0.24.0 `embedding_space` or `embedding`
+  ([section 7](#7-embeddings)). A key occurs at most once per write. A correction cannot
   change structural identity (node `entity_id`/`space_id`, edge
-  `from`/`to`/`predicate`, assertion `edge_id`, attachment `host`/`key`). A
+  `from`/`to`/`predicate`, assertion `edge_id`, attachment `host`/`key`,
+  embedding `space`/`subject`; a space is immutable and cannot be retracted). A
   retraction fails with `E_DEPENDENT_FACT` while live facts still need the
   target (edges of a node, attachments on a host). `expected_head` absent
   means no head check, `null` requires a new branch, a string must equal the
   head. `expected` is `{kind: "absent"}` or `{kind: "unchanged_since",
   revision}`. Any mismatch fails the whole write with `E_CONFLICT`. Writes to
   `weave:` graphs fail with `E_RESERVED_NAMESPACE`. At most 100,000 changes
-  per write (`E_BUDGET`). The result is `committed` or `unchanged`. Fixtures:
+  per write (`E_BUDGET`). The result is `committed` or `unchanged`. Snapshot
+  commits cannot carry embedding spaces or embeddings (`E_EMBEDDING`). Fixtures:
   `positive/fact-write-assert-correct-retract.json`,
-  `negative/write-forged-writer.json`.
+  `negative/write-forged-writer.json`,
+  `negative/embedding-snapshot-commit.json`.
 - **`fact.readers`.** Every fact has `readers`. An empty list means public.
   A nonempty list is a disjunction of principal IDs. An edge is visible only
   when its own readers and both endpoints' readers admit the principal. The
@@ -252,35 +254,64 @@ protocol 0.22.0.
 ## 7. Embeddings
 
 Defined by [ADR-0006](../architecture/ADR-0006-embedding-facts-and-spaces.md)
-(accepted). Records: `weave_contract::embedding`. Active on the wire from A4.
+(accepted). Records: `weave_contract::embedding`. Active on the wire from
+protocol 0.24.0 and store 31. User guide: [EMBEDDINGS.md](../EMBEDDINGS.md).
 
 - **`embedding.space`.** `EmbeddingSpace { id, revision, encoder,
   encoder_version, preprocessing, dimensions, metric }` is an immutable
   descriptor. `dimensions` is between 1 and 4096. `metric` is
-  `cosine_distance` or `euclidean`. Two spaces are compatible only when they
+  `cosine_distance` or `euclidean`. `revision` never contains `@`: within a
+  graph a space is the fact of kind `embedding_space` with key `id@revision`
+  (`SpaceRef::key`), asserted once and never corrected to another descriptor
+  or retracted (`E_CONFLICT`). Two spaces are compatible only when they
   are equal in every field. A mismatch fails with `E_SPACE`, even when the
-  dimensions are equal. Fixtures: `positive/embedding-space.json`,
-  `negative/embedding-space-encoder-version.json`.
+  dimensions are equal. The distance is normative: components are widened to
+  binary64 exactly and summed in component order; `euclidean` is
+  `sqrt(sum((a_i - b_i)^2))` and `cosine_distance` is
+  `1 - dot(a, b) / (sqrt(dot(a, a)) * sqrt(dot(b, b)))` clamped to `[0, 2]`
+  (`EmbeddingMetric::distance`). A cosine space rejects the zero vector.
+  Fixtures: `positive/embedding-space.json`,
+  `negative/embedding-space-encoder-version.json`,
+  `negative/nearest-space-mismatch.json`.
 - **`embedding.fact`.** `EmbeddingFact { id, space, subject, vector,
   valid_time, readers, derived_from, derived_nodes, derived_snapshots,
-  provenance }` is a temporal, permissioned fact. `subject` is `entity`,
-  `node` (document chunks included), `edge` or `assertion`. `vector` holds
-  finite binary32 components of exactly the space's dimension (`E_SPACE`
-  otherwise). Selection by valid time, recorded time and permission comes
-  before ranking. Fixtures: `positive/embedding-fact.json`,
+  provenance }` is a temporal, permissioned fact of kind `embedding`, written
+  only with `write` (`fact.write`) and in the record namespace of the graph.
+  `subject` is `entity`, `node` (document chunks included), `edge` or
+  `assertion`, and must be live (`E_ENDPOINT`); a subject cannot be retracted
+  while an embedding of it is live (`E_DEPENDENT_FACT`). `vector` holds
+  finite binary32 components of exactly the space's dimension, and the space
+  must be declared in the graph (`E_SPACE` otherwise). An embedding is visible
+  when its readers, its subject and its gates admit the reader. Ordinary
+  reads (`query`, `expand`, `as_of`, algebra) never return embeddings or
+  spaces; `nearest`, `similar_candidates` and `changes` do. Selection by
+  valid time, recorded time and permission comes before ranking. Fixtures:
+  `positive/embedding-fact.json`,
+  `positive/embedding-write-and-nearest.json`,
   `negative/embedding-dimension-mismatch.json`,
-  `negative/reserved-graph-embeddings.json`,
-  `negative/reserved-expression-nearest.json`.
+  `negative/embedding-write-version-gated.json`.
 - **`embedding.candidate`.** `CandidateRelation { id, predicate:
   "weave:similar_to", from, to, space, score, exactness, valid_time, origins }`
-  is a similarity-derived *result value*. It is never an asserted fact or an
-  identity, and it never appears in ordinary traversal unless requested.
+  is a similarity-derived *result value* (`QueryResult.candidates`). It is
+  never an asserted fact or an identity, and no traversal follows it.
   `score` is a distance (lower is closer). `exactness` is `exact`;
-  `approximate` is reserved for C5. Fixture:
-  `positive/candidate-relation.json`.
+  `approximate` is reserved for C5. `valid_time` is the intersection of both
+  embeddings' valid times and `origins` their two `FactRef`s. Its ID is
+  derived from the graph, space and both embedding IDs. Persisting one takes
+  an explicit write of an ordinary edge whose provenance cites the origins as
+  `{kind: "embedding", graph_id, revision, embedding_id}` evidence (0.24).
+  Fixtures: `positive/candidate-relation.json`,
+  `positive/similar-candidates.json`.
+
+A document chunk is an ordinary node, by convention of type
+`weave.DocumentChunk` with properties `artifact_uri`, `artifact_digest`,
+`start` and `end` (UTF-8 byte offsets, half-open), linked by `weave:mentions`
+edges to the nodes it mentions (`weave_contract::embedding::CHUNK_TYPE` and
+related constants). The engine gives it no special meaning.
 
 The untyped science `vector` property keeps its current semantics and is
-never reinterpreted as an embedding fact.
+never reinterpreted as an embedding fact. `Engine::vector_property_changes`
+plans an explicit conversion into a declared space (method `import`).
 
 ## 8. Queries and selection
 
@@ -322,6 +353,8 @@ never reinterpreted as an embedding fact.
   | `as_of` | Read a graph as known at a recorded time, record by record (0.23, `time.as_of`) |
   | `expand` | k-hop neighborhood of seed nodes (0.23, `query.expand`) |
   | `changes` | Facts changed between two states of a branch (0.23, `query.changes`) |
+  | `nearest` | Exact k nearest embeddings of one space (0.24, `query.nearest`) |
+  | `similar_candidates` | Candidate similarity relations (0.24, `query.similar_candidates`) |
 
   Derived values carry their exact source origins and are readable only by
   the evaluating principal until a release policy exists (B2). Fixture:
@@ -377,8 +410,48 @@ region. Hidden facts therefore never appear in and never change their output.
 Revision identifiers are the exception: they are content-derived over every
 fact (ADR-0001, ADR-0004), so a hidden write gives a new revision ID.
 
-A4 adds `nearest` and `similar_candidates`. These names are reserved
-([section 11.6](#116-reserved-names)).
+- **`query.nearest`.** `NearestPlan { graph_id, branch_id, revision?,
+  as_of?, space, query, k, valid_at?, candidates? }` (0.24, `kind:
+  "nearest"`) ranks the embeddings of one space by distance to `query`: a
+  caller-supplied `{kind: "vector", vector}` in that space, or `{kind:
+  "embedding", embedding_id}` of the same revision, which must be visible
+  (`E_UNAVAILABLE` otherwise, as when missing) and whose subject is excluded.
+  It reads one revision (pinned, `as_of` or the head). Only embeddings of the
+  space, valid at `valid_at` when set (the subject's node valid time is not
+  re-applied), whose subject is a record of the `candidates` value when set
+  (its nodes, their entities and its edges, by origin in `graph_id`), and
+  that the reader may see with their subject are ranked, so hidden
+  embeddings never change the rank, score or count of visible ones. The
+  order is ascending score, then subject (kind, then ID), then embedding ID.
+  `k` is 1 to 1,000 (`E_NEAREST` for 0, `E_BUDGET` above). The value holds
+  the hits' subject nodes with their attachments and origins, the hit
+  embeddings and their space, `QueryResult.neighbors` (`Neighbor { rank,
+  embedding_id, subject, score }` in rank order) and `exactness: exact`. A
+  partial candidate value or a denied embedding makes it partial. Another
+  operator that takes the value as input takes only its graph records.
+  `expand` takes seeds from another value's nodes with `seeds_from` (0.24),
+  which composes vector search into traversal. Fixtures:
+  `positive/embedding-write-and-nearest.json`,
+  `positive/nearest-composition.json`, `negative/nearest-zero-k.json`,
+  `negative/nearest-version-gated.json`.
+- **`query.similar_candidates`.** `CandidatesPlan { graph_id, branch_id,
+  revision?, as_of?, space, k, max_score?, valid_at?, sources?, targets?,
+  exclude_linked, limit }` (0.24) proposes candidate relations
+  (`embedding.candidate`): for every visible source embedding (of the
+  `sources` value, or all), its `k` nearest visible target embeddings (of
+  `targets`, or all) of another subject with an overlapping valid time, at
+  most `max_score` apart, each pair once from the lower subject to the
+  higher. `exclude_linked` drops node pairs joined by a visible edge in
+  either direction (valid at `valid_at` when set). The result is
+  `QueryResult.candidates` in ascending score, `exactness: exact`, the
+  endpoint nodes and `fact_provenance` for every origin. At most `limit`
+  candidates (default 1,000, at most 100,000) and 50,000,000 comparisons
+  (`E_BUDGET`). Fixture: `positive/similar-candidates.json`.
+
+The A4 operators select and authorize embeddings through the same path as
+the A3 operators. A denied embedding (its readers admit the reader but a
+gate does not) makes the result partial; one whose readers exclude the
+reader, or whose subject is hidden, is simply absent.
 
 ## 9. Result envelope
 
@@ -394,14 +467,19 @@ A4 adds `nearest` and `similar_candidates`. These names are reserved
     references for each returned record;
   - `metadata_graphs`;
   - optional `recorded_observations`, `accepted_observations`,
-    `selected_context`, `source_revisions`, `fact_provenance` (0.22) and
-    `changes` (0.23, `query.changes`), each omitted when empty.
+    `selected_context`, `source_revisions`, `fact_provenance` (0.22.0),
+    `changes` (0.23, `query.changes`), and `neighbors`, `candidates` and
+    `exactness` (0.24, `query.nearest`, `query.similar_candidates`), each
+    omitted when empty;
+  - `graph.embedding_spaces` and `graph.embeddings` (0.24), present only in
+    `nearest` values.
 
   Unknown, partial, denied and empty stay distinguishable. When any selected
   input is missing, hidden or unresolved, the result has `coverage: partial`
   with a generic diagnostic. A result MUST NOT be an empty `complete` result
   for unavailable input. `complete` describes the authorized input, not the
-  world. Fixture: `positive/result-envelope.json`.
+  world. Fixtures: `positive/result-envelope.json`,
+  `positive/nearest-result-envelope.json`.
 
 Results are produced by the engine. Their consumers MUST tolerate new
 optional fields, which are added only under the additive rules of
@@ -452,7 +530,9 @@ decoding failures, and the C ABI keeps `E_NATIVE_INPUT`.
 | `E_CONTEXT_REQUIRED` | A contextual claim was consumed without matching context selection |
 | `E_RESERVED_NAMESPACE` | A write targets an engine-reserved graph or descriptor (for example identity or governance storage) |
 | `E_PROVENANCE` | Invalid provenance, or a missing origin (ADR-0005) |
-| `E_SPACE` | An invalid or mismatched embedding space or vector (ADR-0006) |
+| `E_SPACE` | An invalid or mismatched embedding space or vector, or a space not declared in the graph (ADR-0006) |
+| `E_NEAREST` | A `nearest` or `similar_candidates` with `k` or `limit` 0, or an invalid `max_score` (0.24) |
+| `E_EMBEDDING` | A snapshot commit that carries embedding spaces or embeddings (0.24) |
 | `E_EXPAND` | An `expand` with no seed or no hop (0.23) |
 | `E_CHANGES_OPERAND` | A change set used as the input of another operator (0.23) |
 | `E_STORAGE`, `E_FORMAT` | Internal storage or serialization failure |
@@ -469,10 +549,10 @@ automatically:
 
 | Identifier | Current | Where |
 |---|---|---|
-| Protocol (`Program.version`, `QueryResult.version`) | 0.23.0 | `weave_contract::VERSION` |
+| Protocol (`Program.version`, `QueryResult.version`) | 0.24.0 | `weave_contract::VERSION` |
 | Core profile | `core-v1` | This document |
-| Contract crate | 0.23.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
-| Store schema | 30 | `STORAGE_VERSION` |
+| Contract crate | 0.24.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
+| Store schema | 31 | `STORAGE_VERSION` |
 | Capsule format | 0.4 | [CAPSULES.md](../CAPSULES.md) |
 | Science API | 0.1.0 | [SCIENCE_INTERFACE.md](../SCIENCE_INTERFACE.md) |
 | Artifact formats | `weave-view-registration/1`, `weave-handler-registration/1` | 0.16 and 0.18 notes |
@@ -481,7 +561,7 @@ automatically:
 
 - **`compat.versions`.** A program declares exactly one protocol version.
   There is no range negotiation. The engine accepts the closed set
-  `SUPPORTED_VERSIONS` (0.1.0 through 0.23.0 today) and executes each with
+  `SUPPORTED_VERSIONS` (0.1.0 through 0.24.0 today) and executes each with
   the exact semantics it was published with. A feature used under an older
   version fails with `E_VERSION` before any write. Fixtures:
   `positive/legacy-version-accepted.json`,
@@ -498,7 +578,10 @@ automatically:
   number. A1 itself changes no wire bytes, so the protocol stays 0.21.0.
   A2 activated provenance, `Node.valid_time` and `write` as **0.22.0**.
   A3 activated `expand`, `as_of`, `changes` and `QueryResult.changes` as
-  **0.23.0**, with no store change.
+  **0.23.0**, with no store change. A4 activated the embedding fields,
+  fact kinds, `nearest`, `similar_candidates`, `ExpandPlan.seeds_from`,
+  embedding evidence and the result fields `neighbors`, `candidates` and
+  `exactness` as **0.24.0**, with store 31.
 
 ### 11.3 What a minor version may add
 
@@ -541,10 +624,7 @@ meaning.
 
   | Name | Kind | Owner |
   |---|---|---|
-  | `GraphData.embedding_spaces`, `GraphData.embeddings` | fields | ADR-0006, A4 |
-  | `QueryResult.candidates`, `QueryResult.exactness` | result fields | ADR-0006, A4 |
-  | `nearest`, `similar_candidates` | expression `kind` | A4 |
-  | `weave:` | predicate and ID namespace (`weave:similar_to`) | engine |
+  | `weave:` | predicate and ID namespace (`weave:similar_to`, `weave:mentions`, `weave:candidate:`) | engine |
   | `reader_groups` on every fact record (omitted when empty) | field (group references) | B1, ADR-0007 section 13 |
 
   An epic MAY choose different names, in which case its PR releases the
@@ -552,10 +632,13 @@ meaning.
   and `Node.valid_time` in 0.22.0, and released `assert`, `retract` and
   `correct` as command ops: they are change kinds of the `write` command.
   A3 activated the reserved expression kinds `expand` and `changes` in
-  0.23.0.
+  0.23.0. A4 activated `GraphData.embedding_spaces`, `GraphData.embeddings`,
+  `QueryResult.candidates`, `QueryResult.exactness`, `nearest` and
+  `similar_candidates` in 0.24.0; under older versions they fail with
+  `E_VERSION` (`negative/embedding-write-version-gated.json`,
+  `negative/nearest-version-gated.json`).
   Fixtures: `negative/reserved-node-reader-groups.json`,
-  `negative/reserved-graph-embeddings.json`, `negative/unknown-command.json`,
-  `negative/reserved-expression-nearest.json`.
+  `negative/unknown-command.json`.
 
 ### 11.7 Deprecation process
 
@@ -624,6 +707,7 @@ No feature changes semantics because of this classification.
 | 0.21 | `accepted_history`, `accepted_range`, `accepted_observations` | extension | Governance |
 | 0.22 | `write` (assert, correct, retract), fact revisions, `Node.valid_time`, claimed `provenance`, `QueryResult.fact_provenance` | core v1 | §4 `fact.write`, §5, §6 |
 | 0.23 | `expand`, `as_of` (expression and field), `changes`, `QueryResult.changes` | core v1 | §5 `time.as_of`, §8 `query.expand`, `query.changes` |
+| 0.24 | Embedding spaces and facts (`write` kinds, `GraphData` fields), `nearest`, `similar_candidates`, `ExpandPlan.seeds_from`, embedding evidence, `QueryResult.neighbors`, `candidates`, `exactness` | core v1 | §7, §8 `query.nearest`, `query.similar_candidates` |
 
 Capsules, mounts, dispatch, actors, governed effects and the browser host are
 native APIs, not contract versions. Their deferral is recorded in the
@@ -651,7 +735,7 @@ inside the vendored crate. The directory holds only JSON:
   "canonical": "optional: the exact re-encoding of a minimal input, pinning defaults",
   "engine": {"principal": "...", "write_graphs": [], "clock_ms": 0,
              "setup": [{"principal": "...", "write_graphs": [], "clock_ms": 0, "program": {}}],
-             "results": [{"kind": "queried", "coverage": "complete", "nodes": [], "edges": [], "edge_properties": {}, "recorded_observations": 1, "revision": "sha256:…"}],
+             "results": [{"kind": "queried", "coverage": "complete", "nodes": [], "edges": [], "edge_properties": {}, "recorded_observations": 1, "neighbors": [], "candidates": [], "exactness": "exact", "revision": "sha256:…"}],
              "error": "E_CODE"}
 }
 ```
@@ -669,7 +753,7 @@ executing the program on a fresh store with a manual clock. Revision IDs in
 | Harness | Checks | Runs in |
 |---|---|---|
 | `crates/weave-contract/tests/core_v1_fixtures.rs` | Manifest file set and hashes; fixture shape; every concept covered; positive canonical round trip; negative codes; dedicated unknown-version, unknown-field and unknown-variant tests | Engine CI, and language CI through the vendored crate |
-| `crates/weave-engine/tests/core_v1_fixtures.rs` | Every `engine` expectation; this document cites every fixture and concept; `weave-engine run` codes; the engine accepts exactly `SUPPORTED_VERSIONS` | Engine CI |
+| `crates/weave-engine/tests/core_v1_fixtures.rs` | Every `engine` expectation (including `nearest` neighbors in rank order and candidate pairs); this document cites every fixture and concept; `weave-engine run` codes; the engine accepts exactly `SUPPORTED_VERSIONS` | Engine CI |
 
 ### 13.3 Fixture index
 
@@ -695,7 +779,11 @@ Positive: `positive/identity-graph-nodes-edges.json`,
 `positive/expand-k-hop.json`,
 `positive/expand-valid-time-as-of.json`,
 `positive/changes-between-times.json`,
-`positive/changes-result-envelope.json`.
+`positive/changes-result-envelope.json`,
+`positive/embedding-write-and-nearest.json`,
+`positive/nearest-composition.json`,
+`positive/similar-candidates.json`,
+`positive/nearest-result-envelope.json`.
 
 Negative: `negative/unknown-version.json`, `negative/missing-version.json`,
 `negative/unknown-version-checked-first.json`,
@@ -703,10 +791,13 @@ Negative: `negative/unknown-version.json`, `negative/missing-version.json`,
 `negative/reserved-node-reader-groups.json`,
 `negative/write-forged-writer.json`,
 `negative/node-provenance-version-gated.json`,
-`negative/reserved-graph-embeddings.json`,
+`negative/embedding-write-version-gated.json`,
 `negative/claimed-provenance-forged-writer.json`,
 `negative/unknown-command.json`,
-`negative/reserved-expression-nearest.json`,
+`negative/nearest-version-gated.json`,
+`negative/nearest-space-mismatch.json`,
+`negative/nearest-zero-k.json`,
+`negative/embedding-snapshot-commit.json`,
 `negative/malformed-json.json`, `negative/duplicate-key.json`,
 `negative/wrong-json-type.json`,
 `negative/embedding-dimension-mismatch.json`,
@@ -744,7 +835,9 @@ To vendor them (LA0, weave-language#1):
   that changes it fails the harness instead of silently changing codes.
 - Decoding is structural only. Version feature gates, identifier bounds and
   authorization are checked at execution by the engine.
-- Embedding records are not yet accepted by any program. Their fixtures test
-  the records alone until A4.
+- `nearest` and `similar_candidates` are exhaustive (`exactness: exact`).
+  The read budget counts the stored embeddings they read, including hidden
+  ones, as every read does, so a whole-space ranking is bounded by it.
+
 - Error messages are diagnostic text. They are not stable and not part of the
   contract.

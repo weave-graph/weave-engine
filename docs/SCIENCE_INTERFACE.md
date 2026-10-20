@@ -7,7 +7,7 @@ or drive experiments with JSON; use the [Python client](PYTHON_SCIENCE.md) for
 notebooks, table helpers and experiment records.
 
 The science interface version is **0.1.0** and the engine contract version is
-**0.23.0**. These are separate versions. The Rust
+**0.24.0**. These are separate versions. The Rust
 [request types](../crates/weave-science/src/lib.rs) define the science schema;
 the [engine contract index](contract/README.md) explains base and extension
 semantics. Canonical [contract types](../crates/weave-contract/src/lib.rs) define
@@ -82,7 +82,7 @@ def call(request, *, write=False):
     if completed.returncode or not response["ok"]:
         raise RuntimeError(response.get("error", completed.stderr))
     assert response["science_version"] == "0.1.0"
-    assert response["contract_version"] == "0.23.0"
+    assert response["contract_version"] == "0.24.0"
     return response["result"]
 
 graph = {
@@ -214,7 +214,7 @@ Successful envelope:
 {
   "ok": true,
   "science_version": "0.1.0",
-  "contract_version": "0.23.0",
+  "contract_version": "0.24.0",
   "result": {
     "results": [{
       "kind": "committed",
@@ -236,7 +236,7 @@ Failure envelope, with nonzero CLI exit status:
 {
   "ok": false,
   "science_version": "0.1.0",
-  "contract_version": "0.23.0",
+  "contract_version": "0.24.0",
   "error": {"code": "E_SCIENCE_READ_ONLY", "message": "analysis programs must contain only read operations"}
 }
 ```
@@ -332,7 +332,10 @@ Euclidean distance that exceeds finite `f64` range rejects.
 
 Neighbors sort by increasing distance, then lexical node ID. The caller records
 encoder identity and preprocessing; the interface does not generate embeddings
-or infer transformations between spaces. Algorithms use fixed node and operation
+or infer transformations between spaces. This analysis reads the untyped `vector`
+property in binary64 and is unchanged by A4; typed, temporal, permissioned
+embeddings and the in-plan `nearest` operator are described in
+[EMBEDDINGS.md](EMBEDDINGS.md) and reachable through `execute` programs. Algorithms use fixed node and operation
 order, without randomness or wall-clock inputs; compare platform math using
 numerical tolerances.
 

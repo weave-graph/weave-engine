@@ -12,9 +12,22 @@ the old binary) and after it. Afterwards:
   producing engine's protocol `version` field;
 - the fact-store tables exist and are empty.
 """
-import argparse, json, sqlite3, subprocess, tempfile
+import argparse, json, re, sqlite3, subprocess, tempfile
 from contextlib import closing
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def store_marker():
+    source = (ROOT / "crates/weave-engine/src/lib.rs").read_text()
+    return int(re.search(r"pub const STORAGE_VERSION: i64 = (\d+);", source).group(1))
+
+
+def contract_version():
+    source = (ROOT / "crates/weave-contract/src/lib.rs").read_text()
+    return re.search(r'pub const VERSION: &str = "([^"]+)";', source).group(1)
+
 
 FACT_TABLES = {"fact_lines", "fact_revisions", "fact_log", "fact_index", "fact_checkpoints"}
 
@@ -104,11 +117,11 @@ def main():
         assert rows() == (marker, tables, revisions, events)
         assert run_queries(a.old_cli) == before
 
-        # Process kill after the schema commit: a complete store 30.
+        # Process kill after the schema commit: a complete current store.
         r = subprocess.run([str(a.storage.resolve()), str(db), "after_commit", "20"], capture_output=True, timeout=60)
         assert r.returncode == 83, r
         upgraded, new_tables, new_revisions, new_events = rows()
-        assert upgraded == 30, upgraded
+        assert upgraded == store_marker(), upgraded
         assert new_tables == tables | FACT_TABLES
         assert new_revisions == revisions and new_events == events
         with closing(sqlite3.connect(db)) as c:
@@ -126,14 +139,14 @@ def main():
             new = after[key]
             assert len(old) == len(new) == 1
             old_result, new_result = old[0]["result"], new[0]["result"]
-            assert old_result.pop("version") == "0.21.0" and new_result.pop("version") == "0.23.0"
+            assert old_result.pop("version") == "0.21.0" and new_result.pop("version") == contract_version()
             assert json.dumps(old_result, sort_keys=False) == json.dumps(new_result, sort_keys=False), key
             compared += 1
-        report = {"profile": "native-fact-store-migration/1", "result": "passed", "old_marker": 29, "new_marker": 30,
+        report = {"profile": "native-fact-store-migration/1", "result": "passed", "old_marker": 29, "new_marker": store_marker(),
                   "pinned_revisions": len(pins), "pinned_queries": compared, "process_deaths": 2,
                   "checks": ["kill before schema commit leaves store 29 readable by the old binary",
-                             "kill after schema commit leaves a complete store 30 with empty fact tables",
-                             "old binary refuses store 30 with E_STORAGE_VERSION",
+                             "kill after schema commit leaves a complete current store with empty fact tables",
+                             "old binary refuses the current store with E_STORAGE_VERSION",
                              "revision and event rows unchanged",
                              "pinned query results byte-identical except result.version"]}
         print(json.dumps(report))

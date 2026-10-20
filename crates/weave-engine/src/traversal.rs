@@ -19,16 +19,17 @@ use super::*;
 use crate::fact_store::{self as store, FactBackend, FactFilter, Namespace, StoredFact};
 use crate::facts::{self, FactSource, Key, LineSource, SnapshotSource};
 use std::collections::{BTreeSet, HashMap};
+use weave_contract::embedding::EmbeddingSubject;
 use weave_contract::traversal::{
     ChangeBound, ChangeEntry, ChangeKind, ChangeSet, ChangesPlan, Direction, ExpandPlan, MAX_HOPS,
     MAX_LIMIT, MAX_SCOPE, MAX_SEEDS,
 };
 
 /// A record's identity within one revision: its kind and ID.
-type Slot = (FactKind, String);
+pub(crate) type Slot = (FactKind, String);
 
 fn slot(fact: &Fact) -> Slot {
-    (fact.kind(), fact.id().to_string())
+    (fact.kind(), fact.key_id().into_owned())
 }
 
 fn derivation_count(fact: &Fact) -> usize {
@@ -38,6 +39,7 @@ fn derivation_count(fact: &Fact) -> usize {
         Fact::StructuralEdge(_) => 0,
         Fact::Assertion(a) => a.derivations.len(),
         Fact::Attachment(a) => a.derivations.len(),
+        Fact::EmbeddingSpace(_) | Fact::Embedding(_) => 0,
     }
 }
 
@@ -46,15 +48,15 @@ fn influence_count(data: &GraphData) -> usize {
 }
 
 /// An authorized graph value with its denials attributed to records.
-struct Attributed {
+pub(crate) struct Attributed {
     /// The authorized value.
-    graph: GraphData,
+    pub(crate) graph: GraphData,
     /// What the reader's `readers` admit, before derivation gates.
-    readable: GraphData,
+    pub(crate) readable: GraphData,
     /// Readable records that authorization removed or narrowed.
-    denied: BTreeMap<Slot, Fact>,
+    pub(crate) denied: BTreeMap<Slot, Fact>,
     /// The graph-level gates denied the value, or narrowed its alternatives.
-    header_incomplete: bool,
+    pub(crate) header_incomplete: bool,
 }
 
 /// True when an expression uses `expand` or `changes`.
@@ -64,7 +66,10 @@ pub(crate) fn uses_traversal(expression: &GraphExpression) -> bool {
         match expression {
             GraphExpression::Expand(_)
             | GraphExpression::Changes(_)
-            | GraphExpression::AsOf { .. } => return true,
+            | GraphExpression::AsOf { .. }
+            | GraphExpression::Nearest(_)
+            | GraphExpression::SimilarCandidates(_) => return true,
+
             GraphExpression::Window { input, .. }
             | GraphExpression::TypedContext { input, .. }
             | GraphExpression::Counterparts { input, .. }
@@ -115,7 +120,7 @@ fn limit(value: u32) -> Result<usize> {
 
 /// Keep only the listed nodes and edges of a query value, and the
 /// attachments (valid at `valid_at`) whose host survives, with their origins.
-fn restrict(
+pub(crate) fn restrict(
     value: &mut QueryResult,
     nodes: &BTreeMap<String, u32>,
     edges: &BTreeSet<String>,
@@ -150,7 +155,11 @@ fn restrict(
 
 impl Engine {
     /// Authorize `data` and attribute every denial to the record it removed.
-    fn authorize_attributed(&self, data: GraphData, host: &HostContext) -> Result<Attributed> {
+    pub(crate) fn authorize_attributed(
+        &self,
+        data: GraphData,
+        host: &HostContext,
+    ) -> Result<Attributed> {
         let readable = visible(data.clone(), &host.principal);
         let (graph, _) = self.authorized(data, host)?;
         let kept: HashMap<Slot, usize> = facts::facts_of(&graph)
@@ -174,7 +183,7 @@ impl Engine {
     }
 
     /// The revision an operator reads: exact, as of a recorded time, or the head.
-    fn select_revision(
+    pub(crate) fn select_revision(
         &self,
         graph: &str,
         branch: &str,
@@ -197,7 +206,7 @@ impl Engine {
     }
 
     /// The facts of one revision of `graph`, after the same access checks as a pinned read.
-    fn fact_source(
+    pub(crate) fn fact_source(
         &self,
         graph: &str,
         revision: &str,
@@ -224,7 +233,7 @@ impl Engine {
 
     /// Every influence carrier and graph-hosted attachment: the records a
     /// filtered read always includes so whole-value influence is exact.
-    fn whole_value_records(&self, source: &dyn FactSource) -> Result<Vec<StoredFact>> {
+    pub(crate) fn whole_value_records(&self, source: &dyn FactSource) -> Result<Vec<StoredFact>> {
         let limit = self.materialization_limit();
         let mut records = source.select(
             &FactFilter {
@@ -284,7 +293,14 @@ impl Engine {
     }
 
     /// `expand` (A3): the exact k-hop neighborhood of the visible seeds.
-    pub(crate) fn expand(&self, plan: &ExpandPlan, host: &HostContext) -> Result<QueryResult> {
+    pub(crate) fn expand(
+        &self,
+        plan: &ExpandPlan,
+        values: &BTreeMap<String, QueryResult>,
+        host: &HostContext,
+        depth: u32,
+        budget: &mut usize,
+    ) -> Result<QueryResult> {
         let _read_scope = self.read_budget.enter();
         if !valid_id(&plan.graph_id)
             || !valid_id(&plan.branch_id)
@@ -293,7 +309,7 @@ impl Engine {
         {
             return Err(err("E_ID", "identifiers require 1 to 512 UTF-8 bytes"));
         }
-        if plan.seeds.is_empty() {
+        if plan.seeds.is_empty() && plan.seeds_from.is_none() {
             return Err(err("E_EXPAND", "expand needs at least one seed"));
         }
         bounded_ids(&plan.seeds, MAX_SEEDS)?;
@@ -311,6 +327,25 @@ impl Engine {
             None
         };
         let _clock_scope = self.operation_scope()?;
+        // Seeds from another value (0.24): its nodes, by origin in this graph.
+        let seed_value = plan
+            .seeds_from
+            .as_ref()
+            .map(|input| self.operand(input, values, host, depth + 1, budget))
+            .transpose()?;
+        let mut seeded = plan.clone();
+        if let Some(value) = &seed_value {
+            for node in &value.graph.nodes {
+                for origin in value.node_origins.get(&node.id).into_iter().flatten() {
+                    if origin.graph_id == plan.graph_id && !seeded.seeds.contains(&origin.node_id) {
+                        seeded.seeds.push(origin.node_id.clone());
+                    }
+                }
+            }
+            if seeded.seeds.len() > MAX_SEEDS {
+                return Err(err("E_BUDGET", "too many identifiers in one expression"));
+            }
+        }
         let revision = self
             .select_revision(
                 &plan.graph_id,
@@ -321,7 +356,23 @@ impl Engine {
             )?
             .ok_or_else(|| err("E_UNAVAILABLE", "graph unavailable"))?;
         let source = self.fact_source(&plan.graph_id, &revision, host)?;
-        let result = self.expand_in(plan, &revision, source.as_ref(), limit, host)?;
+        let mut result = self.expand_in(&seeded, &revision, source.as_ref(), limit, host)?;
+        if let Some(value) = &seed_value {
+            if value.coverage == Coverage::Partial {
+                result.coverage = Coverage::Partial;
+                for diagnostic in &value.diagnostics {
+                    if !result.diagnostics.iter().any(|d| d.code == diagnostic.code) {
+                        result.diagnostics.push(diagnostic.clone());
+                    }
+                }
+            }
+            for reference in &value.input_snapshots {
+                if !result.input_snapshots.contains(reference) {
+                    result.input_snapshots.push(reference.clone());
+                }
+            }
+        }
+
         if let Some(transaction) = read_transaction {
             transaction.commit()?;
         }
@@ -520,6 +571,7 @@ impl Engine {
                         edges.contains(id) || structures.contains(id)
                     }
                 },
+                Fact::EmbeddingSpace(_) | Fact::Embedding(_) => false,
             });
         let query = QueryPlan {
             graph_id: plan.graph_id.clone(),
@@ -617,24 +669,29 @@ impl Engine {
             )
         };
         let id = fact.id();
+        if matches!(fact, Fact::EmbeddingSpace(_) | Fact::Embedding(_)) {
+            return Ok(vec![]);
+        }
         let mut out = select(store::FactKind::Attachment, Some(id), None, None)?;
+        out.extend(select(store::FactKind::Embedding, Some(id), None, None)?);
         match fact {
             Fact::Node(n) => {
                 for kind in [store::FactKind::Edge, store::FactKind::StructuralEdge] {
                     out.extend(select(kind, Some(id), None, None)?);
                     out.extend(select(kind, None, Some(id), None)?);
                 }
-                out.extend(select(
-                    store::FactKind::Attachment,
-                    None,
-                    None,
-                    Some(&n.entity_id),
-                )?);
+                for kind in [store::FactKind::Attachment, store::FactKind::Embedding] {
+                    out.extend(select(kind, None, None, Some(&n.entity_id))?);
+                }
             }
             Fact::StructuralEdge(_) => {
                 out.extend(select(store::FactKind::Assertion, Some(id), None, None)?)
             }
-            Fact::Edge(_) | Fact::Assertion(_) | Fact::Attachment(_) => {}
+            Fact::Edge(_)
+            | Fact::Assertion(_)
+            | Fact::Attachment(_)
+            | Fact::EmbeddingSpace(_)
+            | Fact::Embedding(_) => {}
         }
         Ok(out)
     }
@@ -874,6 +931,9 @@ impl Engine {
                 to_revision: to.0.clone(),
                 entries,
             }),
+            neighbors: vec![],
+            candidates: vec![],
+            exactness: None,
         };
         if incomplete {
             partial(
@@ -977,7 +1037,36 @@ impl<'a> Scope<'a> {
                 };
                 (about, Some(a.key.as_str()))
             }
+            // Spaces are about no entity; embeddings are about their subject.
+            // Their "predicate" is the space key, as in the fact index.
+            Fact::EmbeddingSpace(_) => (false, None),
+            Fact::Embedding(e) => {
+                let about = match &e.subject {
+                    EmbeddingSubject::Entity { entity_id } => {
+                        self.entities.contains(entity_id.as_str())
+                    }
+                    EmbeddingSubject::Node { node_id } => self.entity(node_id),
+                    EmbeddingSubject::Edge { edge_id } => {
+                        self.edges
+                            .get(edge_id.as_str())
+                            .is_some_and(|(from, to)| self.touches(from, to))
+                            || self
+                                .structures
+                                .get(edge_id.as_str())
+                                .is_some_and(|(from, to, _)| self.touches(from, to))
+                    }
+                    EmbeddingSubject::Assertion { assertion_id } => self
+                        .assertions
+                        .get(assertion_id.as_str())
+                        .and_then(|s| self.structures.get(s))
+                        .is_some_and(|(from, to, _)| self.touches(from, to)),
+                };
+                return (self.entities.is_empty() || about)
+                    && (self.predicates.is_empty()
+                        || self.predicates.contains(e.space.key().as_str()));
+            }
         };
+
         (self.entities.is_empty() || about)
             && (self.predicates.is_empty()
                 || predicate.is_some_and(|p| self.predicates.contains(p)))

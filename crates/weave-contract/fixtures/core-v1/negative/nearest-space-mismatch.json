@@ -1,0 +1,161 @@
+{
+  "concepts": [
+    "embedding.space",
+    "query.nearest"
+  ],
+  "engine": {
+    "error": "E_SPACE",
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ]
+  },
+  "expect": {
+    "accept": true
+  },
+  "fixture": "nearest-space-mismatch",
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "dimensions": 3,
+              "encoder": "text-embedding-3-small",
+              "encoder_version": "2024-01-25",
+              "id": "notes",
+              "kind": "embedding_space",
+              "metric": "cosine_distance",
+              "preprocessing": "weave-chunk/512-tokens/v1",
+              "revision": "1"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "dimensions": 3,
+              "encoder": "text-embedding-3-small",
+              "encoder_version": "2024-06-01",
+              "id": "other",
+              "kind": "embedding_space",
+              "metric": "cosine_distance",
+              "preprocessing": "weave-chunk/512-tokens/v1",
+              "revision": "1"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "A",
+              "id": "a",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "B",
+              "id": "b",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "va",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [],
+              "space": {
+                "id": "notes",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "a"
+              },
+              "valid_time": {
+                "end": null,
+                "start": 0
+              },
+              "vector": [
+                1.0,
+                0.0,
+                0.0
+              ]
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "vo",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [],
+              "space": {
+                "id": "other",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "b"
+              },
+              "valid_time": {
+                "end": null,
+                "start": 0
+              },
+              "vector": [
+                1.0,
+                0.0,
+                0.0
+              ]
+            }
+          }
+        ],
+        "graph_id": "g",
+        "op": "write"
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "graph_id": "g",
+          "k": 1,
+          "kind": "nearest",
+          "query": {
+            "embedding_id": "vo",
+            "kind": "embedding"
+          },
+          "space": {
+            "id": "notes",
+            "revision": "1"
+          }
+        }
+      }
+    ],
+    "version": "0.24.0"
+  },
+  "type": "program"
+}

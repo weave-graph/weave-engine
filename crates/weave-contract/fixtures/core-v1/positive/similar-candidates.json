@@ -1,0 +1,254 @@
+{
+  "concepts": [
+    "embedding.candidate",
+    "query.similar_candidates"
+  ],
+  "engine": {
+    "principal": "alice",
+    "results": [
+      {
+        "kind": "committed",
+        "revision": "fact:sha256:a90bf68fda26fac14658c3e4966eece32d21c6fdaa2642677f32922f4698dc5f"
+      },
+      {
+        "candidates": [
+          [
+            "u1",
+            "u2"
+          ],
+          [
+            "u2",
+            "u3"
+          ]
+        ],
+        "coverage": "complete",
+        "exactness": "exact",
+        "kind": "queried"
+      },
+      {
+        "candidates": [
+          [
+            "u2",
+            "u3"
+          ]
+        ],
+        "coverage": "complete",
+        "exactness": "exact",
+        "kind": "queried"
+      }
+    ],
+    "write_graphs": [
+      "g"
+    ]
+  },
+  "expect": {
+    "accept": true
+  },
+  "fixture": "similar-candidates",
+  "input": {
+    "commands": [
+      {
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "dimensions": 3,
+              "encoder": "text-embedding-3-small",
+              "encoder_version": "2024-01-25",
+              "id": "notes",
+              "kind": "embedding_space",
+              "metric": "cosine_distance",
+              "preprocessing": "weave-chunk/512-tokens/v1",
+              "revision": "1"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "U1",
+              "id": "u1",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "U2",
+              "id": "u2",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "entity_id": "U3",
+              "id": "u3",
+              "kind": "node",
+              "metadata": [],
+              "properties": {},
+              "readers": [],
+              "space_id": "s"
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "derived_from": [],
+              "from": "u1",
+              "id": "p",
+              "kind": "edge",
+              "metadata": [],
+              "polarity": "positive",
+              "predicate": "peer_of",
+              "properties": {},
+              "readers": [],
+              "to": "u2",
+              "valid_time": {
+                "end": null,
+                "start": 0
+              }
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "v1",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [],
+              "space": {
+                "id": "notes",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "u1"
+              },
+              "valid_time": {
+                "end": null,
+                "start": 0
+              },
+              "vector": [
+                1.0,
+                0.0,
+                0.0
+              ]
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "v2",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [],
+              "space": {
+                "id": "notes",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "u2"
+              },
+              "valid_time": {
+                "end": null,
+                "start": 0
+              },
+              "vector": [
+                1.0,
+                0.05000000074505806,
+                0.0
+              ]
+            }
+          },
+          {
+            "change": "assert",
+            "fact": {
+              "id": "v3",
+              "kind": "embedding",
+              "provenance": {
+                "method": {
+                  "kind": "model",
+                  "model": "text-embedding-3-small",
+                  "version": "2024-01-25"
+                }
+              },
+              "readers": [],
+              "space": {
+                "id": "notes",
+                "revision": "1"
+              },
+              "subject": {
+                "kind": "node",
+                "node_id": "u3"
+              },
+              "valid_time": {
+                "end": 90,
+                "start": 10
+              },
+              "vector": [
+                0.8999999761581421,
+                0.10000000149011612,
+                0.0
+              ]
+            }
+          }
+        ],
+        "graph_id": "g",
+        "op": "write"
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "graph_id": "g",
+          "k": 1,
+          "kind": "similar_candidates",
+          "limit": 1000,
+          "space": {
+            "id": "notes",
+            "revision": "1"
+          }
+        }
+      },
+      {
+        "op": "evaluate",
+        "value": {
+          "branch_id": "main",
+          "exclude_linked": true,
+          "graph_id": "g",
+          "k": 1,
+          "kind": "similar_candidates",
+          "limit": 1000,
+          "space": {
+            "id": "notes",
+            "revision": "1"
+          }
+        }
+      }
+    ],
+    "version": "0.24.0"
+  },
+  "type": "program"
+}

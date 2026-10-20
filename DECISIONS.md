@@ -878,3 +878,149 @@ At the coordinator's request this PR moves both weave-language checkouts in
 `expand` and `changes` syntax), and adds `check_traversal.py --compiler
 --engine` to the `compiler-runtime` job after `check_temporal.py`, which takes
 the same arguments.
+
+### 2026-10-20 — #13 A4 — Delivery in two parts; protocol 0.24.0 and store 31
+
+Part 1 activates the ADR-0006 records on the wire (fact kinds, `GraphData`
+fields, `nearest`, `similar_candidates`, `ExpandPlan.seeds_from`,
+`EvidenceRef::Embedding`, the `neighbors`, `candidates` and `exactness`
+result fields), the engine operators, the migration from the `vector`
+property, golden fixtures, the spec, paired hidden-input tests and exit
+questions 3 and 4 on the fleet. Part 2 measures 100k-vector upserts at 1,536
+dimensions and adds the Python helpers and tutorial, which wait for the A3
+part 2 Python work to merge. Every wire addition is optional and omitted when
+empty, so this is the additive minor bump 0.24.0. The store moves to 31
+although no table changes: the fact log now holds kinds a store-30 binary
+cannot parse, and the marker makes that binary refuse the store with
+`E_STORAGE_VERSION` instead of failing later with `E_INTEGRITY` on one graph.
+The migration only moves the marker; a genuine store-30 binary checks it in
+`scripts/check_embedding_store_migration.py`.
+
+### 2026-10-20 — #13 A4 — Spaces are immutable facts of the graph, keyed `id@revision`
+
+A space must be part of the revision (as-of reads, change sets and exports
+see which spaces existed), and `write` cannot change the line header. So a
+space is a fact of kind `embedding_space` in its own key namespace. Its key
+is `id@revision`; a space revision may not contain `@`, which makes the key
+unambiguous within the 512-byte bound. Tightening `EmbeddingSpace::validate`
+is allowed because no published version could carry the record.
+`Fact::key_id` returns the key; `Fact::id` keeps returning the record's `id`
+field so existing callers do not change. A space is never corrected to a
+different descriptor or retracted (`E_CONFLICT`). There is deliberately no
+cross-graph registry like the schema registry: a conflict there would tell a
+writer that a graph it cannot read declares that space. Comparisons across
+graphs still need equal descriptors (`E_SPACE`).
+
+### 2026-10-20 — #13 A4 — Embeddings only through `write`; ordinary reads never return them
+
+Snapshot commits that carry spaces or embeddings fail with `E_EMBEDDING`.
+Fact-revision materialization (`query`, algebra, checkpoints) selects only
+graph kinds, and closures never pull embeddings in, so a graph with many
+vectors costs ordinary reads nothing and their results do not change. The
+`nearest`, `similar_candidates` and `changes` operators read embeddings
+through the fact index: the space key is the index `predicate`, the subject
+is `subject` (or `entity` for entity subjects) and the valid time is
+`valid_from`/`valid_to`. Values that another operator takes as input lose
+their embeddings, ranking and candidates: the input is the graph records.
+
+### 2026-10-20 — #13 A4 — `valid_at` applies to the embedding, not the subject's node valid time
+
+An embedding's valid time is when that representation holds. A maintenance
+note's node is valid while the work happens, but its text stays true
+afterwards; requiring the node to be valid at the incident time would make
+exit question 3 return nothing. So `nearest` selects on the embedding's valid
+time and requires the subject to be visible, not valid at `valid_at`. A
+candidate set (`expand` or `filter` with `valid_at`) restricts subjects by
+time when that is wanted.
+
+### 2026-10-20 — #13 A4 — Normative distance and total rank order
+
+Scores are computed in binary64 from the binary32 components, summing in
+component order (`EmbeddingMetric::distance`, in the contract so the
+language and any oracle share it). Equal vectors therefore give bit-equal
+scores, and the order (score, subject kind and ID, embedding ID) is total, so
+ties and near-duplicates rank deterministically. The oracle test writes the
+formula independently and compares scores bit for bit. A cosine space
+rejects the zero vector because its distance is undefined.
+
+### 2026-10-20 — #13 A4 — The ranking boundary for C5
+
+Ranking goes through one internal trait (`NeighborSearch`) that receives
+the already-selected, already-authorized embeddings. The exact scan is the
+only implementation and results always say `exactness: exact`. An
+approximate index (C5) implements the same trait, so it can never see or
+rank a hidden vector, and falls back to the exact scan; the request carries
+no mode yet, so adding one later is additive.
+
+### 2026-10-20 — #13 A4 — Hidden input and errors
+
+Embeddings are authorized before ranking with their subject and gates, the
+`k` and `limit` bounds count visible output, and the comparison bound of
+`similar_candidates` counts visible embeddings. A missing or hidden query
+fact both give `E_UNAVAILABLE`, and an undeclared space gives `E_SPACE` for
+every reader, since spaces are public descriptors. `exclude_linked` only
+considers visible edges, so a hidden edge never removes a candidate. As in
+A3, two things remain outside the claim and are documented: the read budget
+counts the stored records an operator reads, hidden ones included, and
+revision IDs are content-derived over every fact. The paired tests compare
+all output, errors included, with revision IDs normalized.
+
+### 2026-10-20 — #13 A4 — Candidates: unordered pairs with stable IDs, never written
+
+A metric is symmetric, so a pair is reported once from the lower subject to
+the higher, with the intersection of the two valid times; targets whose
+valid time does not overlap the source's are not eligible. The ID hashes the
+graph, the space and both embedding IDs, not the revision, so a client can
+track a candidate across revisions while `origins` pin the exact facts.
+Candidates are never written: persisting one is an ordinary edge with a
+predicate of the caller's own and `EvidenceRef::Embedding` evidence, so the
+engine-owned `weave:similar_to` never appears in stored data. `expand` has no
+option to follow candidates; "explicitly requested" means evaluating
+`similar_candidates`.
+
+### 2026-10-20 — #13 A4 — Vector-to-graph composition through `ExpandPlan.seeds_from`
+
+`expand` took only literal seed IDs, so "nearest chunks, then their units,
+then their sites" could not be one plan. `seeds_from` adds the nodes of any
+value (by origin in the expand's graph) to the seeds; `seeds` may then be
+empty, and an empty seed value gives an empty, complete neighborhood unless
+the value itself was partial. `ExpandPlan` loses `Eq` because it may now hold
+an expression; nothing in either repository compares plans with `Eq`.
+The candidate set of `nearest` and the sources and targets of
+`similar_candidates` use the same origin rule: nodes, their entities and
+edges whose origin is the operator's graph.
+
+### 2026-10-20 — #13 A4 — Explicit, idempotent migration from the `vector` property
+
+`Engine::vector_property_changes` plans, and never writes, one embedding per
+visible node with the property: binary32 rounding is counted and reported,
+the node's readers are copied, and the provenance is `method: import` with
+the node as evidence at the revision that recorded its current version (not
+the head), so running it again after the write plans nothing. Any malformed
+value fails the whole plan with `E_SPACE`. The property and science
+`nearest_vectors` are untouched, as ADR-0006 requires.
+
+### 2026-10-20 — #13 A4 — Exit questions 3 and 4 in a sibling test with a hashing embedder
+
+`fleet_scenario.rs` is being extended by the A3 part 2 work, so questions 3
+and 4 live in `tests/fleet_hybrid.rs` on the same generated fleet. The test
+embedder is signed feature hashing of words into 64 dimensions: deterministic
+on every platform, no network and no model, and similar wording still gives
+small cosine distances. Notes are embedded on their maintenance or incident
+node with the row's readers. Question 3's oracle ranks independently over the
+vectors the test wrote, within the reader's `expand` region (A3 checks
+`expand` against a BFS oracle); question 4's oracle recomputes every unit's
+nearest neighbor. Many units have identical profiles, so the top candidates
+are often exact ties, which the deterministic order resolves. The test runs
+at 150 units in the main suite and at 5,000 in the `hardware-fleet-5k` job.
+
+### 2026-10-20 — #13 A4 — Older change sets omit the new kinds
+
+A `changes` expression of a 0.23.0 program on a graph that now holds
+embeddings would otherwise return `embedding` and `embedding_space` entries,
+enum values a 0.23.0 consumer must reject (core v1 §9). Saved plans keep the
+semantics of their version, so results of programs older than 0.24.0 drop
+those entries. The change-set `limit` is applied before that, so such a
+program can still fail with `E_BUDGET` because of embedding changes; this is
+documented in the 0.24 note rather than computing a second, version-specific
+change set.

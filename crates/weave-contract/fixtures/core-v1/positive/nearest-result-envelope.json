@@ -1,0 +1,104 @@
+{
+  "concepts": [
+    "result.envelope",
+    "query.nearest",
+    "embedding.candidate"
+  ],
+  "expect": {
+    "accept": true
+  },
+  "fixture": "nearest-result-envelope",
+  "input": {
+    "coverage": "complete",
+    "diagnostics": [],
+    "edge_origins": {},
+    "exactness": "exact",
+    "graph": {
+      "edges": [],
+      "embedding_spaces": [
+        {
+          "dimensions": 3,
+          "encoder": "text-embedding-3-small",
+          "encoder_version": "2024-01-25",
+          "id": "notes",
+          "metric": "cosine_distance",
+          "preprocessing": "weave-chunk/512-tokens/v1",
+          "revision": "1"
+        }
+      ],
+      "embeddings": [
+        {
+          "id": "va",
+          "provenance": {
+            "method": {
+              "kind": "model",
+              "model": "text-embedding-3-small",
+              "version": "2024-01-25"
+            }
+          },
+          "readers": [],
+          "space": {
+            "id": "notes",
+            "revision": "1"
+          },
+          "subject": {
+            "kind": "node",
+            "node_id": "a"
+          },
+          "valid_time": {
+            "end": null,
+            "start": 0
+          },
+          "vector": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "nodes": [
+        {
+          "entity_id": "A",
+          "id": "a",
+          "metadata": [],
+          "properties": {},
+          "readers": [],
+          "space_id": "s"
+        }
+      ]
+    },
+    "input_snapshots": [
+      {
+        "graph_id": "g",
+        "revision": "fact:sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ],
+    "metadata_graphs": [],
+    "neighbors": [
+      {
+        "embedding_id": "va",
+        "rank": 1,
+        "score": 0.0,
+        "subject": {
+          "kind": "node",
+          "node_id": "a"
+        }
+      }
+    ],
+    "node_origins": {
+      "a": [
+        {
+          "graph_id": "g",
+          "node_id": "a",
+          "revision": "fact:sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      ]
+    },
+    "provenance": [],
+    "snapshots": {
+      "g": "fact:sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "version": "0.24.0"
+  },
+  "type": "query_result"
+}

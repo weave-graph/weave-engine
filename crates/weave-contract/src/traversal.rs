@@ -14,7 +14,7 @@
 //!
 //! Both are authorized under the evaluating principal's current authority.
 //! Hidden facts never appear in, and never change, their output.
-use crate::{main_branch, Fact, FactKind};
+use crate::{main_branch, Fact, FactKind, GraphExpression};
 use serde::{Deserialize, Serialize};
 
 /// Most seed nodes one `expand` may name.
@@ -52,7 +52,10 @@ pub enum Direction {
 /// `valid_at`, are valid at that instant, plus every such edge that leaves a
 /// node fewer than `hops` hops away. Seeds that are missing or hidden make the
 /// result partial; they are not distinguished.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// From 0.24.0, `seeds_from` adds the nodes of another value (for example
+/// the hits of a `nearest` expression) as seeds, by origin in `graph_id`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExpandPlan {
     pub graph_id: String,
@@ -64,8 +67,12 @@ pub struct ExpandPlan {
     /// Read the branch as this replica knew it at this recorded time (Unix ms).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub as_of: Option<i64>,
-    /// Node IDs to start from (1 to 1,000).
+    /// Node IDs to start from (1 to 1,000, together with `seeds_from`).
+    #[serde(default)]
     pub seeds: Vec<String>,
+    /// A value whose nodes (by origin in `graph_id`) are also seeds (0.24).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seeds_from: Option<Box<GraphExpression>>,
     /// Hops to traverse (1 to 16).
     pub hops: u32,
     #[serde(default)]
