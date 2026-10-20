@@ -15,14 +15,12 @@ async fn tenant_b(h: &Harness) -> (String, String) {
         .post("/v1/graphs", &root_b, json!({"graph_id": "secret"}))
         .await;
     assert_eq!(created.status, StatusCode::CREATED, "{}", created.json);
-    let reply = h
-        .write(
-            &root_b,
-            "secret",
-            vec![node("b-public", &[], &[]), node("b-root", &["root"], &[])],
-        )
-        .await;
-    assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
+    h.seed(
+        "beta",
+        "root",
+        "secret",
+        vec![node("b-public", &[], &[]), node("b-root", &["root"], &[])],
+    );
     let created = h.post("/v1/graphs", &root_b, json!({})).await;
     (
         root_b,
@@ -37,8 +35,7 @@ async fn two_tenants_are_two_separate_databases() {
     let (_root_b, _) = tenant_b(&h).await;
     h.post("/v1/graphs", &root_a, json!({"graph_id": "mine"}))
         .await;
-    h.write(&root_a, "mine", vec![node("a-node", &[], &[])])
-        .await;
+    h.seed("alpha", "root", "mine", vec![node("a-node", &[], &[])]);
 
     let a = tenant_dir(h.dir.path(), "alpha");
     let b = tenant_dir(h.dir.path(), "beta");
@@ -82,6 +79,7 @@ async fn two_tenants_are_two_separate_databases() {
             "key_bindings",
             "oidc_bindings",
             "oidc_issuers",
+            "quotas",
             "signed_nonces",
             "tenants"
         ]

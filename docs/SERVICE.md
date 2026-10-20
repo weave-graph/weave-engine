@@ -206,6 +206,7 @@ also in the audit entry and the log line of the request.
 | `POST /v1/graphs` | any active user (not agents) | create a graph (below) |
 | `GET /v1/graphs/{graph_id}/acl` | graph Administer | the graph's ACL and protected branches |
 | `POST /v1/ids` | any principal | `{"count": n}` (1 to 1,000): mint record IDs for the caller (below) |
+| `GET /v1/quota` | any principal | the caller's own quota and its use in the current windows ([quotas](#quotas-and-rate-limits)) |
 | `POST /v1/registry` | per change | `{"changes": [RegistryChange, ...]}`: `Engine::apply_registry`, see [REGISTRY.md](REGISTRY.md). Returns `{"revision"}` |
 | `GET /v1/registry/principals/{id}` | the principal itself, tenant administrators | its registry record |
 | `GET /v1/registry/principals/{id}/memberships` | the principal itself, tenant administrators | the groups it is directly in |
@@ -255,14 +256,61 @@ probe for hidden graphs (ADR-0007 section 4).
 
 A write that asserts a record ID a hidden live record already holds fails
 `E_CONFLICT`, which would reveal the hidden record (ADR-0007 open question
-1). The service closes that channel: **a non-administrator may assert only
-record IDs that `POST /v1/ids` minted for it**. Any other ID in an `assert`
+1). The service closes that channel: **every principal, tenant
+administrators included, may assert only record IDs that `POST /v1/ids`
+minted for it**. Any other ID in an `assert`
 change fails with `E_ID_NOT_MINTED` before the engine sees the program. A
 minted ID is `r-`, 32 hex digits of randomness, `-` and a 16-digit tag that
 binds the ID to the tenant and the principal, so no hidden record can hold
 it and an ID seen on someone else's record cannot be reused. `correct` and
 `retract` name existing facts and need no minting. Edges may reference any
-node. Tenant administrators can read every record, so they may choose IDs.
+node. Administrators get no exemption: record readers apply to them like
+anyone else, so a chosen ID could reveal a hidden record they cannot read.
+Embedding spaces (`embedding_space` facts) are named freely, because a space
+has no readers and is never hidden from a reader of its graph. Operators
+load fixtures with chosen IDs through trusted local administration, not the
+HTTP API.
+
+## Quotas and rate limits
+
+Each principal of a tenant has two limits, counted in fixed windows of the
+trusted clock:
+
+- **Requests per minute.** Every audited request (every route except
+  `health`, and every MCP message) counts once. A request over the limit
+  fails `E_QUOTA` with status `429` and `Retry-After`, is audited, and is
+  not counted.
+- **Fact writes per hour.** Every change of a committed `write` (each
+  `assert`, `correct` or `retract`, through `POST /v1/execute`,
+  `POST /v1/admit` or an MCP write tool) counts once. A program whose
+  changes would pass the limit fails `E_QUOTA` before the engine runs it,
+  so none of its changes is written; over MCP the tool result has
+  `isError` with that code.
+
+**Who is limited.** A principal's own quota row applies first. For an
+agent, the tenant's default for agents applies next, then the service
+default: **600 requests per minute and 10,000 fact writes per hour**.
+Users are unlimited unless they have a row of their own. Rows are read on
+every request, so a change applies to the next one.
+
+```sh
+weave-service quota set --data /srv/weave --tenant acme --agents \
+  --requests-per-minute 120 --writes-per-hour 2000
+weave-service quota set --data /srv/weave --tenant acme --principal alice-bot \
+  --requests-per-minute unlimited --writes-per-hour 50000
+weave-service quota remove --data /srv/weave --tenant acme --principal alice-bot
+weave-service quota list --data /srv/weave --tenant acme
+```
+
+`GET /v1/quota` returns the caller's `requests_per_minute`,
+`writes_per_hour` (`null` is unlimited), `requests_this_minute`,
+`writes_this_hour`, `minute_resets_at_ms` and `hour_resets_at_ms`.
+
+A tenant runs one request at a time, so a request's quota check, its write
+and its count are one step: concurrent requests at the boundary commit
+exactly the permitted number. Usage is kept in memory, so a restart starts
+fresh windows, and fixed windows let a principal use up to twice a limit
+across a window boundary.
 
 ## Audit
 
@@ -304,7 +352,8 @@ Engine codes (`E_UNAVAILABLE`, `E_FORBIDDEN`, `E_BUDGET`, `E_CONFLICT`,
 | `E_INPUT` | 400 | malformed JSON, unknown fields, invalid path or query parameters |
 | `E_BODY_LIMIT` | 413 | the request body exceeds 16 MiB |
 | `E_UNSUPPORTED` | 400 | a program command the service does not run |
-| `E_ID_NOT_MINTED` | 400 | a non-administrator asserted an ID not minted for it |
+| `E_ID_NOT_MINTED` | 400 | a principal asserted a record ID not minted for it |
+| `E_QUOTA` | 429 | the principal's request rate or fact-write quota is used up; `Retry-After` gives the seconds until its window resets ([quotas](#quotas-and-rate-limits)) |
 | `E_BACKPRESSURE` | 503 | the tenant's queue is full; retry later (`Retry-After: 1`) |
 | `E_AUDIT` | 503 | the audit entry could not be written; the response is withheld |
 | `E_NOT_FOUND`, `E_METHOD` | 404, 405 | no such route or method, after authentication |
@@ -330,6 +379,7 @@ graph or record IDs, so denied topology stays out of the log.
 - Per tenant: at most 256 requests queued or running; a request waits at
   most 10 s for its turn, then fails `E_BACKPRESSURE`. Engine work inside a
   request is bounded by the engine's own budgets ([READ_BUDGETS.md](READ_BUDGETS.md)).
+- Quotas: per principal in fixed windows, kept in memory ([above](#quotas-and-rate-limits)).
 - Programs: 1 to 64 commands. IDs: 1 to 1,000 per request. Audit pages: 1 to
   1,000 entries.
 - **Audit and data are two databases.** A response is never sent without its

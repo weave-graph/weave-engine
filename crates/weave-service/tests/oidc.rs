@@ -321,12 +321,12 @@ async fn group_claims_are_never_live_and_are_imported_with_an_audit_trail() {
         json!([{"change": "grant", "graph_id": "g", "subject": "bob", "permission": "read"}]),
     )
     .await;
-    h.write(
-        &root,
+    h.seed(
+        "acme",
+        "root",
         "g",
         vec![node("team-only", &[], &["team"]), node("public", &[], &[])],
-    )
-    .await;
+    );
     // A token claiming membership of `team` and of the administrators gives
     // bob nothing: claims are not authority.
     let mut c = claims(&h, "sub-bob");

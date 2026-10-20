@@ -439,9 +439,9 @@ binary ([guide](SERVICE.md)):
   runs LB1's `check_permissions.py` and `check_agent_repair.py` against the
   engine.
 - **No ID probing.** Graphs get engine-assigned IDs unless a tenant
-  administrator chooses one, and non-administrators may assert only record
-  IDs the service minted for them, which closes the `E_CONFLICT` occupancy
-  channel for them.
+  administrator chooses one, and every principal, administrators included
+  (B4 part 2), may assert only record IDs the service minted for it, which
+  closes the `E_CONFLICT` occupancy channel.
 - **Limits and logs.** Bounded bodies, request heads, connections, per-tenant
   queues, programs, minted IDs and audit pages; JSON request logs without
   tokens, bodies or graph IDs (tested).
@@ -569,8 +569,15 @@ Evidence: `crates/weave-service/tests/agent_mcp.rs`, `agent_hidden.rs`
 (paired worlds for every tool, writes included, for an agent of another
 team and one without access) and `agent_injection.rs`.
 
-**Not yet:** per-agent quotas and rate limits, the Python SDK and a compile
-tool. Derived-fact restriction follows the engine's current propagation
+- **Quotas (part 2).** Per-principal request rates and fact-write quotas
+  in fixed windows: agents get 600 requests per minute and 10,000 fact
+  writes per hour by default, operators override them per principal or per
+  tenant (`weave-service quota`), and `E_QUOTA` (`429`, `Retry-After`)
+  refuses a request or a whole write before the engine runs it. Concurrent
+  writes at the boundary commit exactly the permitted number
+  (`tests/quota.rs`).
+
+**Not yet:** the Python SDK and a compile tool. Derived-fact restriction follows the engine's current propagation
 (B2).
 
 ## Verified evidence

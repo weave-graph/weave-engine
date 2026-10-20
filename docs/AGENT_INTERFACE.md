@@ -8,10 +8,10 @@ authentication, tenancy and audit as the rest of its API
 ([SERVICE.md](SERVICE.md)). It extends the read-only local
 [preview](MCP_PREVIEW.md) (A7) with writes, identity and a schema tool.
 
-**Status.** Part 1 of B4: the MCP endpoint with all nine tools, agent
+**Status.** B4 parts 1 and 2: the MCP endpoint with all nine tools, agent
 identity and provenance on every write, the data/code boundary, revocation
-on the next call, and audit. Per-agent quotas and rate limits and the
-Python SDK follow in later parts of #40.
+on the next call, audit, and per-agent quotas and rate limits. The Python
+SDK follows in part 3 of #40.
 
 ## Quickstart: connect an MCP client
 
@@ -229,6 +229,17 @@ The interface keeps it on the data side:
   at most make the agent call a tool with its own, already limited,
   authority, which the registry checks again and the audit log records.
 
+## Quotas
+
+Every MCP message counts against the principal's request rate, and every
+fact an `assert_fact` or `retract_fact` writes counts against its
+fact-write quota ([SERVICE.md](SERVICE.md#quotas-and-rate-limits)). Agents
+get 600 requests per minute and 10,000 fact writes per hour unless the
+operator sets otherwise. A message over the request rate gets HTTP `429`
+`E_QUOTA` with `Retry-After`; a write over the quota is an `isError` result
+with `E_QUOTA`, and none of its facts is written. `GET /v1/quota` shows an
+agent its own limits and use.
+
 ## Audit
 
 Each message is one audited request ([SERVICE.md](SERVICE.md#audit)). Tool
@@ -261,8 +272,18 @@ server-sent events:
 ## Errors
 
 Tool failures are `isError` results with `error: {code, message}`. Engine
-and service codes pass through (`E_UNAVAILABLE`, `E_FORBIDDEN`,
-`E_CONFLICT`, `E_BUDGET`, `E_SPACE`, ...). The interface adds:
+and service codes pass through unchanged (`E_UNAVAILABLE`, `E_FORBIDDEN`,
+`E_CONFLICT`, `E_BUDGET`, `E_SPACE`, `E_QUOTA`, ...).
+
+Every tool runs a program of the current contract version (1.2.0 or
+later), so the write-time rules of [contract 1.2](contract/v1.2/README.md)
+apply to agents: an `assert_fact` whose visibility is broader than
+restricted evidence it cites fails `E_DERIVED_READERS`, and a fact the
+caller cannot read is unavailable exactly like a missing one (the uniform
+`E_CONFLICT` "fact ID is not available"). There is no correction tool, so
+no tool ever sets `widen_readers`; `E_READERS_WIDENED` arises only from
+corrections sent through `POST /v1/execute`. See the 1.2 note's "Error
+codes for clients" table. The interface adds:
 
 | Code | Meaning |
 |---|---|
@@ -296,8 +317,7 @@ and service codes pass through (`E_UNAVAILABLE`, `E_FORBIDDEN`,
   (an embedding is restricted by its own readers). Write-time propagation
   and release policies are B2
   ([#5](https://github.com/weave-graph/weave-engine/issues/5)).
-- Not yet in this part: per-agent quotas and rate limits, the Python SDK
-  and a compile tool.
+- Not yet: the Python SDK and a compile tool.
 
 Evidence: `crates/weave-service/tests/agent_mcp.rs` (agent X asserts from a
 document, agent Y finds it with `hybrid_search` and `explain` shows X;

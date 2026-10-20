@@ -118,3 +118,72 @@ fn the_binary_administers_tenants_and_tokens_and_serves_requests() {
     let (ok, _, err) = cli(&["serve", "--data", data, "--listen", "127.0.0.1:0"]);
     assert!(!ok && err.contains("tls-cert"), "{err}");
 }
+
+#[test]
+fn the_binary_sets_lists_and_removes_quotas() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().to_str().unwrap();
+    let run = |args: &[&str]| {
+        let mut all: Vec<&str> = args.to_vec();
+        all.extend(["--data", data, "--tenant", "acme"]);
+        cli(&all)
+    };
+    let (ok, _, _) = cli(&[
+        "tenant", "create", "--data", data, "--tenant", "acme", "--admin", "root",
+    ]);
+    assert!(ok);
+    let (ok, set, err) = run(&[
+        "quota",
+        "set",
+        "--agents",
+        "--requests-per-minute",
+        "120",
+        "--writes-per-hour",
+        "unlimited",
+    ]);
+    assert!(ok, "{err}");
+    assert_eq!(set["subject"], "weave:agents");
+    assert_eq!(set["quota"]["requests_per_minute"], 120);
+    assert!(set["quota"]["writes_per_hour"].is_null());
+    let (ok, _, _) = run(&[
+        "quota",
+        "set",
+        "--principal",
+        "root",
+        "--requests-per-minute",
+        "1",
+        "--writes-per-hour",
+        "0",
+    ]);
+    assert!(ok);
+    let (ok, listed, _) = run(&["quota", "list"]);
+    assert!(ok);
+    assert_eq!(listed["quotas"].as_array().unwrap().len(), 2);
+    // Exactly one subject, and whole numbers or `unlimited`.
+    let (ok, _, err) = run(&[
+        "quota",
+        "set",
+        "--agents",
+        "--principal",
+        "x",
+        "--requests-per-minute",
+        "1",
+        "--writes-per-hour",
+        "1",
+    ]);
+    assert!(!ok && err.contains("exactly one"), "{err}");
+    let (ok, _, err) = run(&[
+        "quota",
+        "set",
+        "--agents",
+        "--requests-per-minute",
+        "lots",
+        "--writes-per-hour",
+        "1",
+    ]);
+    assert!(!ok && err.contains("whole number"), "{err}");
+    let (ok, _, _) = run(&["quota", "remove", "--principal", "root"]);
+    assert!(ok);
+    let (ok, _, _) = run(&["quota", "remove", "--principal", "root"]);
+    assert!(!ok);
+}

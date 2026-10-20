@@ -32,18 +32,16 @@ async fn world(hidden: bool) -> World {
         json!([{"change": "grant", "graph_id": "shared", "subject": "bob", "permission": "write"}]),
     )
     .await;
-    let reply = h
-        .write(
-            &root,
-            "shared",
-            vec![
-                node("n1", &[], &[]),
-                node("n2", &[], &[]),
-                edge("e1", "n1", "n2", &[]),
-            ],
-        )
-        .await;
-    assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
+    h.seed(
+        "acme",
+        "root",
+        "shared",
+        vec![
+            node("n1", &[], &[]),
+            node("n2", &[], &[]),
+            edge("e1", "n1", "n2", &[]),
+        ],
+    );
     if hidden {
         h.post("/v1/graphs", &root, json!({"graph_id": "hidden"}))
             .await;
@@ -56,27 +54,23 @@ async fn world(hidden: bool) -> World {
             ]),
         )
         .await;
-        let reply = h
-            .write(
-                &root,
-                "hidden",
-                vec![node("n1", &[], &[]), node("x", &[], &[])],
-            )
-            .await;
-        assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
-        let reply = h
-            .write(
-                &root,
-                "shared",
-                vec![
-                    node("h-root", &["root"], &[]),
-                    node("h-team", &[], &["secret-team"]),
-                    edge("h-edge", "n1", "h-root", &["root"]),
-                    edge("h-edge2", "n2", "n1", &["root"]),
-                ],
-            )
-            .await;
-        assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
+        h.seed(
+            "acme",
+            "root",
+            "hidden",
+            vec![node("n1", &[], &[]), node("x", &[], &[])],
+        );
+        h.seed(
+            "acme",
+            "root",
+            "shared",
+            vec![
+                node("h-root", &["root"], &[]),
+                node("h-team", &[], &["secret-team"]),
+                edge("h-edge", "n1", "h-root", &["root"]),
+                edge("h-edge2", "n2", "n1", &["root"]),
+            ],
+        );
     }
     let tenant = h.service.tenant("acme").unwrap();
     let head = tenant
@@ -302,8 +296,20 @@ async fn non_administrators_assert_only_ids_minted_for_them() {
         )
         .await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
-    // Tenant administrators see every record, so they may choose IDs.
+    // Tenant administrators cannot read every record either, so they too
+    // assert only IDs minted for them.
     let reply = h.write(&root, &graph, vec![node("chosen", &[], &[])]).await;
+    assert_eq!(reply.code(), "E_ID_NOT_MINTED", "{}", reply.json);
+    let root_ids = h.ids(&root, 1).await;
+    let reply = h
+        .write(&root, &graph, vec![node(&root_ids[0], &[], &[])])
+        .await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
+    // Embedding spaces have no readers, so they are named freely.
+    let space = json!({"kind": "embedding_space", "id": "notes", "revision": "1",
+        "encoder": "e", "encoder_version": "1", "preprocessing": "none",
+        "dimensions": 2, "metric": "cosine_distance"});
+    let reply = h.write(&bob, &graph, vec![space]).await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
     // Minting is bounded.
     for count in [0, 1001] {
@@ -382,4 +388,45 @@ async fn programs_and_requests_are_bounded() {
         .get(&format!("/v1/registry/principals/{long}"), &root)
         .await;
     assert_eq!(reply.code(), "E_INPUT");
+}
+
+/// B4 part 2 (#40): a tenant administrator who chooses a record ID gets no
+/// signal of whether a record it cannot read holds that ID. Before, an
+/// administrator could choose IDs, and an ID held by a hidden record failed
+/// `E_CONFLICT` while a free one succeeded.
+#[tokio::test]
+async fn an_administrator_choosing_ids_learns_nothing_about_hidden_records() {
+    let h = Harness::new();
+    let (root, alice, _bob) = standard_tenant(&h, "acme").await;
+    h.post("/v1/graphs", &root, json!({"graph_id": "g"})).await;
+    h.registry(
+        &root,
+        json!([{"change": "grant", "graph_id": "g", "subject": "alice", "permission": "write"}]),
+    )
+    .await;
+    // `held` is a record of `team`, which root is not in.
+    h.seed("acme", "alice", "g", vec![node("held", &[], &["team"])]);
+    assert!(node_ids(&h.query(&root, "g").await).is_empty());
+    assert_eq!(node_ids(&h.query(&alice, "g").await), ["held"]);
+    let tenant = h.service.tenant("acme").unwrap();
+    let head = || {
+        tenant
+            .with_state(|s| s.engine.head("g", "main").unwrap())
+            .unwrap()
+    };
+    let before = head();
+    let held = h.write(&root, "g", vec![node("held", &[], &[])]).await;
+    let free = h.write(&root, "g", vec![node("free", &[], &[])]).await;
+    assert_eq!(held.status, StatusCode::BAD_REQUEST);
+    assert_eq!(held.code(), "E_ID_NOT_MINTED");
+    assert_eq!((held.status, held.bytes), (free.status, free.bytes));
+    // The same for an edge ID.
+    let edge_held = h
+        .write(&root, "g", vec![edge("held", "held", "held", &[])])
+        .await;
+    let edge_free = h
+        .write(&root, "g", vec![edge("free", "free", "free", &[])])
+        .await;
+    assert_eq!(edge_held.bytes, edge_free.bytes);
+    assert_eq!(head(), before);
 }
