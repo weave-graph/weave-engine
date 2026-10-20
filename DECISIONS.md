@@ -774,3 +774,10 @@ engine `5976d47`.
 
 The vendor sync adds no source syntax for `expand`, `as_of` or `changes`.
 Programs can carry them; the query language that lowers to them is LA1.
+
+### 2026-10-20 — CI — Path-filtered workflows also trigger on their own file, scripts and the lockfile
+#58 bumped the pinned weave-language ref in `integration.yml`, but the integration workflow did
+not run because its path filter excluded the workflow file itself; the orchestrator had to dispatch
+it manually before merging. `integration.yml`, `compatibility.yml` and `fuzz.yml` now also trigger on
+their own workflow file and `Cargo.lock`, and integration/compatibility on `scripts/**` (they run
+engine check scripts such as `check_history_source.py`, changed in #55 without triggering them).

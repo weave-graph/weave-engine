@@ -9,6 +9,9 @@ on:
       - 'crates/weave-contract/**'
       - 'crates/weave-host/**'
       - 'crates/weave-native/**'
+      - 'scripts/**'
+      - 'Cargo.lock'
+      - '.github/workflows/compatibility.yml'
   push:
     branches: [main]
     paths:
@@ -16,6 +19,9 @@ on:
       - 'crates/weave-contract/**'
       - 'crates/weave-host/**'
       - 'crates/weave-native/**'
+      - 'scripts/**'
+      - 'Cargo.lock'
+      - '.github/workflows/compatibility.yml'
 concurrency:
   group: compatibility-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
