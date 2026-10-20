@@ -38,8 +38,10 @@ from a nonexistent graph in errors and listings. The registry itself lives in
 the reserved graph `weave:registry`, writable only through the registry API.
 Declared channels it does not close: timing and response size, the
 occupancy of client-chosen record IDs by hidden records (`E_CONFLICT`, see
-[#5](https://github.com/weave-graph/weave-engine/issues/5)), and writer
-identities disclosed to a fact's readers. Authentication and tenant isolation
+[#5](https://github.com/weave-graph/weave-engine/issues/5)), and writer and
+`on_behalf_of` identities disclosed to a fact's readers. Agents act with at
+most their owner's current authority, narrowed by their delegation, and
+never with Administer. Authentication and tenant isolation
 are B3.
 
 ## Trust and limits

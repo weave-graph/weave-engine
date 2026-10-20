@@ -829,6 +829,7 @@ impl Engine {
         host: &HostContext,
     ) -> Result<(String, Option<String>)> {
         self.require_branch_write(host, graph, branch)?;
+        self.refuse_agent_snapshot(host)?;
         if !valid_id(graph) || !valid_id(branch) || !valid_id(&host.principal) {
             return Err(err("E_ID", "identifiers must not be empty"));
         }

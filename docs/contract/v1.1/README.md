@@ -20,8 +20,9 @@ engine-recorded provenance field. Semantics are in
   Groups resolve through the store's principal registry when each request
   runs.
 - **`FactProvenance.on_behalf_of`**: the ownership chain of an agent writer,
-  owner first, at most 8 principal IDs; omitted when empty. It is filled by
-  B1 part 2 (agents); results of programs older than 1.1.0 never carry it.
+  owner first, at most 8 principal IDs; omitted when empty. The engine
+  records it on fact writes by agents; results of programs older than 1.1.0
+  never carry it.
 - **Versions.** `weave_contract::VERSION` and the contract crate are 1.1.0.
   The table accepts 0.1.0 through 0.24.0, 1.0.0 and 1.1.0. 1.2.0 and 2.0.0
   fail with `E_VERSION` before structural decoding.

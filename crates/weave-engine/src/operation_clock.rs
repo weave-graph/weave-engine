@@ -91,6 +91,16 @@ impl OperationClock {
         }
         Ok(ClockScope(self.state.clone(), None, None))
     }
+    fn sample(&self) -> Result<i64> {
+        let now =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.source.unix_millis()))
+                .map_err(|_| unavailable())?
+                .map_err(|_| unavailable())?;
+        if now < 0 {
+            return Err(unavailable());
+        }
+        Ok(now)
+    }
     fn current(&self) -> Result<i64> {
         self.state
             .lock()
@@ -145,6 +155,14 @@ impl Engine {
     }
     pub(crate) fn operation_time(&self) -> Result<i64> {
         self.operation_clock.current()
+    }
+    /// The operation time inside an operation scope, else a fresh sample of
+    /// the trusted clock (registry expiry checks outside a scope).
+    pub(crate) fn trusted_now(&self) -> Result<i64> {
+        match self.operation_clock.current() {
+            Ok(now) => Ok(now),
+            Err(_) => self.operation_clock.sample(),
+        }
     }
     pub(crate) fn optional_read_transaction(&self) -> Result<Option<rusqlite::Transaction<'_>>> {
         if self.conn.is_autocommit() {

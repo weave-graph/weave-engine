@@ -6,6 +6,21 @@ defined in [docs/ROADMAP.md](docs/ROADMAP.md). The supported profile is in
 
 ## Unreleased
 
+### B1 part 2: agents and delegation
+
+Closes [#38](https://github.com/weave-graph/weave-engine/issues/38). No
+contract or store change beyond part 1.
+
+- Agents (`RegistryChange::AddAgent`, `SetDelegation`; `PrincipalKind::Agent`)
+  owned by a user or an agent, with a `Delegation` of graph scopes up to
+  Write, exercised owner identities, an optional expiry and `may_delegate`.
+  Authority is `can(owner) ∧ scope ∧ S_local` on every request.
+- Escalation refused at write time (Administer, foreign identities, wider
+  sub-agent scopes or expiry, chains over 8 links) and at request time.
+- Owners revoke, narrow and retire their agents, effective on the next
+  request; `registry_agents` and owner reads of agent records.
+- Agent fact writes record `on_behalf_of`; agents cannot snapshot-commit.
+
 ### B1 part 1: principal registry, group readers, graph ACLs and Discover
 
 Part of [#38](https://github.com/weave-graph/weave-engine/issues/38)
