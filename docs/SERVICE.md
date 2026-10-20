@@ -12,10 +12,10 @@ the [principal registry](REGISTRY.md) of the caller's tenant authorizes it:
 graph ACLs, Discover, protected branches, `readers` and `reader_groups`
 apply exactly as they do locally.
 
-**Status.** B3 parts 1 and 2: API tokens for users and agents, OIDC
-sign-in, signed admission for agent capabilities, tenants, the HTTP API,
-the audit log, TLS, limits and structured logs. The 50-client load
-measurement is the last part (see [Limits](#limits-and-non-guarantees)).
+**Status.** B3 is complete: API tokens for users and agents, OIDC sign-in,
+signed admission for agent capabilities, tenants, the HTTP API, the audit
+log, TLS, limits, structured logs and a published 50-client load
+measurement ([benchmarks](benchmarks/README.md#authenticated-service-b3)).
 
 ## Run it
 
@@ -350,5 +350,10 @@ graph or record IDs, so denied topology stays out of the log.
   revoke the key. A capability's scope covers the graphs and branches a
   program names; references stored inside records (metadata, evidence) are
   authorized by the registry alone.
-- Not yet: the 50-client load measurement, gRPC (deferred until a measured
-  need) and tenant deletion.
+- **Throughput.** A tenant runs one request at a time. On the recorded host
+  one tenant served about 710 requests/s (20% writes) to 50 clients, with
+  p50 latency 70 ms and p99 about 90 ms; one client saw 1.2 ms per read and
+  1.8 ms per write. Five tenants together served 2,300 requests/s. See the
+  [load report](benchmarks/service-load-2026-10-20.json) and
+  `examples/load.rs` to measure your own host.
+- Not yet: gRPC (deferred until a measured need) and tenant deletion.

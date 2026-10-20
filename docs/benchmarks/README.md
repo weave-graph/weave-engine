@@ -6,6 +6,43 @@ For implementation status and platform verification, read [status](../STATUS.md)
 This directory preserves earlier workloads as historical evidence; their sizes
 and timing boundaries differ from the current science workload.
 
+## Authenticated service (B3)
+
+[Service load, 20 October 2026](service-load-2026-10-20.json) was recorded
+with `cargo run --release --locked -p weave-service --example load`, one run
+per scenario, on one AMD Ryzen 9 7950X (32 logical CPUs, 125 GiB, NVMe)
+running Linux 7.2.6 with rustc 1.98.1. Server and clients share the host
+over loopback. Each client is its own registry user with one keep-alive
+HTTP/1.1 connection over TLS 1.3. Every request takes the full path: token
+or OIDC verification, registry standing check, engine call and an fsynced
+audit append before the response. A read is a `query` of one node's edges;
+a write asserts a node and an edge with minted IDs. 20 s measured after 2 s
+of warm-up, unless noted.
+
+| Scenario (50 clients unless noted) | Requests/s | Reads/s | Writes/s | Read p50 / p99 ms | Write p50 / p99 ms |
+|---|---:|---:|---:|---:|---:|
+| 1 tenant, API tokens, 20% writes | 708.7 | 565.8 | 142.9 | 69.8 / 88.9 | 70.6 / 90.6 |
+| 1 tenant, OIDC ID tokens, 20% writes | 712.6 | 569.0 | 143.7 | 69.6 / 86.1 | 70.3 / 86.7 |
+| 1 tenant, reads only | 797.7 | 797.7 | — | 61.6 / 78.5 | — |
+| 1 tenant, writes only | 487.9 | — | 487.9 | — | 101.5 / 118.3 |
+| 1 tenant, **1 client**, 20% writes | 709.4 | 565.5 | 143.9 | 1.18 / 2.78 | 1.82 / 4.56 |
+| 2 tenants, 20% writes (10 s) | 1,281.6 | 1,023.4 | 258.2 | 38.5 / 52.2 | 39.3 / 52.3 |
+| 5 tenants, 20% writes | 2,317.5 | 1,856.9 | 460.6 | 21.0 / 29.5 | 21.6 / 30.4 |
+| 10 tenants, 20% writes (10 s) | 2,028.9 | 1,626.0 | 402.9 | 25.0 / 37.5 | 22.7 / 34.6 |
+| 25 tenants, 20% writes (10 s) | 1,367.3 | 1,093.8 | 273.5 | 42.2 / 47.5 | 26.9 / 32.6 |
+| 50 tenants, 1 client each, 20% writes | 1,103.3 | 885.0 | 218.4 | 54.0 / 68.8 | 12.4 / 17.3 |
+
+No request failed, and every tenant's audit chain verified afterwards. Read
+these numbers with the service's concurrency model in mind: **a tenant runs
+one request at a time**, so one tenant serves about 710 requests/s whether 1
+or 50 clients send them, and 50 clients see about 70 ms of queueing. Tenants
+run in parallel up to about 5 to 10 active tenants on this host; beyond that
+throughput falls for reasons not established here (an audit log at
+`synchronous=NORMAL` did not change it). The fsynced audit append is a large
+part of single-tenant service time (1,152 requests/s without it, in an
+exploratory build that was not shipped). The JSON report lists the findings
+and every scenario's full latency distribution.
+
 ## Fact-level writes (A2)
 
 | Report | Recorded scope | Result |

@@ -102,6 +102,8 @@ pub async fn serve_tls(
                 }
             },
         };
+        // Responses are small; do not let Nagle hold them back.
+        let _ = stream.set_nodelay(true);
         let acceptor = acceptor.clone();
         let router = router.clone();
         let limits = limits.clone();
@@ -144,6 +146,7 @@ pub async fn serve_plaintext_loopback(
                 Err(_) => continue,
             },
         };
+        let _ = stream.set_nodelay(true);
         let router = router.clone();
         let limits = limits.clone();
         tokio::spawn(async move {

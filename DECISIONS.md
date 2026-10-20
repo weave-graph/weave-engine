@@ -1755,3 +1755,39 @@ OIDC issuers and bindings, key bindings and signed nonces are new control
 store tables. A schema-1 store from part 1 upgrades in place by creating
 them, and a schema-1 binary refuses a schema-2 store, as the engine's
 store markers do. The tenant stores are unchanged.
+
+### 2026-10-20 — #39 B3 — The load criterion is met; per-tenant serialization stays for Phase B
+
+The criterion asks for published concurrent read and write throughput for
+50 clients; it sets no number. The measurement is published with its host,
+workload and full latency distributions, on the final authentication path
+(API tokens and OIDC, registry standing check, fsynced audit append). One
+tenant serves about 710 requests/s at 20% writes whatever the number of
+clients, because every engine program reserves SQLite's write lock and the
+service therefore runs one request per tenant at a time; 50 clients wait
+about 70 ms. That is ample for the Phase B exit scenario (two teams, six
+humans and agents) and keeps the guarantees simple: one registry snapshot
+and one audit order per request. Lifting it needs an engine read path that
+does not reserve the write lock (ADR-0007 open question 6), which belongs
+with C4's storage work and B2's concurrent changes to authorization, not in
+the service. Tenants run in parallel and reach 2,300 requests/s at five
+tenants; the fall beyond ten active tenants on this host is recorded but not
+explained, and is left to C4.
+
+### 2026-10-20 — #39 B3 — The audit log keeps synchronous=FULL
+
+An exploratory build with the audit database at `synchronous=NORMAL`
+served 1,152 instead of 709 requests/s for one tenant. It was not shipped:
+in WAL mode NORMAL can lose the last audit entries on power loss while the
+engine's write, at FULL, survives, which would break "the audit log is
+complete for writes" exactly when it matters. Group commit of audit entries
+across requests is the way to win the time back without that loss, and is
+left for later.
+
+### 2026-10-20 — #39 B3 — The harness settles bulk-seeded graphs
+
+A read at the head revision of one 2,000-fact bulk write took about 5 ms in
+the engine, against 0.45 ms after any later small write. The harness seeds
+each graph and then makes one small write, so it measures steady state.
+This is an engine (A2 fact store) observation, reported rather than changed
+here.

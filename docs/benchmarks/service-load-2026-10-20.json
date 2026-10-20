@@ -1,0 +1,411 @@
+{
+  "profile": "weave-service-load/1",
+  "recorded": "2026-10-20",
+  "epic": "B3 #39",
+  "command": "cargo run --release --locked -p weave-service --example load -- --clients 50 --seconds 20 --write-percent 20 --tenants 1 --auth api (one run per scenario; see each entry)",
+  "source": "branch b3-service-load on top of B3 part 2 (PR #72, 52a9a8e) plus the load example; weave-engine store 32, protocol 1.1.0",
+  "host": {
+    "cpu": "AMD Ryzen 9 7950X, 16 cores / 32 logical CPUs",
+    "memory": "125 GiB",
+    "os": "Linux 7.2.6 x86_64",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "storage": "local NVMe SSD, SQLite WAL, synchronous=FULL (defaults) for engine and audit stores",
+    "note": "server and all clients on the same host over loopback; client TLS work shares the CPUs"
+  },
+  "workload": {
+    "transport": "HTTP/1.1 over TLS 1.3 (rustls + ring), one keep-alive connection per client",
+    "auth_path": "every request: bearer token lookup (API token digest or OIDC JWT signature + binding), registry standing check, engine call, audit append (fsync) before the response",
+    "read": "POST /v1/execute: query of one seed node's outgoing weave:next edges, with fact_provenance",
+    "write": "POST /v1/execute: one fact write asserting a node and an edge with service-minted IDs",
+    "graph": "1,000 seed nodes and 1,000 edges per tenant, plus one settling write; writes add to it during the run",
+    "warmup_seconds": 2,
+    "latency": "client-observed, send to full response"
+  },
+  "findings": [
+    "With one tenant, throughput is about 710 requests/s whatever the number of clients (1 client: 709/s; 50 clients: 709/s): the tenant runs one request at a time, so 50 clients queue and p50 latency rises to ~70 ms (p99 ~89 ms).",
+    "OIDC costs the same as API tokens here (712.6 vs 708.7 requests/s).",
+    "Across tenants, throughput scales to 2,318 requests/s at 5 tenants and 2,029 at 10, then falls (1,367 at 25, 1,103 at 50); the cause past 10 tenants was not established on this host (not fsync: synchronous=NORMAL on the audit log gave 1,177/s at 50 tenants).",
+    "The audit fsync is a large share of single-tenant service time: an exploratory build with the audit log at synchronous=NORMAL gave 1,152 requests/s for one tenant and 50 clients, against 709 with the shipped synchronous=FULL. The shipped setting keeps FULL (see DECISIONS.md).",
+    "A read at the head revision of a single bulk write (2,000 facts) took about 5 ms in the engine, against 0.45 ms after any further small write; the harness settles each graph with one small write. Reported to the engine owners as an A2 fact-store observation.",
+    "No request failed in any scenario, and every tenant's audit hash chain verified after the run (audit_entries_verified)."
+  ],
+  "exploratory_not_shipped": {
+    "audit_synchronous_normal": {
+      "1_tenant_50_clients_total_per_second": 1151.5,
+      "50_tenants_50_clients_total_per_second": 1176.6,
+      "measured_seconds": 10
+    }
+  },
+  "scenarios": [
+    {
+      "audit_entries_verified": 15642,
+      "auth": "api",
+      "clients": 50,
+      "error_codes": [],
+      "errors": 0,
+      "measured_seconds": 20.0,
+      "profile": "weave-service-load/1",
+      "reads": {
+        "latency_ms": {
+          "max": 163.07,
+          "p50": 69.803,
+          "p95": 76.691,
+          "p99": 88.869
+        },
+        "per_second": 565.8,
+        "requests": 11315
+      },
+      "seed_nodes": 1000,
+      "setup_seconds": 0.1,
+      "tenants": 1,
+      "total_per_second": 708.7,
+      "transport": "HTTP/1.1 over TLS 1.3 (rustls, ring), loopback, one keep-alive connection per client",
+      "warmup_seconds": 2,
+      "write_percent": 20,
+      "writes": {
+        "latency_ms": {
+          "max": 106.2,
+          "p50": 70.621,
+          "p95": 77.242,
+          "p99": 90.575
+        },
+        "per_second": 142.9,
+        "requests": 2858
+      },
+      "scenario": "one tenant, API tokens, 20% writes (the criterion scenario)"
+    },
+    {
+      "audit_entries_verified": 15563,
+      "auth": "oidc",
+      "clients": 50,
+      "error_codes": [],
+      "errors": 0,
+      "measured_seconds": 20.0,
+      "profile": "weave-service-load/1",
+      "reads": {
+        "latency_ms": {
+          "max": 102.115,
+          "p50": 69.596,
+          "p95": 76.225,
+          "p99": 86.08
+        },
+        "per_second": 569.0,
+        "requests": 11379
+      },
+      "seed_nodes": 1000,
+      "setup_seconds": 0.1,
+      "tenants": 1,
+      "total_per_second": 712.6,
+      "transport": "HTTP/1.1 over TLS 1.3 (rustls, ring), loopback, one keep-alive connection per client",
+      "warmup_seconds": 2,
+      "write_percent": 20,
+      "writes": {
+        "latency_ms": {
+          "max": 101.998,
+          "p50": 70.255,
+          "p95": 76.643,
+          "p99": 86.72
+        },
+        "per_second": 143.7,
+        "requests": 2873
+      },
+      "scenario": "one tenant, OIDC ID tokens (EdDSA), 20% writes"
+    },
+    {
+      "audit_entries_verified": 17426,
+      "auth": "api",
+      "clients": 50,
+      "error_codes": [],
+      "errors": 0,
+      "measured_seconds": 20.0,
+      "profile": "weave-service-load/1",
+      "reads": {
+        "latency_ms": {
+          "max": 123.466,
+          "p50": 61.562,
+          "p95": 72.486,
+          "p99": 78.527
+        },
+        "per_second": 797.7,
+        "requests": 15953
+      },
+      "seed_nodes": 1000,
+      "setup_seconds": 0.1,
+      "tenants": 1,
+      "total_per_second": 797.7,
+      "transport": "HTTP/1.1 over TLS 1.3 (rustls, ring), loopback, one keep-alive connection per client",
+      "warmup_seconds": 2,
+      "write_percent": 0,
+      "writes": {
+        "latency_ms": {
+          "max": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "per_second": 0.0,
+        "requests": 0
+      },
+      "scenario": "one tenant, reads only"
+    },
+    {
+      "audit_entries_verified": 10777,
+      "auth": "api",
+      "clients": 50,
+      "error_codes": [],
+      "errors": 0,
+      "measured_seconds": 20.0,
+      "profile": "weave-service-load/1",
+      "reads": {
+        "latency_ms": {
+          "max": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "per_second": 0.0,
+        "requests": 0
+      },
+      "seed_nodes": 1000,
+      "setup_seconds": 0.1,
+      "tenants": 1,
+      "total_per_second": 487.9,
+      "transport": "HTTP/1.1 over TLS 1.3 (rustls, ring), loopback, one keep-alive connection per client",
+      "warmup_seconds": 2,
+      "write_percent": 100,
+      "writes": {
+        "latency_ms": {
+          "max": 215.042,
+          "p50": 101.489,
+          "p95": 110.852,
+          "p99": 118.27
+        },
+        "per_second": 487.9,
+        "requests": 9758
+      },
+      "scenario": "one tenant, writes only"
+    },
+    {
+      "audit_entries_verified": 15677,
+      "auth": "api",
+      "clients": 1,
+      "error_codes": [],
+      "errors": 0,
+      "measured_seconds": 20.0,
+      "profile": "weave-service-load/1",
+      "reads": {
+        "latency_ms": {
+          "max": 7.649,
+          "p50": 1.177,
+          "p95": 1.538,
+          "p99": 2.783
+        },
+        "per_second": 565.5,
+        "requests": 11309
+      },
+      "seed_nodes": 1000,
+      "setup_seconds": 0.1,
+      "tenants": 1,
+      "total_per_second": 709.4,
+      "transport": "HTTP/1.1 over TLS 1.3 (rustls, ring), loopback, one keep-alive connection per client",
+      "warmup_seconds": 2,
+      "write_percent": 20,
+      "writes": {
+        "latency_ms": {
+          "max": 8.326,
+          "p50": 1.823,
+          "p95": 3.603,
+          "p99": 4.556
+        },
+        "per_second": 143.9,
+        "requests": 2878
+      },
+      "scenario": "one tenant, ONE client (per-request service time)"
+    },
+    {
+      "audit_entries_verified": 15281,
+      "auth": "api",
+      "clients": 50,
+      "error_codes": [],
+      "errors": 0,
+      "measured_seconds": 10.0,
+      "profile": "weave-service-load/1",
+      "reads": {
+        "latency_ms": {
+          "max": 90.586,
+          "p50": 38.472,
+          "p95": 43.93,
+          "p99": 52.21
+        },
+        "per_second": 1023.4,
+        "requests": 10234
+      },
+      "seed_nodes": 1000,
+      "setup_seconds": 0.2,
+      "tenants": 2,
+      "total_per_second": 1281.6,
+      "transport": "HTTP/1.1 over TLS 1.3 (rustls, ring), loopback, one keep-alive connection per client",
+      "warmup_seconds": 2,
+      "write_percent": 20,
+      "writes": {
+        "latency_ms": {
+          "max": 59.413,
+          "p50": 39.26,
+          "p95": 44.849,
+          "p99": 52.294
+        },
+        "per_second": 258.2,
+        "requests": 2582
+      },
+      "scenario": "2 tenants (25 clients each), 20% writes, 10 s"
+    },
+    {
+      "audit_entries_verified": 51324,
+      "auth": "api",
+      "clients": 50,
+      "error_codes": [],
+      "errors": 0,
+      "measured_seconds": 20.0,
+      "profile": "weave-service-load/1",
+      "reads": {
+        "latency_ms": {
+          "max": 49.537,
+          "p50": 21.019,
+          "p95": 26.181,
+          "p99": 29.534
+        },
+        "per_second": 1856.9,
+        "requests": 37138
+      },
+      "seed_nodes": 1000,
+      "setup_seconds": 0.4,
+      "tenants": 5,
+      "total_per_second": 2317.5,
+      "transport": "HTTP/1.1 over TLS 1.3 (rustls, ring), loopback, one keep-alive connection per client",
+      "warmup_seconds": 2,
+      "write_percent": 20,
+      "writes": {
+        "latency_ms": {
+          "max": 44.749,
+          "p50": 21.561,
+          "p95": 26.886,
+          "p99": 30.386
+        },
+        "per_second": 460.6,
+        "requests": 9212
+      },
+      "scenario": "5 tenants (10 clients each), 20% writes"
+    },
+    {
+      "audit_entries_verified": 24959,
+      "auth": "api",
+      "clients": 50,
+      "error_codes": [],
+      "errors": 0,
+      "measured_seconds": 10.0,
+      "profile": "weave-service-load/1",
+      "reads": {
+        "latency_ms": {
+          "max": 51.192,
+          "p50": 24.99,
+          "p95": 34.395,
+          "p99": 37.53
+        },
+        "per_second": 1626.0,
+        "requests": 16260
+      },
+      "seed_nodes": 1000,
+      "setup_seconds": 0.7,
+      "tenants": 10,
+      "total_per_second": 2028.9,
+      "transport": "HTTP/1.1 over TLS 1.3 (rustls, ring), loopback, one keep-alive connection per client",
+      "warmup_seconds": 2,
+      "write_percent": 20,
+      "writes": {
+        "latency_ms": {
+          "max": 48.839,
+          "p50": 22.733,
+          "p95": 31.435,
+          "p99": 34.644
+        },
+        "per_second": 402.9,
+        "requests": 4029
+      },
+      "scenario": "10 tenants (5 clients each), 20% writes, 10 s"
+    },
+    {
+      "audit_entries_verified": 16443,
+      "auth": "api",
+      "clients": 50,
+      "error_codes": [],
+      "errors": 0,
+      "measured_seconds": 10.0,
+      "profile": "weave-service-load/1",
+      "reads": {
+        "latency_ms": {
+          "max": 66.266,
+          "p50": 42.229,
+          "p95": 45.015,
+          "p99": 47.539
+        },
+        "per_second": 1093.8,
+        "requests": 10938
+      },
+      "seed_nodes": 1000,
+      "setup_seconds": 1.7,
+      "tenants": 25,
+      "total_per_second": 1367.3,
+      "transport": "HTTP/1.1 over TLS 1.3 (rustls, ring), loopback, one keep-alive connection per client",
+      "warmup_seconds": 2,
+      "write_percent": 20,
+      "writes": {
+        "latency_ms": {
+          "max": 44.534,
+          "p50": 26.911,
+          "p95": 29.306,
+          "p99": 32.648
+        },
+        "per_second": 273.5,
+        "requests": 2735
+      },
+      "scenario": "25 tenants (2 clients each), 20% writes, 10 s"
+    },
+    {
+      "audit_entries_verified": 24333,
+      "auth": "api",
+      "clients": 50,
+      "error_codes": [],
+      "errors": 0,
+      "measured_seconds": 20.0,
+      "profile": "weave-service-load/1",
+      "reads": {
+        "latency_ms": {
+          "max": 79.83,
+          "p50": 53.982,
+          "p95": 64.79,
+          "p99": 68.839
+        },
+        "per_second": 885.0,
+        "requests": 17699
+      },
+      "seed_nodes": 1000,
+      "setup_seconds": 3.4,
+      "tenants": 50,
+      "total_per_second": 1103.3,
+      "transport": "HTTP/1.1 over TLS 1.3 (rustls, ring), loopback, one keep-alive connection per client",
+      "warmup_seconds": 2,
+      "write_percent": 20,
+      "writes": {
+        "latency_ms": {
+          "max": 23.673,
+          "p50": 12.351,
+          "p95": 15.715,
+          "p99": 17.311
+        },
+        "per_second": 218.4,
+        "requests": 4367
+      },
+      "scenario": "50 tenants (1 client each), 20% writes"
+    }
+  ]
+}
