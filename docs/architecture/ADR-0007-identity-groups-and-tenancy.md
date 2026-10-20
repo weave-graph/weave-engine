@@ -1,11 +1,13 @@
 # ADR 0007: identity, groups, agent delegation and tenancy
 
-Status: **proposed** on 2026-10-19 for B1
-([#38](https://github.com/weave-graph/weave-engine/issues/38)) and B3
-([#39](https://github.com/weave-graph/weave-engine/issues/39)). It becomes
-accepted when B1 implementation starts, after Phase A. It is written now,
-during A2, so the fact model can reserve what this design needs (see
-[section 13](#13-what-phase-a-must-reserve)). No code implements it yet.
+Status: **accepted** on 2026-10-20, when B1
+([#38](https://github.com/weave-graph/weave-engine/issues/38)) implementation
+started, with the amendments in [section 15](#15-amendments-at-acceptance).
+It was proposed on 2026-10-19 for B1 and B3
+([#39](https://github.com/weave-graph/weave-engine/issues/39)), during A2, so
+the fact model could reserve what this design needs (see
+[section 13](#13-what-phase-a-must-reserve)). The user guide is
+[REGISTRY.md](../REGISTRY.md).
 
 ## Context
 
@@ -510,3 +512,62 @@ A2 should keep the following true. None of it needs B1 code now:
    revision is the fallback. That cache could never outlive a change.
 7. **Cross-tenant sharing.** Capsule export between tenants stays deferred
    (E08). Is a federated read ever in scope?
+
+## 15. Amendments at acceptance
+
+Recorded on 2026-10-20 with B1 part 1. Each is also a `#38 B1` entry in
+[DECISIONS.md](../../DECISIONS.md).
+
+1. **Identity sets have two parts.** Section 2 writes `S(u)` as one set
+   that holds principals and groups, but section 1 says a group ID in
+   `readers` matches no one. The implementation keeps them apart: a
+   clause has `principals` (the user, and later its agents) matched against
+   `readers`, and `groups` (the active closure) matched against
+   `reader_groups`. An agent's identity is an AND of clauses, one per link of
+   its ownership chain plus its own, which is the record half of the
+   `can(...)` rule of section 3.
+2. **The registry API is a trusted engine API, not a wire type.** Registry
+   and ACL changes are `weave_engine::RegistryChange` values applied with
+   `Engine::apply_registry`. They are never `Program` commands, because
+   section 4 keeps registry management a trusted host operation and never a
+   signed plan action, and the language never emits them. The contract
+   change of 1.1.0 is therefore `reader_groups` and
+   `FactProvenance.on_behalf_of` only. B3 defines the HTTP binding of the
+   same values.
+3. **`writable_graphs` is not consulted in a registry store.** Once the
+   registry is enabled, graph ACLs are the only write authority; the host
+   authenticates and the registry authorizes. In a store without a
+   registry, `writable_graphs` is the write authority exactly as before.
+4. **Tenant administrators are the built-in group `weave:administrators`.**
+   Its members hold Administer on every graph and alone change principals,
+   statuses and group administrators. Only users may join it, and the last
+   active member cannot leave or be suspended. The group is a registry
+   principal like any other, so changes to it are audited the same way.
+5. **Discoverable groups.** "Discoverable by the writer" (section 2) means:
+   the writer is in the group (under every clause of its identity), or
+   administers it, or is a tenant administrator.
+6. **Pinning.** "The registry head pinned at request start" is the head the
+   request's SQLite read transaction first sees. Program execution and the
+   read operators each run in one transaction, so a request sees one
+   registry revision; resolution is cached per registry revision and
+   principal only.
+7. **Graph IDs are not engine-assigned in B1.** Section 4 assigns graph IDs
+   in the B3 service. In the engine, writing a new graph needs an ACL entry
+   for its ID, which only an administrator can create, so a non-administrator
+   cannot probe graph IDs by creating graphs: a write to a graph it cannot
+   discover fails exactly like a write to a nonexistent one.
+8. **Conjunction encoding before B2.** A derived record whose inputs are
+   restricted and name groups must carry an AND of clauses (section 2), but a
+   record field holds one clause. Until ADR-0008 defines the carrier form,
+   the shared helper `visibility::intersect` returns the exact conjunction,
+   and its single-field encoding is the clause-wise meet (common principals
+   and common groups), which never admits a reader any input denies and never
+   resolves membership. A single restricted clause is carried exactly.
+9. **Engine graphs keep their own policies.** Reserved graphs other than
+   `weave:registry` (`weave:governance:`, `weave:identity:`) are not governed
+   by graph ACLs; their existing policy readers apply, matched against the
+   request's principal.
+10. **Delegation chains in storage.** The reserved `on_behalf_of` column
+    stores the chain as a JSON array of principal IDs; the result field is the
+    list itself (B1 part 2).
+

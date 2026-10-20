@@ -30,9 +30,10 @@ pub mod versions;
 pub use versions::{
     is_current, is_supported_version, version_at_least, version_rank, SUPPORTED_VERSIONS,
 };
-/// The current protocol version (core contract v1, frozen at 1.0.0 by A6).
+/// The current protocol version: core contract v1, frozen at 1.0.0 by A6,
+/// with the additive 1.1.0 identity fields of B1 (ADR-0007).
 /// Older versions are listed, oldest last, in [`versions::SUPPORTED_VERSIONS`].
-pub const VERSION: &str = "1.0.0";
+pub const VERSION: &str = "1.1.0";
 pub mod accepted_history;
 pub use accepted_history::{
     AcceptedSelection, AcceptedViewHistoryCut, AcceptedViewHistoryRange, AcceptedViewHistoryResult,
@@ -148,6 +149,11 @@ pub struct Node {
     /// Empty means public. Nonempty is a disjunction of principal IDs.
     #[serde(default)]
     pub readers: Vec<String>,
+    /// Group references (1.1.0, ADR-0007 section 2): a disjunction alongside
+    /// `readers`, resolved against current group membership when a request
+    /// runs. Omitted when empty, so records without groups keep their bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reader_groups: Vec<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -188,6 +194,11 @@ pub struct Edge {
     pub metadata: Vec<GraphRef>,
     #[serde(default)]
     pub readers: Vec<String>,
+    /// Group references (1.1.0, ADR-0007 section 2): a disjunction alongside
+    /// `readers`, resolved against current group membership when a request
+    /// runs. Omitted when empty, so records without groups keep their bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reader_groups: Vec<String>,
     #[serde(default)]
     pub derived_from: Vec<AssertionRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -636,6 +647,11 @@ pub struct MetadataAttachment {
     pub origin: Option<AssertionRef>,
     #[serde(default)]
     pub readers: Vec<String>,
+    /// Group references (1.1.0, ADR-0007 section 2): a disjunction alongside
+    /// `readers`, resolved against current group membership when a request
+    /// runs. Omitted when empty, so records without groups keep their bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reader_groups: Vec<String>,
     #[serde(default)]
     pub required: bool,
     #[serde(default)]

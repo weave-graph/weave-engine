@@ -245,6 +245,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
                 properties: [("kind".into(), json!(kind))].into(),
                 metadata: vec![],
                 readers: vec![ctx.principal.clone()],
+                reader_groups: Vec::new(),
             };
             remaining = remaining
                 .checked_sub(size(&n, remaining)?)
@@ -540,6 +541,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             properties: [("payload".into(), json!(payload))].into(),
             metadata: vec![],
             readers: vec![ctx.principal.clone()],
+            reader_groups: Vec::new(),
             derived_from: premises.clone(),
             derivations: vec![Derivation {
                 snapshot_premises: group.snapshot_premises.clone(),
@@ -596,6 +598,7 @@ pub fn explain(input: &QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             .into(),
             metadata: vec![],
             readers: vec![ctx.principal.clone()],
+            reader_groups: Vec::new(),
             derived_from: vec![],
             derived_nodes: vec![],
             derived_snapshots: vec![],

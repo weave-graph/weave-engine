@@ -82,12 +82,15 @@ fn checked(mut result: QueryResult, ctx: &AlgebraContext) -> Result<QueryResult,
             ));
         }
         node.readers = vec![ctx.principal.clone()];
+        node.reader_groups.clear();
     }
     for edge in &mut result.graph.edges {
         edge.readers = vec![ctx.principal.clone()];
+        edge.reader_groups.clear();
     }
     for attachment in &mut result.graph.attachments {
         attachment.readers = vec![ctx.principal.clone()];
+        attachment.reader_groups.clear();
     }
     if let Some(d) = validate_schema_graph(&result.graph).into_iter().next() {
         return Err(d);
@@ -439,6 +442,7 @@ pub fn union(
             let mut node = n.clone();
             node.id = id.clone();
             node.readers = vec![ctx.principal.clone()];
+            node.reader_groups.clear();
             if let (Some(s), Some(t)) = (remap_type, &node.type_id) {
                 node.type_id = Some(type_key(s, t));
             }
@@ -471,6 +475,7 @@ pub fn union(
             edge_ids.insert(e.id.clone(), id.clone());
             edge.id = id.clone();
             edge.readers = vec![ctx.principal.clone()];
+            edge.reader_groups.clear();
             if let (Some(s), Some(t)) = (remap_type, &edge.type_id) {
                 edge.type_id = Some(type_key(s, t));
             }
@@ -491,6 +496,7 @@ pub fn union(
         for a in &input.graph.attachments {
             let mut attachment = a.clone();
             attachment.readers = vec![ctx.principal.clone()];
+            attachment.reader_groups.clear();
             attachment.host = match &a.host {
                 MetadataHost::Node { id } => MetadataHost::Node {
                     id: node_ids
@@ -727,6 +733,7 @@ pub fn diff(
             context: edge.assertion_context.clone(),
             origin: None,
             readers: vec![ctx.principal.clone()],
+            reader_groups: Vec::new(),
             required: false,
             schema_revision: None,
         };
@@ -807,6 +814,7 @@ pub fn diff(
             },
             origin: None,
             readers: vec![ctx.principal.clone()],
+            reader_groups: Vec::new(),
             required: false,
             schema_revision: None,
         };
@@ -1025,6 +1033,7 @@ pub fn support(
         .into(),
         metadata: vec![],
         readers: vec![ctx.principal.clone()],
+        reader_groups: Vec::new(),
     };
     if crate::carrier_profile::requires_v019(&input.graph) {
         node.derived_from.clear();
@@ -1142,6 +1151,7 @@ pub fn support(
             properties: BTreeMap::new(),
             metadata: vec![],
             readers: vec![ctx.principal.clone()],
+            reader_groups: Vec::new(),
             derived_from: origins.clone(),
             derivations,
         };

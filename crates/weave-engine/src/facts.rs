@@ -17,6 +17,51 @@ pub(crate) const FACT_PREFIX: &str = "fact:sha256:";
 /// Writer recorded for base copies of snapshot facts whose revision has no commit event.
 const UNRECORDED: &str = "weave:unrecorded";
 
+/// The `reader_groups` of a fact record (spaces have none).
+pub(crate) fn fact_reader_groups(fact: &Fact) -> &[String] {
+    match fact {
+        Fact::Node(n) => &n.reader_groups,
+        Fact::Edge(e) => &e.reader_groups,
+        Fact::StructuralEdge(e) => &e.reader_groups,
+        Fact::Assertion(a) => &a.reader_groups,
+        Fact::Attachment(a) => &a.reader_groups,
+        Fact::EmbeddingSpace(_) => &[],
+        Fact::Embedding(e) => &e.reader_groups,
+    }
+}
+
+/// The stored `on_behalf_of` column: a JSON array of principal IDs, the
+/// agent writer's owner first (ADR-0007 section 8). Absent for every
+/// non-delegated write.
+pub(crate) fn decode_delegation(stored: Option<&str>) -> Result<Vec<String>> {
+    match stored {
+        None => Ok(Vec::new()),
+        Some(text) => {
+            let chain: Vec<String> = serde_json::from_str(text)
+                .map_err(|_| err("E_INTEGRITY", "stored delegation chain is malformed"))?;
+            if chain.is_empty()
+                || chain.len() > weave_contract::provenance::MAX_DELEGATION_CHAIN
+                || !chain.iter().all(|p| valid_id(p))
+            {
+                return Err(err("E_INTEGRITY", "stored delegation chain is malformed"));
+            }
+            Ok(chain)
+        }
+    }
+}
+
+/// Every `reader_groups` entry of a graph value's records.
+pub(crate) fn data_reader_groups(data: &GraphData) -> impl Iterator<Item = &String> {
+    data.nodes
+        .iter()
+        .flat_map(|n| &n.reader_groups)
+        .chain(data.edges.iter().flat_map(|e| &e.reader_groups))
+        .chain(data.structural_edges.iter().flat_map(|e| &e.reader_groups))
+        .chain(data.assertions.iter().flat_map(|a| &a.reader_groups))
+        .chain(data.attachments.iter().flat_map(|a| &a.reader_groups))
+        .chain(data.embeddings.iter().flat_map(|e| &e.reader_groups))
+}
+
 pub(crate) fn is_fact_revision(revision: &str) -> bool {
     revision.starts_with(FACT_PREFIX)
 }
@@ -742,12 +787,29 @@ impl Engine {
                 "fact writes to engine-reserved weave: graphs are rejected",
             ));
         }
-        if !host.writable_graphs.contains(graph) {
-            return Err(err(
-                "E_FORBIDDEN",
-                "host has not granted graph write authority",
-            ));
-        }
+        self.require_branch_write(host, graph, branch)?;
+        // Named groups must exist and be usable by the writer (ADR-0007 section 2).
+        self.validate_reader_groups(
+            changes.iter().flat_map(|change| match change {
+                FactChange::Assert { fact } | FactChange::Correct { fact, .. } => {
+                    fact_reader_groups(fact)
+                }
+                FactChange::Retract { .. } => &[],
+            }),
+            host,
+        )?;
+        self.append_facts(graph, branch, expected_head, changes, host)
+    }
+
+    /// The write itself, after authorization: also the registry's write path.
+    pub(crate) fn append_facts(
+        &self,
+        graph: &str,
+        branch: &str,
+        expected_head: &Option<Option<String>>,
+        changes: &[FactChange],
+        host: &HostContext,
+    ) -> Result<(String, Option<String>)> {
         if !valid_id(graph) || !valid_id(branch) || !valid_id(&host.principal) {
             return Err(err("E_ID", "identifiers must not be empty"));
         }
@@ -1143,12 +1205,7 @@ impl Engine {
                 "fact writes to engine-reserved weave: graphs are rejected",
             ));
         }
-        if !host.writable_graphs.contains(graph) {
-            return Err(err(
-                "E_FORBIDDEN",
-                "host has not granted graph write authority",
-            ));
-        }
+        self.require_branch_write(host, graph, branch)?;
         if !valid_id(graph) || !valid_id(branch) || !valid_id(&host.principal) {
             return Err(err("E_ID", "identifiers must not be empty"));
         }
@@ -1586,7 +1643,7 @@ impl Engine {
         revision: &str,
         host: &HostContext,
     ) -> Result<bool> {
-        if !host.writable_graphs.contains(graph) {
+        if !self.graph_writable(host, graph, None)? {
             return Err(err(
                 "E_FORBIDDEN",
                 "host has not granted graph write authority",
@@ -1609,7 +1666,7 @@ impl Engine {
         let Some(info) = self.fact_store().revision(revision)? else {
             return Ok(false);
         };
-        if !host.writable_graphs.contains(&info.graph_id) {
+        if !self.graph_writable(host, &info.graph_id, None)? {
             return Err(err(
                 "E_FORBIDDEN",
                 "host has not granted graph write authority",
@@ -1665,11 +1722,14 @@ impl Engine {
                 .get(revision, k.0, &k.1)?
                 .map(|stored| {
                     let fact = parse(&stored.version)?;
-                    Ok(FactProvenance::record(
+                    let mut provenance = FactProvenance::record(
                         stored.recording.writer,
                         stored.recording.recorded_at_ms,
                         claim_of(&fact),
-                    ))
+                    );
+                    provenance.on_behalf_of =
+                        decode_delegation(stored.recording.on_behalf_of.as_deref())?;
+                    Ok(provenance)
                 })
                 .transpose();
         }

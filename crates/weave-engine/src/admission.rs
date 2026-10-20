@@ -117,6 +117,42 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
         tx.commit()?;
         Ok(())
     }
+    /// The installed admission policy epoch, if a policy is installed.
+    pub fn admission_policy_epoch(&self) -> Result<Option<String>> {
+        Ok(self
+            .conn
+            .query_row("SELECT epoch FROM admission_policy WHERE id=1", [], |r| {
+                r.get(0)
+            })
+            .optional()?)
+    }
+    /// An authority-reducing registry change advances the installed policy
+    /// epoch (ADR-0007 section 5), so pending verified requests and cached
+    /// signed retries need a fresh request. The new epoch is named after the
+    /// registry revision that caused it, so it can never be reactivated.
+    pub(crate) fn advance_admission_epoch(&self, registry_revision: &str) -> Result<()> {
+        let Some(policy) = self
+            .conn
+            .query_row("SELECT policy FROM admission_policy WHERE id=1", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .optional()?
+        else {
+            return Ok(());
+        };
+        let mut stored: StoredPolicy = serde_json::from_str(&policy)?;
+        stored.epoch = format!("registry:{registry_revision}");
+        let encoded = serde_json::to_string(&stored)?;
+        self.conn.execute(
+            "INSERT INTO admission_epochs VALUES (?1,?2)",
+            params![stored.epoch, encoded],
+        )?;
+        self.conn.execute(
+            "UPDATE admission_policy SET epoch=?1,policy=?2 WHERE id=1",
+            params![stored.epoch, encoded],
+        )?;
+        Ok(())
+    }
     fn admission_context(&self) -> Result<AdmissionContext> {
         let now_ms = self.operation_time()?;
         let policy: Option<String> = self
@@ -622,7 +658,7 @@ CREATE TABLE IF NOT EXISTS isolated_proposals(id TEXT PRIMARY KEY,subject TEXT N
                 .ok_or_else(|| err("E_UNAVAILABLE", "dependency unavailable"))?;
             // Primitive reader/endpoint filtering does not follow any dependency.
             // Hidden objects cannot influence traversal queues or materialization budgets.
-            let data = visible(data, principal);
+            let data = visible(data, &*self.access(&HostContext::new(principal, []))?);
             let data = if self.context_typing_visible(
                 &data,
                 &HostContext::new(principal, []),

@@ -1,0 +1,68 @@
+{
+  "fixture": "reader-groups-omitted-when-empty",
+  "concepts": [
+    "fact.reader_groups",
+    "compat.versions"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "version": "1.1.0",
+    "commands": [
+      {
+        "op": "write",
+        "graph_id": "g",
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "node",
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s",
+              "reader_groups": []
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "canonical": {
+    "version": "1.1.0",
+    "commands": [
+      {
+        "op": "write",
+        "graph_id": "g",
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "node",
+              "id": "a",
+              "entity_id": "A",
+              "space_id": "s",
+              "properties": {},
+              "metadata": [],
+              "readers": []
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "engine": {
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "results": [
+      {
+        "kind": "committed"
+      }
+    ]
+  }
+}

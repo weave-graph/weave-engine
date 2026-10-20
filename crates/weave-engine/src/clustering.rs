@@ -229,6 +229,7 @@ impl Engine {
             properties,
             metadata: vec![],
             readers: vec![host.principal.clone()],
+            reader_groups: Vec::new(),
             context_scope: Some(request.context.clone()),
             derived_nodes: node_proofs.clone(),
             derived_from: claim_proofs.clone(),
@@ -319,6 +320,7 @@ impl Engine {
                     ]),
                     metadata: vec![],
                     readers: vec![host.principal.clone()],
+                    reader_groups: Vec::new(),
                     derived_from: claim_proofs.clone(),
                     derivations: if claim_proofs.is_empty() {
                         vec![]
@@ -522,6 +524,7 @@ impl Engine {
             ]),
             metadata: vec![],
             readers: vec![host.principal.clone()],
+            reader_groups: Vec::new(),
             context_scope: Some(before.context.clone()),
             derived_nodes,
             derived_from: derived_from.clone(),

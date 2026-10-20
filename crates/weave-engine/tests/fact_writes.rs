@@ -641,10 +641,11 @@ fn readers_restrict_fact_written_records_like_snapshot_records() {
     assert_eq!(bob.graph.edges.len(), 1);
 }
 
-/// ADR-0007 section 13, item 1: `reader_groups` is reserved on every fact
-/// kind, and records without it keep their exact bytes and revision IDs.
+/// ADR-0007 section 13, item 1: `reader_groups` (activated in 1.1.0) is
+/// rejected under older versions, and records without it keep their exact
+/// bytes and revision IDs.
 #[test]
-fn reader_groups_stay_reserved_and_absent_from_canonical_bytes() {
+fn reader_groups_are_version_gated_and_absent_from_canonical_bytes() {
     let attachment = json!({"kind": "attachment", "id": "m", "host": {"kind": "graph"}, "key": "k", "value": {"kind": "literal", "value": 1}, "valid_time": {"start": 0}});
     let structural =
         json!({"kind": "structural_edge", "id": "s", "predicate": "p", "from": "a", "to": "a"});
@@ -658,9 +659,11 @@ fn reader_groups_stay_reserved_and_absent_from_canonical_bytes() {
     ] {
         let mut grouped = fact.clone();
         grouped["reader_groups"] = json!(["team"]);
-        let encoded = json!({"version": VERSION, "commands": [write(json!([assert_(grouped)]))]});
-        let error = weave_contract::decode_program(encoded.to_string().as_bytes()).unwrap_err();
-        assert_eq!(error.code, "E_UNKNOWN_FIELD", "{fact}");
+        let encoded = json!({"version": "1.0.0", "commands": [write(json!([assert_(grouped)]))]});
+        let older = weave_contract::decode_program(encoded.to_string().as_bytes()).unwrap();
+        let mut e = engine(&Arc::new(ManualClock::new(1)));
+        let error = e.execute(&older, &host("alice")).unwrap_err();
+        assert_eq!(error.code, "E_VERSION", "{fact}");
         let plain: weave_contract::Fact = serde_json::from_value(fact.clone()).unwrap();
         assert!(!serde_json::to_string(&plain)
             .unwrap()

@@ -299,9 +299,17 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
                         if selection::eligible(&raw) {
                             let definition_hash =
                                 self.view_definition_fingerprint(definition, host)?;
+                            // Reuse is keyed by the identity the state was built
+                            // for: the principal, and the registry revision it
+                            // was resolved against (none in a local store).
+                            let identity_key = match self.registry_head()? {
+                                None => host.principal.clone(),
+                                Some(registry) => format!("{}\n{registry}", host.principal),
+                            };
+                            let access = self.access(host)?;
                             let reusable = prior
                                 .as_ref()
-                                .map(|s| s.reusable(&definition_hash, &host.principal, &raw))
+                                .map(|s| s.reusable(&definition_hash, &identity_key, &raw))
                                 .transpose()?
                                 .unwrap_or(false);
                             match selection::evaluate(
@@ -309,7 +317,8 @@ CREATE INDEX IF NOT EXISTS view_dependency_graph ON view_dependencies(graph_id,b
                                 &definition_hash,
                                 &revision,
                                 raw,
-                                &host.principal,
+                                &identity_key,
+                                &access,
                                 prior.as_ref(),
                                 work,
                             ) {

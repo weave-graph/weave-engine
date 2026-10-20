@@ -382,6 +382,7 @@ fn geometry_result(
         ]),
         metadata: vec![],
         readers: vec![host.principal.clone()],
+        reader_groups: Vec::new(),
     };
     let edge = Edge {
         provenance: None,
@@ -404,6 +405,7 @@ fn geometry_result(
         properties: BTreeMap::new(),
         metadata: vec![],
         readers: vec![host.principal.clone()],
+        reader_groups: Vec::new(),
         derived_from: origins.clone(),
         derivations,
     };

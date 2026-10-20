@@ -1334,3 +1334,150 @@ One gate keeps exact-version semantics: `OBSERVATION_PROGRAM_VERSION` =
 0.21.0 in `actor_observation.rs`. It is a stored, hashed program format and
 stays pinned so receipts remain verifiable; its existing comment explains
 why. A future minor version touches only the table and `VERSION`.
+
+### 2026-10-20 — #38 B1 — Delivery in two parts; protocol 1.1.0 and store 32
+
+Part 1 is the registry with users and groups, `reader_groups`, graph ACLs,
+protected branches, Discover and revocation. Part 2 is agents: ownership,
+delegated scope, `on_behalf_of` on their writes, the escalation tests and the
+full permission matrix. Every wire change of the epic is in part 1
+(`reader_groups` and `FactProvenance.on_behalf_of`, which part 2 fills), so
+the language vendors one contract version, 1.1.0. Store 32 changes no table:
+the registry is ordinary facts and `on_behalf_of` already had a column. The
+marker still moves, because a store-31 binary would read group-restricted
+records under its literal-reader rule and ignore graph ACLs. That is the A4
+store-31 pattern.
+
+### 2026-10-20 — #38 B1 — ADR-0007 accepted with ten amendments
+
+The ADR was accepted as B1 started, and the amendments are recorded in its
+section 15. The two with the most effect are these. Identity sets have two
+parts, principals matched against `readers` and groups matched against
+`reader_groups`, because a single set would let a group ID in `readers`
+match its members. The registry API is a trusted engine API
+(`RegistryChange`), not a `Program` command, because the ADR keeps registry
+management a trusted host operation and the language never emits it.
+
+### 2026-10-20 — #38 B1 — A registry store ignores `writable_graphs`
+
+Once the registry is enabled, graph ACLs are the only write authority. An
+intersection with `writable_graphs` would let the host narrow further, but
+it would make every B3 request carry a per-graph list computed from the same
+ACL, and it would give two sources of truth for writes. Local stores keep
+`writable_graphs` exactly. Internal contexts that grant themselves a graph
+through `writable_graphs` therefore fail closed in a registry store. They
+belong to peripheral subsystems (governance internals and dispatch), which
+are documented as not extended for registry stores.
+
+### 2026-10-20 — #38 B1 — Tenant administrators are a built-in group
+
+`weave:administrators` is created when the registry is enabled, with the
+enabling principal as its first member. A group, not a flag, keeps
+administrator changes ordinary audited membership facts. Only users may
+join it, because Administer is not delegable to agents. The last active
+member cannot leave or be suspended, so a store can never lose its
+administrators.
+
+### 2026-10-20 — #38 B1 — Registry facts are nodes and edges with restricted readers
+
+A principal is a node whose ID is the principal ID. A membership is an edge
+`weave:member` from member to group. A graph ACL entry is an edge
+`weave:grant` from the subject to a node for the graph, and a protected
+branch is a node with `weave:branch-writer` edges. Edge and node IDs of
+composite keys are SHA-256 hashes, so they stay within 512 bytes. Readers
+implement ADR-0007 section 1. A user's node has readers `[user]`, and a
+group's node has `reader_groups [group]`. A membership edge has readers
+`[member]`. Graph and branch records are readable only by administrators.
+Every registry record also has `reader_groups [weave:administrators]`. A
+group administrator reads members through `registry_members`, not through
+record readers, because a change of group administrators would otherwise
+have to rewrite every membership edge.
+
+### 2026-10-20 — #38 B1 — Bounds are checked on the affected subtree; redundant changes are no-ops
+
+Adding member M to group G re-checks the depth and closure of M and of
+everything below M, which are the only principals whose closures change.
+A cycle counts as a depth violation (`E_BUDGET`), as the ADR groups it with
+the bounds. Adding an existing member, removing an absent one, or
+protecting a protected branch is a no-op, and a write whose changes are all
+no-ops returns the current registry revision and records nothing. This
+mirrors the identical re-assert of `write`. A `grant` replaces the subject's
+entry, so it can also lower a permission.
+
+### 2026-10-20 — #38 B1 — Where Discover is checked
+
+Each operator that names a graph checks graph permission before touching
+the graph: `query`, `expand`, `as_of`, `changes`, `nearest`,
+`similar_candidates`, recorded history, `write`, `commit`, batches and
+embedding imports. Without Discover, each one returns the
+nonexistent-graph error (`E_UNAVAILABLE`, "graph unavailable"). Nested
+references go through the shared `protected_reference_allowed` gate, which
+now also requires graph Read, so a graph the reader cannot read behaves like
+an unavailable revision. Input-only errors (`E_ID`, `k = 0`) stay first,
+because they do not depend on the graph. Peripheral write paths answer
+`E_FORBIDDEN` both for graphs that do not exist and for hidden ones, so they
+reveal nothing either.
+
+### 2026-10-20 — #38 B1 — Engine graphs are not under graph ACLs
+
+`weave:registry` has a fixed rule: every active principal has Read, so it
+can read its own records, and administrators hold Administer. ACL changes
+naming any `weave:` graph fail with `E_RESERVED_NAMESPACE`. Governance and
+identity graphs keep their own policy readers. Those policies have no
+`reader_groups`, so they match the request's principal as before, through
+the same shared predicate.
+
+### 2026-10-20 — #38 B1 — The AND of group clauses is encoded as a meet until B2
+
+`visibility::intersect` returns the literal intersection when no input names
+a group. That keeps the materialized-assertion bytes exactly as before. When
+an input names a group, it returns the conjunction of the restricted inputs'
+clauses. One record field holds one clause, so the encoding of two or more
+clauses is their clause-wise meet. The meet never admits a reader that an
+input denies, and it never resolves membership. An empty meet becomes the
+reader `weave:no-reader`, which no registry principal can carry. It is
+never public. ADR-0008 (B2) replaces the meet with a carrier form.
+
+### 2026-10-20 — #38 B1 — Discoverable groups for `reader_groups` writes
+
+A writer may name a group it is in (under every clause of its identity), a
+group it administers, or, as a tenant administrator, any active group. Every
+other value fails with `E_UNAVAILABLE` and the message "reader group
+unavailable". That covers unknown IDs, hidden, suspended and retired groups,
+users, and every group in a store without a registry. A write therefore
+cannot tell a hidden group from a missing one.
+
+### 2026-10-20 — #38 B1 — Admission epochs named after the registry revision
+
+An authority-reducing registry change installs the epoch
+`registry:<registry revision>`, with the same policy body, in the same
+transaction. Only `add_principal`, `add_member`, `grant_branch_write` and
+`unprotect_branch` count as additive. A `grant` counts as reducing because it
+may lower a permission. Being conservative there only costs a fresh signed
+request. An epoch named after a revision can never be reactivated, which the
+admission store already requires.
+
+### 2026-10-20 — #38 B1 — Identity is resolved per check and cached per registry revision
+
+`Engine::access(host)` reads the registry head on each call and reuses a
+state and resolution cached for that exact revision. Requests run in one
+SQLite read transaction, so the head is stable within a request. A cache
+keyed by revision never outlives a change (ADR-0007 open question 6). The
+incremental view-selection state, previously keyed by principal, is now
+keyed by principal and registry revision, so a state built for an old
+membership is never reused.
+
+### 2026-10-20 — #38 B1 — Graph listing and registry CLI
+
+`Engine::list_graphs` lists external graphs with a branch, plus graphs that
+have ACL entries, filtered to those the caller can discover. It reports the
+caller's permission and no total. The `weave-engine` CLI gains
+`registry enable`, `registry apply CHANGES.json` and `graphs`, so the
+compatibility job can drive a genuine store-31 upgrade into a registry
+store. The registry error for a store without one is `E_REGISTRY_DISABLED`.
+
+### 2026-10-20 — #38 B1 — The Python client and science checks speak 1.1.0
+
+The science CLI reports `weave_contract::VERSION`. The client's strict
+version check, its expression constant and `check_science.py` move to
+1.1.0, as A2 did for 0.22.0. Its programs use no 1.1.0 feature.

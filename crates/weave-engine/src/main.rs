@@ -2,16 +2,22 @@ use std::{collections::HashSet, env, fs, io::Read, process};
 use weave_engine::{Engine, HostContext};
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
-    if args.first().map(String::as_str) != Some("run") {
-        return Err(
-            "usage: weave-engine run --db PATH --actor PRINCIPAL [--write GRAPH] PLAN.json".into(),
-        );
-    }
+    let usage = "usage: weave-engine run --db PATH --actor PRINCIPAL [--write GRAPH] PLAN.json\n       weave-engine registry enable --db PATH --actor PRINCIPAL\n       weave-engine registry apply --db PATH --actor PRINCIPAL CHANGES.json\n       weave-engine graphs --db PATH --actor PRINCIPAL";
+    let (command, first) = match (
+        args.first().map(String::as_str),
+        args.get(1).map(String::as_str),
+    ) {
+        (Some("run"), _) => ("run", 1),
+        (Some("graphs"), _) => ("graphs", 1),
+        (Some("registry"), Some("enable")) => ("enable", 2),
+        (Some("registry"), Some("apply")) => ("apply", 2),
+        _ => return Err(usage.into()),
+    };
     let mut db = None;
     let mut actor = None;
     let mut graphs = HashSet::new();
     let mut path = None;
-    let mut i = 1;
+    let mut i = first;
     while i < args.len() {
         match args[i].as_str() {
             "--db" | "--actor" | "--write" => {
@@ -35,12 +41,48 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         i += 1;
     }
+    let host = HostContext::new(actor.ok_or("--actor required")?, graphs);
+    let engine_path = db.ok_or("--db required")?;
+    let report = |outcome: weave_engine::Result<serde_json::Value>| -> Result<(), Box<dyn std::error::Error>> {
+        match outcome {
+            Ok(value) => println!("{}", serde_json::to_string_pretty(&value)?),
+            Err(error) => {
+                eprintln!("{}", serde_json::to_string(&error)?);
+                process::exit(1);
+            }
+        }
+        Ok(())
+    };
+    match command {
+        "enable" => {
+            let engine = Engine::open(&engine_path)?;
+            return report(
+                engine
+                    .enable_registry(&host)
+                    .map(|r| serde_json::json!({"revision": r})),
+            );
+        }
+        "graphs" => {
+            let engine = Engine::open(&engine_path)?;
+            return report(engine.list_graphs(&host).map(|g| serde_json::json!(g)));
+        }
+        _ => {}
+    }
     let mut bytes = Vec::new();
     fs::File::open(path.ok_or("plan file required")?)?
         .take(16 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)?;
     if bytes.len() > 16 * 1024 * 1024 {
         return Err("plan exceeds 16 MiB".into());
+    }
+    if command == "apply" {
+        let changes: Vec<weave_engine::RegistryChange> = serde_json::from_slice(&bytes)?;
+        let engine = Engine::open(&engine_path)?;
+        return report(
+            engine
+                .apply_registry(&changes, &host)
+                .map(|r| serde_json::json!({"revision": r})),
+        );
     }
     // Stable core-v1 decode codes (E_VERSION, E_UNKNOWN_FIELD, ...) reach the caller.
     let plan = match weave_contract::decode_program(&bytes) {
@@ -50,8 +92,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             process::exit(1);
         }
     };
-    let host = HostContext::new(actor.ok_or("--actor required")?, graphs);
-    let mut engine = Engine::open(db.ok_or("--db required")?)?;
+    let mut engine = Engine::open(&engine_path)?;
     match engine.execute(&plan, &host) {
         Ok(result) => println!("{}", serde_json::to_string_pretty(&result)?),
         Err(error) => {

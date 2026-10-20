@@ -81,12 +81,21 @@ pub struct ClaimedProvenance {
     pub evidence: Vec<EvidenceRef>,
 }
 
+/// Most links in an agent ownership chain, matching the 8-token bound of
+/// `weave-policy` capability chains (ADR-0007 section 3).
+pub const MAX_DELEGATION_CHAIN: usize = 8;
+
 /// Provenance of one stored fact as returned by the engine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FactProvenance {
     /// Principal that wrote the fact, recorded by the engine from host authority.
     pub writer: String,
+    /// Delegation chain of an agent writer (1.1.0, ADR-0007 section 8): the
+    /// agent's owner first, ending at the root user. Engine-recorded and
+    /// outside content. Omitted when the writer acted for no one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub on_behalf_of: Vec<String>,
     /// Engine-recorded time (Unix milliseconds) at which this replica recorded the fact.
     pub recorded_at_ms: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -203,6 +212,13 @@ impl FactProvenance {
                 "engine-recorded writer and nonnegative recorded time required",
             ));
         }
+        if self.on_behalf_of.len() > MAX_DELEGATION_CHAIN
+            || !self.on_behalf_of.iter().all(|p| label(p))
+        {
+            return Err(invalid(
+                "on_behalf_of holds at most 8 bounded principal identifiers",
+            ));
+        }
         validate_claim(&self.source, &self.method, &self.evidence)
     }
     /// Combine an engine-recorded writer and time with a client claim.
@@ -215,6 +231,7 @@ impl FactProvenance {
         });
         Self {
             writer,
+            on_behalf_of: Vec::new(),
             recorded_at_ms,
             source: claim.source,
             method: claim.method,

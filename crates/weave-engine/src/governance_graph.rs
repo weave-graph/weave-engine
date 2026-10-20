@@ -119,6 +119,11 @@ impl Engine {
         host: &HostContext,
     ) -> Result<bool> {
         let _authorization = self.authorization.enter();
+        // Graph Read under the current registry (ADR-0007 section 4): a
+        // graph the reader cannot read behaves like an unavailable revision.
+        if !self.graph_readable(host, graph)? {
+            return Ok(false);
+        }
         if !self.identity_reference_allowed(graph, revision, host)? {
             return Ok(false);
         }
@@ -231,7 +236,7 @@ impl Engine {
         }
         let head = self.gov_head(&binding.view)?;
         let policy = self.gov_policy(&binding.view, &head.policy)?;
-        if !crate::visibility::readers_admit(&policy.readers, &host.principal)
+        if !crate::visibility::readers_admit(&policy.readers, &*self.access(host)?)
             && !policy.proposers.contains(&host.principal)
         {
             return Err(unavailable());

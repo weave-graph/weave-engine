@@ -2,7 +2,7 @@
 
 Status: **accepted** on 2026-10-19 (A1,
 [#2](https://github.com/weave-graph/weave-engine/issues/2)). Baseline protocol:
-**0.21.0**. Current protocol: **1.0.0** (A6,
+**0.21.0**. Current protocol: **1.1.0** (B1); 1.0.0 (A6,
 [#16](https://github.com/weave-graph/weave-engine/issues/16)), which freezes
 core v1 as published in 0.24.0. Protocol 0.22.0 activated per-fact
 provenance, node valid time and fact-level writes (A2,
@@ -10,7 +10,10 @@ provenance, node valid time and fact-level writes (A2,
 k-hop `expand`, `as_of` selection and `changes` change sets (A3,
 [#4](https://github.com/weave-graph/weave-engine/issues/4)); 0.24.0 activates
 embedding spaces and facts and adds exact `nearest` and `similar_candidates`
-(A4, [#13](https://github.com/weave-graph/weave-engine/issues/13)). Profile name: `core-v1` (`weave_contract::wire::CORE_PROFILE`).
+(A4, [#13](https://github.com/weave-graph/weave-engine/issues/13)); 1.1.0
+activates `reader_groups` and `FactProvenance.on_behalf_of` (B1,
+[#38](https://github.com/weave-graph/weave-engine/issues/38), ADR-0007).
+Profile name: `core-v1` (`weave_contract::wire::CORE_PROFILE`).
 
 This document is the consolidated, normative specification of the core of the
 Weave contract that Phases A–C build on. It replaces reading the 21 additive
@@ -166,6 +169,28 @@ A **fact** is a node, an edge, an explicit assertion, a metadata attachment or
   ranks, explanations or error messages. Fixtures:
   `positive/readers-hide-restricted.json`,
   `positive/readers-allow-listed.json`.
+- **`fact.reader_groups`.** From 1.1.0, every fact record except an
+  embedding space has `reader_groups` (ADR-0007 section 2), a list of group
+  IDs omitted from encodings when empty, so records without groups keep
+  their bytes, content hashes and revision IDs. It is a disjunction
+  alongside `readers`: a record is public only when **both** lists are
+  empty, and otherwise visible when some `readers` entry is the request's
+  principal or some `reader_groups` entry is a group the principal is in,
+  transitively, under the store's principal registry **as it is when the
+  request runs**. Membership is never resolved at write time, so removing a
+  member hides the group's records on the member's next request without
+  rewriting anything, and history (pinned revisions, `as_of`, `changes`) is
+  read under current membership. A group ID inside `readers` is a literal
+  that matches no one. A write that names a group must name an active group
+  the writer can discover (a member, a group administrator or a tenant
+  administrator); any other value, including every group of a store without
+  a registry, fails with `E_UNAVAILABLE`, the code of a nonexistent group.
+  A record derived from several records keeps an AND of its inputs' reader
+  clauses and never flattens groups into literal readers. Under programs
+  older than 1.1.0 the field fails with `E_VERSION`. Fixtures:
+  `positive/reader-groups-omitted-when-empty.json`,
+  `negative/reader-groups-unknown-group.json`,
+  `negative/reader-groups-version-gated.json`.
 
 ## 5. Time
 
@@ -252,6 +277,14 @@ protocol 0.22.0.
   `positive/fact-provenance-in-results.json`,
   `negative/node-provenance-version-gated.json`,
   `negative/write-forged-writer.json`.
+
+  From 1.1.0, `FactProvenance` also has `on_behalf_of` (ADR-0007 section 8):
+  for a fact written by an agent principal, the ownership chain from the
+  agent's owner to the root user at write time, at most 8 principal IDs.
+  Like `writer`, it is engine-recorded, outside content, never part of a
+  revision ID, and disclosed to the fact's readers. It is omitted when the
+  writer acted for no one, and results of programs older than 1.1.0 never
+  carry it. Fixture: `positive/fact-provenance-on-behalf-of.json`.
 
 ## 7. Embeddings
 
@@ -528,8 +561,8 @@ decoding failures, and the C ABI keeps `E_NATIVE_INPUT`.
 | `E_CONFLICT` | `expected_head` differs from the branch head, or a descriptor conflicts with one already registered |
 | `E_INTERVAL` | A valid-time interval is empty or inverted |
 | `E_ID` | An identifier is empty, too long or otherwise invalid |
-| `E_FORBIDDEN` | The host has not granted the required write authority |
-| `E_UNAVAILABLE` | A requested object is unavailable to this principal. "Missing" and "denied" are not distinguished |
+| `E_FORBIDDEN` | The host has not granted the required write authority. In a store with a principal registry, also: the principal can discover the named graph but lacks the permission the operation needs |
+| `E_UNAVAILABLE` | A requested object is unavailable to this principal. "Missing" and "denied" are not distinguished. In a store with a principal registry, a graph the principal cannot discover gives exactly this error, as a nonexistent graph does |
 | `E_BUDGET` | A size, depth, work or read budget is exhausted. Never a truncated complete result |
 | `E_INTEGRITY` | Stored data failed an integrity check |
 | `E_HISTORY_SELECTOR`, `E_HISTORY_UNAVAILABLE` | An invalid recorded or accepted selector, or a selected observation that is unavailable |
@@ -555,10 +588,10 @@ automatically:
 
 | Identifier | Current | Where |
 |---|---|---|
-| Protocol (`Program.version`, `QueryResult.version`) | 1.0.0 | `weave_contract::VERSION`; every accepted version in `weave_contract::versions::SUPPORTED_VERSIONS` |
+| Protocol (`Program.version`, `QueryResult.version`) | 1.1.0 | `weave_contract::VERSION`; every accepted version in `weave_contract::versions::SUPPORTED_VERSIONS` |
 | Core profile | `core-v1` | This document |
-| Contract crate | 1.0.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
-| Store schema | 31 | `STORAGE_VERSION` |
+| Contract crate | 1.1.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
+| Store schema | 32 | `STORAGE_VERSION` |
 | Capsule format | 0.4 | [CAPSULES.md](../CAPSULES.md) |
 | Science API | 0.1.0 | [SCIENCE_INTERFACE.md](../SCIENCE_INTERFACE.md) |
 | Artifact formats | `weave-view-registration/1`, `weave-handler-registration/1` | 0.16 and 0.18 notes |
@@ -567,12 +600,12 @@ automatically:
 
 - **`compat.versions`.** A program declares exactly one protocol version.
   There is no range negotiation. The engine accepts the closed set
-  `SUPPORTED_VERSIONS` (0.1.0 through 0.24.0, then 1.0.0) and executes each
+  `SUPPORTED_VERSIONS` (0.1.0 through 0.24.0, then 1.0.0 and 1.1.0) and executes each
   with the exact semantics it was published with. A feature used under an
   older version fails with `E_VERSION` before any write. Fixtures:
   `positive/legacy-version-accepted.json`,
   `negative/legacy-version-feature-gate.json`,
-  `positive/protocol-1-0-0.json`, `negative/unknown-version.json` (1.1.0)
+  `positive/protocol-1-0-0.json`, `negative/unknown-version.json` (1.2.0)
   and `negative/unknown-version-checked-first.json` (2.0.0).
 - **Feature gates.** `weave_contract::versions` holds the one ordered
   version table. Every gate names the version that introduced its feature and
@@ -590,6 +623,11 @@ automatically:
   stay accepted with unchanged meaning. Results report the producing
   engine's version, 1.0.0. From 1.0.0 on, MINOR (1.1.0) means additive under
   section 11.3, and MAJOR (2.0.0) means breaking under section 11.4.
+- **1.1.0 (B1).** The first additive minor version: `reader_groups` on fact
+  records and `FactProvenance.on_behalf_of`, both omitted when empty
+  ([note](v1.1/README.md)). Stored bytes, content hashes and revision IDs of
+  records without groups are unchanged, and 1.0.0 programs keep their exact
+  meaning.
 - **Core v1 activation.** A2 and A4 activate the reserved core-v1 fields
   through additive minor bumps. Each implementing PR records its exact version
   number. A1 itself changes no wire bytes, so the protocol stays 0.21.0.
@@ -642,7 +680,6 @@ meaning.
   | Name | Kind | Owner |
   |---|---|---|
   | `weave:` | predicate and ID namespace (`weave:similar_to`, `weave:mentions`, `weave:candidate:`) | engine |
-  | `reader_groups` on every fact record (omitted when empty) | field (group references) | B1, ADR-0007 section 13 |
 
   An epic MAY choose different names, in which case its PR releases the
   reservation here. A2 activated `provenance`, `QueryResult.fact_provenance`
@@ -653,9 +690,10 @@ meaning.
   `QueryResult.candidates`, `QueryResult.exactness`, `nearest` and
   `similar_candidates` in 0.24.0; under older versions they fail with
   `E_VERSION` (`negative/embedding-write-version-gated.json`,
-  `negative/nearest-version-gated.json`).
-  Fixtures: `negative/reserved-node-reader-groups.json`,
-  `negative/unknown-command.json`.
+  `negative/nearest-version-gated.json`). B1 activated `reader_groups` in
+  1.1.0 under the reserved name; under older versions it fails with
+  `E_VERSION` (`negative/reader-groups-version-gated.json`).
+  Fixture: `negative/unknown-command.json`.
 
 ### 11.7 Deprecation process
 
@@ -801,12 +839,15 @@ Positive: `positive/identity-graph-nodes-edges.json`,
 `positive/embedding-write-and-nearest.json`,
 `positive/nearest-composition.json`,
 `positive/similar-candidates.json`,
-`positive/nearest-result-envelope.json`.
+`positive/nearest-result-envelope.json`,
+`positive/reader-groups-omitted-when-empty.json`,
+`positive/fact-provenance-on-behalf-of.json`.
 
 Negative: `negative/unknown-version.json`, `negative/missing-version.json`,
 `negative/unknown-version-checked-first.json`,
 `negative/unknown-field-program.json`,
-`negative/reserved-node-reader-groups.json`,
+`negative/reader-groups-version-gated.json`,
+`negative/reader-groups-unknown-group.json`,
 `negative/write-forged-writer.json`,
 `negative/node-provenance-version-gated.json`,
 `negative/embedding-write-version-gated.json`,

@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS handler_preparations(adapter TEXT NOT NULL REFERENCES
             || manifest.output_graphs != [output.graph_id.clone()]
             || !manifest.effect_destinations.is_empty()
             || !manifest.projection_replay
-            || !authority.writable_graphs.contains(&output.graph_id)
+            || !self.graph_writable(authority, &output.graph_id, Some(&output.branch_id))?
             || (output.graph_id == template.input.graph_id
                 && output.branch_id == template.input.branch_id)
         {
@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS handler_preparations(adapter TEXT NOT NULL REFERENCES
             || manifest.output_graphs != [output.graph_id.clone()]
             || !manifest.effect_destinations.is_empty()
             || !manifest.projection_replay
-            || !authority.writable_graphs.contains(&output.graph_id)
+            || !self.graph_writable(authority, &output.graph_id, Some(&output.branch_id))?
             || (output.graph_id == template.input.graph_id
                 && output.branch_id == template.input.branch_id)
         {
@@ -905,6 +905,7 @@ fn owned_output(
     for n in &mut result.graph.nodes {
         n.id = nodes.get(&n.id).cloned().ok_or_else(invalid)?;
         n.readers = vec![registration.manifest.principal.clone()];
+        n.reader_groups.clear();
         if !generated.insert(n.id.clone()) {
             return Err(invalid());
         }
@@ -914,6 +915,7 @@ fn owned_output(
         e.from = nodes.get(&e.from).cloned().ok_or_else(invalid)?;
         e.to = nodes.get(&e.to).cloned().ok_or_else(invalid)?;
         e.readers = vec![registration.manifest.principal.clone()];
+        e.reader_groups.clear();
         if !generated.insert(e.id.clone()) {
             return Err(invalid());
         }
@@ -927,6 +929,7 @@ fn owned_output(
             MetadataHost::Graph | MetadataHost::Entity { .. } => {}
         }
         a.readers = vec![registration.manifest.principal.clone()];
+        a.reader_groups.clear();
         if !generated.insert(a.id.clone()) {
             return Err(invalid());
         }
@@ -946,6 +949,7 @@ fn owned_output(
         },
         origin: None,
         readers: vec![registration.manifest.principal.clone()],
+        reader_groups: Vec::new(),
         required: false,
         schema_revision: None,
         context: result

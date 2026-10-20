@@ -11,6 +11,19 @@ pub(crate) fn assertion_edge(
             metadata.push(r.clone());
         }
     }
+    // One shared helper (ADR-0007 section 13, item 6): the literal
+    // intersection when no input names a group, else the AND of clauses.
+    let (readers, reader_groups) = crate::visibility::intersect(&[
+        crate::visibility::Restriction {
+            readers: &assertion.readers,
+            reader_groups: &assertion.reader_groups,
+        },
+        crate::visibility::Restriction {
+            readers: &edge.readers,
+            reader_groups: &edge.reader_groups,
+        },
+    ])
+    .encode();
     Edge {
         provenance: assertion.provenance.clone(),
         derived_snapshots: assertion.derived_snapshots.clone(),
@@ -28,7 +41,8 @@ pub(crate) fn assertion_edge(
         polarity: assertion.polarity.clone(),
         properties: edge.properties.clone(),
         metadata,
-        readers: crate::visibility::intersect_readers(&assertion.readers, &edge.readers),
+        readers,
+        reader_groups,
         derived_from: assertion.derived_from.clone(),
         derivations: assertion.derivations.clone(),
     }

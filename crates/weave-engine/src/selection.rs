@@ -166,12 +166,14 @@ impl State {
 
 /// Caller supplies verified raw data inside the same SQL/authority snapshot as publication.
 /// The cache changes only which predicates are evaluated; fresh primitive readers always clamp output.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn evaluate(
     plan: &Plan<'_>,
     definition: &str,
     revision: &str,
     raw: GraphData,
     principal: &str,
+    access: &crate::visibility::Access,
     prior: Option<&State>,
     work: &mut ViewSelectionWork,
 ) -> Result<(QueryResult, State)> {
@@ -183,7 +185,7 @@ pub(crate) fn evaluate(
         .filter(|s| s.definition == definition && s.principal == principal && s.shape == shape);
     work.source_records =
         raw.nodes.len() + raw.edges.len() + raw.structural_edges.len() + raw.assertions.len();
-    let graph = visible(raw, principal);
+    let graph = visible(raw, access);
     work.hashed_records = graph.nodes.len()
         + graph.edges.len()
         + graph.structural_edges.len()

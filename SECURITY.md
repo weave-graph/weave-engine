@@ -28,6 +28,20 @@ proposal APIs require host-installed roots and policy. The science request
 protocol does not expose those APIs or authenticate arbitrary JSON Programs.
 The admission profile's limitations and scope checks are documented separately.
 
+A store with the [principal registry](docs/REGISTRY.md) enabled (B1) moves
+authorization, but not authentication, into the store. The host still
+asserts `HostContext.principal`; the registry then decides what that
+principal may do: graph ACLs (Discover, Read, Write, Administer), protected
+branches and group-resolved `reader_groups`, evaluated against current
+membership on every request. A graph without Discover is indistinguishable
+from a nonexistent graph in errors and listings. The registry itself lives in
+the reserved graph `weave:registry`, writable only through the registry API.
+Declared channels it does not close: timing and response size, the
+occupancy of client-chosen record IDs by hidden records (`E_CONFLICT`, see
+[#5](https://github.com/weave-graph/weave-engine/issues/5)), and writer
+identities disclosed to a fact's readers. Authentication and tenant isolation
+are B3.
+
 ## Trust and limits
 
 Graph writers must be trusted to classify authored content correctly. The

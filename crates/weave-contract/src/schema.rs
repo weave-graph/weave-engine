@@ -261,6 +261,7 @@ pub fn validate_schema_graph(graph: &GraphData) -> Vec<Diagnostic> {
                     properties: e.properties.clone(),
                     metadata: e.metadata.clone(),
                     readers: e.readers.clone(),
+                    reader_groups: e.reader_groups.clone(),
                     valid_time: Interval {
                         start: 0,
                         end: None,
@@ -494,6 +495,7 @@ mod tests {
             properties: e.properties,
             metadata: e.metadata,
             readers: e.readers,
+            reader_groups: e.reader_groups,
         });
         assert!(validate_schema_graph(&g).is_empty());
         assert!(g.assertions.is_empty());

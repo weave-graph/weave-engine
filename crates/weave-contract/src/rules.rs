@@ -717,6 +717,7 @@ pub fn reason(
             properties: BTreeMap::new(),
             metadata: vec![],
             readers: vec![ctx.principal.clone()],
+            reader_groups: Vec::new(),
             derived_from: origins.clone(),
             derivations,
         };
@@ -751,12 +752,15 @@ pub fn reason(
     }
     for node in &mut input.graph.nodes {
         node.readers = vec![ctx.principal.clone()];
+        node.reader_groups.clear();
     }
     for edge in &mut input.graph.edges {
         edge.readers = vec![ctx.principal.clone()];
+        edge.reader_groups.clear();
     }
     for a in &mut input.graph.attachments {
         a.readers = vec![ctx.principal.clone()];
+        a.reader_groups.clear();
     }
     input.provenance = unique(input.edge_origins.values().flatten().cloned());
     input.source_revisions.push(SourceRevision {

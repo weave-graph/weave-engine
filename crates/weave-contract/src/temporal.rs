@@ -432,6 +432,7 @@ impl<'a> Builder<'a> {
         node.derivations = local_groups(gates, proof, &mut self.budget)?;
         node.context_scope = Some(self.out.selected_context.clone().unwrap_or_default());
         node.readers = vec![self.ctx.principal.clone()];
+        node.reader_groups.clear();
         node.id = identity("node", &(&node, proof, role), self.ctx.max_output_bytes)?;
         let id = node.id.clone();
         self.out.node_origins.insert(id.clone(), vec![]);
@@ -470,6 +471,7 @@ impl<'a> Builder<'a> {
             .as_ref()
             .and_then(|c| c.reference().cloned());
         wrapper.readers = vec![self.ctx.principal.clone()];
+        wrapper.reader_groups.clear();
         wrapper.derived_from = crate::carrier_algebra::assertion_index(gates);
         wrapper.derived_nodes.clear();
         wrapper.derived_snapshots.clear();
@@ -564,6 +566,7 @@ impl<'a> Builder<'a> {
         attachment.derived_nodes = source.derived_nodes.clone();
         attachment.derived_snapshots = source.derived_snapshots.clone();
         attachment.readers = vec![self.ctx.principal.clone()];
+        attachment.reader_groups.clear();
         attachment.id = identity(
             "attachment",
             &(&attachment, proof),

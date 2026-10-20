@@ -26,6 +26,7 @@ const CONCEPTS: &[&str] = &[
     "fact.polarity",
     "fact.immutability",
     "fact.readers",
+    "fact.reader_groups",
     "fact.write",
     "time.valid",
     "time.recorded",
@@ -230,7 +231,7 @@ fn negative_fixtures_fail_with_their_stable_code() {
 fn unknown_version_fails_with_e_version_before_structure() {
     for version in [
         "0.25.0",
-        "1.1.0",
+        "1.2.0",
         "2.0.0",
         "1.0",
         "0.21",
@@ -253,7 +254,7 @@ fn unknown_version_fails_with_e_version_before_structure() {
         let program = json!({"version": version, "commands": []});
         decode_program(&serde_json::to_vec(&program).unwrap()).unwrap();
     }
-    assert_eq!(wire::SUPPORTED_VERSIONS.len(), 25);
+    assert_eq!(wire::SUPPORTED_VERSIONS.len(), 26);
     assert_eq!(wire::SUPPORTED_VERSIONS[0], VERSION);
 }
 
@@ -264,7 +265,7 @@ fn unknown_fields_fail_with_e_unknown_field_at_every_depth() {
         json!({"version": VERSION, "commands": [{"op": "query", "query": {"graph_id": "g", "extra": 1}}]}),
         json!({"version": VERSION, "commands": [{"op": "commit", "graph_id": "g", "extra": 1, "data": {}}]}),
         json!({"version": VERSION, "commands": [{"op": "commit", "graph_id": "g", "data": {"nodes": [
-            {"id": "a", "entity_id": "A", "space_id": "s", "reader_groups": ["team"]}
+            {"id": "a", "entity_id": "A", "space_id": "s", "groups": ["team"]}
         ]}}]}),
         json!({"version": VERSION, "commands": [{"op": "evaluate", "value": {"kind": "filter",
             "input": {"kind": "query", "query": {"graph_id": "g"}}, "as_of": 5}}]}),
@@ -278,7 +279,7 @@ fn unknown_fields_fail_with_e_unknown_field_at_every_depth() {
         json!({"version": VERSION, "commands": [{"op": "write", "graph_id": "g", "changes": [
             {"change": "assert", "fact": {"kind": "embedding", "id": "v", "space": {"id": "s", "revision": "1"},
                 "subject": {"kind": "node", "node_id": "a"}, "vector": [1.0], "valid_time": {"start": 0},
-                "reader_groups": ["team"]}}]}]}),
+                "reader_group": ["team"]}}]}]}),
     ];
 
     for program in programs {
@@ -309,4 +310,47 @@ fn engine_recorded_provenance_replaces_absent_claims_with_unspecified() {
         canonical(&recorded),
         json!({"writer": "alice", "recorded_at_ms": 10, "method": {"kind": "unspecified"}})
     );
+}
+
+#[test]
+fn reader_groups_decode_on_every_record_and_are_omitted_when_empty() {
+    let groups = json!(["team"]);
+    let data = json!({"profile": "explicit",
+        "nodes": [{"id": "a", "entity_id": "A", "space_id": "s", "reader_groups": groups},
+                  {"id": "b", "entity_id": "B", "space_id": "s"}],
+        "structural_edges": [{"id": "s1", "predicate": "p", "from": "a", "to": "b", "reader_groups": groups}],
+        "assertions": [{"id": "x", "edge_id": "s1", "source": "src", "valid_time": {"start": 0},
+                        "reader_groups": groups}],
+        "attachments": [{"id": "m", "host": {"kind": "node", "id": "a"}, "key": "k",
+            "value": {"kind": "literal", "value": 1}, "valid_time": {"start": 0}, "reader_groups": groups}]});
+    let decoded: GraphData = decode(&serde_json::to_vec(&data).unwrap()).unwrap();
+    assert_eq!(decoded.nodes[0].reader_groups, ["team"]);
+    assert_eq!(decoded.structural_edges[0].reader_groups, ["team"]);
+    assert_eq!(decoded.assertions[0].reader_groups, ["team"]);
+    assert_eq!(decoded.attachments[0].reader_groups, ["team"]);
+    let encoded = serde_json::to_string(&decoded.nodes[1]).unwrap();
+    assert!(!encoded.contains("reader_groups"), "{encoded}");
+    let edge = json!({"id": "e", "predicate": "p", "from": "a", "to": "b", "valid_time": {"start": 0},
+        "reader_groups": groups});
+    let edge: weave_contract::Edge = decode(&serde_json::to_vec(&edge).unwrap()).unwrap();
+    assert_eq!(edge.reader_groups, ["team"]);
+    let embedding = json!({"id": "v", "space": {"id": "s", "revision": "1"},
+        "subject": {"kind": "node", "node_id": "a"}, "vector": [1.0], "valid_time": {"start": 0},
+        "reader_groups": groups});
+    let embedding: EmbeddingFact = decode(&serde_json::to_vec(&embedding).unwrap()).unwrap();
+    assert_eq!(embedding.reader_groups, ["team"]);
+}
+
+#[test]
+fn on_behalf_of_is_bounded_and_omitted_when_empty() {
+    let mut provenance = FactProvenance::record("agent".into(), 1, None);
+    assert!(!serde_json::to_string(&provenance)
+        .unwrap()
+        .contains("on_behalf_of"));
+    provenance.on_behalf_of = vec!["owner".into(), "root".into()];
+    provenance.validate().unwrap();
+    provenance.on_behalf_of = vec!["p".into(); 9];
+    assert!(provenance.validate().is_err());
+    provenance.on_behalf_of = vec![String::new()];
+    assert!(provenance.validate().is_err());
 }
