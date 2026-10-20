@@ -108,6 +108,7 @@ also in the audit entry and the log line of the request.
 |---|---|---|
 | `GET /v1/health` | any principal | `{"status": "ok", "service", "version", "protocol"}`. The only route that is not audited |
 | `GET /v1/whoami` | any principal | the caller's tenant, principal, `administrator` and `agent` flags, `on_behalf_of`, credential ID and expiry |
+| `GET /v1/manifest` | any principal | the caller's visible manifest, `weave-visible/1` of weave-language `docs/PERMISSIONS.md`: `{"format", "principal", "graphs": [{"graph_id", "permission", "branches"}], "reader_groups"}`. `graphs` are the graphs it can discover; `reader_groups` are exactly the groups a write by it may name. Embedding spaces and schemas are omitted (unknown to the compiler) |
 | `POST /v1/execute` | any principal | run a core v1 `Program` (below) |
 | `GET /v1/graphs` | any principal | `Engine::list_graphs`: the graphs the caller can discover, with branches and its permission. No total |
 | `POST /v1/graphs` | any active user (not agents) | create a graph (below) |

@@ -285,3 +285,42 @@ async fn a_sub_agent_authenticates_with_its_whole_chain() {
         StatusCode::UNAUTHORIZED
     );
 }
+
+#[tokio::test]
+async fn the_visible_manifest_lists_what_the_caller_can_see_and_name() {
+    let h = Harness::new();
+    let (root, alice, bob, bot) = setup(&h, None).await;
+    let alice_m = h.get("/v1/manifest", &alice).await.json;
+    assert_eq!(
+        alice_m,
+        json!({"format": "weave-visible/1", "principal": "alice",
+            "graphs": [{"graph_id": "notes", "permission": "write", "branches": []}],
+            "reader_groups": ["team"]})
+    );
+    let bob_m = h.get("/v1/manifest", &bob).await.json;
+    assert_eq!(bob_m["graphs"], json!([]));
+    assert_eq!(bob_m["reader_groups"], json!([]));
+    // The agent sees its owner's ceiling: its scope, and the groups it
+    // exercises.
+    let bot_m = h.get("/v1/manifest", &bot).await.json;
+    assert_eq!(bot_m["principal"], "alice-bot");
+    assert_eq!(
+        bot_m["graphs"],
+        json!([{"graph_id": "notes", "permission": "write", "branches": []}])
+    );
+    assert_eq!(bot_m["reader_groups"], json!(["team"]));
+    // A tenant administrator may name every active group.
+    let root_m = h.get("/v1/manifest", &root).await.json;
+    assert!(root_m["reader_groups"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("team")));
+    // Removal takes effect on the next request.
+    h.registry(
+        &root,
+        json!([{"change": "remove_member", "group": "team", "member": "alice"}]),
+    )
+    .await;
+    let after = h.get("/v1/manifest", &alice).await.json;
+    assert_eq!(after["reader_groups"], json!([]));
+}

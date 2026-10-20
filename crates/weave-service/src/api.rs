@@ -117,6 +117,7 @@ fn routes() -> Vec<Route> {
     vec![
         route(Method::GET, "/v1/health", get(health)),
         route(Method::GET, "/v1/whoami", get(whoami)),
+        route(Method::GET, "/v1/manifest", get(manifest)),
         route(Method::POST, "/v1/execute", post(execute)),
         route(Method::GET, "/v1/graphs", get(list_graphs)),
         route(Method::POST, "/v1/graphs", post(create_graph)),
@@ -489,6 +490,42 @@ async fn whoami(State(service): State<Service>, Extension(caller): Extension<Cal
                 "credential": ctx.token_id,
                 "expires_at_ms": ctx.expires_at_ms,
             })))
+        }),
+    )
+    .await
+}
+
+/// The caller's visible manifest (`weave-visible/1`, weave-language
+/// `docs/PERMISSIONS.md`): the graphs it can discover with its permission
+/// and branches, and the groups it may name in `reader_groups`. Spaces and
+/// schemas are omitted, which the format reads as unknown.
+async fn manifest(
+    State(service): State<Service>,
+    Extension(caller): Extension<Caller>,
+) -> Response {
+    call(
+        &service,
+        caller,
+        "manifest",
+        true,
+        Box::new(|state, ctx| {
+            let graphs = state.engine.list_graphs(&ctx.host)?;
+            let groups = state.engine.registry_nameable_groups(&ctx.host)?;
+            let listed: Vec<Value> = graphs
+                .iter()
+                .map(|g| {
+                    json!({"graph_id": g.graph_id, "permission": g.permission,
+                        "branches": g.branches})
+                })
+                .collect();
+            let mut done = Done::json(json!({
+                "format": "weave-visible/1",
+                "principal": ctx.principal,
+                "graphs": listed,
+                "reader_groups": groups,
+            }));
+            done.graphs = graphs.iter().map(|g| g.graph_id.clone()).collect();
+            Ok(done)
         }),
     )
     .await

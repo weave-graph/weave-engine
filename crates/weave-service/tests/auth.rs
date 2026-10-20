@@ -44,6 +44,7 @@ fn the_endpoint_table_is_the_documented_api() {
             "GET /v1/graphs",
             "GET /v1/graphs/{graph_id}/acl",
             "GET /v1/health",
+            "GET /v1/manifest",
             "GET /v1/registry/groups/{id}/members",
             "GET /v1/registry/principals/{id}",
             "GET /v1/registry/principals/{id}/memberships",

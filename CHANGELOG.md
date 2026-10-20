@@ -25,6 +25,8 @@ sections 6 to 9; [guide](docs/SERVICE.md)). No protocol or store change.
   `GET /v1/audit/facts` answers who read and who wrote a fact.
 - Engine-assigned graph IDs (`Engine::create_graph`) and service-minted
   record IDs for non-administrators.
+- `GET /v1/manifest`: the caller's `weave-visible/1` manifest for the LB1
+  compiler, with `Engine::registry_nameable_groups`.
 - Engine: in a registry store, `correct` and `retract` of a fact the writer
   cannot read now fail as for a missing fact.
 

@@ -93,6 +93,7 @@ fn observations() -> Vec<(Method, String, Option<Value>)> {
     let exec = |commands: Value| (Method::POST, "/v1/execute".to_string(), program(commands));
     vec![
         (Method::GET, "/v1/graphs".into(), None),
+        (Method::GET, "/v1/manifest".into(), None),
         exec(json!([{"op": "query", "query": {"graph_id": "shared"}}])),
         exec(
             json!([{"op": "evaluate", "value": {"kind": "expand", "graph_id": "shared",

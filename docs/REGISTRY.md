@@ -237,6 +237,9 @@ Permissions are ordered: **Discover ≤ Read ≤ Write ≤ Administer**.
 - Writing a graph that does not exist yet needs an ACL entry for it, so an
   administrator grants first. A write to a graph the writer cannot discover
   fails like a write to a nonexistent one.
+- `Engine::registry_nameable_groups(host)` lists exactly the groups a write
+  by `host.principal` may name in `reader_groups`, for hosts that serve a
+  visible manifest (weave-language `weave-visible/1`).
 - `Engine::create_graph(entropy, host)` lets any active user create a graph
   without choosing its ID: the engine derives `g-` and 32 hex digits from 32
   bytes of host-supplied randomness and grants the creator Administer, in

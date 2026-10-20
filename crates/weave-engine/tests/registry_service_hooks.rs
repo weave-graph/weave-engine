@@ -195,3 +195,48 @@ fn create_graph_assigns_an_opaque_id_and_grants_the_creator_administer() {
         "E_REGISTRY_DISABLED"
     );
 }
+
+#[test]
+fn nameable_groups_are_exactly_what_a_write_accepts() {
+    let mut s = Store::registry();
+    s.reg(json!([
+        {"change": "add_principal", "id": "org", "kind": "group"},
+        {"change": "add_member", "group": "org", "member": "team"},
+        {"change": "add_principal", "id": "managed", "kind": "group"},
+        {"change": "set_group_administrators", "group": "managed", "administrators": ["bob"]},
+        {"change": "add_principal", "id": "gone", "kind": "group"},
+        {"change": "add_member", "group": "gone", "member": "alice"},
+        {"change": "set_status", "id": "gone", "status": "retired"}
+    ]));
+    let names = |s: &Store, who: &str| s.e.registry_nameable_groups(&host(who)).unwrap();
+    assert_eq!(names(&s, "alice"), ["org", "team"]);
+    assert_eq!(names(&s, "bob"), ["managed"]);
+    assert!(names(&s, "mallory").is_empty());
+    assert!(names(&s, "root").contains(&"managed".to_string()));
+    assert!(!names(&s, "root").contains(&"gone".to_string()));
+    let candidates = [
+        "org",
+        "team",
+        "managed",
+        "gone",
+        "missing",
+        "weave:administrators",
+    ];
+    for who in ["alice", "bob", "root"] {
+        let listed = names(&s, who);
+        for group in candidates {
+            let id = format!("{who}-{}", group.replace(':', "-"));
+            let written = s.write(&host(who), json!([assert_(node(&id, &[], &[group]))]));
+            assert_eq!(
+                written.is_ok(),
+                listed.contains(&group.to_string()),
+                "{who} {group}"
+            );
+        }
+    }
+    assert!(Store::new()
+        .e
+        .registry_nameable_groups(&host("x"))
+        .unwrap()
+        .is_empty());
+}

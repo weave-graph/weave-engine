@@ -49,6 +49,7 @@ pub const MAX_REGISTRY_CHANGES: usize = 1000;
 /// Most records the registry holds.
 pub const MAX_REGISTRY_RECORDS: usize = 100_000;
 mod create;
+mod manifest;
 pub use create::CREATED_GRAPH_PREFIX;
 
 const SPACE: &str = "weave:registry";
@@ -553,6 +554,13 @@ impl State {
     }
     /// Record visibility of the registry API: administrators, the principal
     /// itself, and principals in the target's ownership chain.
+    /// True when `who` may name `group` in `reader_groups`: an active group
+    /// it is in through every clause of its identity, or one it administers
+    /// (ADR-0007 section 2, amendment 5).
+    fn nameable_group(&self, who: &Resolved, group: &str) -> bool {
+        self.active_group(group)
+            && (who.access.has_group(group) || self.may_administer_group(who, group))
+    }
     fn may_see_principal(&self, who: &Resolved, actor: &str, id: &str) -> bool {
         !matches!(who.actor, Actor::Nobody)
             && (who.administrator() || id == actor || self.chain(id).iter().any(|p| p == actor))
@@ -1103,9 +1111,7 @@ impl Engine {
             }
             // A group is discoverable by its members (through every clause of
             // the request's identity), its administrators and tenant administrators.
-            let discoverable =
-                who.access.has_group(group) || state.may_administer_group(&who, group);
-            if !state.active_group(group) || !discoverable {
+            if !state.nameable_group(&who, group) {
                 return Err(unavailable());
             }
         }

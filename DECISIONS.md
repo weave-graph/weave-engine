@@ -1684,3 +1684,20 @@ whether or not the principal exists. Agents cannot issue tokens, create
 graphs or read the audit log, because Administer is not delegable. The
 audit entry's `on_behalf_of` is the agent's chain, read record by record as
 each principal itself.
+
+### 2026-10-20 — #39 B3 — The service serves the LB1 visible manifest
+
+weave-language LB1 compiles against a host-supplied `weave-visible/1`
+manifest and expects B3 or B4 to serve it for the authenticated caller.
+It fits B3, because it is one read of the caller's own standing:
+`GET /v1/manifest` returns the graphs from `Engine::list_graphs` (with
+permission and branches) and the groups the caller may name. The groups
+come from a new `Engine::registry_nameable_groups`, which uses the same
+predicate as write validation (now one `State::nameable_group` function),
+so the manifest can never list a group a write would refuse, or omit one
+it would accept; a test checks both directions. Embedding spaces and
+schemas are omitted, which the format defines as unknown, because listing
+them needs a per-graph read that B4's `describe_schema` will provide. The
+manifest is advisory, as LB1 states: every program is authorized again
+when it runs. The engine's language CI moves to weave-language
+`5d2b9d2` and runs LB1's `check_permissions.py` and `check_agent_repair.py`.

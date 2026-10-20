@@ -427,6 +427,12 @@ ADR-0007 sections 6 to 9) is in progress. Part 1 is implemented as the
   the digest of the response, and the facts read (from `fact_provenance`) or
   written. `GET /v1/audit/facts` answers "who read fact F" and "who wrote
   fact F". Responses are withheld when their entry cannot be written.
+- **Visible manifest.** `GET /v1/manifest` serves the caller's
+  `weave-visible/1` manifest (weave-language LB1): the graphs it can
+  discover with its permission and branches, and exactly the groups it may
+  name in `reader_groups` (`Engine::registry_nameable_groups`). Language CI
+  runs LB1's `check_permissions.py` and `check_agent_repair.py` against the
+  engine.
 - **No ID probing.** Graphs get engine-assigned IDs unless a tenant
   administrator chooses one, and non-administrators may assert only record
   IDs the service minted for them, which closes the `E_CONFLICT` occupancy
