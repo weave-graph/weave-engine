@@ -1,5 +1,5 @@
-//! A7 read-only MCP preview (#37), part 1: `query`, `expand`, `as_of`,
-//! `what_changed` and `explain`, with `hybrid_search` listed as unsupported.
+//! A7 read-only MCP preview (#37): `query`, `expand`, `as_of`,
+//! `what_changed`, `hybrid_search` and `explain`.
 //!
 //! The checks are observable: tool results against the science JSON API on
 //! the same store, a restricted reader against paired stores that differ only
@@ -19,8 +19,10 @@ const GRAPH: &str = "g";
 const ADMIN: &str = "admin";
 const ANALYST: &str = "analyst";
 /// Strings that occur only in records whose `readers` exclude the analyst.
-const HIDDEN: [&str; 7] = [
+const HIDDEN: [&str; 9] = [
     "unit-9",
+    "emb-9",
+    "emb-secret",
     "U9",
     "at-9",
     "runs-9",
@@ -53,8 +55,15 @@ fn hide(mut record: Value) -> Value {
     record["readers"] = json!([ADMIN]);
     record
 }
+fn embedding(id: &str, subject: &str, vector: [f32; 3]) -> Value {
+    json!({"kind": "embedding", "id": id, "space": {"id": "notes", "revision": "1"},
+        "subject": {"kind": "node", "node_id": subject}, "vector": vector,
+        "valid_time": {"start": 0},
+        "provenance": {"method": {"kind": "model", "model": "test-encoder", "version": "1"}}})
+}
 
-/// A small fleet: two writes, recorded at 1,000 and 2,000. With `hidden`,
+/// A small fleet: three writes, recorded at 1,000, 2,000 and 3,000 (the
+/// last one embeds four nodes in the `notes` space). With `hidden`,
 /// each write also carries records only `admin` may read; without it the two
 /// stores agree on everything the analyst can see.
 fn build_store(path: &Path, hidden: bool) {
@@ -131,9 +140,30 @@ fn build_store(path: &Path, hidden: bool) {
         second.push(json!({"change": "correct", "fact": hide(edge(
             "runs-9", "runs", "unit-9", "fw-1", json!({"start": 0, "end": 500})))}));
     }
+    let mut third = vec![
+        assert(
+            json!({"kind": "embedding_space", "id": "notes", "revision": "1",
+            "encoder": "test-encoder", "encoder_version": "1", "preprocessing": "none",
+            "dimensions": 3, "metric": "cosine_distance"}),
+        ),
+        assert(embedding("emb-u1", "unit-1", [1.0, 0.0, 0.0])),
+        assert(embedding("emb-site", "site-a", [0.9, 0.1, 0.0])),
+        assert(embedding("emb-f1", "fw-1", [0.0, 1.0, 0.0])),
+        assert(embedding("emb-f2", "fw-2", [0.0, 0.9, 0.1])),
+    ];
+    if hidden {
+        // A hidden unit's embedding and a hidden embedding of a visible node,
+        // both closer to the query than any visible one.
+        third.extend([
+            assert(hide(embedding("emb-9", "unit-9", [1.0, 0.01, 0.0]))),
+            assert(hide(embedding("emb-secret", "unit-1", [0.99, 0.0, 0.0]))),
+        ]);
+    }
     write(&mut engine, first);
     clock.set(2_000);
     write(&mut engine, second);
+    clock.set(3_000);
+    write(&mut engine, third);
 }
 
 fn session(path: &Path, principal: &str) -> ScienceSession {
@@ -193,7 +223,57 @@ fn calls() -> Vec<(Tool, Value)> {
             Tool::Explain,
             json!({"input": {"kind": "as_of", "unix_millis": 1_500, "query": {"graph_id": GRAPH}}}),
         ),
+        (Tool::HybridSearch, nearest(None)),
+        // Nearest within a graph neighborhood, valid at an instant.
+        (
+            Tool::HybridSearch,
+            nearest(Some(
+                json!({"kind": "expand", "graph_id": GRAPH, "seeds": ["site-a"], "hops": 1, "direction": "both"}),
+            )),
+        ),
+        // A stored embedding as the query, as known before and after it was written.
+        (
+            Tool::HybridSearch,
+            json!({"kind": "nearest", "graph_id": GRAPH, "space": {"id": "notes", "revision": "1"},
+                "query": {"kind": "embedding", "embedding_id": "emb-f1"}, "k": 3, "as_of": 3_500}),
+        ),
+        (
+            Tool::HybridSearch,
+            json!({"kind": "nearest", "graph_id": GRAPH, "space": {"id": "notes", "revision": "1"},
+                "query": {"kind": "vector", "vector": [1, 0, 0]}, "k": 3, "as_of": 2_500}),
+        ),
+        (
+            Tool::HybridSearch,
+            json!({"kind": "similar_candidates", "graph_id": GRAPH, "space": {"id": "notes", "revision": "1"}, "k": 1,
+                "exclude_linked": true, "valid_at": 600}),
+        ),
+        (
+            Tool::HybridSearch,
+            json!({"kind": "similar_candidates", "graph_id": GRAPH, "space": {"id": "notes", "revision": "1"}, "k": 2,
+                "max_score": 0.5, "sources": {"kind": "query", "query": {"graph_id": GRAPH, "from": "unit-1"}}}),
+        ),
+        // Vector to graph: nearest hits as expansion seeds.
+        (
+            Tool::Expand,
+            json!({"graph_id": GRAPH, "hops": 1, "direction": "out", "seeds_from": nearest(None)}),
+        ),
+        (Tool::Explain, json!({"input": nearest(None)})),
     ]
+}
+
+/// `nearest` over the `notes` space with a vector near `unit-1`.
+fn nearest(candidates: Option<Value>) -> Value {
+    let mut plan = json!({"kind": "nearest", "graph_id": GRAPH, "space": {"id": "notes", "revision": "1"},
+        "query": {"kind": "vector", "vector": [1, 0.02, 0]}, "k": 2, "valid_at": 600});
+    if let Some(candidates) = candidates {
+        plan["candidates"] = candidates;
+    }
+    plan
+}
+
+/// `nearest` whose candidates nest `depth` further `nearest` expressions.
+fn nested_nearest(depth: usize) -> Value {
+    (0..depth).fold(nearest(None), |inner, _| nearest(Some(inner)))
 }
 
 fn structured(response: &Value) -> &Value {
@@ -312,6 +392,63 @@ fn hidden_facts_never_appear_and_never_change_the_output() {
 }
 
 #[test]
+fn hybrid_search_ranks_only_visible_embeddings() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("store.db");
+    build_store(&db, true);
+    let ranked = |principal: &str, plan: Value| {
+        let mut server = Server::new(session(&db, principal));
+        let response = server.call_tool(Tool::HybridSearch, plan);
+        assert_eq!(response["isError"], false, "{response}");
+        let result = structured(&response)["result"]["results"][0]["result"].clone();
+        let hits: Vec<String> = result["neighbors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n["embedding_id"].as_str().unwrap().to_string())
+            .collect();
+        (hits, result)
+    };
+    // The hidden embeddings are the closest, but only the admin ranks them.
+    assert_eq!(ranked(ADMIN, nearest(None)).0, ["emb-9", "emb-secret"]);
+    let (hits, result) = ranked(ANALYST, nearest(None));
+    assert_eq!(hits, ["emb-u1", "emb-site"]);
+    assert_eq!(result["neighbors"][0]["rank"], 1);
+    assert_eq!(result["exactness"], "exact");
+    // Within the 1-hop neighborhood of fw-2, only fw-2 and unit-1 (via runs-2) qualify.
+    let within = json!({"kind": "expand", "graph_id": GRAPH, "seeds": ["fw-2"], "hops": 1, "direction": "both"});
+    assert_eq!(
+        ranked(ANALYST, nearest(Some(within))).0,
+        ["emb-u1", "emb-f2"]
+    );
+    // Candidate relations: proposals with both embeddings as provenance, never facts.
+    let mut server = Server::new(session(&db, ANALYST));
+    let response = server.call_tool(
+        Tool::HybridSearch,
+        json!({"kind": "similar_candidates", "graph_id": GRAPH, "space": {"id": "notes", "revision": "1"},
+            "k": 1, "exclude_linked": true}),
+    );
+    let result = &structured(&response)["result"]["results"][0]["result"];
+    let candidates = result["candidates"].as_array().unwrap();
+    assert!(!candidates.is_empty());
+    for candidate in candidates {
+        assert_eq!(candidate["predicate"], "weave:similar_to");
+        assert_eq!(candidate["origins"].as_array().unwrap().len(), 2);
+    }
+    // explain and vector-to-graph expansion take a nearest search.
+    for (tool, arguments) in [
+        (Tool::Explain, json!({"input": nearest(None)})),
+        (
+            Tool::Expand,
+            json!({"graph_id": GRAPH, "hops": 1, "seeds_from": nearest(None)}),
+        ),
+    ] {
+        let response = server.call_tool(tool, arguments);
+        assert_eq!(response["isError"], false, "{tool:?}: {response}");
+    }
+}
+
+#[test]
 fn store_text_is_returned_as_untrusted_data() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("store.db");
@@ -426,11 +563,63 @@ fn tool_inputs_are_bounded_and_validated() {
             json!({"graph_id": GRAPH, "seeds": ["unit-1"], "hops": 2, "limit": 1}),
             "E_BUDGET",
         ),
-        // Not an approximation: unavailable until A4 ships.
+        // hybrid_search takes a nearest or similar_candidates expression,
+        // and nested expressions are only the preview's read operators.
         (
             Tool::HybridSearch,
             json!({"text": "fan failure"}),
-            codes::UNSUPPORTED,
+            codes::INPUT,
+        ),
+        (
+            Tool::HybridSearch,
+            json!({"kind": "query", "query": {"graph_id": GRAPH}}),
+            codes::INPUT,
+        ),
+        (
+            Tool::HybridSearch,
+            nearest(Some(json!({"kind": "reference", "name": "x"}))),
+            codes::INPUT,
+        ),
+        (
+            Tool::HybridSearch,
+            nearest(Some(
+                json!({"kind": "changes", "graph_id": GRAPH, "from": {"kind": "head"}}),
+            )),
+            codes::INPUT,
+        ),
+        (
+            Tool::Expand,
+            json!({"graph_id": GRAPH, "hops": 1, "seeds_from": {"kind": "reference", "name": "x"}}),
+            codes::INPUT,
+        ),
+        (Tool::HybridSearch, nested_nearest(6), codes::INPUT),
+        // Engine bounds on the A4 operators keep their engine codes.
+        (
+            Tool::HybridSearch,
+            {
+                let mut plan = nearest(None);
+                plan["k"] = json!(0);
+                plan
+            },
+            "E_NEAREST",
+        ),
+        (
+            Tool::HybridSearch,
+            {
+                let mut plan = nearest(None);
+                plan["k"] = json!(1001);
+                plan
+            },
+            "E_BUDGET",
+        ),
+        (
+            Tool::HybridSearch,
+            {
+                let mut plan = nearest(None);
+                plan["query"]["vector"] = json!([1, 0]);
+                plan
+            },
+            "E_SPACE",
         ),
     ] {
         assert_eq!(
@@ -579,6 +768,7 @@ fn scripted_client_session_and_no_tool_writes() {
         .collect();
     cases.extend([
         ("hybrid_search".into(), json!({"text": "fan"})),
+        ("hybrid_search".into(), nested_nearest(4)),
         (
             "query".into(),
             json!({"op": "write", "graph_id": GRAPH, "changes": []}),

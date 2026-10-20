@@ -12,7 +12,7 @@ white-paper requirements remain tracked separately in the
 |---|---|
 | Science API and CLI | `weave-science` 0.1.0; native Rust and one-request JSON process |
 | Python client | `weave_science` 0.1.0; Python 3.10+, no mandatory runtime dependencies |
-| MCP preview | `weave-mcp` 0.1.0; read-only local stdio MCP server, part 1 of A7 ([guide](MCP_PREVIEW.md)) |
+| MCP preview | `weave-mcp` 0.1.0; read-only local stdio MCP server (A7, [guide](MCP_PREVIEW.md)) |
 | Engine contract | 0.24.0; existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)), and embedding facts with exact `nearest` and `similar_candidates` ([0.24](contract/v0.24/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
 | Native storage | Store 31; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)), which also holds embedding spaces and embeddings |
 | Platforms | Linux, macOS and Windows in the native CI profile |
@@ -187,38 +187,42 @@ is measured at 10,000 and 1,000,000 revisions
 - Selecting the edges or attachments of a node scans every version recorded
   under it, so a node corrected very many times is slower to traverse.
 
-## Read-only MCP preview (A7, part 1)
+## Read-only MCP preview (A7)
 
 `weave-mcp` is a local stdio MCP server over one existing store
 ([guide](MCP_PREVIEW.md), [#37](https://github.com/weave-graph/weave-engine/issues/37)):
 
-- **Tools.** `query`, `expand`, `as_of`, `what_changed` (the A3 `changes`
-  expression) and `explain` (of a `query`, `as_of` or `expand`). Each runs
-  one read-only `evaluate` program through the same session as the science
-  JSON `execute` operation, so its `result` equals that operation's result.
-  `hybrid_search` is listed and fails with `E_UNSUPPORTED` until A4 ships.
+- **Tools.** `query`, `expand` (with `seeds_from`), `as_of`, `what_changed`
+  (the A3 `changes` expression), `hybrid_search` (the A4 `nearest`, with a
+  neighborhood as `candidates`, and `similar_candidates`) and `explain`. Each
+  runs one read-only `evaluate` program through the same session as the
+  science JSON `execute` operation, so its `result` equals that operation's
+  result. Nested expressions are limited to those read operators.
 - **Principal.** `--actor` is required and fixes the reader for every call.
   There is no default identity and no tool argument can change it; per-record
-  `readers` apply to every result. The server holds no write grants.
+  `readers` apply to every result, rankings and candidates included. The
+  server holds no write grants.
 - **Data/code boundary.** Tool descriptions, schemas and instructions are
   static. Store content appears only inside a result envelope marked
   `"trust": "untrusted_data"`.
 - **Bounds.** Messages up to 1 MiB, arguments up to 32 levels deep with
-  strings up to 4,096 bytes (`E_MCP_INPUT`), results up to 16 MiB; engine
-  bounds and codes pass through.
+  strings up to 4,096 bytes and at most 4 nested expressions (`E_MCP_INPUT`),
+  results up to 16 MiB; engine bounds and codes pass through.
 
 Evidence: `crates/weave-mcp/tests/mcp.rs` checks every tool against the
 science JSON API on the same store, paired stores that differ only in hidden
-facts (identical output for the restricted reader, no hidden ID or text in
-any response), a scripted session of the real binary that calls every listed
-tool and leaves every store table unchanged, the input bounds and the CLI's
-refusal to run without a reader. `tests/fleet_question_2.rs` answers exit
-question 2 on the A5 fleet with `as_of` and `what_changed` for the restricted
-and the unrestricted reader.
+facts and embeddings (identical output for the restricted reader, no hidden
+ID or text in any response, hidden embeddings never ranked), a scripted
+session of the real binary that calls every listed tool and leaves every
+store table unchanged, the input bounds and the CLI's refusal to run without
+a reader. `tests/fleet_exit_questions.rs` drives the binary as a scripted MCP
+client on the A5 fleet and answers exit questions 2, 3 and 4 for the
+restricted and the unrestricted reader, checked against the `weave-hardware`
+helpers (question 2) and an independent ranking (questions 3 and 4).
 
 **Limits.** No authentication, local single-user use only. One request at a
-time, no cancellation, stdio only. Exit questions 3 and 4 through the preview
-wait for `hybrid_search` (A4).
+time, no cancellation, stdio only. The preview supplies no encoder: agents
+pass query vectors from the space's encoder or a stored embedding ID.
 
 ## Embeddings and hybrid retrieval (A4)
 

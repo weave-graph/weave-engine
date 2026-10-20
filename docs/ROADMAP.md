@@ -73,10 +73,11 @@ through `fact_provenance`, explicit coverage and paired hidden-input tests
 ([guide](TRAVERSAL.md)). They are available from Rust, the science JSON
 interface and Python ([tutorial](PYTHON_SCIENCE.md#traversal-as-of-reads-and-change-sets)),
 and the A5 fleet scenario answers "as known at K" for restricted readers.
-A7 part 1: the [read-only MCP preview](MCP_PREVIEW.md) (`weave-mcp`) serves
-`query`, `expand`, `as_of`, `what_changed` and `explain` over stdio as a fixed
-reader, and answers exit question 2 on the fleet. `hybrid_search` reports
-`E_UNSUPPORTED` until A4 lands; questions 3 and 4 through the preview follow it.
+A7 is complete: the [read-only MCP preview](MCP_PREVIEW.md) (`weave-mcp`)
+serves `query`, `expand`, `as_of`, `what_changed`, `hybrid_search` (A4
+`nearest` and `similar_candidates`) and `explain` over stdio as a fixed
+reader, and a scripted MCP client answers exit questions 2 to 4 on the fleet
+through it.
 A4 in progress: protocol 0.24.0 and store 31 activate embedding facts and
 spaces (ADR-0006) and add the exact `nearest` operator with time and
 permission filters, graph-to-vector and vector-to-graph composition
