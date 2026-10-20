@@ -322,7 +322,7 @@
     "sensitive": 6448
    }
   },
-  "seconds": 694.895787592,
+  "seconds": 755.004101997,
   "worlds": 1000
  },
  "host": {
@@ -388,10 +388,10 @@
    }
   },
   "cases_per_analysis_target": 10000,
-  "seconds": 221.011624861,
+  "seconds": 206.936457096,
   "worlds": 1000
  },
- "source_commit": "B2 part 2 (contract 1.2.0) on origin/main 0a49652",
+ "source_commit": "B2 part 3 on origin/main b46c93c (local), hosted run 39467925135 for part 2",
  "what": "B2 noninterference harness, full-count tier (ADR-0008 section 7)",
  "writes_registry_stores": {
   "counts": {

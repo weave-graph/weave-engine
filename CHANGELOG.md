@@ -6,6 +6,22 @@ defined in [docs/ROADMAP.md](docs/ROADMAP.md). The supported profile is in
 
 ## Unreleased
 
+### B2 part 3: persisted results and release policies (B2 complete)
+
+Closes [#5](https://github.com/weave-graph/weave-engine/issues/5)
+([ADR-0008](docs/architecture/ADR-0008-write-time-propagation-and-release-policies.md)
+sections 5 and 6). No protocol, store or contract-file change.
+
+- `Engine::persist_result` and the science operation `persist` write an
+  analysis or a `nearest` ranking back as attachment facts whose readers
+  the engine computes from every input, so a persisted value is readable
+  only by readers of all of them.
+- Release policies: `Engine::install_release_policy`, `Engine::release` and
+  `Engine::release_audit`. An `aggregate_count` policy releases a graph's
+  number of distinct entities to its audience when it is at least `min_k`,
+  withholds it otherwise, and audits every evaluation in `weave:release`.
+- `ScienceSession::into_engine` hands a session's store to another session.
+
 ### B2 part 2: write-time propagation (contract 1.2.0)
 
 Part of [#5](https://github.com/weave-graph/weave-engine/issues/5)

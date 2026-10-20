@@ -8,8 +8,8 @@ the principal registry with users, groups and agents, group readers, graph
 ACLs and Discover, as protocol 1.1.0 and store 32
 ([below](#principals-groups-agents-and-graph-acls-b1)),
 B3 is complete with the authenticated multi-tenant `weave-service` ([below](#authenticated-service-b3)),
-B2 adds a generated noninterference harness over every operator and, as
-protocol **1.2.0**, write-time propagation
+B2 is complete with a generated noninterference harness over every operator,
+write-time propagation as protocol **1.2.0**, and audited release policies
 ([below](#derived-fact-leakage-protection-b2)), and B4 part 1 serves the
 agent interface over MCP ([below](#agent-interface-b4)). The language reached Phase A parity in
 LA1 (weave-language#3): each of the five exit questions fits in at most 15
@@ -472,7 +472,7 @@ B3 is complete.
 
 B2 ([#5](https://github.com/weave-graph/weave-engine/issues/5),
 [ADR-0008](architecture/ADR-0008-write-time-propagation-and-release-policies.md),
-accepted) is in progress. Parts 1 and 2 are implemented:
+accepted) is complete:
 
 - **Noninterference harness.** Generated pairs of stores that differ only in
   facts the readers under test cannot see, in local and registry stores
@@ -522,9 +522,20 @@ accepted) is in progress. Parts 1 and 2 are implemented:
   the owner only removes records from the agent's output. Revocation reaches
   compiled views, change sets and rankings on the next request.
 
-Not yet enforced: persisted analytics, rankings and embeddings with their
-inputs' restrictions, and release policies (ADR-0008 sections 5 and 6,
-part 3).
+- **Persisted analytics and rankings.** The science operation `persist`
+  (`Engine::persist_result`) writes an analysis or a `nearest` ranking back as
+  attachment facts on the analysed nodes. The engine computes their readers:
+  every input node and edge is an influence carrier, and the own clause lies
+  within every ranked embedding's clause, so a persisted value is readable
+  only by readers of every input, also after revocation. An embedding citing
+  restricted text is no broader than the text.
+- **Release policies.** `Engine::install_release_policy` (tenant
+  administrators; the trusted host without a registry), `Engine::release` and
+  `Engine::release_audit`. A policy releases the number of distinct entities
+  in a graph, evaluated under a named evaluator's authority, to its audience
+  only when it is at least `min_k`, and withholds it otherwise. Every
+  evaluation is audited in `weave:release`. Policies have one kind,
+  `aggregate_count`.
 
 ## Agent interface (B4)
 
@@ -627,8 +638,9 @@ addresses:
   authenticated users and agents of isolated tenants with API tokens and an
   audit log. Users, groups, agents and graph ACLs exist (B1); OIDC and signed
   agent capabilities do not yet, and leakage protection is enforced at read
-  time and, from protocol 1.2.0, at write time for declared derivations and
-  corrections (B2); persisted analytics and release policies are part 3.
+  time, at write time for declared derivations and corrections (protocol
+  1.2.0), on persisted analytics and rankings, and declassified only through
+  audited release policies (B2).
 - **Scale (Phase C).** There is no telemetry ingestion and no approximate vector
   index. Measured workloads are 10k–100k objects.
 

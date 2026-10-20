@@ -68,6 +68,26 @@ pub enum Request {
         #[serde(default)]
         limits: Limits,
     },
+    /// Persist an analysis of an authorized input, or a `nearest` ranking,
+    /// as attachment facts on the analysed nodes (B2, ADR-0008 section 5).
+    /// The written records are readable only by readers of every input.
+    Persist {
+        program: Program,
+        #[serde(default)]
+        result_index: usize,
+        /// The analysis to persist; absent persists the selected result's
+        /// `nearest` ranking.
+        #[serde(default)]
+        analysis: Option<Analysis>,
+        #[serde(default)]
+        allow_partial: bool,
+        #[serde(default)]
+        limits: Limits,
+        graph_id: String,
+        #[serde(default = "main_branch")]
+        branch_id: String,
+        key: String,
+    },
     Capabilities,
 }
 
@@ -232,11 +252,17 @@ impl ScienceSession {
     pub fn memory(host: HostContext) -> Result<Self> {
         Ok(Self::new(Engine::memory()?, host))
     }
+    /// The session's engine, for a host that hands the store to another
+    /// principal's session.
+    pub fn into_engine(self) -> Engine {
+        self.engine
+    }
 
     pub fn handle(&mut self, request: Request) -> Result<Value> {
-        let mutating_execute = matches!(&request, Request::Execute { program } if program.commands.iter().any(|command| matches!(command, Command::Commit { .. } | Command::CommitBatch { .. } | Command::Write { .. })));
+        let mutating_execute = matches!(&request, Request::Persist { .. })
+            || matches!(&request, Request::Execute { program } if program.commands.iter().any(|command| matches!(command, Command::Commit { .. } | Command::CommitBatch { .. } | Command::Write { .. })));
         let output_limit = match &request {
-            Request::Analyze { limits, .. } => {
+            Request::Analyze { limits, .. } | Request::Persist { limits, .. } => {
                 limits.validate()?;
                 limits.max_output_bytes
             }
@@ -286,47 +312,81 @@ impl ScienceSession {
                 allow_partial,
                 limits,
             } => {
-                // Reject every mutation before executing any prefix of the supplied program.
-                if program.commands.iter().any(|command| {
-                    matches!(
-                        command,
-                        Command::Commit { .. }
-                            | Command::CommitBatch { .. }
-                            | Command::Write { .. }
-                    )
-                }) {
-                    return Err(failure(
-                        "E_SCIENCE_READ_ONLY",
-                        "analysis programs must contain only read operations",
-                    ));
-                }
-                let mut results = self.engine.execute(&program, &self.host)?;
-                if result_index >= results.len() {
-                    return Err(failure(
-                        "E_SCIENCE_RESULT",
-                        "result_index is outside the command results",
-                    ));
-                }
-                let input = match results.swap_remove(result_index) {
-                    CommandResult::Queried { result } => result,
-                    _ => {
+                let input = self.read_input(&program, result_index, allow_partial)?;
+                let (output, semantics) = algorithms::analyze(&input, &analysis, &limits)?;
+                json!({"input":input,"analysis":output,"semantics":semantics})
+            }
+            Request::Persist {
+                program,
+                result_index,
+                analysis,
+                allow_partial,
+                limits,
+                graph_id,
+                branch_id,
+                key,
+            } => {
+                let input = self.read_input(&program, result_index, allow_partial)?;
+                let (values, method) = match &analysis {
+                    Some(analysis) => {
+                        let (output, _) = algorithms::analyze(&input, analysis, &limits)?;
+                        let algorithm = output["algorithm"]
+                            .as_str()
+                            .unwrap_or("analysis")
+                            .to_string();
+                        (
+                            persisted_values(&output)?,
+                            weave_contract::provenance::Method::Rule {
+                                rule_id: format!("weave-science:{algorithm}"),
+                                revision: "0.1.0".into(),
+                            },
+                        )
+                    }
+                    None if !input.neighbors.is_empty() => (
+                        input
+                            .neighbors
+                            .iter()
+                            .filter_map(|n| match &n.subject {
+                                weave_contract::embedding::EmbeddingSubject::Node { node_id } => {
+                                    Some(weave_engine::PersistedValue {
+                                        node_id: node_id.clone(),
+                                        value: json!({"rank": n.rank, "score": n.score,
+                                            "embedding_id": n.embedding_id}),
+                                    })
+                                }
+                                _ => None,
+                            })
+                            .collect(),
+                        weave_contract::provenance::Method::Rule {
+                            rule_id: "weave:nearest".into(),
+                            revision: VERSION.into(),
+                        },
+                    ),
+                    None => {
                         return Err(failure(
                             "E_SCIENCE_RESULT",
-                            "selected command result is not a graph query",
+                            "persist needs an analysis or a nearest ranking",
                         ))
                     }
                 };
-                if input.changes.is_some() {
+                if values.is_empty() {
                     return Err(failure(
                         "E_SCIENCE_RESULT",
-                        "a change set is not a graph; analyze an expand, as_of or query result",
+                        "the result has no node values to persist",
                     ));
                 }
-                if input.coverage != Coverage::Complete && !allow_partial {
-                    return Err(failure("E_SCIENCE_PARTIAL", "analysis requires complete authorized input; explicitly opt into partial coverage"));
-                }
-                let (output, semantics) = algorithms::analyze(&input, &analysis, &limits)?;
-                json!({"input":input,"analysis":output,"semantics":semantics})
+                let revision = self.engine.persist_result(
+                    &weave_engine::PersistRequest {
+                        input: &input,
+                        graph_id: &graph_id,
+                        branch_id: &branch_id,
+                        key: &key,
+                        method,
+                        values: &values,
+                    },
+                    &self.host,
+                )?;
+                json!({"revision": revision, "persisted": values.len(), "key": key})
             }
         };
         // Include the wire envelope in the output budget, before the caller emits any bytes.
@@ -342,6 +402,56 @@ impl ScienceSession {
         }
         Ok(envelope.result.expect("success envelope contains a result"))
     }
+    /// Run a read-only program and select one authorized graph result.
+    fn read_input(
+        &mut self,
+        program: &Program,
+        result_index: usize,
+        allow_partial: bool,
+    ) -> Result<Box<weave_contract::QueryResult>> {
+        // Reject every mutation before executing any prefix of the supplied program.
+        if program.commands.iter().any(|command| {
+            matches!(
+                command,
+                Command::Commit { .. } | Command::CommitBatch { .. } | Command::Write { .. }
+            )
+        }) {
+            return Err(failure(
+                "E_SCIENCE_READ_ONLY",
+                "analysis programs must contain only read operations",
+            ));
+        }
+        let mut results = self.engine.execute(program, &self.host)?;
+        if result_index >= results.len() {
+            return Err(failure(
+                "E_SCIENCE_RESULT",
+                "result_index is outside the command results",
+            ));
+        }
+        let input = match results.swap_remove(result_index) {
+            CommandResult::Queried { result } => result,
+            _ => {
+                return Err(failure(
+                    "E_SCIENCE_RESULT",
+                    "selected command result is not a graph query",
+                ))
+            }
+        };
+        if input.changes.is_some() {
+            return Err(failure(
+                "E_SCIENCE_RESULT",
+                "a change set is not a graph; analyze an expand, as_of or query result",
+            ));
+        }
+        if input.coverage != Coverage::Complete && !allow_partial {
+            return Err(failure(
+                "E_SCIENCE_PARTIAL",
+                "analysis requires complete authorized input; explicitly opt into partial coverage",
+            ));
+        }
+        Ok(input)
+    }
+
     pub fn respond(&mut self, request: Request) -> Response {
         match self.handle(request) {
             Ok(value) => Response::success(value),
@@ -350,10 +460,66 @@ impl ScienceSession {
     }
 }
 
+/// One value per analysed node, from an analysis output.
+fn persisted_values(output: &Value) -> Result<Vec<weave_engine::PersistedValue>> {
+    let value = |node: &str, v: Value| weave_engine::PersistedValue {
+        node_id: node.to_string(),
+        value: v,
+    };
+    let map = |field: &str| -> Vec<weave_engine::PersistedValue> {
+        output[field]
+            .as_object()
+            .map(|m| {
+                m.iter()
+                    .filter(|(_, v)| !v.is_null())
+                    .map(|(k, v)| value(k, v.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    Ok(match output["algorithm"].as_str() {
+        Some("degree") => map("nodes"),
+        Some("pagerank") => map("scores"),
+        Some("shortest_paths") => map("distances"),
+        Some("components") => output["components"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .flat_map(|(index, group)| {
+                group
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(move |node| {
+                        node.as_str().map(|n| value(n, json!({"component": index})))
+                    })
+            })
+            .collect(),
+        Some("nearest_vectors") => output["neighbors"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .filter_map(|(rank, n)| {
+                n["id"]
+                    .as_str()
+                    .map(|id| value(id, json!({"rank": rank + 1, "distance": n["distance"]})))
+            })
+            .collect(),
+        _ => {
+            return Err(failure(
+                "E_SCIENCE_RESULT",
+                "this analysis cannot be persisted",
+            ))
+        }
+    })
+}
+
 pub fn capabilities() -> Value {
     json!({
         "engine":"weave-engine", "engine_contract_version":VERSION,
-        "operations":["import","execute","analyze","capabilities"],
+        "operations":["import","execute","analyze","persist","capabilities"],
         "algorithms":["degree","components","shortest_paths","pagerank","nearest_vectors"],
         "component_modes":["weak","strong"], "vector_metrics":["cosine","euclidean"],
         "clustering":"existing Program graph expression: cluster",

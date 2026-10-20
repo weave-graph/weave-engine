@@ -4,8 +4,9 @@ Status: **accepted** on 2026-10-20, when B2
 ([#5](https://github.com/weave-graph/weave-engine/issues/5)) implementation
 started. B2 lands in parts. Part 1 added this ADR, the noninterference harness
 (section 7) and the fixes the harness found. Part 2 implements write-time
-propagation (sections 2 to 4) as protocol 1.2.0. Persisted analytics and
-release policies (sections 5 and 6) follow in part 3. Each section says which part implements it, and
+propagation (sections 2 to 4) as protocol 1.2.0. Part 3 implements persisted
+analytics and release policies (sections 5 and 6) with no contract change, and
+completes B2. Each section says which part implements it, and
 "Implementation" at the end records what has shipped.
 
 ## Context
@@ -95,8 +96,9 @@ broader when either holds:
   record is restricted, its `readers` are a subset of the input's `readers`
   and its `reader_groups` a subset of the input's `reader_groups`.
 
-Otherwise the write fails with `E_DERIVED_READERS` and changes nothing,
-unless the change names a release policy that allows it (section 6). Like
+Otherwise the write fails with `E_DERIVED_READERS` and changes nothing.
+Releasing a value to a wider audience is what a release policy does (section
+6); a write never declassifies. Like
 every rule that rejects input a published version accepted, it applies to
 programs of protocol 1.2.0 and later (core v1 section 11.4). The check is
 syntactic and conservative. It never resolves membership, so its
@@ -214,20 +216,33 @@ Results that leave the engine as values are not records, and a value in a
 response has no readers. When one is persisted it becomes a record, and its
 restriction must cover the authorized input it was computed from:
 
-- **Analytics** (science `degree`, `components`, `shortest_paths`,
-  `pagerank`, `nearest_vectors`): a new science operation, `persist`,
-  writes an analysis result as attachment facts on the analysed nodes (or on
-  the graph), computed by the engine. Each persisted record carries the
-  conjunction of every input record that the value depends on, by section 2.
-  A score or component label depends on the whole analysed input, so it
-  carries the input's restricted records.
-- **`nearest` hits and candidate relations**: persisting a candidate as an
-  edge with `EvidenceRef::Embedding` evidence (the A4 path) is a declared
-  derivation under section 3. Its readers must be no broader than both
-  embeddings and both subjects.
+- **Analytics and rankings.** `Engine::persist_result` writes one attachment
+  fact per value, keyed by the caller's `key`, on the value's node. The
+  science operation `persist` calls it for an analysis (`degree`,
+  `components`, `shortest_paths`, `pagerank`, `nearest_vectors`) or for a typed
+  `nearest` ranking. The engine computes every record's restriction from
+  the authorized input result, which it re-checks against the writer:
+  - every input node and edge (its origins) and every ranked embedding must
+    be visible to the writer, else `E_UNAVAILABLE` as for a missing input;
+  - the record's influence carriers name every input node (`derived_nodes`)
+    and edge (`derived_from`), so reads enforce each input exactly and under
+    current authority. Beyond 1,000 references, the record instead carries
+    every input revision as a whole-revision gate (`derived_snapshots`),
+    which is stricter;
+  - the own clause is the first restricted node or edge clause (section 2),
+    met clause-wise with the clause of every ranked embedding. Embeddings
+    have no carrier, so they are cited as evidence, and the section 3 check
+    holds by construction.
+
+  A value depends on the whole analysed input, so it carries all of it.
+  Re-persisting a key corrects the earlier records (`widen_readers`, because
+  the engine computed the restriction).
+- **Candidate relations** persisted by a caller as edges with
+  `EvidenceRef::Embedding` evidence are declared derivations under section 3.
 - **Embeddings of restricted text**: an embedding whose provenance evidence
-  names the source text is a declared derivation under section 3. An
-  embedding that cites nothing is the "undeclared copy" of section 3.
+  names the source text is a declared derivation under section 3, so it is
+  no broader than that text. An embedding that cites nothing is the
+  "undeclared copy" of section 3.
 - **Indexes**: no index holds per-principal visibility (ADR-0004 section 11).
   An approximate index (C5) ranks only already-authorized embeddings (A4
   ranking boundary), so it needs no restriction of its own.
@@ -239,22 +254,32 @@ the only way a derived value may be readable by principals who cannot read
 all of its inputs. B2 defines one kind, and the record leaves room for more:
 
 - `id` and `revision`;
-- `kind: aggregate_count` with `min_k`: the released value is the number of
-  distinct matching subjects in an input, released only when it is at least
+- `kind: aggregate_count` with `min_k`: the value is the number of distinct
+  entities among the source's nodes, released only when it is at least
   `min_k`;
-- `source`: the graphs and selector the count may range over;
-- `audience`: the principals and groups that may read the released value.
-  The released record's readers are the audience;
-- `evaluator`: the principal whose authority evaluates the input. It must be
-  able to read the source, and it is the authority being declassified.
+- `source`: one graph's head, optionally one space;
+- `audience`: a reader clause (`readers` OR `reader_groups`). Only a
+  requester it admits may evaluate the policy. Anyone else gets
+  `E_UNAVAILABLE`, as for an unknown policy;
+- `evaluator`: the principal whose authority evaluates the source. It is the
+  authority being declassified, and it is evaluated now, so revoking its
+  access withholds the value on the next request.
 
-Policies are facts in the reserved graph `weave:release`. Only tenant
-administrators change them, through a trusted engine API, as with the
-registry (ADR-0007 amendment 2). Evaluating a policy appends an audit fact to
-the same graph: the policy revision, the requesting principal, the time, and
-whether the value was released or withheld. A below-threshold result is
-withheld with one fixed outcome, so the requester learns only "below `k`",
-which is exactly what the policy allows.
+Policies are facts in the reserved graph `weave:release`, which programs
+cannot write (`E_RESERVED_NAMESPACE`). They are readable only by tenant
+administrators, and by no ordinary read in a store without a registry. They
+are installed through the trusted API `Engine::install_release_policy`, by
+tenant administrators (by the trusted host without a registry), as with the
+registry (ADR-0007 amendment 2). Each installation is a new fact version, so
+policy history is the fact log. `Engine::release` evaluates a policy. Every
+evaluation, released or withheld, appends an audit fact in the same
+transaction, holding the policy and its revision, the requester, the time
+and whether the value was released. `Engine::release_audit` returns them to
+tenant administrators. A below-threshold result is withheld with one fixed
+outcome (`released: None`), so the requester learns only "below `k`", which
+is exactly what the policy allows. A request outside the audience is not
+evaluated and so not audited; B3's service audit log records it as a
+request.
 
 ### 7. The noninterference harness (part 1)
 
@@ -381,6 +406,19 @@ outcomes, sensitivity and error codes. Measured counts are recorded in
   cannot be added without a generator (the kind-coverage test fails).
 
 ## Implementation
+
+**Part 3** (no contract or store change; trusted engine APIs, as for the
+registry):
+
+- Section 5: `Engine::persist_result` and the science operation `persist`
+  (`crates/weave-science/tests/persist.rs`:
+  `a_persisted_analysis_is_readable_only_by_readers_of_every_input`,
+  `a_persisted_ranking_is_no_broader_than_its_embeddings_and_subjects`), and
+  embeddings of restricted text
+  (`tests/release.rs`, `an_embedding_of_restricted_text_is_no_broader_than_the_text`).
+- Section 6: `Engine::install_release_policy`, `Engine::release` and
+  `Engine::release_audit` (`a_k_threshold_count_is_released_and_a_smaller_one_withheld`,
+  `release_policies_are_managed_by_tenant_administrators_in_registry_stores`).
 
 **Part 2** (protocol 1.2.0, store unchanged at 32):
 

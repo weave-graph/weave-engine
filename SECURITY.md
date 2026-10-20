@@ -162,6 +162,15 @@ cannot read (ADR-0008 section 4, every protocol version): such a version is
 absent for `correct`, `retract` and expectations, and an `assert` of its ID
 fails with one uniform `E_CONFLICT`.
 
+**Release policies** are deliberate declassifications. A tenant
+administrator (the trusted host in a store without a registry) installs a
+policy that lets an audience read the number of distinct entities in a graph
+as a named evaluator sees it, only when that number is at least `min_k`.
+Releases are audited in `weave:release`. A released count, and the bit
+"below `min_k`", are disclosures the policy authorizes; choose `min_k`,
+the source and the audience accordingly. Persisted analytics and rankings
+are restricted to readers of every input (ADR-0008 section 5).
+
 ## Trust and limits
 
 Graph writers must be trusted to classify authored content correctly. The
