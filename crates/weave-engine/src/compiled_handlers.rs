@@ -368,10 +368,7 @@ impl Engine {
             || preparation.binding_digest
                 != digest("weave-handler-registration-binding/1", registration)?
             || preparation.prepared_at_ms < 0
-            || ![
-                VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0",
-            ]
-            .contains(&preparation.program.version.as_str())
+            || !weave_contract::version_at_least(preparation.program.version.as_str(), "0.18.0")
         {
             return Err(invalid());
         }
@@ -399,8 +396,7 @@ impl Engine {
         else {
             return Err(invalid());
         };
-        if ![VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0"]
-            .contains(&preparation.program.version.as_str())
+        if !weave_contract::version_at_least(preparation.program.version.as_str(), "0.19.0")
             && weave_contract::carrier_profile::requires_v019(data)
         {
             return Err(invalid());

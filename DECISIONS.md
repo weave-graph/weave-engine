@@ -1281,3 +1281,56 @@ the entity lookups makes it fail. The paired test
 known difference remains outside both paths' tested range: a single candidate
 subject with more embeddings than the selection limit fails with `E_BUDGET`
 in the lookup. That is unchanged from before this PR.
+
+### 2026-10-20 — #16 A6 — Protocol 1.0.0 is a freeze, with no wire change
+
+As decided in A1, 1.0.0 freezes core v1 once the provenance (0.22),
+traversal (0.23) and embedding (0.24) fields are live. The cut adds no wire
+feature: a 1.0.0 program has exactly the 0.24.0 feature set, and every
+0.1.0–0.24.0 program keeps its published semantics. Stored data, content
+hashes and revision IDs are unchanged, so there is no store bump. Results
+report the producing engine's version (1.0.0). New handler and view
+artifacts record protocol 1.0.0 (`*_TEMPLATE_PROTOCOL` = `VERSION`, as
+artifact versions advance with the protocol since A2), and older artifact
+protocols stay accepted. The unknown-version fixtures move to 1.1.0 (the next
+minor) and 2.0.0 (the next major, still checked before structure). A positive
+`protocol-1-0-0` fixture runs a write, `nearest` and `expand` under 1.0.0
+with golden outcomes. The Python client and `check_science.py` expect engine
+contract 1.0.0. Exact replay of an experiment record saved against a 0.24.0
+engine therefore reports a contract mismatch. The replay policy is unchanged:
+the program still runs, but an exact replay requires the same engine
+contract. This is listed in the release notes rather than relaxed here.
+
+### 2026-10-20 — #16 A6 — One version table; gates name the version that introduced the feature
+
+Every protocol bump used to add the previous version to about 50 list
+literals (`[VERSION, "0.23.0", …].contains(v)`) and `== VERSION`
+comparisons. `weave_contract::versions` now holds the one ordered table,
+`SUPPORTED_VERSIONS`, which `wire` re-exports, and `version_at_least(v,
+introduced)`, `version_rank`, `is_supported_version` and `is_current`.
+Converting a gate was mechanical. Every list was a contiguous suffix of
+publication order (checked by the conversion script), so it became
+`version_at_least(v, <oldest listed>)`. The four `!= VERSION` gates became
+`version_at_least(v, "0.24.0")`, the `== LEGACY_VERSION` join gate became
+`version_at_least(v, "0.2.0")`, and the capsule check `== "0.16.0"` became
+`!version_at_least(v, "0.17.0")`; the last is equivalent within the
+condition, which already rejects anything older than 0.16.0.
+
+`tests/version_gates.rs` keeps every gate's old list, copied from the 0.24.0
+source, and requires the same accept or reject result for every version in
+`SUPPORTED_VERSIONS`, with 1.0.0 accepted wherever the current version was.
+A behavioral test runs each gated feature under every version against a real
+engine:
+
+- `evaluate`, `write`, `expand`, `changes`, `nearest`, embedding writes and
+  `seeds_from` each run exactly from their introducing version;
+- per-fact provenance appears from 0.22.0;
+- change sets of older programs omit embedding kinds.
+
+`version_at_least` panics on an introducing version that is not in the table,
+which is a programming error, never an input error.
+
+One gate keeps exact-version semantics: `OBSERVATION_PROGRAM_VERSION` =
+0.21.0 in `actor_observation.rs`. It is a stored, hashed program format and
+stays pinned so receipts remain verifiable; its existing comment explains
+why. A future minor version touches only the table and `VERSION`.

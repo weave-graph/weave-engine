@@ -273,7 +273,7 @@ fn engine_rejects_every_unsupported_version_and_accepts_every_supported_one() {
         };
         engine.execute(&program, &host).unwrap();
     }
-    for version in ["0.25.0", "1.0.0", "0.0.0"] {
+    for version in ["0.25.0", "1.1.0", "2.0.0", "0.0.0"] {
         let program = weave_contract::Program {
             source_revisions: vec![],
             version: version.into(),

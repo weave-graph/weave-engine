@@ -40,9 +40,7 @@ fn digest(value: &impl Serialize) -> Result<String> {
         .map_err(|d| err(&d.code, &d.message))
 }
 fn selection(program: &Program) -> Result<&ClusterRequest> {
-    if ![VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0"]
-        .contains(&program.version.as_str())
-    {
+    if !weave_contract::version_at_least(program.version.as_str(), "0.19.0") {
         return Err(invalid());
     }
     let expression = match program.commands.as_slice() {
@@ -334,8 +332,7 @@ impl Engine {
         };
         if graph_id != &manifest.output_graphs[0]
             || !valid_id(branch_id)
-            || ![VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0"]
-                .contains(&captured.completion.version.as_str())
+            || !weave_contract::version_at_least(captured.completion.version.as_str(), "0.19.0")
         {
             return Err(invalid());
         }

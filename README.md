@@ -24,8 +24,16 @@ Read the [vision](VISION.md) and the [phased roadmap](docs/ROADMAP.md).
 
 ## Status: what works today and what does not yet
 
-The engine has been tested extensively: 615 Rust tests, crash-injection and
-migration checks, and CI on Linux, macOS and Windows. It is **pre-release**.
+**Phase A is complete** ([1.0.0 release notes](CHANGELOG.md)). The shared
+core is released as protocol **1.0.0**, which freezes
+[core contract v1](docs/contract/core-v1.md). The engine has 758 Rust tests,
+crash-injection and migration checks, fuzz smoke runs, and CI on Linux, macOS
+and Windows. That CI includes the whole
+[Phase A exit scenario](docs/PHASE_A_EXIT.md) on a 5,000-unit fleet. The
+optional [Weave language](https://github.com/weave-graph/weave-language) has
+reached Phase A parity: each of the five exit questions fits in at most 15
+lines of `.weave`, and engine CI runs all five. Phases B (multi-user,
+permissions and agents) and C (telemetry scale) are not started.
 
 | Works today | Not yet (roadmap phase) |
 |---|---|
@@ -38,7 +46,7 @@ migration checks, and CI on Linux, macOS and Windows. It is **pre-release**.
 | A read-only local MCP preview for agents (`weave-mcp`: query, expand, as-of, what changed, hybrid search, explain) as a fixed reader ([guide](docs/MCP_PREVIEW.md)) | |
 
 The supported profile is described in [docs/STATUS.md](docs/STATUS.md): science
-**0.1.0**, contract **0.24.0**, store **31**. It runs locally. There is no
+**0.1.0**, contract **1.0.0**, store **31**. It runs locally. There is no
 server, and the CLI trusts its caller (see [SECURITY.md](SECURITY.md)).
 
 ## Run your first experiment

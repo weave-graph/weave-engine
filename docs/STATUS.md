@@ -1,5 +1,15 @@
 # Current status
 
+**Phase A is complete** (20 October 2026). The shared core is released as
+protocol **1.0.0**, which freezes [core contract v1](contract/core-v1.md)
+with the 0.24.0 feature set ([release notes](../CHANGELOG.md),
+[1.0 note](contract/v1.0/README.md)). The language reached Phase A parity in
+LA1 (weave-language#3): each of the five exit questions fits in at most 15
+lines of `.weave`, and engine CI runs all five through `check_phase_a.py`.
+Source writes cannot set `readers` until LB1. A source `correct` of a
+restricted fact therefore publishes it, so write restricted facts through
+JSON or Rust.
+
 As of **10 October 2026**, the native data-science delivery is implemented and
 merged in [PR #33](https://github.com/weave-graph/weave-engine/pull/33). Its finite
 completion contract is [DS01–DS09](NATIVE_SCIENCE_PLAN.md). The broader original
@@ -13,7 +23,7 @@ white-paper requirements remain tracked separately in the
 | Science API and CLI | `weave-science` 0.1.0; native Rust and one-request JSON process |
 | Python client | `weave_science` 0.1.0; Python 3.10+, no mandatory runtime dependencies |
 | MCP preview | `weave-mcp` 0.1.0; read-only local stdio MCP server (A7, [guide](MCP_PREVIEW.md)) |
-| Engine contract | 0.24.0; existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)), and embedding facts with exact `nearest` and `similar_candidates` ([0.24](contract/v0.24/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
+| Engine contract | 1.0.0, which freezes core v1 with the 0.24.0 feature set ([1.0](contract/v1.0/README.md)); 0.1.0–0.24.0 programs stay accepted with their published semantics. Existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)), and embedding facts with exact `nearest` and `similar_candidates` ([0.24](contract/v0.24/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
 | Native storage | Store 31; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)), which also holds embedding spaces and embeddings |
 | Platforms | Linux, macOS and Windows in the native CI profile |
 
@@ -295,8 +305,7 @@ restricted units hidden from the analyst.
 
 ## Phase A acceptance (A6)
 
-A6 is in progress ([#16](https://github.com/weave-graph/weave-engine/issues/16)).
-Delivered so far:
+A6 is complete ([#16](https://github.com/weave-graph/weave-engine/issues/16)):
 
 - **Exit scenario.** `scripts/check_phase_a_exit.py` runs the whole
   [exit scenario](ROADMAP.md#phase-a-rock-solid-shared-core) at 5,000 units
@@ -330,7 +339,13 @@ Delivered so far:
   vectors, down from 24 and 251 ms
   ([report](benchmarks/scoped-nearest-2026-10-20.json)).
 
-Still open: the protocol 1.0.0 cut, the release notes and the tagged release.
+- **Protocol 1.0.0.** One ordered version table in `weave_contract::versions`
+  drives every feature gate through `version_at_least`.
+  `tests/version_gates.rs` shows each gate accepts the same versions as
+  before, and that 1.0.0 behaves like 0.24.0
+  ([note](contract/v1.0/README.md)).
+- **Release.** The [CHANGELOG](../CHANGELOG.md) has the 1.0.0 release notes,
+  covering limits and deferred scope.
 
 ## Verified evidence
 

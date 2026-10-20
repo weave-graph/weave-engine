@@ -1,7 +1,7 @@
 {
   "format": "weave-core-fixtures/1",
   "profile": "core-v1",
-  "protocol": "0.24.0",
+  "protocol": "1.0.0",
   "spec": "docs/contract/core-v1.md",
   "fixtures": {
     "negative/changes-unknown-bound.json": "2347081d1ab587cb390259020bee067ae4e0f9d999cd86d8890b3eefc650c7da",
@@ -25,8 +25,8 @@
     "negative/stale-expected-head.json": "5933ae40f5736b1009daf8c1e59b4f9b628a8c48a1105ec8f0e38cffcc0a34be",
     "negative/unknown-command.json": "df538aed44298789fcdfb162f4fb0dc348d9591a46598e93b2c2a1c11da98ff9",
     "negative/unknown-field-program.json": "26c67014d68eec06b94843e42d06898a8a78dbeec857de75cafe1af770c38919",
-    "negative/unknown-version-checked-first.json": "bb10b5f021d6e9a24976f328aa9f3d66246142acdecb3ed03f18dea830cee3db",
-    "negative/unknown-version.json": "8303c411956438240133bf3d32a702f2616c467353618e5b075c9400ceb113ee",
+    "negative/unknown-version-checked-first.json": "28652f52d289665ef3bf47cd58b069bd65b37c51de4415f6a7f3553d10e5d692",
+    "negative/unknown-version.json": "378be84f23464e764b84dc2f3a21d2b5e9bdbdb668f09469f1063483259022bd",
     "negative/write-forged-writer.json": "2f5e9e3705ec18b3811f3d9bff654d241c7600038746914a826a7e3fbd146123",
     "negative/wrong-json-type.json": "57573d84249e977f69396063b8934622d64a43df0682fbb6d1e454eda72d53b5",
     "positive/as-of-partially-visible.json": "6a1e3edc30ecc7b65265bfb37f31fd2f65a10fcc2339e4c35963cfd8be388548",
@@ -50,6 +50,7 @@
     "positive/nearest-composition.json": "f32358d240972f9263a1d55fac23bfb816bb10440f22b18182f727040c2c8131",
     "positive/nearest-result-envelope.json": "d511130870bfa49dcd1ebaf6046657da1ff09e10489e0ce2601f35c0bb86a2a6",
     "positive/node-valid-time.json": "41486bef60c35587ab0f0d922282fbac8d5cef5be03a3ddbb337117ef2568d5a",
+    "positive/protocol-1-0-0.json": "c398e99af3d254bb828f41de0fa29fd5adb9d023c5d1282acac809feb506fd3a",
     "positive/provenance-entry-unspecified.json": "7b05b971ac297af6b1de9adc4cb3fe5d688943f8d28ba8b0648f211d4699b937",
     "positive/readers-allow-listed.json": "482c6e345e580ae1a0396faa08aaf935294671ed8fa399765ad1f06a90eb8631",
     "positive/readers-hide-restricted.json": "b5e9c043e66d4b3909170251ce7a1830a25df8e1abb06f33c28dce001424f57f",

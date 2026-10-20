@@ -273,19 +273,15 @@ fn validate_response(response: &SignedCapsuleExport, key: &str) -> Result<()> {
     if b.format != RESPONSE
         || b.server_key != key
         || b.root != response.capsule.root
-        || ![
-            VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0", "0.18.0", "0.17.0", "0.16.0",
-        ]
-        .contains(&b.contract_version.as_str())
-        || (![VERSION, "0.23.0", "0.22.0", "0.21.0", "0.20.0", "0.19.0"]
-            .contains(&b.contract_version.as_str())
+        || !weave_contract::version_at_least(b.contract_version.as_str(), "0.16.0")
+        || (!weave_contract::version_at_least(b.contract_version.as_str(), "0.19.0")
             && (response.capsule.format == "weave-capsule-0.4"
                 || response
                     .capsule
                     .revisions
                     .iter()
                     .any(|r| weave_contract::carrier_profile::requires_v019(&r.data))))
-        || (b.contract_version == "0.16.0"
+        || (!weave_contract::version_at_least(&b.contract_version, "0.17.0")
             && (response.capsule.format == "weave-capsule-0.3"
                 || response
                     .capsule

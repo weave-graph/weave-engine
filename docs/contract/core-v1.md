@@ -2,7 +2,9 @@
 
 Status: **accepted** on 2026-10-19 (A1,
 [#2](https://github.com/weave-graph/weave-engine/issues/2)). Baseline protocol:
-**0.21.0**. Current protocol: **0.24.0**. Protocol 0.22.0 activated per-fact
+**0.21.0**. Current protocol: **1.0.0** (A6,
+[#16](https://github.com/weave-graph/weave-engine/issues/16)), which freezes
+core v1 as published in 0.24.0. Protocol 0.22.0 activated per-fact
 provenance, node valid time and fact-level writes (A2,
 [#3](https://github.com/weave-graph/weave-engine/issues/3)); 0.23.0 adds
 k-hop `expand`, `as_of` selection and `changes` change sets (A3,
@@ -553,9 +555,9 @@ automatically:
 
 | Identifier | Current | Where |
 |---|---|---|
-| Protocol (`Program.version`, `QueryResult.version`) | 0.24.0 | `weave_contract::VERSION` |
+| Protocol (`Program.version`, `QueryResult.version`) | 1.0.0 | `weave_contract::VERSION`; every accepted version in `weave_contract::versions::SUPPORTED_VERSIONS` |
 | Core profile | `core-v1` | This document |
-| Contract crate | 0.24.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
+| Contract crate | 1.0.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
 | Store schema | 31 | `STORAGE_VERSION` |
 | Capsule format | 0.4 | [CAPSULES.md](../CAPSULES.md) |
 | Science API | 0.1.0 | [SCIENCE_INTERFACE.md](../SCIENCE_INTERFACE.md) |
@@ -565,18 +567,29 @@ automatically:
 
 - **`compat.versions`.** A program declares exactly one protocol version.
   There is no range negotiation. The engine accepts the closed set
-  `SUPPORTED_VERSIONS` (0.1.0 through 0.24.0 today) and executes each with
-  the exact semantics it was published with. A feature used under an older
-  version fails with `E_VERSION` before any write. Fixtures:
+  `SUPPORTED_VERSIONS` (0.1.0 through 0.24.0, then 1.0.0) and executes each
+  with the exact semantics it was published with. A feature used under an
+  older version fails with `E_VERSION` before any write. Fixtures:
   `positive/legacy-version-accepted.json`,
-  `negative/legacy-version-feature-gate.json`.
-- **Before 1.0.0 (now).** Every wire change bumps MINOR (0.22.0, 0.23.0 and
-  so on). Each change MUST be additive (section 11.3). PATCH is not used on
-  the wire: wire versions are always `X.Y.0`. Clarifications that change no
-  bytes need no bump.
-- **1.0.0.** Protocol 1.0.0 is cut at the Phase A release (A6). It freezes
-  core v1 together with its activated provenance and embedding fields. After
-  that, MINOR means additive and MAJOR means breaking.
+  `negative/legacy-version-feature-gate.json`,
+  `positive/protocol-1-0-0.json`, `negative/unknown-version.json` (1.1.0)
+  and `negative/unknown-version-checked-first.json` (2.0.0).
+- **Feature gates.** `weave_contract::versions` holds the one ordered
+  version table. Every gate names the version that introduced its feature and
+  asks `version_at_least(program.version, introduced)`, so a new version
+  gets every earlier feature and changes no gate. A gate that must match one
+  exact version (a stored program pinned for its digest) compares that
+  version explicitly and documents why.
+- **0.x (until 0.24.0).** Every wire change bumped MINOR (0.22.0, 0.23.0
+  and so on), and each change was additive (section 11.3). PATCH is not used
+  on the wire: wire versions are always `X.Y.0`. Clarifications that change
+  no bytes need no bump.
+- **1.0.0 (A6, Phase A release).** 1.0.0 freezes core v1 with its activated
+  provenance, traversal and embedding fields. It adds no wire feature: a
+  1.0.0 program has exactly the feature set of 0.24.0, and 0.24.0 programs
+  stay accepted with unchanged meaning. Results report the producing
+  engine's version, 1.0.0. From 1.0.0 on, MINOR (1.1.0) means additive under
+  section 11.3, and MAJOR (2.0.0) means breaking under section 11.4.
 - **Core v1 activation.** A2 and A4 activate the reserved core-v1 fields
   through additive minor bumps. Each implementing PR records its exact version
   number. A1 itself changes no wire bytes, so the protocol stays 0.21.0.
@@ -712,6 +725,7 @@ No feature changes semantics because of this classification.
 | 0.22 | `write` (assert, correct, retract), fact revisions, `Node.valid_time`, claimed `provenance`, `QueryResult.fact_provenance` | core v1 | §4 `fact.write`, §5, §6 |
 | 0.23 | `expand`, `as_of` (expression and field), `changes`, `QueryResult.changes` | core v1 | §5 `time.as_of`, §8 `query.expand`, `query.changes` |
 | 0.24 | Embedding spaces and facts (`write` kinds, `GraphData` fields), `nearest`, `similar_candidates`, `ExpandPlan.seeds_from`, embedding evidence, `QueryResult.neighbors`, `candidates`, `exactness` | core v1 | §7, §8 `query.nearest`, `query.similar_candidates` |
+| 1.0 | No wire feature: freezes core v1 with the 0.24 feature set ([note](v1.0/README.md)) | core v1 | §11 `compat.versions` |
 
 Capsules, mounts, dispatch, actors, governed effects and the browser host are
 native APIs, not contract versions. Their deferral is recorded in the

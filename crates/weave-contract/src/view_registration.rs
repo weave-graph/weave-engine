@@ -3,7 +3,7 @@ use crate::*;
 use serde::{Deserialize, Serialize};
 
 pub const VIEW_TEMPLATE_FORMAT: &str = "weave-view-registration/1";
-pub const VIEW_TEMPLATE_PROTOCOL: &str = "0.24.0";
+pub const VIEW_TEMPLATE_PROTOCOL: &str = crate::VERSION;
 const LIMIT: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -77,18 +77,7 @@ pub fn is_definition_digest(value: &str) -> bool {
 fn fields(template: &CompiledViewTemplate) -> Result<(), Diagnostic> {
     identity::digest("weave-view-template-bound", template, LIMIT)?;
     if template.format != VIEW_TEMPLATE_FORMAT
-        || ![
-            VIEW_TEMPLATE_PROTOCOL,
-            "0.23.0",
-            "0.22.0",
-            "0.21.0",
-            "0.20.0",
-            "0.19.0",
-            "0.18.0",
-            "0.17.0",
-            "0.16.0",
-        ]
-        .contains(&template.protocol.as_str())
+        || !crate::version_at_least(template.protocol.as_str(), "0.16.0")
     {
         return Err(fail(
             "E_VIEW_TEMPLATE",
@@ -116,14 +105,7 @@ fn fields(template: &CompiledViewTemplate) -> Result<(), Diagnostic> {
     for _ in 0..=32 {
         match expression {
             GraphExpression::RecordedQuery { query, selection } => {
-                if ![
-                    VIEW_TEMPLATE_PROTOCOL,
-                    "0.23.0",
-                    "0.22.0",
-                    "0.21.0",
-                    "0.20.0",
-                ]
-                .contains(&template.protocol.as_str())
+                if !crate::version_at_least(template.protocol.as_str(), "0.20.0")
                     || !id(&query.graph_id)
                     || !id(&query.branch_id)
                     || query.revision.is_some()
