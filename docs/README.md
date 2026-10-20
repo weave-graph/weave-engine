@@ -26,6 +26,8 @@ is scheduled.
 | [Scientific validation](SCIENCE_VALIDATION.md) | Run independent checks and reproduce measurements |
 | [Hardware reference model](HARDWARE_MODEL.md) | Fleet schema, `SeriesRef`, CSV/JSON importers and the seeded fleet generator |
 | [Read-only MCP preview](MCP_PREVIEW.md) | Connect an MCP client (agent) to a local store: tools, trust boundary, errors |
+| [Authenticated service](SERVICE.md) | Run `weave-service`: tenants, API tokens, the HTTP API, audit log, limits |
+| [Principals, groups and graph ACLs](REGISTRY.md) | The registry a tenant's requests are authorized by |
 | [Current status](STATUS.md) | Supported versions, verified evidence and remaining work |
 
 The [example source](../examples/science/temporal_vectors.py) is an executable

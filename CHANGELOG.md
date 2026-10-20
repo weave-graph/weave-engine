@@ -6,6 +6,30 @@ defined in [docs/ROADMAP.md](docs/ROADMAP.md). The supported profile is in
 
 ## Unreleased
 
+### B3 part 1: authenticated multi-tenant service
+
+Part of [#39](https://github.com/weave-graph/weave-engine/issues/39)
+([ADR-0007](docs/architecture/ADR-0007-identity-groups-and-tenancy.md)
+sections 6 to 9; [guide](docs/SERVICE.md)). No protocol or store change.
+
+- New crate and binary `weave-service` 0.1.0: HTTP/1.1 over TLS (axum,
+  hyper, rustls with ring), serving core v1 `write`, `query`, `evaluate` and
+  `bind` programs, graph listing and creation, the registry API and token
+  management.
+- One store per tenant, with the tenant taken from the credential; a
+  control store with tenants and SHA-256 digests of API tokens.
+- Bearer API tokens with expiry and revocation, checked with the registry on
+  every request; one uniform `401` on every route. Agent tokens authenticate
+  B1 agents under their owner's ceiling, issued and revoked by their owners.
+- A per-tenant append-only, hash-chained read and write audit log;
+  `GET /v1/audit/facts` answers who read and who wrote a fact.
+- Engine-assigned graph IDs (`Engine::create_graph`) and service-minted
+  record IDs for non-administrators.
+- `GET /v1/manifest`: the caller's `weave-visible/1` manifest for the LB1
+  compiler, with `Engine::registry_nameable_groups`.
+- Engine: in a registry store, `correct` and `retract` of a fact the writer
+  cannot read now fail as for a missing fact.
+
 ### B1 part 2: agents and delegation
 
 Closes [#38](https://github.com/weave-graph/weave-engine/issues/38). No

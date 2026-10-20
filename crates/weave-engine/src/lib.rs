@@ -126,8 +126,8 @@ mod visibility;
 pub use capsule::{Capsule, CapsuleRevision};
 pub use registry::{
     GraphAcl, GraphGrant, GraphListing, Permission, Principal, PrincipalKind, PrincipalStatus,
-    RegistryChange, ADMINISTRATORS, MAX_GROUP_CLOSURE, MAX_GROUP_DEPTH, REGISTRY_BRANCH,
-    REGISTRY_GRAPH,
+    RegistryChange, ADMINISTRATORS, CREATED_GRAPH_PREFIX, MAX_GROUP_CLOSURE, MAX_GROUP_DEPTH,
+    REGISTRY_BRANCH, REGISTRY_GRAPH,
 };
 
 #[derive(Debug, Clone, serde::Serialize)]

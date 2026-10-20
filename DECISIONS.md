@@ -1542,3 +1542,162 @@ rather than storing an agent write without its chain. The chain is the
 JSON-array encoding of the reserved `on_behalf_of` column. The store's
 bound for that column was raised from 512 bytes to fit 8 principal IDs. The
 column already existed (store 30), so no migration is needed.
+
+### 2026-10-20 — #39 B3 — Delivery in parts; agents wait for B1 part 2
+
+Part 1 is the server, API tokens for users and agents, tenants, the audit
+log, TLS, limits and logs. It covers the criteria on unauthenticated
+endpoints, cross-tenant isolation, the audit log and SECURITY.md. Agent
+tokens joined part 1 after B1 part 2 merged. Part 2 adds OIDC and signed
+admission for agent capabilities. The 50-client load measurement closes the epic, because
+it should measure the final authentication path. Each part says "Part of
+#39"; the last says "Closes #39".
+
+### 2026-10-20 — #39 B3 — axum on hyper with rustls and ring; no OpenSSL
+
+The HTTP stack is axum 0.8 (default features off: http1, json,
+matched-path, query, tokio) on hyper 1 and hyper-util. These are the
+mature, MIT-licensed Tokio stack. TLS is tokio-rustls 0.26 with the `ring`
+provider, not the default aws-lc-rs, which needs CMake and NASM on Windows
+CI. ring also provides the HMAC and the system random source, so the
+service adds no separate crypto crates. The accept loop is our own (about
+40 lines in `tls.rs`), because `axum::serve` has no TLS. It bounds
+connections, handshake time, header read time and header size. rcgen
+generates certificates in tests only. There is no CLI-parsing or logging
+dependency: flags are parsed by hand, and logs are JSON lines written with
+serde_json.
+
+### 2026-10-20 — #39 B3 — Every route authenticates, including unknown ones
+
+Authentication is router middleware that runs before routing results are
+reported. An unknown route or method therefore gets `401` without a
+credential, and `404` or `405` only after authentication. Every failure
+uses one byte-identical body: missing, duplicated or non-Bearer headers,
+malformed, unknown, expired and revoked tokens, and principals that are not
+active users. `health` also requires a token, so "rejected on every
+endpoint" holds without exception; liveness probes can use the TLS
+handshake or a probe token. The endpoint test is driven by the same route
+table that builds the router, and it checks that the guide documents each
+route.
+
+### 2026-10-20 — #39 B3 — Tokens in the control store, checked with the registry per request
+
+An API token is `wvs_` and 256 random bits in hex. The control store keeps
+its SHA-256 digest (a fast hash is enough for a 256-bit random secret), a
+public token ID, the tenant, principal, issuer and expiry. Each request
+looks the digest up, then checks inside the tenant that the principal is an
+active registry user. Nothing is cached, so revocation, expiry and
+suspension apply on the next request. Tokens live in the control store, not
+the registry, because a token must name its tenant before any tenant store
+is opened. The registry stays the authority on the principal itself. Only
+tenant administrators issue tokens over HTTP; any principal can list and
+revoke its own.
+
+### 2026-10-20 — #39 B3 — One connection and one request at a time per tenant
+
+Every engine program reserves SQLite's write lock through the operation
+clock, even a read-only one, and the engine sets no busy timeout. A pool of
+connections per tenant would therefore fail with `SQLITE_BUSY` under
+concurrency. Each tenant has one engine connection and one audit connection
+behind a mutex, a bounded queue (256) and a queue timeout (10 s, then
+`E_BACKPRESSURE`). Tenants run in parallel. The load measurement in a later
+part decides whether reads need a separate path (ADR-0007 open question 6).
+
+### 2026-10-20 — #39 B3 — The audit log is a separate database per tenant
+
+ADR-0007 section 9 puts the audit log in a separate table, not in fact-log
+data. It is a separate SQLite file, `audit.db`, in the tenant directory. A
+table inside the engine store would change the engine schema (a store
+version bump) for a service concern while B1 part 2 changes the engine in
+parallel, and the engine owns its connection. The entry is appended before
+the response is sent; if that fails, the response is withheld (`E_AUDIT`).
+A crash between a committed write and its entry can lose the entry, but the
+fact log still records the writer, so "who wrote F" survives. Entries are
+hash-chained, and triggers reject UPDATE and DELETE. Reads are recorded from
+the result's `fact_provenance`, which lists every stored source fact a
+result cites, so the service requires protocol 1.0.0 or later, where it is
+always present. Denied requests record the graph IDs the request named,
+which are client input, never the hidden object. Tenant administrators are
+the auditors.
+
+### 2026-10-20 — #39 B3 — The service runs fact writes and reads only
+
+`/v1/execute` accepts `write`, `query`, `evaluate` and `bind`, which cover
+the A2 to A4 operations. Snapshot `commit` and `commit_batch`, `join`,
+`recorded_range` and `accepted_range` fail with `E_UNSUPPORTED`. They are
+legacy or peripheral, and `fact_provenance` does not describe their writes
+and reads, so the audit log could not name their facts.
+
+### 2026-10-20 — #39 B3 — Record IDs minted by the service for non-administrators
+
+ADR-0007 open question 1 (B2 decides) leans towards server-generated record
+IDs. The service decides it for its own clients now: a non-administrator
+may assert only IDs that `POST /v1/ids` minted for it. A minted ID carries
+an HMAC tag over the tenant, the principal and 128 random bits, under a
+per-tenant key. A hidden record cannot hold such an ID, an ID seen on
+another record cannot be reused, and the check is stateless. Rewriting
+client IDs inside a program was rejected, because edges, assertions and
+attachments reference IDs. Administrators can read every record, so they
+may choose IDs and learn nothing. The key lives in the control store. It is
+a service secret that authenticates no one, so it is not hashed.
+
+### 2026-10-20 — #39 B3 — Graph creation through an engine hook
+
+ADR-0007 section 4 gives created graphs engine-assigned IDs, and only
+tenant administrators may choose one. Granting the creator Administer on a
+new graph is a registry write that only an administrator could make, so the
+engine gains `Engine::create_graph(entropy, host)` in a new child module of
+the registry (`registry/create.rs`, plus one line in `registry.rs`). The
+host supplies the randomness, because the engine has no random source; the
+ID is `g-` and 32 hex digits of its SHA-256. Groups, and agents once they
+exist, cannot create graphs, because Administer is not delegable.
+
+### 2026-10-20 — #39 B3 — Correct and retract need Read on the fact
+
+The paired HTTP hidden-input test found that B1 part 1 let a writer of a
+graph retract or correct a record it could not read, and that the error for
+a hidden record differed from the error for a missing one. ADR-0007
+section 4 allows correction or retraction "only when Read also holds". In a
+registry store the write path now treats a live fact the writer cannot read
+(its own readers and groups, and an edge's endpoints) as absent, so the
+write fails exactly as for a missing fact. Local stores and the registry's
+own writes are unchanged. The fix is a few lines in `facts.rs`; B1 part 2
+may move it when it threads `on_behalf_of` through the write path.
+Retracting a visible fact with a hidden live dependent still fails
+`E_DEPENDENT_FACT`. That is declared for B2, because allowing the
+retraction would leave a dangling hidden fact.
+
+### 2026-10-20 — #39 B3 — Agent tokens: the chain must be able to act, owners manage tokens
+
+An agent token is an API token whose principal is the agent; the service
+passes the agent's ID as `HostContext.principal`, as B1 specifies, and needs
+no other engine API. Authentication requires the agent record to be
+active and readable by the agent itself, which the registry allows only
+while the whole ownership chain can act, and every delegation along the
+chain to be unexpired at the trusted clock. A suspended owner or an expired
+delegation therefore fails the agent's next request with the uniform `401`,
+not with empty results, so a cut-off agent learns nothing new and the
+denial is audited. A user may issue and revoke tokens for agents it owns,
+directly or through other agents, because the registry already lets it
+suspend them; any other non-administrator request gets one `E_FORBIDDEN`,
+whether or not the principal exists. Agents cannot issue tokens, create
+graphs or read the audit log, because Administer is not delegable. The
+audit entry's `on_behalf_of` is the agent's chain, read record by record as
+each principal itself.
+
+### 2026-10-20 — #39 B3 — The service serves the LB1 visible manifest
+
+weave-language LB1 compiles against a host-supplied `weave-visible/1`
+manifest and expects B3 or B4 to serve it for the authenticated caller.
+It fits B3, because it is one read of the caller's own standing:
+`GET /v1/manifest` returns the graphs from `Engine::list_graphs` (with
+permission and branches) and the groups the caller may name. The groups
+come from a new `Engine::registry_nameable_groups`, which uses the same
+predicate as write validation (now one `State::nameable_group` function),
+so the manifest can never list a group a write would refuse, or omit one
+it would accept; a test checks both directions. Embedding spaces and
+schemas are omitted, which the format defines as unknown, because listing
+them needs a per-graph read that B4's `describe_schema` will provide. The
+manifest is advisory, as LB1 states: every program is authorized again
+when it runs. The engine's language CI moves to weave-language
+`5d2b9d2` and runs LB1's `check_permissions.py` and `check_agent_repair.py`.
