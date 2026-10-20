@@ -12,6 +12,7 @@ white-paper requirements remain tracked separately in the
 |---|---|
 | Science API and CLI | `weave-science` 0.1.0; native Rust and one-request JSON process |
 | Python client | `weave_science` 0.1.0; Python 3.10+, no mandatory runtime dependencies |
+| MCP preview | `weave-mcp` 0.1.0; read-only local stdio MCP server, part 1 of A7 ([guide](MCP_PREVIEW.md)) |
 | Engine contract | 0.23.0; existing graph, temporal, metadata and authorization semantics, plus fact-level writes, node valid time and per-fact provenance ([0.22](contract/v0.22/README.md)), and k-hop `expand`, `as_of` selection and `changes` change sets ([0.23](contract/v0.23/README.md)). The core subset is specified in [core contract v1](contract/core-v1.md) |
 | Native storage | Store 30; persistent local SQLite graph revisions and history, plus the fact log ([ADR-0004](architecture/ADR-0004-fact-log-and-storage-backend.md)) |
 | Platforms | Linux, macOS and Windows in the native CI profile |
@@ -185,6 +186,39 @@ is measured at 10,000 and 1,000,000 revisions
 - The change feed is pull only (push is C2).
 - Selecting the edges or attachments of a node scans every version recorded
   under it, so a node corrected very many times is slower to traverse.
+
+## Read-only MCP preview (A7, part 1)
+
+`weave-mcp` is a local stdio MCP server over one existing store
+([guide](MCP_PREVIEW.md), [#37](https://github.com/weave-graph/weave-engine/issues/37)):
+
+- **Tools.** `query`, `expand`, `as_of`, `what_changed` (the A3 `changes`
+  expression) and `explain` (of a `query`, `as_of` or `expand`). Each runs
+  one read-only `evaluate` program through the same session as the science
+  JSON `execute` operation, so its `result` equals that operation's result.
+  `hybrid_search` is listed and fails with `E_UNSUPPORTED` until A4 ships.
+- **Principal.** `--actor` is required and fixes the reader for every call.
+  There is no default identity and no tool argument can change it; per-record
+  `readers` apply to every result. The server holds no write grants.
+- **Data/code boundary.** Tool descriptions, schemas and instructions are
+  static. Store content appears only inside a result envelope marked
+  `"trust": "untrusted_data"`.
+- **Bounds.** Messages up to 1 MiB, arguments up to 32 levels deep with
+  strings up to 4,096 bytes (`E_MCP_INPUT`), results up to 16 MiB; engine
+  bounds and codes pass through.
+
+Evidence: `crates/weave-mcp/tests/mcp.rs` checks every tool against the
+science JSON API on the same store, paired stores that differ only in hidden
+facts (identical output for the restricted reader, no hidden ID or text in
+any response), a scripted session of the real binary that calls every listed
+tool and leaves every store table unchanged, the input bounds and the CLI's
+refusal to run without a reader. `tests/fleet_question_2.rs` answers exit
+question 2 on the A5 fleet with `as_of` and `what_changed` for the restricted
+and the unrestricted reader.
+
+**Limits.** No authentication, local single-user use only. One request at a
+time, no cancellation, stdio only. Exit questions 3 and 4 through the preview
+wait for `hybrid_search` (A4).
 
 ## Verified evidence
 

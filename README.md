@@ -34,6 +34,7 @@ migration checks, and CI on Linux, macOS and Windows. It is **pre-release**.
 | Per-record read permissions, re-checked through derived results | High-volume telemetry ingestion, approximate vector index (Phase C) |
 | Joins, rules, metadata graphs, per-fact provenance and explanations | |
 | Exact vector neighbors and graph analytics (PageRank, components, paths) from Python, JSON or Rust | |
+| A read-only local MCP preview for agents (`weave-mcp`: query, expand, as-of, what changed, explain) as a fixed reader ([guide](docs/MCP_PREVIEW.md)) | Hybrid search through the preview (A4, A7) |
 
 The supported profile is described in [docs/STATUS.md](docs/STATUS.md): science
 **0.1.0**, contract **0.23.0**, store **30**. It runs locally. There is no

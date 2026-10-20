@@ -25,6 +25,7 @@ is scheduled.
 | [Native JSON and Rust interface](SCIENCE_INTERFACE.md) | Python-free requests, responses, algorithms, defaults, errors and budgets |
 | [Scientific validation](SCIENCE_VALIDATION.md) | Run independent checks and reproduce measurements |
 | [Hardware reference model](HARDWARE_MODEL.md) | Fleet schema, `SeriesRef`, CSV/JSON importers and the seeded fleet generator |
+| [Read-only MCP preview](MCP_PREVIEW.md) | Connect an MCP client (agent) to a local store: tools, trust boundary, errors |
 | [Current status](STATUS.md) | Supported versions, verified evidence and remaining work |
 
 The [example source](../examples/science/temporal_vectors.py) is an executable

@@ -738,6 +738,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "weave-mcp"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "weave-contract",
+ "weave-engine",
+ "weave-hardware",
+ "weave-science",
+]
+
+[[package]]
 name = "weave-native"
 version = "0.1.0"
 dependencies = [
