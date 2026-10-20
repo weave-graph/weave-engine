@@ -148,6 +148,22 @@ class ClientTests(unittest.TestCase):
 
 
 class DataAndArtifactTests(unittest.TestCase):
+    def test_traversal_builders_validate_before_execution(self):
+        from weave_science import as_of, changes, expand
+        self.assertEqual(expand("g", ["a"], hops=2, direction="both", predicates=["p"], as_of=5),
+                         {"kind": "expand", "graph_id": "g", "branch_id": "main", "seeds": ["a"], "hops": 2,
+                          "direction": "both", "limit": 10000, "predicates": ["p"], "as_of": 5})
+        self.assertEqual(as_of("g", 7, predicate="p")["query"]["predicate"], "p")
+        self.assertEqual(changes("g", since_cursor="r")["from"], {"kind": "cursor", "revision": "r"})
+        self.assertEqual(changes("g", since_ms=1, until_ms=2)["to"], {"kind": "as_of", "unix_millis": 2})
+        for bad in (lambda: expand("g", [], hops=1), lambda: expand("g", ["a"], hops=0),
+                    lambda: expand("g", ["a"], hops=1, direction="up"),
+                    lambda: expand("g", ["a"], hops=1, revision="r", as_of=1),
+                    lambda: changes("g"), lambda: changes("g", since_ms=1, since_cursor="r"),
+                    lambda: as_of("g", -1), lambda: as_of("g", 1, revision="r")):
+            with self.assertRaises(ValueError):
+                bad()
+
     def test_helpers_do_not_mutate_caller_rows(self):
         properties = {"label": "sample", "nested": [1, 2]}
         record = node("m1", entity_id="e", properties=properties, vector=[1, 2])

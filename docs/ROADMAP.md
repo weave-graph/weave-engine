@@ -66,11 +66,12 @@ A5: the [hardware reference model](HARDWARE_MODEL.md) ships in the
 importers through fact writes, and a seeded 5,000-unit generator with 1,000
 updates. Its fleet scenario covers exit questions 2 and 5 with the current
 operators; questions 3 and 4 wait for A4.
-A3 in progress: protocol 0.23.0 adds the `expand` (k-hop) and `changes`
-(change set and pull feed) graph expressions and indexed `as_of` selection,
-with explanations through `fact_provenance`, explicit coverage and paired
-hidden-input tests ([guide](TRAVERSAL.md)). Python helpers, the science JSON
-operations and a tutorial follow in the next part.
+A3 is complete: protocol 0.23.0 adds the `expand` (k-hop), `as_of` and
+`changes` (change set and pull feed) graph expressions, with explanations
+through `fact_provenance`, explicit coverage and paired hidden-input tests
+([guide](TRAVERSAL.md)). They are available from Rust, the science JSON
+interface and Python ([tutorial](PYTHON_SCIENCE.md#traversal-as-of-reads-and-change-sets)),
+and the A5 fleet scenario answers "as known at K" for restricted readers.
 
 **Phase A exit scenario:** import a fleet of 5,000 units with parts, firmware,
 sites, owners, sensor series references and maintenance notes with embeddings.

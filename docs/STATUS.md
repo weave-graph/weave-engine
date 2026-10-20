@@ -157,6 +157,13 @@ Protocol 0.23.0 adds three graph expressions
 - **Coverage.** A missing or hidden seed (`E_SEED_UNAVAILABLE`) and a denied
   derivation in the result's region (`E_DERIVATION_UNAVAILABLE`) make the
   result partial; an empty complete result means nothing visible matched.
+- **Interfaces.** Rust programs, `weave-engine run`, the science JSON
+  envelope (`execute`, `analyze`, listed in `capabilities`) and the Python
+  client (`Engine.expand`, `as_of`, `changes`, `explain`, with exact replay
+  through `pinned_program`); see the
+  [tutorial](PYTHON_SCIENCE.md#traversal-as-of-reads-and-change-sets). The A5
+  fleet scenario answers "as known at K" for the restricted analyst with
+  `At::AsOf`.
 - **Hidden input.** Paired tests (`tests/traversal.rs`) show that facts a
   reader cannot see do not change any `expand` or `changes` output for that
   reader, apart from content-derived revision IDs.
@@ -171,9 +178,6 @@ is measured at 10,000 and 1,000,000 revisions
 ([report](benchmarks/as-of-selection-2026-10-20.json)).
 
 **Limits.**
-- The Python client and the science JSON envelope reach the operators through
-  `execute` programs only; dedicated helpers and a tutorial follow in the next
-  A3 part.
 - A change set across a snapshot revision or two fact lines reads both states
   whole, within the read budget.
 - The read budget counts stored records an operator reads, including hidden

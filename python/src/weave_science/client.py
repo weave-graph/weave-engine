@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from .data import graph_data, read_csv
-from .expressions import program, query, recorded_query, validate_read_only
+from .expressions import (as_of, changes, expand, explain, program, query, recorded_query,
+                          validate_read_only)
 from .results import AnalysisResult, CommitReceipt, QueryResult, assert_same_input, canonical_json
 
 
@@ -225,6 +226,22 @@ class Engine:
 
     def recorded_query(self, graph_id: str, **selection: Any) -> QueryResult:
         return self.evaluate(recorded_query(graph_id, **selection))
+
+    def as_of(self, graph_id: str, recorded_at_ms: int, **selection: Any) -> QueryResult:
+        """Query the branch as this replica knew it at a recorded time (visible subset)."""
+        return self.evaluate(as_of(graph_id, recorded_at_ms, **selection))
+
+    def expand(self, graph_id: str, seeds: Iterable[str], **options: Any) -> QueryResult:
+        """The exact k-hop neighborhood of seed nodes; see expressions.expand."""
+        return self.evaluate(expand(graph_id, seeds, **options))
+
+    def changes(self, graph_id: str, **options: Any) -> QueryResult:
+        """A change set between two states; see expressions.changes and QueryResult.changes."""
+        return self.evaluate(changes(graph_id, **options))
+
+    def explain(self, expression: Mapping[str, Any]) -> QueryResult:
+        """The derivation graph explaining every record of a graph expression."""
+        return self.evaluate(explain(expression))
 
     def evaluate(self, expression: Mapping[str, Any], *, result_index: int = 0) -> QueryResult:
         """Evaluate an existing graph expression or read-only JSON Program.

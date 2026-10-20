@@ -90,6 +90,26 @@ def _pin_program(source: Mapping[str, Any], result: Mapping[str, Any]) -> dict[s
                     value["selection"] = {"kind": "checkpoint", "observer": witness["observer"],
                                           "checkpoint": witness["checkpoint"]}
                 return  # recorded_query forbids a simultaneous explicit revision
+            if value.get("kind") == "as_of":
+                # The result equals the query pinned to the selected revision.
+                plan = deepcopy(value["query"])
+                pin_query(plan)
+                value.clear()
+                value.update({"kind": "query", "query": plan})
+                return
+            if value.get("kind") == "expand":
+                value.pop("as_of", None)
+                pin_query(value)
+                return
+            if value.get("kind") == "changes":
+                change_set = result.get("changes") or {}
+                for end, key in (("from", "from_revision"), ("to", "to_revision")):
+                    revision = change_set.get(key)
+                    if revision is not None:
+                        value[end] = {"kind": "cursor", "revision": revision}
+                    elif value.get(end, {}).get("kind") != "as_of":
+                        raise ValueError("change set end has no observed revision; pin it explicitly")
+                return
             if value.get("kind") == "query" or value.get("op") == "query":
                 pin_query(value["query"])
             if value.get("op") == "join":
@@ -145,6 +165,21 @@ class QueryResult:
     @property
     def provenance(self) -> list[dict[str, str]]:
         return deepcopy(self.raw.get("provenance", []))
+
+    @property
+    def fact_provenance(self) -> list[dict[str, Any]]:
+        """Engine-recorded writer and time plus the claim of every cited stored fact."""
+        return deepcopy(self.raw.get("fact_provenance", []))
+
+    @property
+    def changes(self) -> list[dict[str, Any]]:
+        """Entries of a change set (``changes`` expressions): change, kind, id, before, after."""
+        return deepcopy((self.raw.get("changes") or {}).get("entries", []))
+
+    @property
+    def cursor(self) -> str | None:
+        """The ``to`` revision of a change set: pass it as ``since_cursor`` to continue the feed."""
+        return (self.raw.get("changes") or {}).get("to_revision")
 
     @property
     def pinned_program(self) -> dict[str, Any]:

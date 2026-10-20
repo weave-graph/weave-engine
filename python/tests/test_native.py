@@ -71,6 +71,55 @@ class NativeIntegration(unittest.TestCase):
             self.assertEqual((unit_entry["writer"], unit_entry["source"], unit_entry["method"]["kind"]),
                              ("importer", "erp", "import"))
 
+    def test_expand_as_of_changes_and_explain_for_a_restricted_reader(self):
+        import time
+        with tempfile.TemporaryDirectory() as directory:
+            db = Path(directory) / "fleet.db"
+            loader = Engine(db, actor="loader", write_graphs=["fleet"])
+            unit = lambda i, readers=(): {"kind": "node", "id": i, "entity_id": i.upper(),
+                                          "space_id": "fleet", "readers": list(readers)}
+            at = lambda i, u: {"kind": "edge", "id": i, "predicate": "located_at", "from": u,
+                               "to": "site", "valid_time": {"start": 0}}
+            first = loader.import_facts("fleet", [{"change": "assert", "fact": f} for f in [
+                unit("site"), unit("u1"), unit("u2", ["admin"]), at("a1", "u1"), at("a2", "u2")]])
+            time.sleep(0.01)
+            known = int(time.time() * 1000)
+            time.sleep(0.01)
+            loader.import_facts("fleet", [{"change": "assert", "fact": unit("u3")},
+                                          {"change": "assert", "fact": at("a3", "u3")},
+                                          {"change": "retract", "target": {"kind": "edge", "id": "a1"}}])
+            analyst = Engine(db, actor="analyst")
+            # k-hop: the restricted unit stays out.
+            near = analyst.expand("fleet", ["site"], hops=1, direction="in")
+            self.assertEqual(sorted(n["id"] for n in near.nodes), ["site", "u3"])
+            self.assertEqual(sorted(e["id"] for e in near.edges), ["a3"])
+            self.assertEqual(near.coverage, "complete")
+            self.assertEqual(len(near.fact_provenance), len(near.nodes) + len(near.edges))
+            # As known then: the visible subset, not E_HISTORY_UNAVAILABLE.
+            then = analyst.as_of("fleet", known, predicate="located_at")
+            self.assertEqual(sorted(e["id"] for e in then.edges), ["a1"])
+            with self.assertRaises(NativeError) as denied:
+                analyst.recorded_query("fleet", recorded_at_ms=known, predicate="located_at")
+            self.assertEqual(denied.exception.code, "E_HISTORY_UNAVAILABLE")
+            self.assertEqual(sorted(e["id"] for e in analyst.expand(
+                "fleet", ["site"], hops=1, direction="in", as_of=known).edges), ["a1"])
+            # What changed, and the pull feed continuing from its cursor.
+            changed = analyst.changes("fleet", since_cursor=first.revision)
+            self.assertEqual(sorted((c["change"], c["kind"], c["id"]) for c in changed.changes),
+                             [("asserted", "edge", "a3"), ("asserted", "node", "u3"), ("retracted", "edge", "a1")])
+            self.assertEqual(len(changed.fact_provenance), 3)
+            self.assertEqual(analyst.changes("fleet", since_cursor=changed.cursor).changes, [])
+            self.assertEqual([c["id"] for c in analyst.changes("fleet", since_ms=known, entities=["U3"]).changes], ["u3", "a3"])
+            admin = Engine(db, actor="admin").changes("fleet", since_ms=0, until_ms=known)
+            self.assertIn(("asserted", "edge", "a2"), [(c["change"], c["kind"], c["id"]) for c in admin.changes])
+            # Explanations and exact replay of pinned results.
+            self.assertTrue(analyst.explain({"kind": "expand", "graph_id": "fleet", "seeds": ["site"],
+                                             "hops": 1, "direction": "in"}).nodes)
+            for result in (then, near, changed):
+                replayed = analyst.evaluate(result.pinned_program)
+                self.assertEqual(replayed.raw["graph"], result.raw["graph"])
+                self.assertEqual(replayed.changes, result.changes)
+
     def test_hidden_vectors_and_topology_are_authorized_before_analysis(self):
         with tempfile.TemporaryDirectory() as directory:
             db = Path(directory) / "restricted.db"

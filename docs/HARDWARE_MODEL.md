@@ -311,7 +311,9 @@ caller's authority, so `readers` apply to every answer:
 - `series_overlapping(unit?, start, end, at)`: series references by overlap.
 
 `at` selects the state: `Head`, `Revision(id)` (for example from an import
-report) or `Recorded(unix_millis)` (`recorded_query` with `local_time`).
+report), `Recorded(unix_millis)` (`recorded_query` with `local_time`) or
+`AsOf(unix_millis)` (the A3 `as_of` expression, which works for restricted
+readers).
 
 ## Phase A scenario
 
@@ -436,9 +438,10 @@ The unit row above produces these two facts (the importer adds the
   to the older values (as new versions, with history kept).
 - **Recorded-time selection and restricted readers.** `At::Recorded`
   (`recorded_query`) needs the reader to see the whole selected revision
-  (ADR-0002). A reader who cannot see the restricted units gets
-  `E_HISTORY_UNAVAILABLE` and must pin a revision (`At::Revision`) instead.
-  The scenario checks both. Recorded-time selection is A3 scope.
+  (ADR-0002), so a reader who cannot see the restricted units gets
+  `E_HISTORY_UNAVAILABLE`. `At::AsOf` (A3 `as_of`) selects the same revision
+  and returns the visible subset to that reader, equal to a read pinned to
+  it. The scenario checks all three forms for both readers.
 - **Overlap is filtered after an indexed read.** There is no interval-overlap
   index; `series_overlapping` reads the `hw:measured_by` edges (by unit when
   given) with their sensors and attachments, then filters. Fleet-wide calls

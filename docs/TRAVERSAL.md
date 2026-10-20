@@ -17,7 +17,10 @@ and every result states its coverage. The normative definitions are in
 
 All three are graph expressions, evaluated with `evaluate` or `bind` in
 a 0.23.0 program, through `Engine::execute`, `weave-engine run` or the science
-`execute` request.
+`execute` request. The Python client has `Engine.expand`, `Engine.as_of`,
+`Engine.changes` and `Engine.explain` and matching expression builders
+([tutorial](PYTHON_SCIENCE.md#traversal-as-of-reads-and-change-sets)); the
+science JSON forms are in [SCIENCE_INTERFACE.md](SCIENCE_INTERFACE.md#traversal-as-of-reads-and-change-sets).
 
 ## Expand
 

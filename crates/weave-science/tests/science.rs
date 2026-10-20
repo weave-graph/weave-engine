@@ -312,3 +312,111 @@ fn incremental_import_appends_fact_batches_after_a_snapshot() {
         assert_eq!(s.handle(request(body)).unwrap_err().code, "E_INPUT");
     }
 }
+
+#[test]
+fn json_api_exposes_expand_as_of_changes_and_explain() {
+    let mut s = session();
+    let first = import(&mut s, graph(), Value::Null);
+    let execute = |s: &mut ScienceSession, value: Value| {
+        s.handle(request(json!({"operation":"execute","program":
+            {"version":"0.23.0","commands":[{"op":"evaluate","value":value}]}})))
+            .unwrap()["results"][0]["result"]
+            .clone()
+    };
+    let ids = |result: &Value, list: &str| -> Vec<String> {
+        let mut ids: Vec<String> = result["graph"][list]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["id"].as_str().unwrap().to_string())
+            .collect();
+        ids.sort();
+        ids
+    };
+    // k-hop expansion: the hidden edge and node stay out for alice.
+    let expand = json!({"kind":"expand","graph_id":"g","seeds":["A"],"hops":2,"valid_at":20});
+    let expanded = execute(&mut s, expand.clone());
+    assert_eq!(ids(&expanded, "nodes"), ["A", "B", "C"]);
+    assert_eq!(
+        ids(&expanded, "edges"),
+        ["ab1", "ab2", "ba", "bc", "cc", "negative"]
+    );
+    assert_eq!(expanded["coverage"], "complete");
+    assert!(!expanded["fact_provenance"].as_array().unwrap().is_empty());
+    // An expansion is analysis input like any graph value.
+    let degree = s
+        .handle(request(json!({"operation":"analyze","program":
+            {"version":"0.23.0","commands":[{"op":"evaluate","value":expand}]},
+            "analysis":{"algorithm":"degree"}})))
+        .unwrap();
+    assert_eq!(
+        degree["input"]["graph"]["nodes"].as_array().unwrap().len(),
+        3
+    );
+    // explain turns it into a derivation graph.
+    let explained = execute(
+        &mut s,
+        json!({"kind":"explain","input":{"kind":"expand","graph_id":"g","seeds":["A"],"hops":1}}),
+    );
+    assert!(!explained["graph"]["nodes"].as_array().unwrap().is_empty());
+    // A correction, then as_of and changes across it.
+    let now = || {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64
+    };
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    let before = now();
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    let second = s
+        .handle(request(
+            json!({"operation":"import","graph_id":"g","changes":[
+            {"change":"retract","target":{"kind":"edge","id":"bc"}}]}),
+        ))
+        .unwrap()["results"][0]["revision"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_ne!(first, second);
+    let head = execute(
+        &mut s,
+        json!({"kind":"query","query":{"graph_id":"g","predicate":"link","from":"B"}}),
+    );
+    let change_set = execute(
+        &mut s,
+        json!({"kind":"changes","graph_id":"g","from":{"kind":"cursor","revision":first}}),
+    );
+    assert_eq!(
+        change_set["changes"]["entries"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(change_set["changes"]["entries"][0]["change"], "retracted");
+    assert_eq!(change_set["changes"]["to_revision"], json!(second));
+    assert!(ids(&head, "edges").iter().all(|e| e != "bc"));
+    let known = execute(
+        &mut s,
+        json!({"kind":"as_of","unix_millis":before,
+        "query":{"graph_id":"g","predicate":"link","from":"B"}}),
+    );
+    assert_eq!(ids(&known, "edges"), ["ba", "bc"]);
+    assert_eq!(known["input_snapshots"][0]["revision"], json!(first));
+    let capabilities = s
+        .handle(request(json!({"operation":"capabilities"})))
+        .unwrap();
+    for operator in ["expand", "as_of", "changes", "explain"] {
+        assert!(capabilities["query_operators"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|o| o == operator));
+    }
+    // A change set is not analysis input.
+    let error = s
+        .handle(request(json!({"operation":"analyze","program":
+            {"version":"0.23.0","commands":[{"op":"evaluate","value":
+                {"kind":"changes","graph_id":"g","from":{"kind":"cursor","revision":first}}}]},
+            "analysis":{"algorithm":"degree"}})))
+        .unwrap_err();
+    assert_eq!(error.code, "E_SCIENCE_RESULT");
+}
