@@ -110,38 +110,26 @@ pub(crate) enum Derived {
     /// engine has always computed it.
     Literal(Vec<String>),
     /// Some input names a group: each restricted input's clause, all of
-    /// which a reader must match. B2 (ADR-0008) owns its write-time form.
+    /// which a reader must match (ADR-0008 section 2).
     Conjunction(Vec<(Vec<String>, Vec<String>)>),
 }
 
 impl Derived {
-    /// The single `(readers, reader_groups)` pair a record field can hold.
+    /// The record's own `(readers, reader_groups)` clause (ADR-0008 section
+    /// 2, the carrier form of the conjunction).
     ///
-    /// A literal intersection and a conjunction of at most one restricted
-    /// clause are exact. For two or more clauses the pair is their
-    /// clause-wise meet (common principals and common groups). The meet
-    /// admits only readers that every clause admits, so it never widens a
-    /// restriction and never resolves membership. It can be narrower than the
-    /// exact conjunction; B2 replaces it with the carrier form of ADR-0008.
+    /// A literal intersection is exact. A conjunction keeps its first
+    /// restricted clause exactly as the own clause, and the derived record
+    /// carries every other restricted input as an influence carrier (an
+    /// explicit assertion carries its source assertion, whose visibility
+    /// needs its structural edge), so reads enforce each clause exactly and
+    /// under current membership. Replacing the B1 clause-wise meet, this
+    /// admits an agent whose clauses each admit one input, as the conjunction
+    /// does. No clause is ever resolved into literal readers.
     pub(crate) fn encode(&self) -> (Vec<String>, Vec<String>) {
         match self {
             Derived::Literal(readers) => (readers.clone(), Vec::new()),
-            Derived::Conjunction(clauses) => {
-                let mut clauses = clauses.iter();
-                let Some((first_readers, first_groups)) = clauses.next() else {
-                    return (Vec::new(), Vec::new());
-                };
-                let (mut readers, mut groups) = (first_readers.clone(), first_groups.clone());
-                for (r, g) in clauses {
-                    readers.retain(|p| r.contains(p));
-                    groups.retain(|p| g.contains(p));
-                }
-                if readers.is_empty() && groups.is_empty() {
-                    // An empty meet must stay restricted, never become public.
-                    return (vec![MATCHES_NO_ONE.to_owned()], Vec::new());
-                }
-                (readers, groups)
-            }
+            Derived::Conjunction(clauses) => clauses.first().cloned().unwrap_or_default(),
         }
     }
 }
@@ -173,14 +161,21 @@ pub(crate) fn intersect(inputs: &[Restriction<'_>]) -> Derived {
 
 /// Readers of a record derived from two records, as the explicit-assertion
 /// materialization has always computed them: an empty side defers to the
-/// other side, and two restricted sides keep their common principals.
+/// other side, and two restricted sides keep their common principals. Two
+/// restricted sides with no common principal give [`MATCHES_NO_ONE`], never
+/// the empty (public) list (ADR-0008 section 2).
 fn intersect_readers(left: &[String], right: &[String]) -> Vec<String> {
     if left.is_empty() {
         right.to_vec()
     } else if right.is_empty() {
         left.to_vec()
     } else {
-        left.iter().filter(|p| right.contains(p)).cloned().collect()
+        let common: Vec<String> = left.iter().filter(|p| right.contains(p)).cloned().collect();
+        if common.is_empty() {
+            vec![MATCHES_NO_ONE.to_owned()]
+        } else {
+            common
+        }
     }
 }
 
@@ -255,20 +250,18 @@ mod tests {
             derived,
             Derived::Conjunction(vec![(s(&["a", "b"]), vec![]), (vec![], s(&["team"]))])
         );
-        // The meet of disjoint clauses stays restricted.
-        let (readers, groups) = derived.encode();
-        assert!(!(readers.is_empty() && groups.is_empty()));
-        for access in [
-            Access::from_clauses(vec![clause(&["a"], &[])]),
-            Access::from_clauses(vec![clause(&["z"], &["team"])]),
-            Access::from_clauses(vec![clause(&["a"], &["team"])]),
-        ] {
-            assert!(
-                !record_admits(&readers, &groups, &access) || {
-                    record_admits(a, none, &access) && record_admits(none, team, &access)
-                }
-            );
-        }
+        // The own clause is the first restricted clause, exactly; the other
+        // clauses are enforced through the record's influence carriers.
+        assert_eq!(derived.encode(), (s(&["a", "b"]), vec![]));
+        // Disjoint literal readers never become public.
+        let c: &'static [String] = Box::leak(s(&["c"]).into_boxed_slice());
+        let disjoint = intersect(&[r(a, none), r(c, none)]);
+        assert_eq!(disjoint, Derived::Literal(s(&[MATCHES_NO_ONE])));
+        assert!(!record_admits(
+            &s(&[MATCHES_NO_ONE]),
+            &[],
+            &Access::literal("a")
+        ));
         // One restricted clause is exact.
         assert_eq!(
             intersect(&[r(none, none), r(b, team)]).encode(),

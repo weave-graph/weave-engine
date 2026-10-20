@@ -426,7 +426,15 @@ fn hidden_evidence_is_removed_without_changing_visible_output() {
             );
         }
         public["provenance"] = json!({"method": {"kind": "human"}, "evidence": evidence});
-        run(&mut e, "bob", json!([write(json!([assert_(public)]))])).unwrap();
+        // A public fact citing restricted evidence: written as 1.1.0, because
+        // from 1.2.0 such a write fails with E_DERIVED_READERS (ADR-0008
+        // section 3, `tests/propagation.rs`). Reads must still hide the
+        // evidence of facts stored that way.
+        e.execute(
+            &program("1.1.0", json!([write(json!([assert_(public)]))])),
+            &host("bob"),
+        )
+        .unwrap();
         e
     };
     let mut with_hidden = build(true);

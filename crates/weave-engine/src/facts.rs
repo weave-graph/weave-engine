@@ -392,6 +392,73 @@ fn conflict(message: &str) -> Error {
     err("E_CONFLICT", message)
 }
 
+/// The one conflict for an `assert` of an ID that a live version the writer
+/// cannot read holds (ADR-0008 section 4): it never depends on that version's
+/// kind or content.
+pub(crate) const ID_UNAVAILABLE: &str = "fact ID is not available";
+
+/// Which write-time rules apply to a write.
+#[derive(Clone, Copy)]
+struct WriteRules {
+    /// ADR-0008 section 3 and the widening check, for programs of 1.2.0 and
+    /// later (core v1 section 11.4).
+    propagation: bool,
+}
+
+/// What a writer may compare its changes with (ADR-0008 section 4).
+struct WriterView {
+    /// The writer's identity; `None` for engine-reserved graphs.
+    access: Option<std::sync::Arc<visibility::Access>>,
+    registry: bool,
+    principal: String,
+    /// The principal that committed a snapshot parent, if any.
+    snapshot_writer: Option<String>,
+}
+
+/// A record's own reader clause: `(readers, reader_groups)`.
+fn clause(fact: &Fact) -> (&[String], &[String]) {
+    (fact_readers(fact), fact_reader_groups(fact))
+}
+
+/// True when the clause `(readers, groups)` admits only readers that the
+/// clause `(of_readers, of_groups)` admits, judged by the lists alone and
+/// never by membership (ADR-0008 section 3).
+fn clause_within(
+    readers: &[String],
+    groups: &[String],
+    of_readers: &[String],
+    of_groups: &[String],
+) -> bool {
+    if of_readers.is_empty() && of_groups.is_empty() {
+        return true;
+    }
+    !(readers.is_empty() && groups.is_empty())
+        && readers.iter().all(|r| of_readers.contains(r))
+        && groups.iter().all(|g| of_groups.contains(g))
+}
+
+/// A record's influence carriers: `derived_from`, `derived_nodes` and
+/// `derived_snapshots` (spaces have none).
+fn carriers(fact: &Fact) -> (&[AssertionRef], &[NodeRef], &[GraphRef]) {
+    match fact {
+        Fact::Node(n) => (&n.derived_from, &n.derived_nodes, &n.derived_snapshots),
+        Fact::Edge(e) => (&e.derived_from, &e.derived_nodes, &e.derived_snapshots),
+        Fact::StructuralEdge(_) => (&[], &[], &[]),
+        Fact::Assertion(a) => (&a.derived_from, &a.derived_nodes, &a.derived_snapshots),
+        Fact::Attachment(a) => (&a.derived_from, &a.derived_nodes, &a.derived_snapshots),
+        Fact::EmbeddingSpace(_) => (&[], &[], &[]),
+        Fact::Embedding(e) => (&e.derived_from, &e.derived_nodes, &e.derived_snapshots),
+    }
+}
+
+/// True when a correction makes a fact readable by principals its current
+/// version does not name.
+fn widens(old: &Fact, new: &Fact) -> bool {
+    let (new_readers, new_groups) = clause(new);
+    let (old_readers, old_groups) = clause(old);
+    !clause_within(new_readers, new_groups, old_readers, old_groups)
+}
+
 /// Structural identity a correction cannot change (ADR-0004 section 2).
 fn same_identity(old: &Fact, new: &Fact) -> bool {
     match (old, new) {
@@ -463,6 +530,8 @@ struct Seen {
     fact: Fact,
     /// The revision that recorded this version, when it was recorded by a fact write.
     recorded_in: Option<String>,
+    /// The principal that recorded this version, when it was recorded by a fact write.
+    writer: Option<String>,
 }
 
 /// Read access to the facts live at one revision: a fact revision through the
@@ -685,6 +754,7 @@ impl Engine {
                 .map(|fact| Seen {
                     fact,
                     recorded_in: None,
+                    writer: None,
                 })),
             Parent::Fact { revision } => self
                 .fact_store()
@@ -693,6 +763,7 @@ impl Engine {
                     Ok(Seen {
                         fact: parse(&stored.version)?,
                         recorded_in: Some(stored.recording.revision),
+                        writer: Some(stored.recording.writer),
                     })
                 })
                 .transpose(),
@@ -825,6 +896,7 @@ impl Engine {
         expected_head: &Option<Option<String>>,
         changes: &[FactChange],
         host: &HostContext,
+        version: &str,
     ) -> Result<(String, Option<String>)> {
         identity_acceptance::require_external_graph(graph)?;
         // The `weave:` namespace is engine-owned (ADR-0007 section 13, item 5).
@@ -845,10 +917,13 @@ impl Engine {
             }),
             host,
         )?;
-        self.append_facts(graph, branch, expected_head, changes, host)
+        let rules = WriteRules {
+            propagation: weave_contract::version_at_least(version, "1.2.0"),
+        };
+        self.append_facts_with(graph, branch, expected_head, changes, host, rules)
     }
 
-    /// The write itself, after authorization: also the registry's write path.
+    /// The registry's write path: the write itself, after authorization.
     pub(crate) fn append_facts(
         &self,
         graph: &str,
@@ -856,6 +931,73 @@ impl Engine {
         expected_head: &Option<Option<String>>,
         changes: &[FactChange],
         host: &HostContext,
+    ) -> Result<(String, Option<String>)> {
+        self.append_facts_with(
+            graph,
+            branch,
+            expected_head,
+            changes,
+            host,
+            WriteRules { propagation: false },
+        )
+    }
+
+    /// Whether a writer may compare a change with a live version (ADR-0008
+    /// section 4): it can read the version (its clause, and an edge's
+    /// endpoints), or, in a store without a registry, it recorded that exact
+    /// version. Engine-reserved graphs (the registry) see every version.
+    fn writer_knows(&self, parent: &Parent, seen: &Seen, view: &WriterView) -> Result<bool> {
+        let Some(access) = &view.access else {
+            return Ok(true);
+        };
+        if self.writer_reads(parent, &seen.fact, access)? {
+            return Ok(true);
+        }
+        if view.registry {
+            return Ok(false);
+        }
+        let recorder = match parent {
+            Parent::Fact { .. } => seen.writer.as_deref(),
+            Parent::Snapshot { .. } => view.snapshot_writer.as_deref(),
+            Parent::Empty => None,
+        };
+        Ok(recorder == Some(view.principal.as_str()))
+    }
+
+    /// A live parent fact the writer knows, else `None`.
+    fn known_parent(&self, parent: &Parent, key: &Key, view: &WriterView) -> Result<Option<Fact>> {
+        match self.parent_get(parent, key)? {
+            Some(seen) if self.writer_knows(parent, &seen, view)? => Ok(Some(seen.fact)),
+            _ => Ok(None),
+        }
+    }
+
+    fn writer_view(&self, graph: &str, parent: &Parent, host: &HostContext) -> Result<WriterView> {
+        let registry = self.registry_head()?.is_some();
+        Ok(WriterView {
+            access: if registry::reserved(graph) || graph.starts_with("weave:") {
+                None
+            } else {
+                Some(self.access(host)?)
+            },
+            registry,
+            principal: host.principal.clone(),
+            snapshot_writer: match parent {
+                Parent::Snapshot { revision, .. } => self.revision_writer(revision)?,
+                _ => None,
+            },
+        })
+    }
+
+    /// The write itself, after authorization.
+    fn append_facts_with(
+        &self,
+        graph: &str,
+        branch: &str,
+        expected_head: &Option<Option<String>>,
+        changes: &[FactChange],
+        host: &HostContext,
+        rules: WriteRules,
     ) -> Result<(String, Option<String>)> {
         if !valid_id(graph) || !valid_id(branch) || !valid_id(&host.principal) {
             return Err(err("E_ID", "identifiers must not be empty"));
@@ -886,15 +1028,13 @@ impl Engine {
             },
         };
         let header = self.parent_header(&parent)?;
-        // In a registry store, correcting or retracting a fact needs Read on
-        // it (ADR-0007 section 4). A live fact the writer cannot read is
-        // treated as absent, so the write fails exactly as for a missing
-        // fact. The registry's own writes are exempt.
-        let reader = if self.registry_head()?.is_some() && !registry::reserved(graph) {
-            Some(self.access(host)?)
-        } else {
-            None
-        };
+        // A live version the writer cannot read is absent for every purpose
+        // except occupancy (ADR-0008 section 4; ADR-0007 section 4 in
+        // registry stores, B3): `correct`, `retract` and expectations fail
+        // exactly as for a missing fact, references to it fail as references
+        // to a missing record, and an `assert` of its ID fails with one
+        // uniform conflict whatever its kind or content.
+        let view = self.writer_view(graph, &parent, host)?;
         // Effective operations: key -> Some(new version) or None (retract).
         let mut ops: BTreeMap<Key, Option<Fact>> = BTreeMap::new();
         let mut live_before: BTreeMap<Key, Option<Fact>> = BTreeMap::new();
@@ -914,10 +1054,11 @@ impl Engine {
                 return Err(conflict("a fact occurs twice in one write"));
             }
             let mut live = self.parent_get(&parent, &k)?;
-            if let (Some(access), Some(seen)) = (&reader, &live) {
-                if !matches!(change, FactChange::Assert { .. })
-                    && !self.writer_reads(&parent, &seen.fact, access)?
-                {
+            if let Some(seen) = &live {
+                if !self.writer_knows(&parent, seen, &view)? {
+                    if matches!(change, FactChange::Assert { .. }) {
+                        return Err(conflict(ID_UNAVAILABLE));
+                    }
                     live = None;
                 }
             }
@@ -932,7 +1073,11 @@ impl Engine {
                         ops.insert(k.clone(), Some(fact.clone()));
                     }
                 },
-                FactChange::Correct { fact, expected } => {
+                FactChange::Correct {
+                    fact,
+                    expected,
+                    widen_readers,
+                } => {
                     self.check_expectation(graph, &k, &live, expected)?;
                     let l = live
                         .as_ref()
@@ -940,6 +1085,14 @@ impl Engine {
                     if !same_identity(&l.fact, fact) {
                         return Err(conflict(
                             "a correction cannot change structural identity; write a new fact",
+                        ));
+                    }
+                    // ADR-0008 section 3, from 1.2.0: a correction never makes
+                    // a fact readable by more principals without saying so.
+                    if rules.propagation && !widen_readers && widens(&l.fact, fact) {
+                        return Err(err(
+                            "E_READERS_WIDENED",
+                            "a correction may not widen readers without widen_readers",
                         ));
                     }
                     if &l.fact != fact {
@@ -963,11 +1116,33 @@ impl Engine {
             let revision = head.ok_or_else(|| err("E_INTEGRITY", "no-op write without head"))?;
             return Ok((revision, None));
         }
-        // Post-state lookup: this write's changes over the parent state.
+        // ADR-0008 section 3, from 1.2.0: a declared derivation is no
+        // broader than the inputs it cites.
+        if rules.propagation {
+            for fact in ops.values().flatten() {
+                self.check_derived_readers(fact, host)?;
+            }
+        }
+        // Post-state lookup: this write's changes over the parent state. The
+        // dependent check sees every live record, hidden ones included, so a
+        // hidden dependent refuses a retraction exactly as a visible one does.
         let post = |k: &Key| -> Result<Option<Fact>> {
             match ops.get(k) {
                 Some(change) => Ok(change.clone()),
                 None => Ok(self.parent_get(&parent, k)?.map(|s| s.fact)),
+            }
+        };
+        // In a registry store, validation sees only what the writer can read,
+        // so a reference to a hidden record fails exactly as a reference to a
+        // missing one. A local store's host is trusted and its pipelines
+        // reference records by the IDs of their sources (an embedder writes
+        // the vectors of notes it was given), so there references resolve
+        // against every live record (ADR-0008 section 4, declared).
+        let known = |k: &Key| -> Result<Option<Fact>> {
+            match ops.get(k) {
+                Some(change) => Ok(change.clone()),
+                None if !view.registry => post(k),
+                None => self.known_parent(&parent, k, &view),
             }
         };
         // Records that survive in the post state and depend on a retracted fact.
@@ -1128,7 +1303,7 @@ impl Engine {
             include(fact.clone(), &mut neighborhood);
             let mut queue = needed;
             while let Some(k) = queue.pop() {
-                let Some(dependency) = post(&k)? else {
+                let Some(dependency) = known(&k)? else {
                     continue;
                 };
                 match &dependency {
@@ -1243,6 +1418,139 @@ impl Engine {
         Ok((revision, Some(event_id)))
     }
 
+    /// ADR-0008 section 3: every restricted input that a fact's provenance
+    /// evidence cites, and that the writer can see, must be carried by the
+    /// fact's influence carriers or have a clause the fact's own clause
+    /// implies. Evidence the writer cannot see is not consulted, so the
+    /// outcome never depends on it.
+    fn check_derived_readers(&self, fact: &Fact, host: &HostContext) -> Result<()> {
+        let Some(claim) = claim_field(fact) else {
+            return Ok(());
+        };
+        if claim.evidence.is_empty() {
+            return Ok(());
+        }
+        let (readers, groups) = clause(fact);
+        let (derived_from, derived_nodes, derived_snapshots) = carriers(fact);
+        for evidence in &claim.evidence {
+            let carried = match evidence {
+                EvidenceRef::Assertion {
+                    graph_id,
+                    revision,
+                    assertion_id,
+                } => derived_from.iter().any(|r| {
+                    (&r.graph_id, &r.revision, &r.assertion_id)
+                        == (graph_id, revision, assertion_id)
+                }),
+                EvidenceRef::Node {
+                    graph_id,
+                    revision,
+                    node_id,
+                } => derived_nodes.iter().any(|r| {
+                    (&r.graph_id, &r.revision, &r.node_id) == (graph_id, revision, node_id)
+                }),
+                EvidenceRef::Graph { graph_id, revision } => derived_snapshots
+                    .iter()
+                    .any(|r| (&r.graph_id, &r.revision) == (graph_id, revision)),
+                EvidenceRef::Artifact { .. } => true,
+                EvidenceRef::Embedding { .. } => false,
+            };
+            if carried || !self.evidence_visible(evidence, host)? {
+                continue;
+            }
+            for (in_readers, in_groups) in self.evidence_clauses(evidence)? {
+                if !clause_within(readers, groups, &in_readers, &in_groups) {
+                    return Err(err(
+                        "E_DERIVED_READERS",
+                        "a derived fact's readers are broader than an input it cites",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The reader clauses a visible piece of evidence is restricted by: the
+    /// record and every record its visibility depends on.
+    fn evidence_clauses(&self, evidence: &EvidenceRef) -> Result<Vec<(Vec<String>, Vec<String>)>> {
+        let (graph_id, revision) = match evidence {
+            EvidenceRef::Assertion {
+                graph_id, revision, ..
+            }
+            | EvidenceRef::Node {
+                graph_id, revision, ..
+            }
+            | EvidenceRef::Graph { graph_id, revision }
+            | EvidenceRef::Embedding {
+                graph_id, revision, ..
+            } => (graph_id, revision),
+            EvidenceRef::Artifact { .. } => return Ok(vec![]),
+        };
+        let data = match evidence {
+            EvidenceRef::Node { node_id, .. } => {
+                self.load_for_reference(graph_id, revision, store::Namespace::Node, node_id)?
+            }
+            EvidenceRef::Assertion { assertion_id, .. } => {
+                self.load_for_reference(graph_id, revision, store::Namespace::Record, assertion_id)?
+            }
+            EvidenceRef::Embedding { embedding_id, .. } => {
+                self.load_for_reference(graph_id, revision, store::Namespace::Record, embedding_id)?
+            }
+            _ => self.load(graph_id, revision)?,
+        };
+        let Some(data) = data else {
+            return Ok(vec![]);
+        };
+        let of = |r: &[String], g: &[String]| (r.to_vec(), g.to_vec());
+        let node = |id: &str| {
+            data.nodes
+                .iter()
+                .find(|n| n.id == id)
+                .map(|n| of(&n.readers, &n.reader_groups))
+        };
+        let mut out = vec![];
+        match evidence {
+            EvidenceRef::Node { node_id, .. } => out.extend(node(node_id)),
+            EvidenceRef::Assertion { assertion_id, .. } => {
+                let id = assertion_id.as_str();
+                if let Some(e) = data.edges.iter().find(|e| e.id == id) {
+                    out.push(of(&e.readers, &e.reader_groups));
+                    out.extend(node(&e.from));
+                    out.extend(node(&e.to));
+                } else if let Some(a) = data.assertions.iter().find(|a| a.id == id) {
+                    out.push(of(&a.readers, &a.reader_groups));
+                    if let Some(e) = data.structural_edges.iter().find(|e| e.id == a.edge_id) {
+                        out.push(of(&e.readers, &e.reader_groups));
+                        out.extend(node(&e.from));
+                        out.extend(node(&e.to));
+                    }
+                } else if let Some(a) = data.attachments.iter().find(|a| a.id == id) {
+                    out.push(of(&a.readers, &a.reader_groups));
+                    if let MetadataHost::Node { id } = &a.host {
+                        out.extend(node(id));
+                    }
+                }
+            }
+            EvidenceRef::Embedding { embedding_id, .. } => {
+                if let Some(e) = data.embeddings.iter().find(|e| &e.id == embedding_id) {
+                    out.push(of(&e.readers, &e.reader_groups));
+                    if let EmbeddingSubject::Node { node_id } = &e.subject {
+                        out.extend(node(node_id));
+                    }
+                }
+            }
+            EvidenceRef::Graph { .. } => {
+                for f in facts_of(&data) {
+                    let (r, g) = clause(&f);
+                    out.push(of(r, g));
+                }
+            }
+            EvidenceRef::Artifact { .. } => {}
+        }
+        out.retain(|(r, g)| !(r.is_empty() && g.is_empty()));
+        Ok(out)
+    }
+
     /// The changes that make the live facts of a branch equal `facts`, for
     /// importers that re-send whole tables (A5): `assert` for a fact that is
     /// not live, `correct` for a live fact of the same kind and ID that
@@ -1292,6 +1600,7 @@ impl Engine {
                 ),
             },
         };
+        let view = self.writer_view(graph, &parent, host)?;
         let mut seen: BTreeSet<Key> = BTreeSet::new();
         let mut changes = Vec::new();
         for fact in facts {
@@ -1302,7 +1611,14 @@ impl Engine {
             if !seen.insert(k.clone()) {
                 return Err(conflict("a fact occurs twice in one reconciliation"));
             }
-            match self.parent_get(&parent, &k)? {
+            // A live version the writer cannot read is planned like an absent
+            // one; the write then fails with the uniform occupancy conflict
+            // (ADR-0008 section 4).
+            let live = match self.parent_get(&parent, &k)? {
+                Some(live) if self.writer_knows(&parent, &live, &view)? => Some(live),
+                _ => None,
+            };
+            match live {
                 None => changes.push(FactChange::Assert { fact: fact.clone() }),
                 Some(live) if live.fact.kind() != fact.kind() => {
                     return Err(conflict("a live fact with this ID has another kind"));
@@ -1317,6 +1633,7 @@ impl Engine {
                     changes.push(FactChange::Correct {
                         fact: fact.clone(),
                         expected: None,
+                        widen_readers: false,
                     });
                 }
             }

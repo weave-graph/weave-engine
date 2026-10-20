@@ -28,21 +28,21 @@
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_UNAVAILABLE": 4040
+     "E_UNAVAILABLE": 5189
     },
-    "errors": 4040,
-    "ok": 15960,
+    "errors": 5189,
+    "ok": 19811,
     "sensitive": 5305
    },
    "changes": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 1103,
-     "E_UNAVAILABLE": 800
+     "E_BUDGET": 1453,
+     "E_UNAVAILABLE": 1200
     },
-    "errors": 1903,
-    "ok": 18097,
+    "errors": 2653,
+    "ok": 22347,
     "sensitive": 4857
    },
    "cluster": {
@@ -50,192 +50,192 @@
     "declared": 0,
     "error_codes": {},
     "errors": 0,
-    "ok": 20000,
+    "ok": 25000,
     "sensitive": 6746
    },
    "context": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 160,
-     "E_SPACE": 88,
-     "E_UNAVAILABLE": 1987
+     "E_BUDGET": 230,
+     "E_SPACE": 117,
+     "E_UNAVAILABLE": 2594
     },
-    "errors": 2235,
-    "ok": 17765,
+    "errors": 2941,
+    "ok": 22059,
     "sensitive": 5721
    },
    "counterparts": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 149,
-     "E_IDENTITY": 19,
-     "E_SPACE": 80,
-     "E_UNAVAILABLE": 2080
+     "E_BUDGET": 207,
+     "E_IDENTITY": 27,
+     "E_SPACE": 111,
+     "E_UNAVAILABLE": 2777
     },
-    "errors": 2328,
-    "ok": 17672,
+    "errors": 3122,
+    "ok": 21878,
     "sensitive": 5012
    },
    "current_view": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_UNAVAILABLE": 16583
+     "E_UNAVAILABLE": 20716
     },
-    "errors": 16583,
-    "ok": 3417,
-    "sensitive": 1199
+    "errors": 20716,
+    "ok": 4284,
+    "sensitive": 1222
    },
    "diff": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 154,
-     "E_SPACE": 119,
-     "E_UNAVAILABLE": 1988
+     "E_BUDGET": 208,
+     "E_SPACE": 159,
+     "E_UNAVAILABLE": 2603
     },
-    "errors": 2261,
-    "ok": 17739,
+    "errors": 2970,
+    "ok": 22030,
     "sensitive": 8609
    },
    "expand": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 757,
-     "E_SPACE": 108,
-     "E_UNAVAILABLE": 2541
+     "E_BUDGET": 1019,
+     "E_SPACE": 142,
+     "E_UNAVAILABLE": 3372
     },
-    "errors": 3406,
-    "ok": 16594,
+    "errors": 4533,
+    "ok": 20467,
     "sensitive": 7304
    },
    "explain": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 175,
-     "E_SPACE": 101,
-     "E_UNAVAILABLE": 2206
+     "E_BUDGET": 242,
+     "E_SPACE": 138,
+     "E_UNAVAILABLE": 2902
     },
-    "errors": 2482,
-    "ok": 17518,
+    "errors": 3282,
+    "ok": 21718,
     "sensitive": 4961
    },
    "filter": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 160,
-     "E_SPACE": 87,
-     "E_UNAVAILABLE": 2002
+     "E_BUDGET": 222,
+     "E_SPACE": 113,
+     "E_UNAVAILABLE": 2681
     },
-    "errors": 2249,
-    "ok": 17751,
+    "errors": 3016,
+    "ok": 21984,
     "sensitive": 3790
    },
    "geometry": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_GEOMETRY_UNAVAILABLE": 15995
+     "E_GEOMETRY_UNAVAILABLE": 19648
     },
-    "errors": 15995,
-    "ok": 4005,
+    "errors": 19648,
+    "ok": 5352,
     "sensitive": 4652
    },
    "join": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 209,
-     "E_SPACE": 142,
-     "E_UNAVAILABLE": 3199
+     "E_BUDGET": 279,
+     "E_SPACE": 194,
+     "E_UNAVAILABLE": 4271
     },
-    "errors": 3550,
-    "ok": 16450,
+    "errors": 4744,
+    "ok": 20256,
     "sensitive": 2582
    },
    "metadata": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_UNAVAILABLE": 708
+     "E_UNAVAILABLE": 1062
     },
-    "errors": 708,
-    "ok": 19292,
+    "errors": 1062,
+    "ok": 23938,
     "sensitive": 737
    },
    "nearest": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 103,
-     "E_SPACE": 837,
-     "E_UNAVAILABLE": 7514
+     "E_BUDGET": 139,
+     "E_SPACE": 1152,
+     "E_UNAVAILABLE": 9327
     },
-    "errors": 8454,
-    "ok": 11546,
+    "errors": 10618,
+    "ok": 14382,
     "sensitive": 6736
    },
    "project": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 79,
-     "E_PROJECT_MEMBER": 15296,
-     "E_SPACE": 55,
-     "E_UNAVAILABLE": 992
+     "E_BUDGET": 104,
+     "E_PROJECT_MEMBER": 18799,
+     "E_SPACE": 74,
+     "E_UNAVAILABLE": 1314
     },
-    "errors": 16422,
-    "ok": 3578,
+    "errors": 20291,
+    "ok": 4709,
     "sensitive": 5218
    },
    "query": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_UNAVAILABLE": 648
+     "E_UNAVAILABLE": 972
     },
-    "errors": 648,
-    "ok": 19352,
+    "errors": 972,
+    "ok": 24028,
     "sensitive": 7024
    },
    "reason": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 159,
-     "E_SPACE": 105,
-     "E_UNAVAILABLE": 2036
+     "E_BUDGET": 210,
+     "E_SPACE": 140,
+     "E_UNAVAILABLE": 2677
     },
-    "errors": 2300,
-    "ok": 17700,
+    "errors": 3027,
+    "ok": 21973,
     "sensitive": 6517
    },
    "recorded_query": {
     "cases": 10000,
-    "declared": 935,
+    "declared": 1572,
     "error_codes": {
-     "E_HISTORY_UNAVAILABLE": 15295,
-     "E_UNAVAILABLE": 698
+     "E_HISTORY_UNAVAILABLE": 18550,
+     "E_UNAVAILABLE": 1047
     },
-    "errors": 15993,
-    "ok": 4007,
+    "errors": 19597,
+    "ok": 5403,
     "sensitive": 5571
    },
    "reference": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 236,
-     "E_SPACE": 156,
-     "E_UNAVAILABLE": 3021
+     "E_BUDGET": 314,
+     "E_SPACE": 212,
+     "E_UNAVAILABLE": 4008
     },
-    "errors": 3413,
-    "ok": 16587,
+    "errors": 4534,
+    "ok": 20466,
     "sensitive": 6783
    },
    "resolve_identity": {
@@ -250,79 +250,79 @@
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 308,
-     "E_INFLUENCE_BUDGET": 2,
-     "E_SPACE": 189,
-     "E_UNAVAILABLE": 3841
+     "E_BUDGET": 413,
+     "E_INFLUENCE_BUDGET": 3,
+     "E_SPACE": 256,
+     "E_UNAVAILABLE": 5089
     },
-    "errors": 4340,
-    "ok": 15660,
+    "errors": 5761,
+    "ok": 19239,
     "sensitive": 6695
    },
    "similar_candidates": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 450,
-     "E_SPACE": 29,
-     "E_UNAVAILABLE": 1586
+     "E_BUDGET": 658,
+     "E_SPACE": 44,
+     "E_UNAVAILABLE": 2278
     },
-    "errors": 2065,
-    "ok": 17935,
+    "errors": 2980,
+    "ok": 22020,
     "sensitive": 6114
    },
    "support": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 153,
-     "E_SPACE": 101,
-     "E_UNAVAILABLE": 2127
+     "E_BUDGET": 202,
+     "E_SPACE": 147,
+     "E_UNAVAILABLE": 2834
     },
-    "errors": 2381,
-    "ok": 17619,
+    "errors": 3183,
+    "ok": 21817,
     "sensitive": 6531
    },
    "typed_context": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 139,
-     "E_CONTEXT_UNAVAILABLE": 8265,
-     "E_SPACE": 96,
-     "E_UNAVAILABLE": 2026
+     "E_BUDGET": 183,
+     "E_CONTEXT_UNAVAILABLE": 10209,
+     "E_SPACE": 137,
+     "E_UNAVAILABLE": 2694
     },
-    "errors": 10526,
-    "ok": 9474,
-    "sensitive": 5108
+    "errors": 13223,
+    "ok": 11777,
+    "sensitive": 5256
    },
    "union": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 333,
-     "E_SPACE": 191,
-     "E_UNAVAILABLE": 3737
+     "E_BUDGET": 444,
+     "E_SPACE": 251,
+     "E_UNAVAILABLE": 4933
     },
-    "errors": 4261,
-    "ok": 15739,
+    "errors": 5628,
+    "ok": 19372,
     "sensitive": 7316
    },
    "window": {
     "cases": 10000,
     "declared": 0,
     "error_codes": {
-     "E_BUDGET": 154,
-     "E_INFLUENCE_BUDGET": 5,
-     "E_SPACE": 105,
-     "E_UNAVAILABLE": 2071
+     "E_BUDGET": 208,
+     "E_INFLUENCE_BUDGET": 8,
+     "E_SPACE": 141,
+     "E_UNAVAILABLE": 2744
     },
-    "errors": 2335,
-    "ok": 17665,
+    "errors": 3101,
+    "ok": 21899,
     "sensitive": 6448
    }
   },
-  "seconds": 655.792167298,
+  "seconds": 694.895787592,
   "worlds": 1000
  },
  "host": {
@@ -337,75 +337,76 @@
    "components": {
     "cases": 10000,
     "error_codes": {
-     "E_SCIENCE_PARTIAL": 999,
-     "E_UNAVAILABLE": 196
+     "E_SCIENCE_PARTIAL": 1184,
+     "E_UNAVAILABLE": 233
     },
-    "errors": 1195,
-    "ok": 18805,
+    "errors": 1417,
+    "ok": 23583,
     "sensitive": 9573
    },
    "degree": {
     "cases": 10000,
     "error_codes": {
-     "E_SCIENCE_PARTIAL": 908,
-     "E_UNAVAILABLE": 192
+     "E_SCIENCE_PARTIAL": 1082,
+     "E_UNAVAILABLE": 233
     },
-    "errors": 1100,
-    "ok": 18900,
+    "errors": 1315,
+    "ok": 23685,
     "sensitive": 9599
    },
    "nearest_vectors": {
     "cases": 10000,
     "error_codes": {
-     "E_SCIENCE_PARTIAL": 936,
-     "E_UNAVAILABLE": 184
+     "E_SCIENCE_PARTIAL": 1128,
+     "E_UNAVAILABLE": 224
     },
-    "errors": 1120,
-    "ok": 18880,
+    "errors": 1352,
+    "ok": 23648,
     "sensitive": 9552
    },
    "pagerank": {
     "cases": 10000,
     "error_codes": {
-     "E_SCIENCE_PARTIAL": 1019,
-     "E_UNAVAILABLE": 152
+     "E_SCIENCE_PARTIAL": 1214,
+     "E_UNAVAILABLE": 196
     },
-    "errors": 1171,
-    "ok": 18829,
+    "errors": 1410,
+    "ok": 23590,
     "sensitive": 9591
    },
    "shortest_paths": {
     "cases": 10000,
     "error_codes": {
-     "E_SCIENCE_PARTIAL": 916,
-     "E_SCIENCE_SOURCE": 14873,
-     "E_SCIENCE_TARGET": 1090,
-     "E_UNAVAILABLE": 202
+     "E_SCIENCE_PARTIAL": 1093,
+     "E_SCIENCE_SOURCE": 18286,
+     "E_SCIENCE_TARGET": 1400,
+     "E_UNAVAILABLE": 251
     },
-    "errors": 17081,
-    "ok": 2919,
+    "errors": 21030,
+    "ok": 3970,
     "sensitive": 5076
    }
   },
   "cases_per_analysis_target": 10000,
-  "seconds": 179.722094976,
+  "seconds": 221.011624861,
   "worlds": 1000
  },
- "source_commit": "origin/main 4440843 + B2 part 1",
+ "source_commit": "B2 part 2 (contract 1.2.0) on origin/main 0a49652",
  "what": "B2 noninterference harness, full-count tier (ADR-0008 section 7)",
  "writes_registry_stores": {
   "counts": {
    "cases": 10000,
-   "declared": 515,
+   "declared": 2544,
    "error_codes": {
-    "E_CONFLICT": 6197,
-    "E_DEPENDENT_FACT": 457,
-    "E_SCHEMA_ENDPOINT": 3
+    "E_ATTACHMENT": 303,
+    "E_CONFLICT": 5061,
+    "E_DEPENDENT_FACT": 284,
+    "E_SCHEMA_ENDPOINT": 241
    },
-   "errors": 6657,
-   "ok": 2828,
+   "errors": 5889,
+   "ok": 1567,
    "sensitive": 0
   },
-  "worlds": 515
+  "worlds": 2544
  }
 }

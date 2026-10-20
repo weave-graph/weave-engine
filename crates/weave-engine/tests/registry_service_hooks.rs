@@ -95,7 +95,8 @@ fn correct_and_retract_treat_an_unreadable_fact_as_absent() {
     .unwrap();
     let retract =
         |kind: &str, id: &str| json!([{"change": "retract", "target": {"kind": kind, "id": id}}]);
-    let correct = |id: &str| json!([{"change": "correct", "fact": node(id, &[], &[])}]);
+    // These corrections publish the fact, so they say so (ADR-0008, 1.2.0).
+    let correct = |id: &str| json!([{"change": "correct", "fact": node(id, &[], &[]), "widen_readers": true}]);
     // For bob each hidden fact fails exactly like one that does not exist.
     for (hidden, kind) in [
         ("for-root", "node"),

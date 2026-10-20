@@ -2148,3 +2148,91 @@ compile tool, so it is left out and noted for LB1: a `weave sdk` mode that
 reads one `weave-compiler-request/1` on stdin would let the service run it
 as a sandboxed subprocess, and `describe_schema` now provides the embedding
 spaces the manifest omits.
+
+### 2026-10-20 — #5 B2 — Part 2 is protocol 1.2.0 with no store change
+
+Part 2 adds one optional wire field, `widen_readers` on corrections, omitted
+when false, and two error codes. That makes it the additive minor version
+1.2.0 under core v1 section 11.3. Nothing new is stored: the field is a flag
+on a change, not fact content, so revision IDs and stored bytes are
+unchanged and `STORAGE_VERSION` stays 32. The language vendors once, at 1.2.0,
+including the part 1 changes to `src/rules.rs` and `src/carrier_algebra.rs`,
+as the coordinator asked. The Python client and `check_science.py` move to
+1.2.0, as they did for 1.1.0.
+
+### 2026-10-20 — #5 B2 — The author exception is local-only; registry stores need Read
+
+ADR-0008 section 4 lets a writer act on a version it recorded itself, so A5
+importers keep reconciling customer-restricted units they cannot read. In a
+registry store the exception would contradict ADR-0007 section 4 ("correct
+or retract it only when Read also holds") and the B3 rule. So it applies only
+in stores without a registry, where the host is trusted and the writer's
+grant is `writable_graphs`. A version recorded by someone else is hidden
+from the importer like any other.
+
+### 2026-10-20 — #5 B2 — References to hidden records: missing in registry stores, resolved in local ones
+
+In a registry store, a reference to a record the writer cannot read now
+fails exactly as a reference to a missing one, which closes an existence
+oracle on guessed IDs. Applying the same rule to local stores broke the A4/A6
+exit scenario and the README quickstart. There a separate `note-embedder`
+writes vectors for notes the importer restricted to their customers, exactly
+as a real embedding pipeline that was handed the text would. A local host
+is trusted (SECURITY.md), so local references resolve against every live
+record and the remaining bit is declared with occupancy. The rest of section
+4 (asserts, corrections, retractions, expectations, reconciliation) applies
+in both kinds of store.
+
+### 2026-10-20 — #5 B2 — Declared-derivation checks consult only evidence the writer can see
+
+`E_DERIVED_READERS` compares a fact with the restricted evidence it cites.
+Evidence the writer cannot see is skipped, so the outcome equals the outcome
+for evidence that does not exist; checking it would make the write's success
+depend on a hidden record's readers. Reads already strip such evidence from
+`fact_provenance`. The cited record's clause includes what its visibility
+depends on: an edge's endpoints, an assertion's structural edge and
+endpoints, an attachment's host node, an embedding's subject, and every
+record of a cited graph revision. Influence carriers satisfy the rule by
+construction, because reads enforce them.
+
+### 2026-10-20 — #5 B2 — A derived conjunction keeps its first clause; disjoint literals match no one
+
+`visibility::Derived::encode` replaces the B1 meet with the carrier form of
+ADR-0008 section 2. The own clause is the first restricted clause, exactly.
+The only engine derivation that intersects clauses, a materialized explicit
+assertion, already carries its source assertion in `derived_from`, and that
+assertion is visible only with its structural edge, so the other clause is
+enforced at read time. Under the meet, a group clause and a principal clause
+met in nothing, and the derived edge was readable by no one, even by a
+reader who satisfied both. Two disjoint literal reader lists now derive
+`weave:no-reader` instead of the empty, public list. No reader ever saw such
+a record, but a copy of it would have been public.
+
+### 2026-10-20 — #5 B2 — Agents in the harness
+
+Registry worlds add `alice-bot`, an agent of `alice` with `owner_all` and
+Read on the visible graphs, as a reader under test, so every operator's
+noninterference also holds for an agent (ADR-0007 section 10, item 5). A
+second check shows the agent sees no more than its owner, and that removing
+the owner from groups only removes records from the agent's query and
+`expand` output. Top-k rankings are excluded from that monotonicity check,
+because a hidden near neighbor lets a farther one into the top k; they keep
+the agent-within-owner check. Item 6 (revocation) is checked on a compiled
+view, a change set and a `nearest` ranking.
+
+### 2026-10-20 — #5 B2 — The write harness covers occupancy and local stores
+
+The write-outcome harness now runs in local and registry worlds and asserts
+records with hidden IDs, with any content. It allows two declared
+differences: the uniform occupancy conflict ("fact ID is not available") and
+the uniform dependent refusal. Either one ends the world, because the stores'
+visible states then differ. References to hidden records are generated only
+in registry worlds, where they must give identical outcomes.
+
+### 2026-10-20 — #5 B2 — Importers do not widen silently either
+
+`reconcile_facts` plans corrections without `widen_readers`. If a re-import
+row makes a unit readable by more principals, the A5 importer's 1.2.0 write
+now fails with `E_READERS_WIDENED` instead of publishing it. An export that
+widens readers is exactly the mistake the check exists to catch. An
+operator who means it re-runs the correction with the flag.

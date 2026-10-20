@@ -108,6 +108,11 @@ pub enum FactChange {
         fact: Fact,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         expected: Option<FactExpectation>,
+        /// Allow the correction to make the fact readable by more principals
+        /// than the version it replaces (1.2.0, ADR-0008 section 3). Without
+        /// it a widening correction fails with `E_READERS_WIDENED`.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        widen_readers: bool,
     },
     /// End the live version of a fact. History keeps it.
     Retract {

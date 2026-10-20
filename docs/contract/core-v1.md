@@ -2,7 +2,7 @@
 
 Status: **accepted** on 2026-10-19 (A1,
 [#2](https://github.com/weave-graph/weave-engine/issues/2)). Baseline protocol:
-**0.21.0**. Current protocol: **1.1.0** (B1); 1.0.0 (A6,
+**0.21.0**. Current protocol: **1.2.0** (B2); 1.0.0 (A6,
 [#16](https://github.com/weave-graph/weave-engine/issues/16)), which freezes
 core v1 as published in 0.24.0. Protocol 0.22.0 activated per-fact
 provenance, node valid time and fact-level writes (A2,
@@ -12,7 +12,9 @@ k-hop `expand`, `as_of` selection and `changes` change sets (A3,
 embedding spaces and facts and adds exact `nearest` and `similar_candidates`
 (A4, [#13](https://github.com/weave-graph/weave-engine/issues/13)); 1.1.0
 activates `reader_groups` and `FactProvenance.on_behalf_of` (B1,
-[#38](https://github.com/weave-graph/weave-engine/issues/38), ADR-0007).
+[#38](https://github.com/weave-graph/weave-engine/issues/38), ADR-0007); 1.2.0
+adds write-time propagation rules and `widen_readers` on corrections (B2,
+[#5](https://github.com/weave-graph/weave-engine/issues/5), ADR-0008).
 Profile name: `core-v1` (`weave_contract::wire::CORE_PROFILE`).
 
 This document is the consolidated, normative specification of the core of the
@@ -153,10 +155,20 @@ A **fact** is a node, an edge, an explicit assertion, a metadata attachment or
   revision}`. Any mismatch fails the whole write with `E_CONFLICT`. Writes to
   `weave:` graphs fail with `E_RESERVED_NAMESPACE`. At most 100,000 changes
   per write (`E_BUDGET`). The result is `committed` or `unchanged`. Snapshot
-  commits cannot carry embedding spaces or embeddings (`E_EMBEDDING`). Fixtures:
+  commits cannot carry embedding spaces or embeddings (`E_EMBEDDING`). A live
+  version the writer cannot read (ADR-0008 section 4) is absent for
+  `correct`, `retract` and `expected`, which fail exactly as for a missing
+  fact; an `assert` of its ID fails with `E_CONFLICT` "fact ID is not
+  available" whatever its kind or content. In a store with a principal
+  registry, a reference to a record the writer cannot read (an edge
+  endpoint, an attachment host, an embedding subject) fails exactly as a
+  reference to a missing record. Retracting a record that a live record
+  depends on fails with `E_DEPENDENT_FACT` whether or not the writer can read
+  the dependent. These rules apply to programs of every version. Fixtures:
   `positive/fact-write-assert-correct-retract.json`,
   `negative/write-forged-writer.json`,
-  `negative/embedding-snapshot-commit.json`.
+  `negative/embedding-snapshot-commit.json`,
+  `negative/hidden-fact-id-unavailable.json`.
 - **`fact.readers`.** Every fact has `readers`. An empty list means public.
   A nonempty list is a disjunction of principal IDs. An edge is visible only
   when its own readers and both endpoints' readers admit the principal. The
@@ -191,6 +203,27 @@ A **fact** is a node, an edge, an explicit assertion, a metadata attachment or
   `positive/reader-groups-omitted-when-empty.json`,
   `negative/reader-groups-unknown-group.json`,
   `negative/reader-groups-version-gated.json`.
+- **`fact.propagation`.** From 1.2.0 (ADR-0008 section 3), writes keep
+  restrictions from widening:
+  - A `correct` whose `readers` and `reader_groups` admit anyone the live
+    version's do not (it is public where the old version was not, or it
+    names a principal or group the old version does not) fails with
+    `E_READERS_WIDENED`, unless the change sets `widen_readers: true`. The
+    field is omitted when false. Narrowing needs no flag.
+  - A fact whose `provenance.evidence` cites a restricted record the writer
+    can see must either carry that record as an influence carrier
+    (`derived_from`, `derived_nodes` or `derived_snapshots`) or have its own
+    clause within the record's clause (it is restricted, and its `readers`
+    and `reader_groups` are subsets of the record's). Otherwise the write
+    fails with `E_DERIVED_READERS`. Evidence the writer cannot see is not
+    consulted.
+  Both checks compare lists and never resolve group membership. Programs
+  older than 1.2.0 keep their published meaning: neither check applies, and
+  `widen_readers` fails with `E_VERSION`. Fixtures:
+  `negative/readers-widened.json`,
+  `positive/readers-widened-explicitly.json`,
+  `negative/widen-readers-version-gated.json`,
+  `negative/derived-readers-broader.json`.
 
 ## 5. Time
 
@@ -558,7 +591,10 @@ decoding failures, and the C ABI keeps `E_NATIVE_INPUT`.
 | Code | Meaning |
 |---|---|
 | `E_VERSION` | A feature is newer than the program's declared version, for example `join` in 0.1.0 (fixture: `negative/legacy-version-feature-gate.json`) |
-| `E_CONFLICT` | `expected_head` differs from the branch head, or a descriptor conflicts with one already registered |
+| `E_CONFLICT` | `expected_head` differs from the branch head, a descriptor conflicts with one already registered, or a write asserts an ID a live fact holds. When the writer cannot read that fact, the message is always "fact ID is not available" (fixture: `negative/hidden-fact-id-unavailable.json`) |
+| `E_READERS_WIDENED` | A 1.2.0 correction makes a fact readable by more principals without `widen_readers` (fixture: `negative/readers-widened.json`) |
+| `E_DERIVED_READERS` | A 1.2.0 fact cites restricted evidence and is readable by principals that evidence is not (fixture: `negative/derived-readers-broader.json`) |
+| `E_DEPENDENT_FACT` | A retraction leaves a live dependent fact, visible or not |
 | `E_INTERVAL` | A valid-time interval is empty or inverted |
 | `E_ID` | An identifier is empty, too long or otherwise invalid |
 | `E_FORBIDDEN` | The host has not granted the required write authority. In a store with a principal registry, also: the principal can discover the named graph but lacks the permission the operation needs |
@@ -588,9 +624,9 @@ automatically:
 
 | Identifier | Current | Where |
 |---|---|---|
-| Protocol (`Program.version`, `QueryResult.version`) | 1.1.0 | `weave_contract::VERSION`; every accepted version in `weave_contract::versions::SUPPORTED_VERSIONS` |
+| Protocol (`Program.version`, `QueryResult.version`) | 1.2.0 | `weave_contract::VERSION`; every accepted version in `weave_contract::versions::SUPPORTED_VERSIONS` |
 | Core profile | `core-v1` | This document |
-| Contract crate | 1.1.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
+| Contract crate | 1.2.0, always equal to the protocol | `crates/weave-contract/Cargo.toml` |
 | Store schema | 32 | `STORAGE_VERSION` |
 | Capsule format | 0.4 | [CAPSULES.md](../CAPSULES.md) |
 | Science API | 0.1.0 | [SCIENCE_INTERFACE.md](../SCIENCE_INTERFACE.md) |
@@ -600,12 +636,12 @@ automatically:
 
 - **`compat.versions`.** A program declares exactly one protocol version.
   There is no range negotiation. The engine accepts the closed set
-  `SUPPORTED_VERSIONS` (0.1.0 through 0.24.0, then 1.0.0 and 1.1.0) and executes each
+  `SUPPORTED_VERSIONS` (0.1.0 through 0.24.0, then 1.0.0, 1.1.0 and 1.2.0) and executes each
   with the exact semantics it was published with. A feature used under an
   older version fails with `E_VERSION` before any write. Fixtures:
   `positive/legacy-version-accepted.json`,
   `negative/legacy-version-feature-gate.json`,
-  `positive/protocol-1-0-0.json`, `negative/unknown-version.json` (1.2.0)
+  `positive/protocol-1-0-0.json`, `negative/unknown-version.json` (1.3.0)
   and `negative/unknown-version-checked-first.json` (2.0.0).
 - **Feature gates.** `weave_contract::versions` holds the one ordered
   version table. Every gate names the version that introduced its feature and
@@ -628,6 +664,11 @@ automatically:
   ([note](v1.1/README.md)). Stored bytes, content hashes and revision IDs of
   records without groups are unchanged, and 1.0.0 programs keep their exact
   meaning.
+- **1.2.0 (B2).** `widen_readers` on corrections, omitted when false, and
+  the write rules of `fact.propagation` for 1.2.0 programs
+  ([note](v1.2/README.md)). Nothing stored changes. The write-path rule for
+  live versions the writer cannot read (`fact.write`) is authorization and
+  applies to every version (ADR-0008 section 4).
 - **Core v1 activation.** A2 and A4 activate the reserved core-v1 fields
   through additive minor bumps. Each implementing PR records its exact version
   number. A1 itself changes no wire bytes, so the protocol stays 0.21.0.
@@ -841,13 +882,18 @@ Positive: `positive/identity-graph-nodes-edges.json`,
 `positive/similar-candidates.json`,
 `positive/nearest-result-envelope.json`,
 `positive/reader-groups-omitted-when-empty.json`,
-`positive/fact-provenance-on-behalf-of.json`.
+`positive/fact-provenance-on-behalf-of.json`,
+`positive/readers-widened-explicitly.json`.
 
 Negative: `negative/unknown-version.json`, `negative/missing-version.json`,
 `negative/unknown-version-checked-first.json`,
 `negative/unknown-field-program.json`,
 `negative/reader-groups-version-gated.json`,
 `negative/reader-groups-unknown-group.json`,
+`negative/readers-widened.json`,
+`negative/widen-readers-version-gated.json`,
+`negative/derived-readers-broader.json`,
+`negative/hidden-fact-id-unavailable.json`,
 `negative/write-forged-writer.json`,
 `negative/node-provenance-version-gated.json`,
 `negative/embedding-write-version-gated.json`,

@@ -543,6 +543,22 @@ impl Engine {
         {
             return Err(err("E_VERSION", "reader_groups require contract 1.1.0"));
         }
+        if !weave_contract::version_at_least(&program.version, "1.2.0")
+            && program.commands.iter().any(|command| match command {
+                Command::Write { changes, .. } => changes.iter().any(|change| {
+                    matches!(
+                        change,
+                        FactChange::Correct {
+                            widen_readers: true,
+                            ..
+                        }
+                    )
+                }),
+                _ => false,
+            })
+        {
+            return Err(err("E_VERSION", "widen_readers requires contract 1.2.0"));
+        }
         if !weave_contract::version_at_least(program.version.as_str(), "0.22.0")
             && program.commands.iter().any(|command| match command {
                 Command::Write { .. } => true,
@@ -748,8 +764,14 @@ impl Engine {
                         expected_head,
                         changes,
                     } => {
-                        let (revision, event_id) =
-                            self.write_facts(graph_id, branch_id, expected_head, changes, host)?;
+                        let (revision, event_id) = self.write_facts(
+                            graph_id,
+                            branch_id,
+                            expected_head,
+                            changes,
+                            host,
+                            &program.version,
+                        )?;
                         match event_id {
                             Some(event_id) => CommandResult::Committed { revision, event_id },
                             None => CommandResult::Unchanged { revision },

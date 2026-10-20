@@ -1,0 +1,80 @@
+{
+  "fixture": "hidden-fact-id-unavailable",
+  "concepts": [
+    "fact.readers",
+    "fact.write"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "version": "1.2.0",
+    "commands": [
+      {
+        "op": "write",
+        "graph_id": "g",
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "node",
+              "id": "b",
+              "entity_id": "B",
+              "space_id": "s",
+              "properties": {},
+              "metadata": [],
+              "readers": [
+                "bob"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "engine": {
+    "setup": [
+      {
+        "principal": "bob",
+        "write_graphs": [
+          "g"
+        ],
+        "clock_ms": 10,
+        "program": {
+          "version": "1.2.0",
+          "commands": [
+            {
+              "op": "write",
+              "graph_id": "g",
+              "branch_id": "main",
+              "changes": [
+                {
+                  "change": "assert",
+                  "fact": {
+                    "kind": "node",
+                    "id": "b",
+                    "entity_id": "B",
+                    "space_id": "s",
+                    "properties": {},
+                    "metadata": [],
+                    "readers": [
+                      "bob"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "clock_ms": 20,
+    "error": "E_CONFLICT"
+  }
+}

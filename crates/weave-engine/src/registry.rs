@@ -1209,6 +1209,7 @@ impl Engine {
                     Some(previous) if previous != fact => writes.push(FactChange::Correct {
                         fact: fact.clone(),
                         expected: None,
+                        widen_readers: false,
                     }),
                     Some(_) => {}
                 }

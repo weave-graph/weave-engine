@@ -5,17 +5,18 @@ protocol **1.0.0**, which freezes [core contract v1](contract/core-v1.md)
 with the 0.24.0 feature set ([release notes](../CHANGELOG.md),
 [1.0 note](contract/v1.0/README.md)). **Phase B has started:** B1 is complete:
 the principal registry with users, groups and agents, group readers, graph
-ACLs and Discover, as protocol **1.1.0** and store 32
+ACLs and Discover, as protocol 1.1.0 and store 32
 ([below](#principals-groups-agents-and-graph-acls-b1)),
 B3 is complete with the authenticated multi-tenant `weave-service` ([below](#authenticated-service-b3)),
-B2 part 1 adds a generated noninterference harness over every operator
+B2 adds a generated noninterference harness over every operator and, as
+protocol **1.2.0**, write-time propagation
 ([below](#derived-fact-leakage-protection-b2)), and B4 part 1 serves the
 agent interface over MCP ([below](#agent-interface-b4)). The language reached Phase A parity in
 LA1 (weave-language#3): each of the five exit questions fits in at most 15
 lines of `.weave`, and engine CI runs all five through `check_phase_a.py`.
 Source writes cannot set `readers` until LB1. A source `correct` of a
-restricted fact therefore publishes it, so write restricted facts through
-JSON or Rust.
+restricted fact under 1.1.0 therefore publishes it; under 1.2.0 it fails
+with `E_READERS_WIDENED`. Write restricted facts through JSON or Rust.
 
 As of **10 October 2026**, the native data-science delivery is implemented and
 merged in [PR #33](https://github.com/weave-graph/weave-engine/pull/33). Its finite
@@ -471,7 +472,7 @@ B3 is complete.
 
 B2 ([#5](https://github.com/weave-graph/weave-engine/issues/5),
 [ADR-0008](architecture/ADR-0008-write-time-propagation-and-release-policies.md),
-accepted) is in progress. Part 1 is implemented:
+accepted) is in progress. Parts 1 and 2 are implemented:
 
 - **Noninterference harness.** Generated pairs of stores that differ only in
   facts the readers under test cannot see, in local and registry stores
@@ -493,17 +494,37 @@ accepted) is in progress. Part 1 is implemented:
   witnesses in an order that follows revision IDs, and proof conjunctions
   are flat and canonically ordered, so hidden records no longer change a
   visible witness or push a result over the carrier depth budget.
-- **Writes.** Generated writes in registry stores (corrections and
-  retractions of visible, hidden and missing records, and new records) give
-  identical outcomes with and without hidden facts. The one exception is
-  declared: a retraction that a hidden record depends on fails with the same
-  `E_DEPENDENT_FACT` as for a visible dependent, and changes nothing.
+- **Writes never compare with hidden versions (every protocol version).** A
+  live version the writer cannot read is absent for `correct`, `retract` and
+  `expected`, which fail exactly as for a missing fact. An `assert` of its ID
+  fails with `E_CONFLICT` "fact ID is not available", whatever its kind or
+  content, and `reconcile_facts` plans it like an absent key. In a registry
+  store, a reference to a record the writer cannot read fails as a reference
+  to a missing record; a local store resolves references against every live
+  record, and its writers may act on versions they recorded themselves
+  (trusted importers). Generated writes in local and registry stores give
+  identical outcomes with and without hidden facts, except for the two
+  declared bits: occupancy of an asserted ID, and a hidden dependent
+  refusing a retraction with the same `E_DEPENDENT_FACT` as a visible one.
+- **Write-time propagation (protocol 1.2.0).** A correction that would make
+  a fact readable by more principals fails with `E_READERS_WIDENED` unless it
+  sets `widen_readers: true`. A fact whose provenance evidence cites a
+  restricted record the writer can see must carry it as an influence carrier
+  or be readable only by a subset of its readers and groups, else
+  `E_DERIVED_READERS`. Both compare lists, never membership; 1.1.0 and older
+  programs keep their published meaning. A derived conjunction of group
+  clauses keeps its first clause exactly and enforces the rest through its
+  carriers, instead of the B1 meet; disjoint literal readers derive
+  `weave:no-reader`, never a public record. Error codes for clients are in the
+  [1.2 note](contract/v1.2/README.md#error-codes-for-clients).
+- **Agents.** Registry worlds of the harness add an agent of `alice` as a
+  reader under test; an agent never sees more than its owner, and narrowing
+  the owner only removes records from the agent's output. Revocation reaches
+  compiled views, change sets and rankings on the next request.
 
-Not yet enforced: write-time propagation (a declared derivation with
-broader readers than its inputs is still accepted, and the write path still
-compares changes with live versions the writer cannot read; ADR-0008
-sections 2 to 4, part 2); persisted analytics, rankings and embeddings with
-their inputs' restrictions, and release policies (sections 5 and 6, part 3).
+Not yet enforced: persisted analytics, rankings and embeddings with their
+inputs' restrictions, and release policies (ADR-0008 sections 5 and 6,
+part 3).
 
 ## Agent interface (B4)
 
@@ -606,8 +627,8 @@ addresses:
   authenticated users and agents of isolated tenants with API tokens and an
   audit log. Users, groups, agents and graph ACLs exist (B1); OIDC and signed
   agent capabilities do not yet, and leakage protection is enforced at read
-  time only (B2 part 1 adds a generated noninterference check of every
-  operator; write-time propagation is part 2).
+  time and, from protocol 1.2.0, at write time for declared derivations and
+  corrections (B2); persisted analytics and release policies are part 3.
 - **Scale (Phase C).** There is no telemetry ingestion and no approximate vector
   index. Measured workloads are 10k–100k objects.
 

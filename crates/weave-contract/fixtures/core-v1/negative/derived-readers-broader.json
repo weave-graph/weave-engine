@@ -1,0 +1,91 @@
+{
+  "fixture": "derived-readers-broader",
+  "concepts": [
+    "fact.propagation",
+    "provenance.fact"
+  ],
+  "type": "program",
+  "expect": {
+    "accept": true
+  },
+  "input": {
+    "version": "1.2.0",
+    "commands": [
+      {
+        "op": "write",
+        "graph_id": "g",
+        "branch_id": "main",
+        "changes": [
+          {
+            "change": "assert",
+            "fact": {
+              "kind": "node",
+              "id": "summary",
+              "entity_id": "SUMMARY",
+              "space_id": "s",
+              "properties": {},
+              "metadata": [],
+              "readers": [],
+              "provenance": {
+                "method": {
+                  "kind": "human"
+                },
+                "evidence": [
+                  {
+                    "kind": "node",
+                    "graph_id": "g",
+                    "revision": "fact:sha256:bd68243589d85ecc42fbb02c821c3ee91dc9d734fcda6a06e1bbf2d2de68038c",
+                    "node_id": "a"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "engine": {
+    "setup": [
+      {
+        "principal": "alice",
+        "write_graphs": [
+          "g"
+        ],
+        "clock_ms": 10,
+        "program": {
+          "version": "1.2.0",
+          "commands": [
+            {
+              "op": "write",
+              "graph_id": "g",
+              "branch_id": "main",
+              "changes": [
+                {
+                  "change": "assert",
+                  "fact": {
+                    "kind": "node",
+                    "id": "a",
+                    "entity_id": "A",
+                    "space_id": "s",
+                    "properties": {},
+                    "metadata": [],
+                    "readers": [
+                      "alice"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "principal": "alice",
+    "write_graphs": [
+      "g"
+    ],
+    "clock_ms": 20,
+    "error": "E_DERIVED_READERS"
+  }
+}
