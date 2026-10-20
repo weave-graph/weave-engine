@@ -15,11 +15,14 @@
 //! The tool catalog, its text and the untrusted-data envelope come from
 //! `weave-mcp`; nothing read from a store is placed outside `result`.
 use super::{
-    body_bytes, call, error_response, named_graphs, run_program, Caller, Ctx, Done, Service,
+    body_bytes, call, error_response, named_graphs, run_program, visible_manifest, Caller, Ctx,
+    Done, Service,
 };
+use crate::compile::Compiler;
 use crate::error::{codes, ApiError};
 use crate::ids::mint_record_id;
 use crate::tenant::TenantState;
+use crate::Limits;
 use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
 use axum::extract::State;
@@ -28,7 +31,10 @@ use axum::response::Response;
 use axum::Extension;
 use serde_json::{json, Value};
 use weave_contract::CommandResult;
-use weave_mcp::agent::{describe_program, parse_describe, plan_assert, plan_retract, summarize};
+use weave_mcp::agent::{
+    compile_request, describe_program, parse_compile, parse_describe, plan_assert, plan_retract,
+    summarize, visible_spaces, MAX_SPACE_GRAPHS,
+};
 use weave_mcp::{Message, Tool, AGENT, PROTOCOL_VERSIONS};
 
 /// The audit operation of one message.
@@ -84,7 +90,7 @@ pub(super) async fn post(
         Err(error) => return error_response(error),
     };
     let message = weave_mcp::parse_message(&bytes);
-    let max_commands = service.limits().max_commands;
+    let limits = service.limits().clone();
     call(
         &service,
         caller,
@@ -96,7 +102,7 @@ pub(super) async fn post(
                 Message::Request { id, method, params } => {
                     let response =
                         weave_mcp::respond(&AGENT, id, &method, &params, |tool, args| {
-                            call_tool(state, ctx, tool, args, max_commands, &mut done)
+                            call_tool(state, ctx, tool, args, &limits, &mut done)
                         });
                     if response.get("error").is_some() {
                         done.failure = Some(codes::INPUT.into());
@@ -126,12 +132,12 @@ fn call_tool(
     ctx: &Ctx,
     tool: Tool,
     arguments: Value,
-    max_commands: usize,
+    limits: &Limits,
     done: &mut Done,
 ) -> Value {
     let mut named = Vec::new();
     named_graphs(&arguments, &mut named, &mut 100_000);
-    let outcome = run_tool(state, ctx, tool, arguments, max_commands, done);
+    let outcome = run_tool(state, ctx, tool, arguments, limits, done);
     if let Err(error) = &outcome {
         done.failure = Some(error.code.clone());
         // As for `POST /v1/execute`: a failure records the graphs the
@@ -171,23 +177,27 @@ fn run_tool(
     ctx: &Ctx,
     tool: Tool,
     arguments: Value,
-    max_commands: usize,
+    limits: &Limits,
     done: &mut Done,
 ) -> Result<Value, ApiError> {
+    let max_commands = limits.max_commands;
     match tool {
+        Tool::Compile => compile(state, ctx, arguments, limits.compiler.as_ref(), done),
         Tool::AssertFact => {
+            let human = arguments["provenance"]["method"]["kind"] == "human";
+            let planned = plan_assert(arguments, || {
+                mint_record_id(&ctx.id_key, &ctx.tenant_id, &ctx.principal)
+            })
+            .map_err(input)?;
             // A method is a claim, not an attestation; still, an agent's
-            // own facts never claim to be a person's.
-            if ctx.agent && arguments["provenance"]["method"]["kind"] == "human" {
+            // own facts never claim to be a person's. Checked after the
+            // arguments parse, so malformed input is always E_MCP_INPUT.
+            if ctx.agent && human {
                 return Err(ApiError::new(
                     weave_mcp::codes::CLAIM,
                     "an agent states a model, rule or import method",
                 ));
             }
-            let planned = plan_assert(arguments, || {
-                mint_record_id(&ctx.id_key, &ctx.tenant_id, &ctx.principal)
-            })
-            .map_err(input)?;
             let results = run_program(state, ctx, &planned.program(), max_commands, done)?;
             Ok(json!({
                 "revision": written_revision(&results),
@@ -251,4 +261,73 @@ fn run_tool(
             Ok(json!({"results": results}))
         }
     }
+}
+
+/// The `compile` tool: the caller's source compiled by the configured
+/// compiler under the untrusted policy (and read-only when the caller can
+/// write no graph), against its visible manifest with the embedding spaces
+/// of up to [`MAX_SPACE_GRAPHS`] readable graphs. It returns the compiler's
+/// response and runs nothing.
+fn compile(
+    state: &mut TenantState,
+    ctx: &Ctx,
+    arguments: Value,
+    compiler: Option<&Compiler>,
+    done: &mut Done,
+) -> Result<Value, ApiError> {
+    let arguments = parse_compile(arguments).map_err(input)?;
+    let Some(compiler) = compiler else {
+        return Err(ApiError::new(
+            codes::UNSUPPORTED,
+            "this service has no compiler configured",
+        ));
+    };
+    let mut manifest = visible_manifest(state, ctx, done)?;
+    let readable = |entry: &Value| {
+        matches!(
+            entry["permission"].as_str(),
+            Some("read" | "write" | "administer")
+        )
+    };
+    let wanted: Vec<String> = match &arguments.graphs {
+        Some(graphs) => graphs.clone(),
+        None => manifest["graphs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|g| readable(g))
+            .filter_map(|g| g["graph_id"].as_str().map(String::from))
+            .take(MAX_SPACE_GRAPHS)
+            .collect(),
+    };
+    let can_write = manifest["graphs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|g| matches!(g["permission"].as_str(), Some("write" | "administer")));
+    for entry in manifest["graphs"].as_array_mut().into_iter().flatten() {
+        let Some(graph_id) = entry["graph_id"].as_str().map(String::from) else {
+            continue;
+        };
+        if !readable(entry) || !wanted.contains(&graph_id) {
+            continue;
+        }
+        // Space descriptors carry no fact provenance, so this read cites
+        // no facts; a graph whose spaces cannot be read is left unknown.
+        let program = describe_program(&graph_id, "main");
+        if let Ok(results) = state.engine.execute(&program, &ctx.host) {
+            if let Some(CommandResult::Queried { result }) = results.first() {
+                let result = serde_json::to_value(result).map_err(|_| ApiError::internal())?;
+                entry["embedding_spaces"] = Value::Array(visible_spaces(&result));
+            }
+        }
+    }
+    let read_only = !can_write;
+    let request = compile_request(&arguments, read_only, manifest);
+    let bytes = serde_json::to_vec(&request).map_err(|_| ApiError::internal())?;
+    let response = compiler.compile(&bytes, read_only)?;
+    Ok(json!({
+        "policy": {"untrusted": true, "read_only": read_only},
+        "response": response,
+    }))
 }

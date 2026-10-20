@@ -36,8 +36,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Fact-store SQL boundary (ADR-0004)
         run: python scripts/check_fact_store_boundary.py
-      - name: Build native experiment engine
-        run: cargo build --locked -p weave-science
+      - name: Build native experiment engine and service
+        run: cargo build --locked -p weave-science -p weave-service
       - name: README quickstart, hardware model and hybrid retrieval
         shell: bash
         run: |
@@ -53,6 +53,7 @@ jobs:
       - name: Python client checks
         env:
           WEAVE_SCIENCE_BINARY: ${{ runner.os == 'Windows' && 'target/debug/weave-science.exe' || 'target/debug/weave-science' }}
+          WEAVE_SERVICE_BINARY: ${{ runner.os == 'Windows' && 'target/debug/weave-service.exe' || 'target/debug/weave-service' }}
         run: python -m unittest discover -s python/tests -v
       - name: Independent scientific acceptance
         run: python scripts/check_science.py --engine "${{ runner.os == 'Windows' && 'target/debug/weave-science.exe' || 'target/debug/weave-science' }}" --report science-acceptance.json

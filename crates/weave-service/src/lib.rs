@@ -20,6 +20,7 @@
 //!
 //! See `docs/SERVICE.md` for the API and its limits.
 pub mod audit;
+pub mod compile;
 pub mod control;
 pub mod error;
 pub mod ids;
@@ -63,6 +64,9 @@ pub struct Limits {
     /// The quota of an agent with no quota row of its own and no tenant
     /// default for agents ([`quota`]).
     pub agent_quota: quota::Quota,
+    /// The compiler the `compile` tool runs; `None` makes the tool answer
+    /// `E_UNSUPPORTED` ([`compile`]).
+    pub compiler: Option<compile::Compiler>,
 }
 
 /// The default agent request rate: 600 requests per minute.
@@ -82,6 +86,7 @@ impl Default for Limits {
                 requests_per_minute: Some(DEFAULT_AGENT_REQUESTS_PER_MINUTE),
                 writes_per_hour: Some(DEFAULT_AGENT_WRITES_PER_HOUR),
             },
+            compiler: None,
         }
     }
 }

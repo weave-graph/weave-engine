@@ -53,3 +53,8 @@ Imports replace a full graph snapshot and require `expected_head` for updates.
 Results preserve exact inputs, provenance and coverage; artifact replay rechecks
 current authorization and rejects changed live dependencies. Optional pandas and
 NetworkX conversion is available through the `tables` and `networkx` extras.
+
+For agents, `AgentClient` connects to an authenticated `weave-service` with an
+agent token and calls the agent tools (assert, retract, query, time travel,
+what changed, hybrid search, explain, describe schema, compile) over MCP; see
+the [agent interface guide](../docs/AGENT_INTERFACE.md#python-sdk).

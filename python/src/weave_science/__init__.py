@@ -1,5 +1,6 @@
 """Native Weave temporal graph experiments, with no required Python dependencies."""
 
+from .agent import AgentClient, AgentError
 from .client import Engine, NativeError, OperationTimeout, ProtocolError, WeaveError
 from .data import asserts, edge, embedding, embedding_space, graph_data, node, read_csv
 from .expressions import (
@@ -29,5 +30,6 @@ __all__ = [
     "program", "join", "union", "diff", "window", "explain", "CONTRACT_VERSION",
     "as_of", "expand", "changes",
     "embedding_space", "embedding", "asserts", "nearest_embeddings", "similar_candidates",
+    "AgentClient", "AgentError",
 ]
 

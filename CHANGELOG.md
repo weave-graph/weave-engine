@@ -6,6 +6,26 @@ defined in [docs/ROADMAP.md](docs/ROADMAP.md). The supported profile is in
 
 ## Unreleased
 
+### B4 part 3: the `compile` tool and the Python agent SDK
+
+Closes [#40](https://github.com/weave-graph/weave-engine/issues/40)
+([guide](docs/AGENT_INTERFACE.md)). No protocol, engine store or control
+store change.
+
+- MCP tool `compile`: runs the operator-configured weave-language compiler
+  (`weave-service serve --compiler PATH`) as a sandboxed child, `weave sdk
+  --untrusted` plus `--read-only` for callers that can write no graph, on
+  the caller's source and visible manifest with embedding spaces. Empty
+  environment and working directory, time, output and (on Unix) resource
+  limits; returns the compiler response and runs nothing. `E_UNSUPPORTED`
+  without a compiler, `E_COMPILER` when it misbehaves.
+- Python: `weave_science.AgentClient` and `AgentError`, the agent tools over
+  MCP with the standard library only.
+- `scripts/check_agent_compile.py` and weave-language's
+  `check_agent_service.py` run in the language integration workflow, which
+  now pins weave-language `73def87` and also triggers on `weave-mcp` and
+  `weave-service` changes.
+
 ### B2 part 3: persisted results and release policies (B2 complete)
 
 Closes [#5](https://github.com/weave-graph/weave-engine/issues/5)
