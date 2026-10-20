@@ -843,7 +843,7 @@ fn views(world: &mut World, spec: &Spec) {
     let Ok(template) = template else {
         return;
     };
-    for principal in READERS.iter().chain([&HIDDEN_READER]) {
+    for principal in readers(spec.profile).iter().chain([&HIDDEN_READER]) {
         let host = HostContext::new(*principal, Vec::<String>::new());
         // A view whose registration fails is simply absent for that reader.
         if world
@@ -927,7 +927,7 @@ fn run_world(
             };
             let commands = (operator.plan)(&mut gen);
             local.cases += 1;
-            for principal in READERS {
+            for principal in readers(profile) {
                 let a = outcome(&mut plain, principal, &commands);
                 let b = outcome(&mut mixed, principal, &commands);
                 let ok = a == b;
@@ -1145,28 +1145,32 @@ fn proof_conjunctions_do_not_depend_on_hidden_records() {
 
 // ---------------------------------------------------------------- write outcomes
 
-/// The error of a retraction with a live dependent, which the store with
-/// hidden facts may return where the other succeeds (the declared
-/// dependent channel, ADR-0008 section 4).
 /// Write cases per world; the last retracts the lonely node.
 const WRITE_CASES: usize = 20;
+/// The error of a retraction with a live dependent, which the store with
+/// hidden facts may return where the other succeeds (the declared dependent
+/// channel, ADR-0008 section 4).
 const DEPENDENT: &str = "error E_DEPENDENT_FACT a retracted fact still has live dependent facts";
+/// The one error for an `assert` of an ID a hidden live record holds (the
+/// declared occupancy channel, ADR-0008 section 4).
+const OCCUPIED: &str = "error E_CONFLICT fact ID is not available";
 
-/// One generated write by `alice`, who has Write on `g` in registry stores.
-/// It corrects, retracts and asserts visible, hidden and missing records.
-/// Asserts never name hidden IDs and edges never reference hidden nodes:
-/// those compare with hidden versions in every store until B2 part 2
-/// (ADR-0008 section 4).
+/// One generated write by `alice`, who has Write on `g`. It asserts new
+/// records and records with hidden IDs, and corrects and retracts visible,
+/// hidden and missing records. In registry stores it also references hidden
+/// records; a local store resolves references against every live record
+/// (declared), so local worlds do not generate them.
 fn plan_write(g: &mut Gen, case: usize) -> Value {
     if case == WRITE_CASES - 1 {
         // Every world ends on the node only a hidden record depends on.
         return json!([{"op": "write", "graph_id": "g", "changes": [
             {"change": "retract", "target": {"kind": "node", "id": LONELY}}]}]);
     }
+    let registry = g.spec.profile == Profile::Registry;
     let mut changes = vec![];
     let mut used = std::collections::BTreeSet::new();
     for j in 0..g.rng.range(1, 3) {
-        let change = match g.rng.below(8) {
+        let change = match g.rng.below(11) {
             0 => {
                 let mut node = json!({"kind": "node", "id": format!("new{case}-{j}"),
                     "entity_id": g.rng.pick_str(&ENTITIES), "space_id": g.rng.pick_str(&SPACES)});
@@ -1175,7 +1179,11 @@ fn plan_write(g: &mut Gen, case: usize) -> Value {
             }
             1 => {
                 let from = g.rng.pick(&g.spec.visible_nodes).clone();
-                let to = g.rng.pick(&g.spec.visible_nodes).clone();
+                let to = if registry && g.rng.chance(1, 2) {
+                    g.rng.pick(&g.spec.hidden_nodes).clone()
+                } else {
+                    g.rng.pick(&g.spec.visible_nodes).clone()
+                };
                 json!({"change": "assert", "fact": {"kind": "edge", "id": format!("new-e{case}-{j}"),
                     "predicate": "p", "from": from, "to": to, "valid_time": {"start": 0}}})
             }
@@ -1206,6 +1214,19 @@ fn plan_write(g: &mut Gen, case: usize) -> Value {
                 };
                 json!({"change": "retract", "target": {"kind": kind, "id": id}})
             }
+            7 | 8 => {
+                // An assert of a hidden ID, with any content: occupancy.
+                let id = g.rng.pick(&g.spec.hidden_nodes).clone();
+                json!({"change": "assert", "fact": {"kind": "node", "id": id,
+                    "entity_id": g.rng.pick_str(&ENTITIES), "space_id": g.rng.pick_str(&SPACES)}})
+            }
+            9 if registry => {
+                // An attachment on a hidden node: a reference to it.
+                let host = g.rng.pick(&g.spec.hidden_nodes).clone();
+                json!({"change": "assert", "fact": {"kind": "attachment", "id": format!("new-a{case}-{j}"),
+                    "host": {"kind": "node", "id": host}, "key": "note",
+                    "value": {"kind": "literal", "value": 1}, "valid_time": {"start": 0}}})
+            }
             _ => json!({"change": "retract", "target": {"kind": "node", "id": "nowhere"}}),
         };
         let key = change
@@ -1220,23 +1241,24 @@ fn plan_write(g: &mut Gen, case: usize) -> Value {
     json!([{"op": "write", "graph_id": "g", "changes": changes}])
 }
 
-/// Hidden facts never change a writer's outcome in a registry store, except
-/// through the declared dependent channel. This includes the B3 rule (#70)
-/// that `correct` and `retract` of a fact the writer cannot read fail
-/// exactly as for a missing fact.
+/// Hidden facts never change a writer's outcome, in local and registry
+/// stores, except through the two declared write-path channels: occupancy of
+/// an asserted ID, and a hidden dependent refusing a retraction. This covers
+/// ADR-0008 section 4 and the B3 rule (#70): `correct`, `retract` and
+/// expectations treat a fact the writer cannot read as absent, an `assert` of
+/// its ID gets one uniform conflict whatever its content, and in a registry
+/// store a reference to it fails as a reference to a missing record.
 #[test]
-fn hidden_facts_never_change_a_writers_outcome_in_registry_stores() {
+fn hidden_facts_never_change_a_writers_outcome() {
     // The set of worlds depends only on the target, never on the number of
     // threads or their timing: worlds run in batches of seeds, and a batch is
-    // added only after the previous one is complete. (The first version
-    // stopped on a shared running count, so a 3-core CI host ran fewer worlds
-    // than an 8-core one.)
+    // added only after the previous one is complete.
     let target = cases_per_operator();
-    let base = first_seed() | 1;
+    let base = first_seed();
     let mut counts = Counts::default();
     let mut started = 0usize;
     while counts.cases < target {
-        let batch = (target - counts.cases).div_ceil(WRITE_CASES).max(1);
+        let batch = (target - counts.cases).div_ceil(WRITE_CASES).max(2);
         let next = AtomicUsize::new(started);
         let end = started + batch;
         let results = Mutex::new(Vec::new());
@@ -1247,8 +1269,7 @@ fn hidden_facts_never_change_a_writers_outcome_in_registry_stores() {
                     if index >= end {
                         break;
                     }
-                    // Registry worlds are the odd seeds.
-                    let local = write_world(base + 2 * index as u64);
+                    let local = write_world(base + index as u64);
                     results.lock().unwrap().push(local);
                 });
             }
@@ -1274,23 +1295,31 @@ fn hidden_facts_never_change_a_writers_outcome_in_registry_stores() {
         counts.error_codes.contains_key("E_CONFLICT"),
         "corrections and retractions of hidden facts were exercised"
     );
-    // Every world ends on the lonely node, so every world reaches the
-    // dependent refusal at least once.
+    // Every world ends on the lonely node, so every world reaches a declared
+    // outcome at least once.
     assert!(
         counts.declared >= started,
-        "the hidden dependents were reached in every world"
+        "the hidden records were reached in every world"
     );
 }
 
-/// One registry world of generated writes by `alice`.
+/// One world of generated writes by `alice`; even seeds are local stores.
 fn write_world(seed: u64) -> Counts {
-    let spec = Spec::new(seed, Profile::Registry);
+    let profile = if seed.is_multiple_of(2) {
+        Profile::Local
+    } else {
+        Profile::Registry
+    };
+    let spec = Spec::new(seed, profile);
     let mut plain = World::build(&spec, false);
     let mut mixed = World::build(&spec, true);
     plain.at(FINAL_TIME);
     mixed.at(FINAL_TIME);
     let mut local = Counts::default();
-    let host = HostContext::new("alice", Vec::<String>::new());
+    let host = match profile {
+        Profile::Local => HostContext::new("alice", ["g".to_string()]),
+        Profile::Registry => HostContext::new("alice", Vec::<String>::new()),
+    };
     for case in 0..WRITE_CASES {
         let mut gen = Gen {
             spec: &spec,
@@ -1321,9 +1350,12 @@ fn write_world(seed: u64) -> Counts {
         let (a, b) = (text(&plain, a), text(&mixed, b));
         local.cases += 1;
         if a != b {
+            let plan = commands.to_string();
+            let declared = (b == DEPENDENT && plan.contains("\"retract\""))
+                || (b == OCCUPIED && plan.contains("\"assert\""));
             assert!(
-                b == DEPENDENT && commands.to_string().contains("retract"),
-                "hidden facts changed alice's write outcome (seed {seed}, case {case})\nplan {commands}\n{}",
+                declared,
+                "hidden facts changed alice's write outcome (seed {seed}, {profile:?}, case {case})\nplan {commands}\n{}",
                 difference(&a, &b)
             );
             // The stores now differ in visible state: stop this world.
@@ -1411,4 +1443,100 @@ fn a_hidden_dependent_refuses_a_retraction_like_a_visible_one() {
         assert!(retract(&mut e, "free").is_ok());
         assert_ne!(e.head("g", "main").unwrap(), head);
     }
+}
+
+/// ADR-0007 section 10, item 5: an agent never sees more than its owner, and
+/// narrowing only the owner's access changes the agent's output only by
+/// removing records. The pair differs in one registry change: in the second
+/// store `alice` leaves `team` and `crew`.
+#[test]
+fn an_agents_output_only_shrinks_with_its_owners_access() {
+    let records = |text: &str| -> std::collections::BTreeSet<String> {
+        let Ok(value) = serde_json::from_str::<Value>(text) else {
+            return Default::default();
+        };
+        let mut out = std::collections::BTreeSet::new();
+        for kind in ["nodes", "edges", "attachments"] {
+            for record in value["graph"][kind].as_array().into_iter().flatten() {
+                out.insert(format!("{kind}/{}", record["id"]));
+            }
+        }
+        for hit in value["neighbors"].as_array().into_iter().flatten() {
+            out.insert(format!("neighbor/{}", hit["embedding_id"]));
+        }
+        out
+    };
+    let run = |world: &mut World, principal: &str, commands: &Value| -> Option<String> {
+        let commands = world.substitute(commands);
+        let host = HostContext::new(principal, Vec::<String>::new());
+        match world.e.execute(&program(commands), &host).ok()?.pop()? {
+            CommandResult::Queried { result } => Some(serde_json::to_string(&result).unwrap()),
+            _ => None,
+        }
+    };
+    let mut compared = 0;
+    let mut shrank = 0;
+    for seed in (1..2 * cases_per_operator().div_ceil(20).max(4) as u64).step_by(2) {
+        let spec = Spec::new(seed, Profile::Registry);
+        let mut wide = World::build(&spec, true);
+        let mut narrow = World::build(&spec, true);
+        let changes: Vec<RegistryChange> = serde_json::from_value(json!([
+            {"change": "remove_member", "group": "team", "member": "alice"},
+            {"change": "remove_member", "group": "crew", "member": "alice"}
+        ]))
+        .unwrap();
+        narrow.at(60);
+        narrow
+            .e
+            .apply_registry(&changes, &narrow.writer.clone())
+            .unwrap();
+        wide.at(FINAL_TIME);
+        narrow.at(FINAL_TIME);
+        for case in 0..20u64 {
+            let mut gen = Gen {
+                spec: &spec,
+                rng: Rng::new(seed.wrapping_mul(31_337) ^ case),
+            };
+            let plan = match case % 3 {
+                0 => evaluate(gen.query()),
+                1 => evaluate(gen.expand()),
+                _ => evaluate(gen.nearest_plan(false)),
+            };
+            // The agent sees no more than its owner, in either store.
+            for world in [&mut wide, &mut narrow] {
+                if let (Some(agent), Some(owner)) =
+                    (run(world, AGENT, &plan), run(world, "alice", &plan))
+                {
+                    let (agent, owner) = (records(&agent), records(&owner));
+                    assert!(
+                        agent.is_subset(&owner),
+                        "seed {seed} case {case}\nplan {plan}"
+                    );
+                }
+            }
+            // Narrowing the owner only removes records from the agent's
+            // output. A top-k ranking is not monotone (a hidden near
+            // neighbor lets a farther one in), so it is checked for the
+            // agent-within-owner ceiling only.
+            if case % 3 == 2 || plan.to_string().contains("\"nearest\"") {
+                // Also an `expand` seeded from a ranking.
+                continue;
+            }
+            if let (Some(before), Some(after)) =
+                (run(&mut wide, AGENT, &plan), run(&mut narrow, AGENT, &plan))
+            {
+                let (before, after) = (records(&before), records(&after));
+                assert!(
+                    after.is_subset(&before),
+                    "seed {seed} case {case}\nplan {plan}"
+                );
+                compared += 1;
+                shrank += usize::from(after.len() < before.len());
+            }
+        }
+    }
+    assert!(
+        compared > 0 && shrank > 0,
+        "compared {compared}, shrank {shrank}"
+    );
 }

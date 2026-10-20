@@ -862,7 +862,12 @@ fn random_history(rng: &mut Rng, hidden_only: Option<&str>) -> (Engine, Vec<(i64
                 if next.get(&key) == Some(&fact) {
                     continue;
                 }
-                changes.push(json!({"change": change, "fact": fact.clone()}));
+                // Random corrections may change readers either way (1.2.0).
+                let mut entry = json!({"change": change, "fact": fact.clone()});
+                if live {
+                    entry["widen_readers"] = json!(true);
+                }
+                changes.push(entry);
                 identity.entry(id.clone()).or_insert_with(|| fact.clone());
                 next.insert(key, fact);
             }

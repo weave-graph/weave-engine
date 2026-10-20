@@ -148,15 +148,19 @@ closed, and nothing in this repository claims otherwise:
   local caller.
 - **Copies by authorized readers.** A principal who can read a fact can write
   its content into a new fact without declaring where it came from. The
-  engine restricts the derivations it computes and, from B2 part 2, the
-  derivations a writer declares; it cannot detect an undeclared copy.
+  engine restricts the derivations it computes and, from protocol 1.2.0, the
+  derivations a writer declares in provenance evidence; it cannot detect an
+  undeclared copy.
+- **References in local stores.** A store without a registry resolves a
+  written record's references against every live record, so a trusted local
+  writer can learn that an ID is live by referencing it (the occupancy bit).
+  Registry stores treat references to records the writer cannot read as
+  missing.
 
-Until B2 part 2 ships, the fact write path also compares a change with live
-versions the writer cannot read (ADR-0008 section 4): an identical `assert`
-is a no-op, `correct` and `retract` apply to hidden facts in local stores
-(registry stores treat them as absent since B3), and references to
-hidden records validate. Treat Write on a graph as access to the existence
-and equality of its records until then.
+The fact write path never compares a change with a live version the writer
+cannot read (ADR-0008 section 4, every protocol version): such a version is
+absent for `correct`, `retract` and expectations, and an `assert` of its ID
+fails with one uniform `E_CONFLICT`.
 
 ## Trust and limits
 

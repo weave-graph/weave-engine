@@ -140,7 +140,7 @@ fn run_world(seed: u64, plans: usize, counts: &Mutex<BTreeMap<&'static str, Coun
         Profile::Registry
     };
     let spec = Spec::new(seed, profile);
-    let mut pairs: Vec<(&str, Pair)> = READERS
+    let mut pairs: Vec<(&str, Pair)> = readers(profile)
         .iter()
         .chain([&HIDDEN_READER])
         .map(|principal| {

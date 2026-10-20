@@ -27,6 +27,7 @@ const CONCEPTS: &[&str] = &[
     "fact.immutability",
     "fact.readers",
     "fact.reader_groups",
+    "fact.propagation",
     "fact.write",
     "time.valid",
     "time.recorded",
@@ -231,7 +232,7 @@ fn negative_fixtures_fail_with_their_stable_code() {
 fn unknown_version_fails_with_e_version_before_structure() {
     for version in [
         "0.25.0",
-        "1.2.0",
+        "1.3.0",
         "2.0.0",
         "1.0",
         "0.21",
@@ -254,7 +255,7 @@ fn unknown_version_fails_with_e_version_before_structure() {
         let program = json!({"version": version, "commands": []});
         decode_program(&serde_json::to_vec(&program).unwrap()).unwrap();
     }
-    assert_eq!(wire::SUPPORTED_VERSIONS.len(), 26);
+    assert_eq!(wire::SUPPORTED_VERSIONS.len(), 27);
     assert_eq!(wire::SUPPORTED_VERSIONS[0], VERSION);
 }
 

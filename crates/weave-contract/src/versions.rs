@@ -18,9 +18,12 @@ use crate::{LEGACY_VERSION, VERSION};
 /// newer than a program's declared version are rejected at execution with
 /// `E_VERSION`. 1.0.0 freezes core v1 as published in 0.24.0: it has the
 /// same features as 0.24.0. 1.1.0 (B1) adds `reader_groups` on fact records
-/// and `on_behalf_of` in engine-recorded provenance.
+/// and `on_behalf_of` in engine-recorded provenance. 1.2.0 (B2) adds
+/// `widen_readers` on corrections and the write-time rules of ADR-0008
+/// section 3 (declared derivations and readers widened by a correction).
 pub const SUPPORTED_VERSIONS: &[&str] = &[
     VERSION,
+    "1.1.0",
     "1.0.0",
     "0.24.0",
     "0.23.0",
@@ -114,7 +117,7 @@ mod tests {
             }
         }
         assert!(
-            !version_at_least("1.2.0", "0.1.0"),
+            !version_at_least("1.3.0", "0.1.0"),
             "unknown versions have no features"
         );
         assert!(!version_at_least("", "0.1.0"));
@@ -127,6 +130,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "unknown version")]
     fn a_gate_on_an_unpublished_version_is_a_programming_error() {
-        version_at_least(VERSION, "1.2.0");
+        version_at_least(VERSION, "1.3.0");
     }
 }

@@ -2,10 +2,10 @@
 
 Status: **accepted** on 2026-10-20, when B2
 ([#5](https://github.com/weave-graph/weave-engine/issues/5)) implementation
-started. B2 lands in parts. Part 1 adds this ADR, the noninterference harness
-(section 7) and the fixes the harness found. Write-time propagation (sections
-2 to 4) follows in part 2. Persisted analytics and release policies (sections
-5 and 6) follow in part 3. Each section says which part implements it, and
+started. B2 lands in parts. Part 1 added this ADR, the noninterference harness
+(section 7) and the fixes the harness found. Part 2 implements write-time
+propagation (sections 2 to 4) as protocol 1.2.0. Persisted analytics and
+release policies (sections 5 and 6) follow in part 3. Each section says which part implements it, and
 "Implementation" at the end records what has shipped.
 
 ## Context
@@ -68,13 +68,16 @@ its inputs' restrictions:
   anyone, because a reader must be listed on both inputs, but a copy of it
   would be public.
 - **Some input names a group.** The own clause is the first restricted
-  input's clause, exactly. Every other restricted input enters as an
-  influence carrier on the record (`derived_from` for assertions and records
-  that have an assertion reference, `derived_nodes` for nodes), so the read
-  check enforces that input's clause exactly and under current membership.
-  This replaces the clause-wise meet of ADR-0007 amendment 8. A meet is
-  narrower than the conjunction: an agent whose two clauses each admit one
-  input saw nothing.
+  input's clause, exactly. Every other restricted input is enforced through
+  the record's influence carriers, so the read check enforces that input's
+  clause exactly and under current membership. The one engine derivation
+  that intersects clauses, an explicit assertion materialized as an edge
+  (`assertions.rs`), already carries its source assertion in `derived_from`,
+  and that assertion is visible only with its structural edge. This replaces
+  the clause-wise meet of ADR-0007 amendment 8. A meet is narrower than the
+  conjunction: a group clause and a principal clause that a reader satisfies
+  together met in nothing, so even that reader saw a copy as readable by no
+  one.
 - The carrier references are bounded by the existing 1,000-reference carrier
   limit (`E_BUDGET` beyond it).
 
@@ -97,9 +100,13 @@ unless the change names a release policy that allows it (section 6). Like
 every rule that rejects input a published version accepted, it applies to
 programs of protocol 1.2.0 and later (core v1 section 11.4). The check is
 syntactic and conservative. It never resolves membership, so its
-outcome does not depend on registry state the writer cannot see. A declared
-input the writer cannot see fails the write with `E_EVIDENCE_UNAVAILABLE`, as
-it does today.
+outcome does not depend on registry state the writer cannot see. Evidence
+the writer cannot see is not consulted, so the outcome is the one for
+evidence that does not exist; reads already remove such evidence from
+`fact_provenance` (ADR-0005). The clause of a cited record covers what its
+visibility depends on: an edge's endpoints, an assertion's structural edge
+and its endpoints, an attachment's host node, an embedding's subject node,
+and every record of a cited graph revision.
 
 **What this does not cover.** A principal who can read a fact can always copy
 its content into a new fact without declaring it. No engine can detect an
@@ -151,18 +158,33 @@ open question 1 declared:
 
 The rule from part 2: a live version the writer cannot read is treated as
 absent for every purpose except occupancy. `correct`, `retract` and
-`expected: unchanged_since` fail exactly as for an absent key. A reference to
-a hidden record fails exactly as a reference to a missing one. An `assert` of
-a hidden-occupied key, and `expected: absent` on one, fail with `E_CONFLICT`
-"fact ID is not available", whatever the hidden fact's kind or content.
-`reconcile_facts` plans `assert` for a hidden key, so the following write
-fails the same way.
+`expected` fail exactly as for an absent key ("corrected fact is not live",
+"retracted fact is not live", "fact changed since the expected revision").
+An `assert` of a hidden-occupied key fails with `E_CONFLICT` "fact ID is not
+available", whatever the hidden fact's kind or content. `reconcile_facts`
+plans `assert` for a hidden key, so the following write fails the same way.
+In a registry store, a reference to a record the writer cannot read (an
+edge endpoint, an attachment host, an embedding subject, an entity's nodes)
+fails exactly as a reference to a missing record.
 
-A writer *can read* a live version when its clause admits the writer, or when
-the writer recorded that exact version (ADR-0005 `writer`). The second case
-keeps A5 importers working: they write customer-restricted units that they
-cannot read, and must be able to reconcile and correct what they wrote. It
-reveals nothing the writer did not author.
+A writer *can read* a live version when its clause admits the writer, and for
+an edge both endpoints too (the B3 rule). In a store without a registry it
+can also act on a version it recorded itself (ADR-0005 `writer`). That keeps
+A5 importers working: they write customer-restricted units they cannot read,
+and must reconcile and correct what they wrote. It reveals nothing the
+writer did not author. A registry store has no such exception, because
+ADR-0007 section 4 requires Read to correct or retract.
+
+**References in local stores.** A store without a registry resolves
+references against every live record. Its host is trusted (SECURITY.md), and
+its pipelines reference records by the IDs of their sources: the A4 and A6
+embedder writes the vectors of notes that the importer restricted to their
+customers. A reference there can tell a writer that an ID is live, which is
+the same bit as occupancy, and it is declared with it.
+
+**Snapshot commits** (`commit`) replace a whole revision and validate it
+whole. They are the legacy trusted-writer path and are unchanged; their
+structural-identity checks are the occupancy bit above.
 
 **Risk 1 decision (record-ID occupancy).** Occupancy stays a declared
 channel. It is one bit per guessed ID, reachable only by a principal with
@@ -360,7 +382,28 @@ outcomes, sensitivity and error codes. Measured counts are recorded in
 
 ## Implementation
 
-**Part 1** (this PR): the ADR; the harness for all 28 `GraphExpression`
+**Part 2** (protocol 1.2.0, store unchanged at 32):
+
+- Section 2: `visibility::Derived::encode` keeps the first restricted clause
+  exactly, and a literal intersection of disjoint restricted lists is
+  `weave:no-reader` (`tests/propagation.rs`,
+  `a_derived_conjunction_keeps_its_first_clause_and_carries_the_rest`).
+- Section 3: `E_DERIVED_READERS` and `E_READERS_WIDENED` with
+  `widen_readers`, for 1.2.0 programs (`declared_derivations_are_no_broader_than_their_evidence`,
+  `corrections_never_widen_readers_silently`, and the fixtures of the
+  [1.2 note](../contract/v1.2/README.md)).
+- Section 4 for every version: `a_hidden_live_version_is_absent_except_for_occupancy`,
+  `local_authors_keep_their_versions_and_reconciliation_hides_the_rest`,
+  `references_to_hidden_records_fail_like_missing_ones_in_registry_stores`.
+- Harness: the write-outcome harness covers local and registry stores,
+  asserts of hidden IDs and references to hidden records, with the occupancy
+  and dependent outcomes as its only declared differences. Registry worlds
+  add an agent of `alice` as a reader under test, and
+  `an_agents_output_only_shrinks_with_its_owners_access` checks ADR-0007
+  section 10 item 5. `revocation_reaches_views_change_sets_and_rankings_on_the_next_request`
+  checks item 6.
+
+**Part 1** (#71): the ADR; the harness for all 28 `GraphExpression`
 kinds and all 5 science analyses, in registry and local stores; a PR CI job
 at 500 cases per operator and a scheduled job at 10,000. The harness found
 two interferences, each fixed with a regression test that fails without the

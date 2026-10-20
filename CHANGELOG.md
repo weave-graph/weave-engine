@@ -6,6 +6,49 @@ defined in [docs/ROADMAP.md](docs/ROADMAP.md). The supported profile is in
 
 ## Unreleased
 
+### B2 part 2: write-time propagation (contract 1.2.0)
+
+Part of [#5](https://github.com/weave-graph/weave-engine/issues/5)
+([ADR-0008](docs/architecture/ADR-0008-write-time-propagation-and-release-policies.md)
+sections 2 to 4, [1.2 note](docs/contract/v1.2/README.md)).
+
+| Identifier | Version |
+|---|---|
+| Protocol (`Program.version`), `weave-contract` crate | **1.2.0** (additive minor) |
+| Store schema (`STORAGE_VERSION`) | 32 (unchanged) |
+| Science API, Python client | 0.1.0, now emitting and accepting contract 1.2.0 |
+
+- **Every version:** a live version the writer cannot read is absent for
+  `correct`, `retract` and `expected`; an `assert` of its ID fails with
+  `E_CONFLICT` "fact ID is not available" whatever its kind or content;
+  `reconcile_facts` plans it like an absent key. In registry stores,
+  references to records the writer cannot read fail as references to
+  missing ones. Local writers may still act on versions they recorded.
+- **1.2.0 programs:** `E_READERS_WIDENED` for a correction that admits more
+  readers without `widen_readers: true`; `E_DERIVED_READERS` for a fact
+  broader than restricted evidence it cites. 1.1.0 and older programs keep
+  their published meaning.
+- A derived conjunction of group clauses keeps its first clause exactly
+  instead of the B1 meet; disjoint literal readers derive `weave:no-reader`.
+- The noninterference harness covers write outcomes in local and registry
+  stores and adds an agent as a reader under test.
+
+**Vendor update for weave-language (contract 1.2.0, includes B2 part 1).**
+Copy these files of `crates/weave-contract/` and update `vendor/manifest.json`:
+
+- changed: `Cargo.toml`, `src/carrier_algebra.rs`, `src/facts.rs`,
+  `src/lib.rs`, `src/rules.rs`, `src/versions.rs`,
+  `tests/core_v1_fixtures.rs`, `fixtures/core-v1/manifest.json`,
+  `fixtures/core-v1/negative/unknown-version.json`;
+- added: `fixtures/core-v1/negative/derived-readers-broader.json`,
+  `fixtures/core-v1/negative/hidden-fact-id-unavailable.json`,
+  `fixtures/core-v1/negative/readers-widened.json`,
+  `fixtures/core-v1/negative/widen-readers-version-gated.json`,
+  `fixtures/core-v1/positive/readers-widened-explicitly.json`.
+
+A compiler that emits 1.2.0 corrections must copy a fact's `readers` and
+`reader_groups`, or set `widen_readers`.
+
 ### B4 part 1: the agent interface over MCP
 
 Part of [#40](https://github.com/weave-graph/weave-engine/issues/40)
@@ -109,10 +152,9 @@ accepted). No protocol, store or API version changes.
   of hidden records.
 - SECURITY.md lists the declared noninterference channels.
 
-**Vendor update for weave-language (contract 1.1.0, unchanged version).**
-Copy these files of `crates/weave-contract/` and update their hashes in
-`vendor/manifest.json`: `src/rules.rs`, `src/carrier_algebra.rs`. No fixture
-changes.
+**Vendor update for weave-language:** `src/rules.rs` and
+`src/carrier_algebra.rs` changed with no version change. They are vendored
+with the 1.2.0 update of B2 part 2, so the language vendors once.
 
 ### B1 part 1: principal registry, group readers, graph ACLs and Discover
 

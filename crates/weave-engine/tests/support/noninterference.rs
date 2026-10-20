@@ -58,6 +58,18 @@ impl Rng {
 
 /// The readers whose output must not depend on hidden facts.
 pub const READERS: [&str; 2] = ["alice", "carol"];
+/// An agent owned by `alice` in registry worlds, acting with all of its
+/// owner's identities on the visible graphs (ADR-0007 section 10, item 5).
+pub const AGENT: &str = "alice-bot";
+
+/// The readers under test of a world: in registry worlds also `alice`'s agent.
+pub fn readers(profile: Profile) -> Vec<&'static str> {
+    let mut readers = READERS.to_vec();
+    if profile == Profile::Registry {
+        readers.push(AGENT);
+    }
+    readers
+}
 /// The principal who can see the hidden facts (sensitivity checks).
 pub const HIDDEN_READER: &str = "mallory";
 /// Visible-world entities and spaces.
@@ -725,6 +737,14 @@ impl World {
         changes.push(
             json!({"change": "grant", "graph_id": "g", "subject": "alice", "permission": "write"}),
         );
+        // `alice`'s agent reads the visible graphs with all of `alice`'s
+        // identities; its graph scope never names the hidden-only graphs.
+        let scopes: Vec<Value> = ["g", "snap", "pub", "ctx"]
+            .iter()
+            .map(|graph| json!({"graph_id": graph, "permission": "read"}))
+            .collect();
+        changes.push(json!({"change": "add_agent", "id": AGENT, "owner": "alice",
+            "delegation": {"scopes": scopes, "exercise": {"kind": "owner_all"}}}));
         self.apply(changes, "G1");
         if hidden {
             // Registry state the readers cannot discover: a hidden principal,

@@ -31,9 +31,10 @@ pub use versions::{
     is_current, is_supported_version, version_at_least, version_rank, SUPPORTED_VERSIONS,
 };
 /// The current protocol version: core contract v1, frozen at 1.0.0 by A6,
-/// with the additive 1.1.0 identity fields of B1 (ADR-0007).
+/// with the additive 1.1.0 identity fields of B1 (ADR-0007) and the 1.2.0
+/// write-time propagation rules of B2 (ADR-0008).
 /// Older versions are listed, oldest last, in [`versions::SUPPORTED_VERSIONS`].
-pub const VERSION: &str = "1.1.0";
+pub const VERSION: &str = "1.2.0";
 pub mod accepted_history;
 pub use accepted_history::{
     AcceptedSelection, AcceptedViewHistoryCut, AcceptedViewHistoryRange, AcceptedViewHistoryResult,
