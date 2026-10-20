@@ -961,6 +961,13 @@ impl Engine {
     pub fn registry_enabled(&self) -> Result<bool> {
         Ok(self.registry_head()?.is_some())
     }
+    /// True when the store has a registry and `host` is an active tenant
+    /// administrator (B2 release policies).
+    pub(crate) fn tenant_administrator(&self, host: &HostContext) -> Result<bool> {
+        Ok(self
+            .resolved(host)?
+            .is_some_and(|(_, who)| who.administrator()))
+    }
     fn resolved(&self, host: &HostContext) -> Result<Option<(Arc<State>, Arc<Resolved>)>> {
         let Some(state) = self.registry_state()? else {
             return Ok(None);

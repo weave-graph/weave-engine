@@ -170,6 +170,7 @@ graph expressions use **`kind`**. These fields are not interchangeable.
 | `import` | `graph_id` and exactly one of `data` or `changes` | `branch_id: "main"`, `expected_head: null` | `{"results": [commit receipt]}`. |
 | `execute` | `program` | None | `{"results": [ordered engine command results]}`. |
 | `analyze` | `program`, `analysis` | `result_index: 0`, `allow_partial: false`, `limits` as below | `{"input": QueryResult, "analysis": metrics, "semantics": declared semantics}`. |
+| `persist` | `program`, `graph_id`, `key` | `analysis` (absent: persist the selected result's `nearest` ranking), `branch_id: "main"`, `result_index`, `allow_partial`, `limits` | `{"revision", "persisted": count, "key"}`. |
 
 Import with `data` commits a **full snapshot**, not a patch. A null or absent
 expected head creates an empty branch's first revision. Updating requires its
@@ -208,13 +209,24 @@ array**, not just query results. The selected result must have `kind: "queried"`
 history ranges are not graph analysis inputs. Analysis reexecutes the Program
 under current authority; it does not accept a copied graph as proof of access.
 
+`persist` writes an analysis (or a typed `nearest` ranking) back as
+attachment facts keyed `key` on the analysed nodes of `graph_id`, one per
+node: a degree record, a PageRank score, a component index, a path distance
+or a rank and distance. The engine, not the client, computes each record's
+readers from the authorized input it re-reads (ADR-0008 section 5): its own
+clause is the first restricted input clause, met with the clause of every
+ranked embedding, and its influence carriers name every input node and edge.
+A reader who cannot read every input cannot read the persisted value, now or
+after a later revocation. The program must be read-only, the host needs Write
+on `graph_id`, and a persisted value re-persisted later is corrected in place.
+
 Successful envelope:
 
 ```json
 {
   "ok": true,
   "science_version": "0.1.0",
-  "contract_version": "1.1.0",
+  "contract_version": "1.2.0",
   "result": {
     "results": [{
       "kind": "committed",
@@ -236,7 +248,7 @@ Failure envelope, with nonzero CLI exit status:
 {
   "ok": false,
   "science_version": "0.1.0",
-  "contract_version": "1.1.0",
+  "contract_version": "1.2.0",
   "error": {"code": "E_SCIENCE_READ_ONLY", "message": "analysis programs must contain only read operations"}
 }
 ```

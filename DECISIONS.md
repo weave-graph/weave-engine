@@ -2236,3 +2236,54 @@ row makes a unit readable by more principals, the A5 importer's 1.2.0 write
 now fails with `E_READERS_WIDENED` instead of publishing it. An export that
 widens readers is exactly the mistake the check exists to catch. An
 operator who means it re-runs the correction with the flag.
+
+### 2026-10-20 — #5 B2 — Persisting results is an engine API, and the science operation calls it
+
+The engine is the semantic authority, so it computes the restriction of a
+persisted result: `Engine::persist_result(input, graph, branch, key, method,
+values, host)`. It re-checks every input reference the result cites (node and
+edge origins, ranked embeddings) against the writer. A forged or
+hand-built input therefore cannot launder a restriction, and a reference the
+writer cannot see fails like a missing one. The science operation `persist`
+runs the read-only program itself, computes the analysis, maps it to one value
+per node and calls the API. A client never supplies readers for persisted
+values.
+
+### 2026-10-20 — #5 B2 — A persisted value carries every input; its own clause is the first, met with the embeddings
+
+A score, a component label or a rank depends on the whole analysed input,
+so each persisted record names every input node and edge as an influence
+carrier. Beyond 1,000 references it names every input revision as a
+whole-revision gate instead. That is stricter, but it stays bounded. The own
+clause is the first restricted node or edge clause, exactly as in ADR-0008
+section 2, because the carriers enforce the rest. Embeddings have no carrier
+kind, so the own clause is also met with every ranked embedding's clause and
+the embeddings are cited as evidence. The section 3 check then holds by
+construction. A re-persist corrects the earlier records with
+`widen_readers`, because the engine computed the restriction.
+
+### 2026-10-20 — #5 B2 — Release policies: one kind, distinct entities, an evaluator evaluated now
+
+The #5 criterion asks for a k-threshold aggregate. `aggregate_count` counts
+distinct entities among one graph's nodes (optionally one space), not
+records. Several manifestations of one customer must not let a policy
+release a count of one. The count runs under a named evaluator's authority,
+resolved at each request, so revoking the evaluator's access withholds the
+value next time; an unreadable source counts nothing. The audience is a
+reader clause like a record's. A requester outside it gets the error of an
+unknown policy and is not audited, because nothing was evaluated; the B3
+audit log records the request itself. Policies and audit records live in
+`weave:release`, which programs cannot write, and which is readable only by
+tenant administrators (by no ordinary read without a registry). Management
+is a trusted engine API, not a wire type, as for the registry (ADR-0007
+amendment 2), so the contract stays 1.2.0 and the language has nothing to
+vendor.
+
+### 2026-10-20 — #5 B2 — Writes never declassify
+
+ADR-0008 section 3 first allowed a write to name a release policy that
+excuses it from `E_DERIVED_READERS`. Release policies produce values for an
+audience, not records, so that hook would be a second declassification path
+with no threshold. It is removed: a write that is broader than its declared
+inputs always fails, and a wider audience only ever learns what a policy
+releases.

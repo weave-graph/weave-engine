@@ -118,6 +118,11 @@ pub use facts::FactReconciliation;
 
 mod metadata;
 mod registry;
+mod release;
+pub use release::{
+    PersistRequest, PersistedValue, ReleaseAudience, ReleaseAuditEntry, ReleaseKind,
+    ReleaseOutcome, ReleasePolicy, ReleaseSource, MAX_PERSISTED_RECORDS, RELEASE_GRAPH,
+};
 mod snapshot;
 mod traversal;
 mod typed;
