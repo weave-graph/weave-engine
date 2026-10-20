@@ -46,7 +46,9 @@ most their owner's current authority, narrowed by their delegation, and
 never with Administer. Authentication and tenant isolation
 are B3. In a registry store a writer can correct or retract only facts it
 can read; retracting a fact with a hidden live dependent fails
-`E_DEPENDENT_FACT`, which is a further declared channel until B2.
+`E_DEPENDENT_FACT`, the same error as for a visible dependent: a declared
+one-bit channel (B2 refuses such a retraction instead of cascading or
+orphaning the hidden record).
 
 ## The authenticated service (B3)
 
@@ -99,6 +101,51 @@ local process to the network. Its trust model:
   the program then runs under the registry ceiling. Key bindings are
   per-tenant and never reused after revocation. Nonces are reserved until
   the request expires.
+
+## Noninterference and its declared channels
+
+Hidden facts must not change what a reader sees. A generated harness
+([ADR-0008](docs/architecture/ADR-0008-write-time-propagation-and-release-policies.md)
+section 7) checks this for every query operator and science analysis: pairs
+of stores that differ only in facts a reader cannot see must give that reader
+identical values, counts, ranks, explanations, coverage, diagnostics,
+provenance and errors. It runs 500 generated cases per operator on every
+pull request and 10,000 in a scheduled job. These channels are **not**
+closed, and nothing in this repository claims otherwise:
+
+- **Whole-revision reads.** `recorded_query`, recorded ranges and
+  checkpoints, `accepted_graph` and `accepted_history` serve a revision only
+  to a reader who can see all of it. Their "unavailable" error tells a reader
+  that the selected revision holds something it cannot see.
+- **Revision identity.** Revision IDs are content-derived over every fact.
+  A new revision ID, a stale compiled view, or two revisions of one visible
+  state in one result reveal that a write happened, never what it wrote.
+- **Work budgets.** The read budget, the `nearest` scan budget and the
+  proof-traversal budget count the records an operation reads, hidden ones
+  included. A request near a limit can fail with `E_BUDGET` because hidden
+  records exist.
+- **Timing, response size and resource use** (CPU, memory, I/O).
+- **Write-path occupancy**, for principals with Write on a graph: an
+  `assert` of a record ID that a hidden live record holds fails with
+  `E_CONFLICT`; retracting a record that hidden records depend on fails with
+  `E_DEPENDENT_FACT`; a structural identity a hidden record once had cannot
+  be reused. B4 agent tools generate record IDs on the server.
+- **Disclosed identities.** A fact's `writer` and `on_behalf_of` are shown
+  to its readers.
+- **Graph existence in local stores.** Without the registry there is no
+  Discover permission, so graph and revision IDs are visible to every trusted
+  local caller.
+- **Copies by authorized readers.** A principal who can read a fact can write
+  its content into a new fact without declaring where it came from. The
+  engine restricts the derivations it computes and, from B2 part 2, the
+  derivations a writer declares; it cannot detect an undeclared copy.
+
+Until B2 part 2 ships, the fact write path also compares a change with live
+versions the writer cannot read (ADR-0008 section 4): an identical `assert`
+is a no-op, `correct` and `retract` apply to hidden facts in local stores
+(registry stores treat them as absent since B3), and references to
+hidden records validate. Treat Write on a graph as access to the existence
+and equality of its records until then.
 
 ## Trust and limits
 

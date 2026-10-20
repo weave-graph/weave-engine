@@ -1,0 +1,52 @@
+name: Noninterference (full count)
+# B2 (#5, ADR-0008 section 7): the property-based noninterference harness at
+# 10,000 generated cases per GraphExpression operator and per science
+# analysis. Pull requests run the 500-case tier in ci.yml. This job runs
+# nightly, on demand, and when the harness itself changes.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'crates/weave-engine/tests/noninterference.rs'
+      - 'crates/weave-engine/tests/support/noninterference.rs'
+      - 'crates/weave-science/tests/noninterference.rs'
+      - '.github/workflows/noninterference-full.yml'
+permissions:
+  contents: read
+concurrency:
+  group: noninterference-full-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_INCREMENTAL: '0'
+jobs:
+  full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: noninterference
+      - name: Every GraphExpression operator, 10,000 cases each (release)
+        env:
+          WEAVE_NI_CASES: '10000'
+        run: cargo test --release --locked -p weave-engine --test noninterference -- --nocapture 2>&1 | tee noninterference-engine.log
+        shell: bash
+      - name: Every science analysis, 10,000 cases each (release)
+        env:
+          WEAVE_NI_CASES: '10000'
+        run: cargo test --release --locked -p weave-science --test noninterference -- --nocapture 2>&1 | tee noninterference-science.log
+        shell: bash
+      - name: Counts
+        if: always()
+        shell: bash
+        run: grep -h '^NONINTERFERENCE' noninterference-*.log > noninterference-counts.jsonl || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: noninterference-counts
+          path: noninterference-counts.jsonl
+          if-no-files-found: ignore

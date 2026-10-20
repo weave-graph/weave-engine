@@ -73,6 +73,29 @@ contract or store change beyond part 1.
   request; `registry_agents` and owner reads of agent records.
 - Agent fact writes record `on_behalf_of`; agents cannot snapshot-commit.
 
+### B2 part 1: ADR-0008 and the noninterference harness
+
+Part of [#5](https://github.com/weave-graph/weave-engine/issues/5)
+([ADR-0008](docs/architecture/ADR-0008-write-time-propagation-and-release-policies.md),
+accepted). No protocol, store or API version changes.
+
+- A generated noninterference harness covers every `GraphExpression` kind and
+  every science analysis, in local and registry stores: 40 cases per
+  operator in the debug suite, 500 in a new PR CI job and 10,000 in the
+  scheduled `noninterference-full.yml` job.
+- `reason` explanations no longer pick among equivalent witnesses in an
+  order that follows revision IDs.
+- A conjunction of two proof alternatives lists its conjuncts flat and in a
+  canonical order instead of nesting pairs in record order. Results with many
+  conjuncts are smaller and no longer reach the carrier depth budget because
+  of hidden records.
+- SECURITY.md lists the declared noninterference channels.
+
+**Vendor update for weave-language (contract 1.1.0, unchanged version).**
+Copy these files of `crates/weave-contract/` and update their hashes in
+`vendor/manifest.json`: `src/rules.rs`, `src/carrier_algebra.rs`. No fixture
+changes.
+
 ### B1 part 1: principal registry, group readers, graph ACLs and Discover
 
 Part of [#38](https://github.com/weave-graph/weave-engine/issues/38)

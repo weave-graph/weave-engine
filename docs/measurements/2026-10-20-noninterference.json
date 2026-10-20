@@ -1,0 +1,411 @@
+{
+ "command": "WEAVE_NI_CASES=10000 cargo test --release --locked -p weave-engine --test noninterference -- --nocapture; same for -p weave-science",
+ "date": "2026-10-20",
+ "engine": {
+  "cases_per_operator_target": 10000,
+  "operators": {
+   "accepted_graph": {
+    "cases": 10000,
+    "declared": 456,
+    "error_codes": {
+     "E_GOV_UNAVAILABLE": 12942
+    },
+    "errors": 12942,
+    "ok": 7058,
+    "sensitive": 3358
+   },
+   "accepted_history": {
+    "cases": 10000,
+    "declared": 411,
+    "error_codes": {
+     "E_GOV_HISTORY_UNAVAILABLE": 10671
+    },
+    "errors": 10671,
+    "ok": 9329,
+    "sensitive": 2716
+   },
+   "as_of": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_UNAVAILABLE": 4040
+    },
+    "errors": 4040,
+    "ok": 15960,
+    "sensitive": 5305
+   },
+   "changes": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 1103,
+     "E_UNAVAILABLE": 800
+    },
+    "errors": 1903,
+    "ok": 18097,
+    "sensitive": 4857
+   },
+   "cluster": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {},
+    "errors": 0,
+    "ok": 20000,
+    "sensitive": 6746
+   },
+   "context": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 160,
+     "E_SPACE": 88,
+     "E_UNAVAILABLE": 1987
+    },
+    "errors": 2235,
+    "ok": 17765,
+    "sensitive": 5721
+   },
+   "counterparts": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 149,
+     "E_IDENTITY": 19,
+     "E_SPACE": 80,
+     "E_UNAVAILABLE": 2080
+    },
+    "errors": 2328,
+    "ok": 17672,
+    "sensitive": 5012
+   },
+   "current_view": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_UNAVAILABLE": 16583
+    },
+    "errors": 16583,
+    "ok": 3417,
+    "sensitive": 1199
+   },
+   "diff": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 154,
+     "E_SPACE": 119,
+     "E_UNAVAILABLE": 1988
+    },
+    "errors": 2261,
+    "ok": 17739,
+    "sensitive": 8609
+   },
+   "expand": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 757,
+     "E_SPACE": 108,
+     "E_UNAVAILABLE": 2541
+    },
+    "errors": 3406,
+    "ok": 16594,
+    "sensitive": 7304
+   },
+   "explain": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 175,
+     "E_SPACE": 101,
+     "E_UNAVAILABLE": 2206
+    },
+    "errors": 2482,
+    "ok": 17518,
+    "sensitive": 4961
+   },
+   "filter": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 160,
+     "E_SPACE": 87,
+     "E_UNAVAILABLE": 2002
+    },
+    "errors": 2249,
+    "ok": 17751,
+    "sensitive": 3790
+   },
+   "geometry": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_GEOMETRY_UNAVAILABLE": 15995
+    },
+    "errors": 15995,
+    "ok": 4005,
+    "sensitive": 4652
+   },
+   "join": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 209,
+     "E_SPACE": 142,
+     "E_UNAVAILABLE": 3199
+    },
+    "errors": 3550,
+    "ok": 16450,
+    "sensitive": 2582
+   },
+   "metadata": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_UNAVAILABLE": 708
+    },
+    "errors": 708,
+    "ok": 19292,
+    "sensitive": 737
+   },
+   "nearest": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 103,
+     "E_SPACE": 837,
+     "E_UNAVAILABLE": 7514
+    },
+    "errors": 8454,
+    "ok": 11546,
+    "sensitive": 6736
+   },
+   "project": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 79,
+     "E_PROJECT_MEMBER": 15296,
+     "E_SPACE": 55,
+     "E_UNAVAILABLE": 992
+    },
+    "errors": 16422,
+    "ok": 3578,
+    "sensitive": 5218
+   },
+   "query": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_UNAVAILABLE": 648
+    },
+    "errors": 648,
+    "ok": 19352,
+    "sensitive": 7024
+   },
+   "reason": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 159,
+     "E_SPACE": 105,
+     "E_UNAVAILABLE": 2036
+    },
+    "errors": 2300,
+    "ok": 17700,
+    "sensitive": 6517
+   },
+   "recorded_query": {
+    "cases": 10000,
+    "declared": 935,
+    "error_codes": {
+     "E_HISTORY_UNAVAILABLE": 15295,
+     "E_UNAVAILABLE": 698
+    },
+    "errors": 15993,
+    "ok": 4007,
+    "sensitive": 5571
+   },
+   "reference": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 236,
+     "E_SPACE": 156,
+     "E_UNAVAILABLE": 3021
+    },
+    "errors": 3413,
+    "ok": 16587,
+    "sensitive": 6783
+   },
+   "resolve_identity": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {},
+    "errors": 0,
+    "ok": 20000,
+    "sensitive": 3430
+   },
+   "sequence": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 308,
+     "E_INFLUENCE_BUDGET": 2,
+     "E_SPACE": 189,
+     "E_UNAVAILABLE": 3841
+    },
+    "errors": 4340,
+    "ok": 15660,
+    "sensitive": 6695
+   },
+   "similar_candidates": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 450,
+     "E_SPACE": 29,
+     "E_UNAVAILABLE": 1586
+    },
+    "errors": 2065,
+    "ok": 17935,
+    "sensitive": 6114
+   },
+   "support": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 153,
+     "E_SPACE": 101,
+     "E_UNAVAILABLE": 2127
+    },
+    "errors": 2381,
+    "ok": 17619,
+    "sensitive": 6531
+   },
+   "typed_context": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 139,
+     "E_CONTEXT_UNAVAILABLE": 8265,
+     "E_SPACE": 96,
+     "E_UNAVAILABLE": 2026
+    },
+    "errors": 10526,
+    "ok": 9474,
+    "sensitive": 5108
+   },
+   "union": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 333,
+     "E_SPACE": 191,
+     "E_UNAVAILABLE": 3737
+    },
+    "errors": 4261,
+    "ok": 15739,
+    "sensitive": 7316
+   },
+   "window": {
+    "cases": 10000,
+    "declared": 0,
+    "error_codes": {
+     "E_BUDGET": 154,
+     "E_INFLUENCE_BUDGET": 5,
+     "E_SPACE": 105,
+     "E_UNAVAILABLE": 2071
+    },
+    "errors": 2335,
+    "ok": 17665,
+    "sensitive": 6448
+   }
+  },
+  "seconds": 655.792167298,
+  "worlds": 1000
+ },
+ "host": {
+  "machine": "x86_64",
+  "os": "Linux",
+  "threads_used": 8
+ },
+ "notes": "writes: declared counts the uniform E_DEPENDENT_FACT refusals; every world ends on one by construction and stops there; sensitivity does not apply to writes. World sets do not depend on the thread count.",
+ "result": "pass: every operator and analysis reached 10,000 cases, with no interference and nonzero sensitivity",
+ "science": {
+  "analyses": {
+   "components": {
+    "cases": 10000,
+    "error_codes": {
+     "E_SCIENCE_PARTIAL": 999,
+     "E_UNAVAILABLE": 196
+    },
+    "errors": 1195,
+    "ok": 18805,
+    "sensitive": 9573
+   },
+   "degree": {
+    "cases": 10000,
+    "error_codes": {
+     "E_SCIENCE_PARTIAL": 908,
+     "E_UNAVAILABLE": 192
+    },
+    "errors": 1100,
+    "ok": 18900,
+    "sensitive": 9599
+   },
+   "nearest_vectors": {
+    "cases": 10000,
+    "error_codes": {
+     "E_SCIENCE_PARTIAL": 936,
+     "E_UNAVAILABLE": 184
+    },
+    "errors": 1120,
+    "ok": 18880,
+    "sensitive": 9552
+   },
+   "pagerank": {
+    "cases": 10000,
+    "error_codes": {
+     "E_SCIENCE_PARTIAL": 1019,
+     "E_UNAVAILABLE": 152
+    },
+    "errors": 1171,
+    "ok": 18829,
+    "sensitive": 9591
+   },
+   "shortest_paths": {
+    "cases": 10000,
+    "error_codes": {
+     "E_SCIENCE_PARTIAL": 916,
+     "E_SCIENCE_SOURCE": 14873,
+     "E_SCIENCE_TARGET": 1090,
+     "E_UNAVAILABLE": 202
+    },
+    "errors": 17081,
+    "ok": 2919,
+    "sensitive": 5076
+   }
+  },
+  "cases_per_analysis_target": 10000,
+  "seconds": 179.722094976,
+  "worlds": 1000
+ },
+ "source_commit": "origin/main 4440843 + B2 part 1",
+ "what": "B2 noninterference harness, full-count tier (ADR-0008 section 7)",
+ "writes_registry_stores": {
+  "counts": {
+   "cases": 10000,
+   "declared": 515,
+   "error_codes": {
+    "E_CONFLICT": 6197,
+    "E_DEPENDENT_FACT": 457,
+    "E_SCHEMA_ENDPOINT": 3
+   },
+   "errors": 6657,
+   "ok": 2828,
+   "sensitive": 0
+  },
+  "worlds": 515
+ }
+}

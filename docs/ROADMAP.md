@@ -135,7 +135,7 @@ protection, audit and optional review.
 | ID | Epic | Builds on | Summary |
 |---|---|---|---|
 | B1 | Principals, groups and agent identities | new (#38), split from E04 (#5) | A principal registry for users, groups, teams and agents (each owned by a principal, with narrowed delegated scope); group-resolved readers; graph-level ACLs; the Discover permission; membership revocation. **Complete:** registry, groups, agents with delegated scope, ACLs, Discover and revocation (protocol 1.1.0, store 32) |
-| B2 | Derived-fact leakage protection | E04 (#5) | Write-time restriction propagation; influence on analytics, kNN results and embeddings; release policies; a property-based noninterference harness covering every operator |
+| B2 | Derived-fact leakage protection | E04 (#5) | Write-time restriction propagation; influence on analytics, kNN results and embeddings; release policies; a property-based noninterference harness covering every operator. **In progress:** part 1 (ADR-0008 and the harness over every operator and science analysis, 500 cases per PR and 10,000 nightly) is implemented; write-time propagation is next |
 | B3 | Authenticated Weave service | new (#39) | A long-running server with authentication mapped to principals; tenant isolation by one store per tenant (row-level tenant keys only if later needed); a read and write audit log, and reuse of signed admission for agent capabilities. **Complete:** `weave-service` with TLS, user and agent API tokens, OIDC, signed admission for agent capabilities, one store per tenant, a read/write audit log, minted IDs and a published 50-client load measurement |
 | B4 | Agent interface (MCP and SDK) | new (#40) | Extends the A7 preview into the full write-capable interface: tools to assert, retract, query, time travel, ask what changed, run hybrid search and explain. Facts are stamped with agent identity and method; quotas; a data/code boundary against injected content |
 | B5 | Optional review of shared knowledge | E11 (#12) | **Last in Phase B.** Agents propose into a team graph and reviewers accept; personal graphs publish immediately; reuses the existing governance |
@@ -283,7 +283,7 @@ Each needs an ADR in `docs/architecture/` before implementation merges:
 | ADR-0005 | A2 | Per-fact provenance model: recorded writer, claimed source, method/model version, evidence links. **Accepted** 2026-10-19 in A1: [ADR-0005](architecture/ADR-0005-per-fact-provenance.md) |
 | ADR-0006 | A4 | Embedding facts and spaces: one model replacing the untyped `vector` property; candidate-relation semantics. **Accepted** 2026-10-19 in A1: [ADR-0006](architecture/ADR-0006-embedding-facts-and-spaces.md) |
 | ADR-0007 | B1/B3 | Identity, authentication and group resolution; the agent delegation model; tenancy as one store per tenant. Proposed 2026-10-19 during A2; **accepted** 2026-10-20 with B1 part 1, with amendments: [ADR-0007](architecture/ADR-0007-identity-groups-and-tenancy.md) |
-| ADR-0008 | B2 | Write-time propagation and release policies |
+| ADR-0008 | B2 | Write-time propagation and release policies. **Accepted** 2026-10-20 with B2 part 1: [ADR-0008](architecture/ADR-0008-write-time-propagation-and-release-policies.md) |
 | ADR-0009 | C1 | Telemetry storage boundary. Leaning: raw series stay in external Parquet or a TSDB, linked by `SeriesRef` with time ranges; Weave stores references and derived facts, not raw samples |
 
 ## Definition of done (all epics)
