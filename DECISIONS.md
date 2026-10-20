@@ -1701,3 +1701,57 @@ them needs a per-graph read that B4's `describe_schema` will provide. The
 manifest is advisory, as LB1 states: every program is authorized again
 when it runs. The engine's language CI moves to weave-language
 `5d2b9d2` and runs LB1's `check_permissions.py` and `check_agent_repair.py`.
+
+### 2026-10-20 — #39 B3 — OIDC with configured key sets, bindings in the control store
+
+An operator configures each issuer for a tenant with its audience and a
+JWKS document (`weave-service oidc set`); the service has no HTTP client and
+never fetches keys, so no request can make it open a connection, and key
+rotation is an explicit, logged operator step. ID-token verification uses
+ring, which the service already links for TLS, for RS256, ES256 and EdDSA:
+no JWT crate and no second crypto stack. The tests generate RSA keys with
+the `rsa` crate as a dev-dependency only, with its two crates optimized in
+dev builds. An `(issuer, audience)` pair belongs to one tenant, so the
+tenant comes from configuration, never from the token's content alone.
+Bindings of `(iss, sub)` to users live in the control store with the
+tokens, as credential state that must be read before a tenant store is
+opened; the registry remains the authority on the user's status. ADR-0007
+section 7 calls this a registry binding; the control store holds only the
+mapping, and the registry user's status is checked on every request.
+
+### 2026-10-20 — #39 B3 — IdP groups are imported as a full snapshot
+
+ADR-0007 section 11 (alternative 6) rejects live IdP groups. The import
+takes a mapping from claim values to registry groups and a snapshot of the
+issuer's subjects. It adds and removes direct memberships only for
+principals bound to that issuer, so members added by hand are never
+touched, and applies them as one registry write by the importing
+administrator: the change is audited, in the registry history, and
+revocation through it takes effect on the next request. A full snapshot,
+rather than a delta, makes a lost import harmless: the next one converges.
+
+### 2026-10-20 — #39 B3 — Signed admission verified by weave-policy, executed by the registry
+
+The engine's `admit_query` and `admit_publish` take the subject key itself
+as the principal and accept only a query plan or a snapshot commit, which
+agents may not make. ADR-0007 section 8 instead maps the leaf key to a
+registry principal. The service therefore reuses the `weave-policy`
+verifier directly: it derives the root from the registry (the first
+issuer's key bound to an active user, granted that user's current
+permissions on the scopes the root capability names), passes the tenant's
+audience and revoked keys, checks that every key in the chain is bound to
+the acting principal's ownership chain, reserves the nonce, and runs the
+program as the agent through `Engine::execute`, where the registry
+authorizes it again. Revocation is live through key bindings and the
+registry, so the policy epoch is a constant. Signed programs are one
+operation (all reads or all writes of one graph branch), read from the
+re-encoded program so defaulted branches count. Retry receipts are not kept;
+a retry needs a new nonce. Every verification failure is the uniform 401,
+so a signed request is not an oracle for which check failed.
+
+### 2026-10-20 — #39 B3 — Control store schema 2
+
+OIDC issuers and bindings, key bindings and signed nonces are new control
+store tables. A schema-1 store from part 1 upgrades in place by creating
+them, and a schema-1 binary refuses a schema-2 store, as the engine's
+store markers do. The tenant stores are unchanged.

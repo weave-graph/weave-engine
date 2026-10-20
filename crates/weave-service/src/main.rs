@@ -15,6 +15,8 @@ const USAGE: &str = "usage:
   weave-service tenant create --data DIR --tenant ID --admin PRINCIPAL
   weave-service token issue  --data DIR --tenant ID --principal PRINCIPAL [--ttl-days N] [--label TEXT]
   weave-service token revoke --data DIR --token-id ID
+  weave-service oidc set    --data DIR --tenant ID --issuer URL --audience CLIENT_ID --jwks FILE
+  weave-service oidc remove --data DIR --tenant ID --issuer URL
   weave-service serve --data DIR --listen ADDR (--tls-cert PEM --tls-key PEM | --plaintext-loopback)";
 
 fn flags(args: &[String]) -> Result<HashMap<String, String>, String> {
@@ -53,7 +55,9 @@ fn open(flags: &HashMap<String, String>, log: Logger) -> Result<Service, String>
 
 fn run(args: &[String]) -> Result<(), String> {
     let (command, rest) = match args {
-        [a, b, rest @ ..] if a == "tenant" || a == "token" => (format!("{a} {b}"), rest),
+        [a, b, rest @ ..] if a == "tenant" || a == "token" || a == "oidc" => {
+            (format!("{a} {b}"), rest)
+        }
         [a, rest @ ..] => (a.clone(), rest),
         [] => return Err(USAGE.into()),
     };
@@ -103,6 +107,36 @@ fn run(args: &[String]) -> Result<(), String> {
                 Ok(())
             } else {
                 Err("no such token".into())
+            }
+        }
+        "oidc set" => {
+            let service = open(&flags, Logger::discard())?;
+            let jwks = std::fs::read_to_string(required(&flags, "jwks")?)
+                .map_err(|_| "cannot read the --jwks file".to_string())?;
+            service
+                .set_oidc_issuer(
+                    required(&flags, "tenant")?,
+                    required(&flags, "issuer")?,
+                    required(&flags, "audience")?,
+                    &jwks,
+                )
+                .map_err(api)?;
+            println!(
+                "{}",
+                json!({"tenant": required(&flags, "tenant")?, "issuer": required(&flags, "issuer")?, "configured": true})
+            );
+            Ok(())
+        }
+        "oidc remove" => {
+            let service = open(&flags, Logger::discard())?;
+            let removed = service
+                .remove_oidc_issuer(required(&flags, "tenant")?, required(&flags, "issuer")?)
+                .map_err(api)?;
+            println!("{}", json!({"removed": removed}));
+            if removed {
+                Ok(())
+            } else {
+                Err("no such issuer".into())
             }
         }
         "serve" => {

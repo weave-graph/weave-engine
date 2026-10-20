@@ -146,6 +146,18 @@ fn routes() -> Vec<Route> {
             "/v1/tokens/{token_id}",
             delete(revoke_token),
         ),
+        route(Method::POST, "/v1/admit", post(admit)),
+        route(Method::GET, "/v1/keys", get(list_keys)),
+        route(Method::POST, "/v1/keys", post(bind_key)),
+        route(Method::DELETE, "/v1/keys/{public_key}", delete(revoke_key)),
+        route(Method::GET, "/v1/oidc/bindings", get(list_oidc_bindings)),
+        route(Method::POST, "/v1/oidc/bindings", post(bind_oidc)),
+        route(Method::DELETE, "/v1/oidc/bindings", delete(unbind_oidc)),
+        route(
+            Method::POST,
+            "/v1/oidc/groups/import",
+            post(import_oidc_groups),
+        ),
         route(Method::GET, "/v1/audit", get(audit_entries)),
         route(Method::GET, "/v1/audit/facts", get(audit_facts)),
     ]
@@ -230,10 +242,28 @@ fn bearer(headers: &HeaderMap) -> Option<String> {
     }
     let value = value.to_str().ok()?;
     let (scheme, token) = value.split_once(' ')?;
-    if !scheme.eq_ignore_ascii_case("bearer") || token.len() > 256 {
+    if !scheme.eq_ignore_ascii_case("bearer") || token.len() > crate::oidc::MAX_JWT_BYTES {
         return None;
     }
     Some(token.trim().to_string())
+}
+
+/// True when the request carries exactly `Authorization: Weave-Signed`:
+/// a signed admission request, authenticated by the proof in its body.
+fn signed_scheme(headers: &HeaderMap) -> bool {
+    let mut values = headers.get_all(header::AUTHORIZATION).iter();
+    match (values.next(), values.next()) {
+        (Some(value), None) => value
+            .to_str()
+            .is_ok_and(|v| v.trim().eq_ignore_ascii_case(crate::signed::SCHEME)),
+        _ => false,
+    }
+}
+
+/// Marks a signed admission request that the handler authenticates.
+#[derive(Clone)]
+pub(crate) struct SignedPending {
+    pub(crate) request_id: String,
 }
 
 async fn authenticate(
@@ -241,11 +271,26 @@ async fn authenticate(
     mut request: Request,
     next: Next,
 ) -> Response {
+    // Signed requests are authenticated by their body, on one route only.
+    if signed_scheme(request.headers()) {
+        if request.method() == Method::POST && request.uri().path() == crate::signed::ROUTE {
+            let request_id = request
+                .extensions()
+                .get::<RequestId>()
+                .map(|r| r.0.clone())
+                .unwrap_or_default();
+            request
+                .extensions_mut()
+                .insert(SignedPending { request_id });
+            return next.run(request).await;
+        }
+        return ApiError::unauthenticated().into_response();
+    }
     let binding = match bearer(request.headers()) {
         None => None,
         Some(token) => match service
             .now()
-            .and_then(|now| service.control(|c| c.authenticate(&token, now)))
+            .and_then(|now| service.authenticate_bearer(&token, now))
         {
             Ok(binding) => binding,
             Err(error) => return error.into_response(),
@@ -475,14 +520,17 @@ async fn health(State(service): State<Service>, Extension(caller): Extension<Cal
 }
 
 async fn whoami(State(service): State<Service>, Extension(caller): Extension<Caller>) -> Response {
+    let audience = caller.tenant.record.audience.clone();
     call(
         &service,
         caller,
         "whoami",
         true,
-        Box::new(|_, ctx| {
+        Box::new(move |_, ctx| {
             Ok(Done::json(json!({
                 "tenant": ctx.tenant_id,
+                "admission_audience": audience,
+                "admission_policy_revision": crate::signed::POLICY_REVISION,
                 "principal": ctx.principal,
                 "administrator": ctx.administrator,
                 "agent": ctx.agent,
@@ -1199,6 +1247,523 @@ async fn audit_facts(
                 "fact_id": params.fact_id,
                 "accesses": accesses,
             })))
+        }),
+    )
+    .await
+}
+
+// ------------------------------------------------------------ signed admission
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SignedBody {
+    proof: Value,
+    program: String,
+}
+
+/// `POST /v1/admit`: a delegated request authenticated by its capability
+/// chain ([`crate::signed`]). Every authentication failure is the uniform
+/// `401`; the audit entry, when the tenant is known, keeps the reason.
+async fn admit(
+    State(service): State<Service>,
+    pending: Option<Extension<SignedPending>>,
+    body: Result<Bytes, BytesRejection>,
+) -> Response {
+    let Some(Extension(pending)) = pending else {
+        return ApiError::unauthenticated().into_response();
+    };
+    let unauthenticated = || ApiError::unauthenticated().into_response();
+    let Ok(bytes) = body_bytes(body) else {
+        return unauthenticated();
+    };
+    let Ok(request) = weave_contract::decode::<SignedBody>(&bytes) else {
+        return unauthenticated();
+    };
+    let Ok(proof_bytes) = serde_json::to_vec(&request.proof) else {
+        return unauthenticated();
+    };
+    let Ok(proof) = weave_policy::decode_proof(&proof_bytes) else {
+        return unauthenticated();
+    };
+    let signed = &proof.request.request;
+    let located = service.control(|c| {
+        let Some(tenant_id) = c.tenant_by_audience(&signed.audience)? else {
+            return Ok(None);
+        };
+        let principal = c.key_principal(&tenant_id, &signed.subject)?;
+        Ok(principal.map(|p| (tenant_id, p)))
+    });
+    let Ok(Some((tenant_id, principal))) = located else {
+        return unauthenticated();
+    };
+    let Ok(tenant) = service.tenant(&tenant_id) else {
+        return unauthenticated();
+    };
+    let leaf_id = proof
+        .chain
+        .last()
+        .and_then(|leaf| weave_policy::capability_id(leaf).ok())
+        .unwrap_or_default();
+    let caller = Caller {
+        tenant: tenant.clone(),
+        binding: TokenBinding {
+            token_id: leaf_id.chars().take(128).collect(),
+            tenant_id: tenant_id.clone(),
+            principal: principal.clone(),
+            expires_at_ms: signed.expires_at_ms,
+        },
+        request_id: pending.request_id,
+    };
+    let identity = LogIdentity {
+        tenant: tenant_id.clone(),
+        principal,
+    };
+    let control = service.clone();
+    let max_commands = service.limits().max_commands;
+    let audience = tenant.record.audience.clone();
+    let mut response = call(
+        &service,
+        caller,
+        "admit",
+        true,
+        Box::new(move |state, ctx| {
+            let denied = || Failed::from(ApiError::unauthenticated());
+            let program_bytes = request.program.as_bytes();
+            let program = weave_contract::decode_program(program_bytes)
+                .map_err(|e| ApiError::new(&e.code, e.message))?;
+            let operation = crate::signed::operation(&program)?;
+            let now = control.now()?;
+            // The root comes from the registry: the first issuer's key must
+            // be bound to an active user, granted its current permissions on
+            // the scopes the root capability names.
+            let root_capability = &proof.chain.first().ok_or_else(denied)?.capability;
+            let root_principal = control
+                .control(|c| c.key_principal(&ctx.tenant_id, &root_capability.issuer))?
+                .ok_or_else(denied)?;
+            let root_host = HostContext::new(root_principal.clone(), Vec::<String>::new());
+            match standing(&state.engine, &root_principal, now)? {
+                Some(s) if s.kind == PrincipalKind::User => {}
+                _ => return Err(denied()),
+            }
+            let listing = state.engine.list_graphs(&root_host)?;
+            let mut scopes: Vec<weave_policy::Scope> = root_capability
+                .scopes
+                .iter()
+                .filter_map(|scope| {
+                    let held = listing.iter().find(|g| g.graph_id == scope.graph_id)?;
+                    Some(weave_policy::Scope {
+                        graph_id: scope.graph_id.clone(),
+                        branch_id: scope.branch_id.clone(),
+                        actions: crate::signed::actions(held.permission),
+                    })
+                })
+                .collect();
+            scopes.sort_by(|a, b| (&a.graph_id, &a.branch_id).cmp(&(&b.graph_id, &b.branch_id)));
+            scopes.dedup_by(|a, b| a.graph_id == b.graph_id && a.branch_id == b.branch_id);
+            let context = weave_policy::AdmissionContext {
+                audience: audience.clone(),
+                now_ms: now,
+                policy_epoch: crate::signed::POLICY_EPOCH.into(),
+                roots: vec![weave_policy::RootAuthority {
+                    issuer: root_capability.issuer.clone(),
+                    audience: audience.clone(),
+                    policy_revision: crate::signed::POLICY_REVISION.into(),
+                    scopes,
+                    not_before_ms: 0,
+                    expires_at_ms: i64::MAX,
+                    max_delegations: 7,
+                }],
+                revoked_capabilities: Default::default(),
+                revoked_keys: control.control(|c| c.revoked_keys(&ctx.tenant_id))?,
+                consumed_nonces: Default::default(),
+            };
+            let verified =
+                weave_policy::verify_request(&proof, program_bytes, &operation, &context)
+                    .and_then(|v| {
+                        v.check_boundary(program_bytes, &operation, &context)
+                            .map(|()| v)
+                    })
+                    .map_err(|_| denied())?;
+            // The registry agrees: every key in the chain belongs to the
+            // acting principal or its ownership chain, and the root key to
+            // the chain's root user.
+            let mut chain_principals: Vec<String> = vec![ctx.principal.clone()];
+            chain_principals.extend(ctx.on_behalf_of.iter().cloned());
+            let root_user = chain_principals.last().cloned().unwrap_or_default();
+            if root_principal != root_user {
+                return Err(denied());
+            }
+            for link in &proof.chain {
+                for key in [&link.capability.issuer, &link.capability.subject] {
+                    let bound = control.control(|c| c.key_principal(&ctx.tenant_id, key))?;
+                    if !bound.is_some_and(|p| chain_principals.contains(&p)) {
+                        return Err(denied());
+                    }
+                }
+            }
+            if !control.control(|c| {
+                c.reserve_nonce(
+                    &ctx.tenant_id,
+                    verified.replay_id(),
+                    verified.expires_at_ms(),
+                    now,
+                )
+            })? {
+                return Err(ApiError::new("E_REPLAY", "the request nonce was already used").into());
+            }
+            admit_program(&program, ctx, max_commands)?;
+            let results = state.engine.execute(&program, &ctx.host)?;
+            let mut done = Done::json(json!({"results": results}));
+            touched(&program, &results, &mut done);
+            Ok(done)
+        }),
+    )
+    .await;
+    response.extensions_mut().insert(identity);
+    response
+}
+
+// ---------------------------------------------------------------- key bindings
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BindKey {
+    public_key: String,
+    #[serde(default)]
+    principal: Option<String>,
+}
+
+/// May the caller manage credentials of `principal`: itself, an agent it
+/// owns, or anyone for a tenant administrator.
+fn manages(engine: &Engine, ctx: &Ctx, principal: &str) -> Result<bool, Failed> {
+    Ok(ctx.administrator || principal == ctx.principal || owns_agent(engine, ctx, principal)?)
+}
+
+async fn bind_key(
+    State(service): State<Service>,
+    Extension(caller): Extension<Caller>,
+    body: Result<Bytes, BytesRejection>,
+) -> Response {
+    let request: BindKey = match json_body(body) {
+        Ok(request) => request,
+        Err(error) => return error_response(error),
+    };
+    let control = service.clone();
+    call(
+        &service,
+        caller,
+        "keys.bind",
+        true,
+        Box::new(move |state, ctx| {
+            let principal = request.principal.unwrap_or_else(|| ctx.principal.clone());
+            check_id(&principal, "principal")?;
+            if !manages(&state.engine, ctx, &principal)? {
+                return Err(ApiError::forbidden(
+                    "binding keys requires being the principal, owning the agent or tenant administration",
+                )
+                .into());
+            }
+            let now = control.now()?;
+            if standing(&state.engine, &principal, now)?.is_none() {
+                return Err(ApiError::new("E_UNAVAILABLE", "principal unavailable").into());
+            }
+            control.control(|c| c.bind_key(&ctx.tenant_id, &request.public_key, &principal, now))?;
+            let mut done = Done::json(json!({"public_key": request.public_key, "principal": principal}));
+            done.status = Some(StatusCode::CREATED);
+            Ok(done)
+        }),
+    )
+    .await
+}
+
+async fn list_keys(
+    State(service): State<Service>,
+    Extension(caller): Extension<Caller>,
+) -> Response {
+    let control = service.clone();
+    call(
+        &service,
+        caller,
+        "keys.list",
+        true,
+        Box::new(move |_, ctx| {
+            let own = (!ctx.administrator).then_some(ctx.principal.as_str());
+            let keys = control.control(|c| c.keys(&ctx.tenant_id, own))?;
+            Ok(Done::json(json!({"keys": keys})))
+        }),
+    )
+    .await
+}
+
+async fn revoke_key(
+    State(service): State<Service>,
+    Extension(caller): Extension<Caller>,
+    Path(public_key): Path<String>,
+) -> Response {
+    let control = service.clone();
+    call(
+        &service,
+        caller,
+        "keys.revoke",
+        true,
+        Box::new(move |state, ctx| {
+            let unavailable = || ApiError::new("E_UNAVAILABLE", "key unavailable");
+            if public_key.len() > 128 {
+                return Err(unavailable().into());
+            }
+            let owner = control.control(|c| c.key_owner(&ctx.tenant_id, &public_key))?;
+            let allowed = match &owner {
+                None => false,
+                Some(owner) => manages(&state.engine, ctx, owner)?,
+            };
+            if !allowed {
+                return Err(unavailable().into());
+            }
+            let now = control.now()?;
+            control.control(|c| c.revoke_key(&ctx.tenant_id, &public_key, now))?;
+            Ok(Done::json(
+                json!({"public_key": public_key, "revoked": true}),
+            ))
+        }),
+    )
+    .await
+}
+
+// ------------------------------------------------------------------- OIDC
+
+fn require_administrator(ctx: &Ctx, what: &str) -> Result<(), Failed> {
+    if ctx.administrator {
+        Ok(())
+    } else {
+        Err(ApiError::forbidden(format!("{what} requires tenant administration")).into())
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BindOidc {
+    issuer: String,
+    subject: String,
+    principal: String,
+}
+
+async fn bind_oidc(
+    State(service): State<Service>,
+    Extension(caller): Extension<Caller>,
+    body: Result<Bytes, BytesRejection>,
+) -> Response {
+    let request: BindOidc = match json_body(body) {
+        Ok(request) => request,
+        Err(error) => return error_response(error),
+    };
+    let control = service.clone();
+    call(
+        &service,
+        caller,
+        "oidc.bind",
+        true,
+        Box::new(move |state, ctx| {
+            require_administrator(ctx, "binding OIDC subjects")?;
+            check_id(&request.principal, "principal")?;
+            if !control.control(|c| c.oidc_issuer_configured(&ctx.tenant_id, &request.issuer))? {
+                return Err(ApiError::new("E_UNAVAILABLE", "issuer unavailable").into());
+            }
+            let now = control.now()?;
+            // OIDC signs in people: only users are bound (ADR-0007 section 7).
+            match standing(&state.engine, &request.principal, now)? {
+                Some(s) if s.kind == PrincipalKind::User => {}
+                _ => return Err(ApiError::new("E_UNAVAILABLE", "principal unavailable").into()),
+            }
+            control.control(|c| {
+                c.bind_oidc(
+                    &ctx.tenant_id,
+                    &request.issuer,
+                    &request.subject,
+                    &request.principal,
+                    now,
+                )
+            })?;
+            let mut done = Done::json(json!({"issuer": request.issuer, "subject": request.subject,
+                "principal": request.principal}));
+            done.status = Some(StatusCode::CREATED);
+            Ok(done)
+        }),
+    )
+    .await
+}
+
+async fn list_oidc_bindings(
+    State(service): State<Service>,
+    Extension(caller): Extension<Caller>,
+) -> Response {
+    let control = service.clone();
+    call(
+        &service,
+        caller,
+        "oidc.bindings",
+        true,
+        Box::new(move |_, ctx| {
+            require_administrator(ctx, "listing OIDC bindings")?;
+            let bindings = control.control(|c| c.oidc_bindings(&ctx.tenant_id, None))?;
+            Ok(Done::json(json!({"bindings": bindings})))
+        }),
+    )
+    .await
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UnbindOidc {
+    issuer: String,
+    subject: String,
+}
+
+async fn unbind_oidc(
+    State(service): State<Service>,
+    Extension(caller): Extension<Caller>,
+    params: Result<Query<UnbindOidc>, QueryRejection>,
+) -> Response {
+    let params = match query(params) {
+        Ok(params) => params,
+        Err(error) => return error_response(error),
+    };
+    let control = service.clone();
+    call(
+        &service,
+        caller,
+        "oidc.unbind",
+        true,
+        Box::new(move |_, ctx| {
+            require_administrator(ctx, "removing OIDC bindings")?;
+            if !control
+                .control(|c| c.unbind_oidc(&ctx.tenant_id, &params.issuer, &params.subject))?
+            {
+                return Err(ApiError::new("E_UNAVAILABLE", "binding unavailable").into());
+            }
+            Ok(Done::json(
+                json!({"issuer": params.issuer, "subject": params.subject, "removed": true}),
+            ))
+        }),
+    )
+    .await
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImportSubject {
+    subject: String,
+    #[serde(default)]
+    groups: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImportGroups {
+    issuer: String,
+    /// IdP group claim value -> registry group.
+    mapping: std::collections::BTreeMap<String, String>,
+    /// A full snapshot of the issuer's subjects and their group claims.
+    subjects: Vec<ImportSubject>,
+}
+
+/// Most subjects in one group import, and most mapped claim values.
+pub const MAX_IMPORT_SUBJECTS: usize = 10_000;
+pub const MAX_IMPORT_MAPPINGS: usize = 1024;
+
+/// `POST /v1/oidc/groups/import`: turn an IdP group snapshot into audited
+/// registry membership changes (ADR-0007 section 11, alternative 6). For
+/// each mapped registry group, the bound principals whose subjects carry a
+/// mapped claim become direct members, and bound principals of this issuer
+/// that no longer carry one are removed. Members not bound to this issuer
+/// are never touched. Live requests never read group claims.
+async fn import_oidc_groups(
+    State(service): State<Service>,
+    Extension(caller): Extension<Caller>,
+    body: Result<Bytes, BytesRejection>,
+) -> Response {
+    let request: ImportGroups = match json_body(body) {
+        Ok(request) => request,
+        Err(error) => return error_response(error),
+    };
+    let control = service.clone();
+    call(
+        &service,
+        caller,
+        "oidc.groups.import",
+        true,
+        Box::new(move |state, ctx| {
+            use std::collections::{BTreeMap, BTreeSet};
+            require_administrator(ctx, "importing OIDC groups")?;
+            if request.subjects.len() > MAX_IMPORT_SUBJECTS
+                || request.mapping.len() > MAX_IMPORT_MAPPINGS
+            {
+                return Err(ApiError::new(
+                    "E_BUDGET",
+                    "an import holds at most 10000 subjects and 1024 mappings",
+                )
+                .into());
+            }
+            if !control.control(|c| c.oidc_issuer_configured(&ctx.tenant_id, &request.issuer))? {
+                return Err(ApiError::new("E_UNAVAILABLE", "issuer unavailable").into());
+            }
+            let bindings: BTreeMap<String, String> = control
+                .control(|c| c.oidc_bindings(&ctx.tenant_id, Some(&request.issuer)))?
+                .into_iter()
+                .map(|b| (b.subject, b.principal))
+                .collect();
+            let bound: BTreeSet<&String> = bindings.values().collect();
+            let mut desired: BTreeMap<&String, BTreeSet<&String>> = request
+                .mapping
+                .values()
+                .map(|g| (g, BTreeSet::new()))
+                .collect();
+            for subject in &request.subjects {
+                let Some(principal) = bindings.get(&subject.subject) else {
+                    continue;
+                };
+                for claim in &subject.groups {
+                    if let Some(group) = request.mapping.get(claim) {
+                        desired.entry(group).or_default().insert(principal);
+                    }
+                }
+            }
+            let mut changes = Vec::new();
+            let (mut added, mut removed) = (Vec::new(), Vec::new());
+            for (group, members) in &desired {
+                let current: BTreeSet<String> = state
+                    .engine
+                    .registry_members(group, &ctx.host)?
+                    .into_iter()
+                    .collect();
+                for member in members {
+                    if !current.contains(*member) {
+                        changes.push(RegistryChange::AddMember {
+                            group: (*group).clone(),
+                            member: (*member).clone(),
+                        });
+                        added.push(json!({"group": group, "member": member}));
+                    }
+                }
+                for member in &current {
+                    if bound.contains(member) && !members.contains(member) {
+                        changes.push(RegistryChange::RemoveMember {
+                            group: (*group).clone(),
+                            member: member.clone(),
+                        });
+                        removed.push(json!({"group": group, "member": member}));
+                    }
+                }
+            }
+            let revision = if changes.is_empty() {
+                None
+            } else {
+                Some(state.engine.apply_registry(&changes, &ctx.host)?)
+            };
+            let mut done =
+                Done::json(json!({"revision": revision, "added": added, "removed": removed}));
+            done.graphs = vec![REGISTRY_GRAPH.into()];
+            done.revisions = revision.into_iter().collect();
+            Ok(done)
         }),
     )
     .await

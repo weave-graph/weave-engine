@@ -24,6 +24,8 @@ pub mod control;
 pub mod error;
 pub mod ids;
 pub mod log;
+pub mod oidc;
+pub mod signed;
 pub mod tenant;
 pub mod tls;
 
@@ -192,6 +194,68 @@ impl Service {
             return Err(ApiError::new("E_UNAVAILABLE", "principal unavailable"));
         }
         self.control(|c| c.issue_token(tenant_id, principal, issued_by, ttl_ms, label, now))
+    }
+
+    /// The binding a bearer credential authenticates at `now_ms`: an API
+    /// token (`wvs_...`), or an OIDC JWT verified against the issuer
+    /// configuration its `iss` and `aud` select and mapped through an OIDC
+    /// binding. `None` for every failure, whatever the reason.
+    pub(crate) fn authenticate_bearer(
+        &self,
+        token: &str,
+        now_ms: i64,
+    ) -> Result<Option<control::TokenBinding>, ApiError> {
+        if token.starts_with(control::TOKEN_PREFIX) {
+            return self.control(|c| c.authenticate(token, now_ms));
+        }
+        let Some((issuer, audiences)) = oidc::peek_issuer(token) else {
+            return Ok(None);
+        };
+        let candidates = self.control(|c| c.oidc_candidates(&issuer, &audiences))?;
+        for config in candidates {
+            let Some(verified) = oidc::verify(
+                token,
+                &config.issuer,
+                &config.audience,
+                &config.keys,
+                now_ms,
+            ) else {
+                continue;
+            };
+            let principal = self.control(|c| {
+                c.oidc_principal(&config.tenant_id, &verified.issuer, &verified.subject)
+            })?;
+            let Some(principal) = principal else {
+                return Ok(None);
+            };
+            let id =
+                ids::sha256_hex(format!("{}\0{}", verified.issuer, verified.subject).as_bytes());
+            return Ok(Some(control::TokenBinding {
+                token_id: format!("oidc:{}", &id[..24]),
+                tenant_id: config.tenant_id,
+                principal,
+                expires_at_ms: verified.expires_at_ms,
+            }));
+        }
+        Ok(None)
+    }
+
+    /// Configure an OIDC issuer for a tenant from a JWKS document. Trusted
+    /// local administration (`weave-service oidc set`).
+    pub fn set_oidc_issuer(
+        &self,
+        tenant_id: &str,
+        issuer: &str,
+        audience: &str,
+        jwks: &str,
+    ) -> Result<(), ApiError> {
+        let now = self.now()?;
+        self.control(|c| c.set_oidc_issuer(tenant_id, issuer, audience, jwks, now))
+    }
+
+    /// Remove an OIDC issuer of a tenant and its bindings.
+    pub fn remove_oidc_issuer(&self, tenant_id: &str, issuer: &str) -> Result<bool, ApiError> {
+        self.control(|c| c.remove_oidc_issuer(tenant_id, issuer))
     }
 
     /// Revoke a token by ID, in any tenant. Trusted local administration.

@@ -12,10 +12,10 @@ the [principal registry](REGISTRY.md) of the caller's tenant authorizes it:
 graph ACLs, Discover, protected branches, `readers` and `reader_groups`
 apply exactly as they do locally.
 
-**Status.** Part 1 of B3: API tokens for users and agents, tenants, the
-HTTP API, the audit log, TLS, limits and structured logs. OIDC and signed
-admission for agent capabilities are the next parts (see
-[Limits](#limits-and-non-guarantees)).
+**Status.** B3 parts 1 and 2: API tokens for users and agents, OIDC
+sign-in, signed admission for agent capabilities, tenants, the HTTP API,
+the audit log, TLS, limits and structured logs. The 50-client load
+measurement is the last part (see [Limits](#limits-and-non-guarantees)).
 
 ## Run it
 
@@ -50,7 +50,9 @@ The data directory holds:
 
 ## Authentication
 
-Every request carries exactly one `Authorization: Bearer <token>` header.
+Every request carries exactly one `Authorization` header: `Bearer <API
+token or OIDC JWT>` on every route, or `Weave-Signed` on `POST /v1/admit`
+only ([signed admission](#signed-admission-for-agent-capabilities)).
 Every route requires it, including unknown routes: an unauthenticated
 request gets `404` or `405` never, only `401`. Each failure, whatever the
 reason (no header, two headers, another scheme, a malformed, unknown,
@@ -83,6 +85,93 @@ with status `401` and `WWW-Authenticate: Bearer`.
   `on_behalf_of`, and so do its audit entries. Agents cannot create graphs,
   issue tokens or read the audit log.
 - **Groups never authenticate.**
+
+### OIDC
+
+An operator configures an identity provider for a tenant from the shell,
+with the expected audience (the client ID) and the provider's JSON Web Key
+Set:
+
+```sh
+weave-service oidc set --data /srv/weave --tenant acme \
+  --issuer https://login.example.com --audience weave-acme --jwks jwks.json
+weave-service oidc remove --data /srv/weave --tenant acme --issuer https://login.example.com
+```
+
+The service never fetches keys over the network; a key rotation is another
+`oidc set`, effective on the next request. An `(issuer, audience)` pair
+belongs to one tenant, and that pair, never the request, decides a token's
+tenant. A tenant administrator binds IdP subjects to registry **users**
+(`POST /v1/oidc/bindings`); a token's `(iss, sub)` must be bound.
+
+A bearer JWT authenticates when its signature verifies under a key of the
+set (RS256 with 2048 to 8192-bit keys, ES256, or EdDSA with Ed25519; `none`,
+algorithm/key mismatches and `crit` headers are refused), its `iss` and
+`aud` match the configuration, and `exp` (required) and `nbf` hold with 60 s
+of leeway. Tokens are at most 8 KiB. Then the bound user must be active, as
+for an API token. Every failure is the uniform `401`.
+
+**Group claims are never live.** `groups`, `roles` and every claim other
+than `iss`, `sub`, `aud`, `exp` and `nbf` are ignored when authenticating
+(ADR-0007 section 11, alternative 6). They reach the registry only through
+`POST /v1/oidc/groups/import`, a tenant administrator's import of an IdP
+snapshot:
+
+```json
+{"issuer": "https://login.example.com",
+ "mapping": {"eng": "maintenance"},
+ "subjects": [{"subject": "00u1", "groups": ["eng"]}, {"subject": "00u2", "groups": []}]}
+```
+
+For each mapped registry group, the principals bound to subjects that carry
+a mapped claim become direct members, and principals bound to this issuer
+that no longer carry one are removed. The snapshot is complete for the
+issuer: a bound subject that is missing loses its mapped memberships.
+Members not bound to the issuer are never touched. The changes are one
+ordinary registry write by the administrator, so they are audited and
+in the registry history; revocation through the import takes effect on the
+next request. At most 10,000 subjects, 1,024 mappings and 1,000 resulting
+changes per import.
+
+### Signed admission for agent capabilities
+
+Agents that hold ed25519 keys can send requests signed with a
+`weave-policy` capability chain ([CAPABILITIES.md](CAPABILITIES.md))
+instead of a bearer token (ADR-0007 section 8). Keys are bound to
+principals with `POST /v1/keys` (a principal binds its own, an owner binds
+its agents', an administrator any); a key is bound once per tenant, ever.
+
+`POST /v1/admit` with `Authorization: Weave-Signed` and the body
+
+```json
+{"proof": {"chain": [...], "request": {...}}, "program": "<program JSON text>"}
+```
+
+runs `program` as the principal bound to the request's subject key. The
+signed body is the exact UTF-8 bytes of `program`. `whoami` returns the
+tenant's `admission_audience` and `admission_policy_revision`, which every
+capability and request must name. A request is admitted only when:
+
+1. **the chain verifies under `weave-policy`**, with the tenant's audience,
+   the trusted clock, the tenant's revoked keys and a root derived from the
+   registry: the first issuer's key must be bound to an active user, and the
+   root grants that user's current permissions (Discover; Read, Traverse and
+   Delegate for Read; Publish for Write) on the graph branches its root
+   capability names;
+2. **the registry agrees**: the leaf key's principal can act now, every key
+   in the chain is bound to that principal or a principal of its ownership
+   chain, and the first issuer is the chain's root user.
+
+The program then runs as the agent, so the registry authorizes it again
+under the agent ceiling: a capability only narrows. A signed program is one
+operation: all reads of one graph branch (`read`, which needs Read and
+Traverse in the leaf scope) or all writes of one (`publish`); anything else
+is `E_UNSUPPORTED`. Each request nonce is reserved until the request
+expires, so a replay is `E_REPLAY` (`409`); a request that fails after its
+nonce is reserved needs a new nonce. Revoking a key (`DELETE
+/v1/keys/{public_key}`), suspending the agent or its owner, or the owner
+losing the permission fails the next signed request. Every verification
+failure is the uniform `401`.
 
 ## Tenants
 
@@ -120,6 +209,14 @@ also in the audit entry and the log line of the request.
 | `GET /v1/registry/groups/{id}/members` | the group's administrators, tenant administrators | its direct members |
 | `GET /v1/tokens` | any principal | its own tokens; a tenant administrator sees every token of the tenant. Never the secret or its digest |
 | `POST /v1/tokens` | tenant administrators; a user for the agents it owns | `{"principal", "expires_in_ms"?, "label"?}`: issue a token for an active user or agent. `201` with the token, shown once. A user naming anything but its own agent gets `E_FORBIDDEN`, whether or not the principal exists |
+| `POST /v1/admit` | a signed request (`Authorization: Weave-Signed`), never a bearer token | run a signed program ([above](#signed-admission-for-agent-capabilities)) |
+| `GET /v1/keys` | any principal | its own key bindings; a tenant administrator sees all |
+| `POST /v1/keys` | the principal itself, the owners of its agent, tenant administrators | `{"public_key": "ed25519:<64 hex>", "principal"?}`: bind a key (at most 16 live keys per principal). `201` |
+| `DELETE /v1/keys/{public_key}` | the key's principal, the owners of its agent, tenant administrators | revoke it, for good. Anyone else gets `E_UNAVAILABLE`, as for a key that is not bound |
+| `GET /v1/oidc/bindings` | tenant administrators | every OIDC binding of the tenant |
+| `POST /v1/oidc/bindings` | tenant administrators | `{"issuer", "subject", "principal"}`: bind an IdP subject of a configured issuer to an active user. `201` |
+| `DELETE /v1/oidc/bindings` | tenant administrators | `?issuer=I&subject=S`: remove a binding. Effective on the next request |
+| `POST /v1/oidc/groups/import` | tenant administrators | import an IdP group snapshot into registry memberships ([above](#oidc)) |
 | `DELETE /v1/tokens/{token_id}` | the token's principal, the owners of its agent, tenant administrators | revoke it. Effective on the next request. Anyone else gets `E_UNAVAILABLE`, as for a token that does not exist |
 | `GET /v1/audit` | tenant administrators | `?after=SEQ&limit=N` (1 to 1,000): audit entries in order |
 | `GET /v1/audit/facts` | tenant administrators | `?graph_id=G&fact_id=F[&access=read\|write][&after][&limit]`: who read and who wrote fact F |
@@ -246,6 +343,12 @@ graph or record IDs, so denied topology stays out of the log.
 - The ID key that tags minted record IDs is stored in the control store. It
   authenticates no one; if it leaked, the occupancy channel above would
   reopen for writers of a graph, nothing more.
-- Not yet: OIDC, signed admission for agent capabilities
-  (ADR-0007 section 8), the 50-client load measurement, gRPC (deferred until
-  a measured need), tenant deletion, and online JWKS rotation.
+- OIDC keys are configured, not discovered: there is no OIDC discovery or
+  JWKS fetching, and a rotation is an operator `oidc set`.
+- Signed admission does not keep retry receipts: a lost response needs a
+  new request with a new nonce. Capability IDs cannot be revoked one by one;
+  revoke the key. A capability's scope covers the graphs and branches a
+  program names; references stored inside records (metadata, evidence) are
+  authorized by the registry alone.
+- Not yet: the 50-client load measurement, gRPC (deferred until a measured
+  need) and tenant deletion.
